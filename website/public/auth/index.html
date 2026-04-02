@@ -439,12 +439,20 @@
         color: var(--bg-primary, #1a1a2e);
       }
 
+      .work-view-tabs,
       .routine-tabs {
         display: inline-flex;
         gap: 0.5rem;
         margin-bottom: 1rem;
         flex-wrap: wrap;
       }
+      .work-view-tabs {
+        padding: 0.35rem;
+        border: 1px solid var(--border, #333);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent);
+      }
+      .work-view-tab,
       .routine-tab {
         border: 1px solid var(--border, #333);
         background: transparent;
@@ -456,10 +464,21 @@
         cursor: pointer;
         transition: all 0.2s ease;
       }
+      .work-view-tab {
+        border-color: transparent;
+        padding-inline: 1rem;
+      }
+      .work-view-tab.is-active,
       .routine-tab.is-active {
         color: var(--text, #fff);
         border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border, #333));
         background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
+      }
+      .work-view-panel + .work-view-panel {
+        margin-top: 1.25rem;
+      }
+      .work-view-panel[hidden] {
+        display: none !important;
       }
       .routine-list {
         display: flex;
@@ -1839,8 +1858,7 @@
                   <a class="sidebar-link is-active" href="#section-overview">Overview</a>
                   <a class="sidebar-link" href="#section-channels">Connected Apps</a>
                   <a class="sidebar-link" href="#section-workspace">Next Steps</a>
-                  <a class="sidebar-link" href="#section-tasks">Tasks</a>
-                  <a class="sidebar-link" href="#section-routines">Routines</a>
+                  <a class="sidebar-link" href="#section-work">Work</a>
                   <a class="sidebar-link" href="#section-memo">Memory</a>
                   <a class="sidebar-link" href="#section-settings">Settings</a>
                 </nav>
@@ -1953,65 +1971,101 @@
                   </div>
                 </section>
 
-                <section id="section-tasks" class="legal-card dashboard-section">
-                  <h2>Tasks</h2>
-                  <p>Tasks that arrive through your connected apps show up here so you can review progress and results.</p>
-                  <div class="tasks-header work-section-header">
-                    <div class="tasks-controls work-section-controls">
-                      <button id="refresh-tasks-btn" class="auth-btn auth-btn-oauth">
-                        Refresh
-                      </button>
-                      <div class="polling-indicator">
-                        <span class="polling-dot"></span>
-                        <span>Auto-updating</span>
-                      </div>
-                    </div>
-                    <span id="tasks-status" class="tasks-status work-section-status"></span>
-                  </div>
-                  <ul id="task-list" class="identifier-list work-item-list">
-                    <li class="task-item work-item" style="text-align: center; color: var(--text-muted, #888);">Loading tasks...</li>
-                  </ul>
-                </section>
-
-                <section id="section-routines" class="legal-card dashboard-section">
-                  <h2>Routines</h2>
-                  <p>Review and manage recurring Oliver work across your connected apps.</p>
-                  <div class="tasks-header work-section-header">
-                    <div class="tasks-controls work-section-controls">
-                      <button id="refresh-routines-btn" class="auth-btn auth-btn-oauth">
-                        Refresh
-                      </button>
-                      <div class="polling-indicator">
-                        <span class="polling-dot"></span>
-                        <span>Auto-updating</span>
-                      </div>
-                    </div>
-                    <span id="routines-status" class="tasks-status work-section-status"></span>
-                  </div>
-                  <div class="routine-tabs" role="tablist" aria-label="Routine views">
+                <section id="section-work" class="legal-card dashboard-section">
+                  <h2>Work</h2>
+                  <p>Review incoming tasks and manage recurring Oliver work across your connected apps.</p>
+                  <div class="work-view-tabs" role="tablist" aria-label="Work views">
                     <button
-                      id="routine-tab-active"
-                      class="routine-tab is-active"
+                      id="work-view-tab-tasks"
+                      class="work-view-tab is-active"
                       type="button"
-                      data-routine-tab="active"
+                      data-work-view="tasks"
                       role="tab"
                       aria-selected="true"
+                      aria-controls="work-view-panel-tasks"
                     >
-                      Active
+                      Tasks
                     </button>
                     <button
-                      id="routine-tab-history"
-                      class="routine-tab"
+                      id="work-view-tab-routines"
+                      class="work-view-tab"
                       type="button"
-                      data-routine-tab="history"
+                      data-work-view="routines"
                       role="tab"
                       aria-selected="false"
+                      aria-controls="work-view-panel-routines"
                     >
-                      History
+                      Routines
                     </button>
                   </div>
-                  <div id="routine-list" class="routine-list work-item-list" aria-live="polite">
-                    <div class="routine-empty-state work-item-empty-state">Loading routines...</div>
+
+                  <div
+                    id="work-view-panel-tasks"
+                    class="work-view-panel"
+                    role="tabpanel"
+                    aria-labelledby="work-view-tab-tasks"
+                  >
+                    <div class="tasks-header work-section-header">
+                      <div class="tasks-controls work-section-controls">
+                        <button id="refresh-tasks-btn" class="auth-btn auth-btn-oauth">
+                          Refresh
+                        </button>
+                        <div class="polling-indicator">
+                          <span class="polling-dot"></span>
+                          <span>Auto-updating</span>
+                        </div>
+                      </div>
+                      <span id="tasks-status" class="tasks-status work-section-status"></span>
+                    </div>
+                    <ul id="task-list" class="identifier-list work-item-list">
+                      <li class="task-item work-item" style="text-align: center; color: var(--text-muted, #888);">Loading tasks...</li>
+                    </ul>
+                  </div>
+
+                  <div
+                    id="work-view-panel-routines"
+                    class="work-view-panel"
+                    role="tabpanel"
+                    aria-labelledby="work-view-tab-routines"
+                    hidden
+                  >
+                    <div class="tasks-header work-section-header">
+                      <div class="tasks-controls work-section-controls">
+                        <button id="refresh-routines-btn" class="auth-btn auth-btn-oauth">
+                          Refresh
+                        </button>
+                        <div class="polling-indicator">
+                          <span class="polling-dot"></span>
+                          <span>Auto-updating</span>
+                        </div>
+                      </div>
+                      <span id="routines-status" class="tasks-status work-section-status"></span>
+                    </div>
+                    <div class="routine-tabs" role="tablist" aria-label="Routine views">
+                      <button
+                        id="routine-tab-active"
+                        class="routine-tab is-active"
+                        type="button"
+                        data-routine-tab="active"
+                        role="tab"
+                        aria-selected="true"
+                      >
+                        Active
+                      </button>
+                      <button
+                        id="routine-tab-history"
+                        class="routine-tab"
+                        type="button"
+                        data-routine-tab="history"
+                        role="tab"
+                        aria-selected="false"
+                      >
+                        History
+                      </button>
+                    </div>
+                    <div id="routine-list" class="routine-list work-item-list" aria-live="polite">
+                      <div class="routine-empty-state work-item-empty-state">Loading routines...</div>
+                    </div>
                   </div>
                 </section>
 
@@ -2390,6 +2444,7 @@
         lark: 'lark-oauth-btn'
       };
       const RECOMMENDATION_SECTION_LABELS = {
+        'section-work': 'Open Work',
         'section-channels': 'Open Connected Apps',
         'section-memo': 'Open Memory',
         'section-routines': 'Open Routines',
@@ -2415,6 +2470,7 @@
       let cachedIdentifiers = [];
       let cachedTasks = [];
       let cachedRoutines = { active: [], history: [] };
+      let activeWorkView = 'tasks';
       let activeRoutineTab = 'active';
       let routineActionBusyIds = new Set();
       let routineActionErrors = {};
@@ -2539,6 +2595,74 @@
         dashboardSidebarLinks.forEach((link, index) => {
           link.classList.toggle('is-active', index === activeIndex);
         });
+      }
+
+      function normalizeWorkView(view) {
+        return view === 'routines' ? 'routines' : 'tasks';
+      }
+
+      // Preserve legacy dashboard anchors by routing old Tasks/Routines hashes into
+      // the unified Work section and selecting the matching top-level tab.
+      function resolveDashboardSectionTarget(sectionId) {
+        const normalizedSectionId = String(sectionId || '').replace(/^#/, '');
+        if (!normalizedSectionId) {
+          return null;
+        }
+        if (normalizedSectionId === 'section-tasks') {
+          return {
+            requestedSectionId: normalizedSectionId,
+            targetSectionId: 'section-work',
+            workView: 'tasks'
+          };
+        }
+        if (normalizedSectionId === 'section-routines') {
+          return {
+            requestedSectionId: normalizedSectionId,
+            targetSectionId: 'section-work',
+            workView: 'routines'
+          };
+        }
+        return {
+          requestedSectionId: normalizedSectionId,
+          targetSectionId: normalizedSectionId,
+          workView: null
+        };
+      }
+
+      function syncWorkViewHash(view) {
+        const nextHash = normalizeWorkView(view) === 'routines' ? '#section-routines' : '#section-tasks';
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        window.history.replaceState({}, document.title, nextUrl);
+      }
+
+      function setActiveWorkView(nextView, options = {}) {
+        const { syncHash = false } = options;
+        activeWorkView = normalizeWorkView(nextView);
+
+        const tasksButton = document.getElementById('work-view-tab-tasks');
+        const routinesButton = document.getElementById('work-view-tab-routines');
+        const tasksPanel = document.getElementById('work-view-panel-tasks');
+        const routinesPanel = document.getElementById('work-view-panel-routines');
+        const tasksActive = activeWorkView === 'tasks';
+
+        if (tasksButton) {
+          tasksButton.classList.toggle('is-active', tasksActive);
+          tasksButton.setAttribute('aria-selected', tasksActive ? 'true' : 'false');
+        }
+        if (routinesButton) {
+          routinesButton.classList.toggle('is-active', !tasksActive);
+          routinesButton.setAttribute('aria-selected', tasksActive ? 'false' : 'true');
+        }
+        if (tasksPanel) {
+          tasksPanel.hidden = !tasksActive;
+        }
+        if (routinesPanel) {
+          routinesPanel.hidden = tasksActive;
+        }
+
+        if (syncHash) {
+          syncWorkViewHash(activeWorkView);
+        }
       }
 
       function hideExistingAccountOptions() {
@@ -3520,17 +3644,25 @@
       }
 
       function openDashboardSection(sectionId) {
-        const normalizedSectionId = String(sectionId || '').replace(/^#/, '');
-        if (!normalizedSectionId) {
+        const resolvedSection = resolveDashboardSectionTarget(sectionId);
+        if (!resolvedSection) {
           return false;
         }
 
-        const target = document.getElementById(normalizedSectionId);
+        if (resolvedSection.workView) {
+          setActiveWorkView(resolvedSection.workView);
+        }
+
+        const target = document.getElementById(resolvedSection.targetSectionId);
         if (!target) {
           return false;
         }
 
-        window.location.hash = normalizedSectionId;
+        window.history.replaceState(
+          {},
+          document.title,
+          `${window.location.pathname}${window.location.search}#${resolvedSection.requestedSectionId}`
+        );
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         window.setTimeout(updateSidebarNavigation, 150);
         return true;
@@ -4549,9 +4681,17 @@
         if (!hash || !hash.startsWith('#section-')) {
           return;
         }
-        const target = document.querySelector(hash);
+        const resolvedSection = resolveDashboardSectionTarget(hash);
+        if (!resolvedSection) {
+          return;
+        }
+        if (resolvedSection.workView) {
+          setActiveWorkView(resolvedSection.workView);
+        }
+        const target = document.getElementById(resolvedSection.targetSectionId);
         if (target) {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          window.setTimeout(updateSidebarNavigation, 150);
         }
       }
 
@@ -4774,6 +4914,7 @@
         cachedIdentifiers = [];
         cachedTasks = [];
         cachedRoutines = { active: [], history: [] };
+        activeWorkView = 'tasks';
         activeRoutineTab = 'active';
         routineActionBusyIds = new Set();
         routineActionErrors = {};
@@ -6532,6 +6673,12 @@
         }
       });
 
+      document.querySelectorAll('[data-work-view]').forEach((button) => {
+        button.addEventListener('click', () => {
+          setActiveWorkView(button.dataset.workView, { syncHash: true });
+        });
+      });
+
       document.querySelectorAll('[data-routine-tab]').forEach((button) => {
         button.addEventListener('click', () => {
           switchRoutineTab(button.dataset.routineTab);
@@ -6544,6 +6691,10 @@
           document.getElementById('routines-status').textContent = 'Refreshing...';
           await loadRoutines(session.access_token);
         }
+      });
+
+      window.addEventListener('hashchange', () => {
+        scrollToDashboardHashTarget();
       });
 
       // Handle OAuth callback - manually parse hash and set session
