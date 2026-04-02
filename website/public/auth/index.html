@@ -320,35 +320,48 @@
         border-color: #ef4444;
       }
 
-      /* Task list styles */
-      .task-item {
+      /* Shared work item styles */
+      .work-item,
+      .task-item,
+      .routine-item {
         display: flex;
         flex-direction: column;
         padding: 1rem;
         background: var(--surface, #1a1a1a);
         border: 1px solid var(--border, #333);
+      }
+      .task-item {
         border-radius: 8px;
         margin-bottom: 0.5rem;
         gap: 0.5rem;
       }
+      .routine-item {
+        border-radius: 10px;
+        gap: 0.75rem;
+      }
+      .work-item-header,
       .task-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 1rem;
       }
+      .work-item-title,
       .task-name {
         font-weight: 600;
         flex: 1;
         min-width: 0;
         word-break: break-word;
       }
+      .work-item-badge,
       .task-badge {
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 600;
         flex-shrink: 0;
+      }
+      .task-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
       }
       .task-badge.success {
         background: rgba(34, 197, 94, 0.2);
@@ -366,6 +379,7 @@
         background: rgba(156, 163, 175, 0.2);
         color: #9ca3af;
       }
+      .work-item-meta-flow,
       .task-details {
         display: flex;
         flex-wrap: wrap;
@@ -373,26 +387,31 @@
         font-size: 0.85rem;
         color: var(--text-muted, #888);
       }
+      .work-item-meta-flow-item,
       .task-detail {
         display: flex;
         align-items: center;
         gap: 0.25rem;
       }
+      .work-item-meta-label,
       .task-detail-label {
         opacity: 0.7;
       }
+      .work-section-header,
       .tasks-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 1rem;
       }
+      .work-section-controls,
       .tasks-controls {
         display: flex;
         align-items: center;
         gap: 0.5rem;
       }
 
+      .work-section-status,
       .tasks-status {
         font-size: 0.85rem;
         color: var(--text-muted, #888);
@@ -447,43 +466,41 @@
         flex-direction: column;
         gap: 0.75rem;
       }
-      .routine-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        padding: 1rem;
-        background: var(--surface, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 10px;
-      }
+      .work-item-meta-grid,
       .routine-meta-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.6rem 1rem;
       }
+      .work-item-meta-block,
       .routine-meta-item {
         display: flex;
         flex-direction: column;
         gap: 0.15rem;
         min-width: 0;
       }
+      .work-item-meta-grid .work-item-meta-label,
       .routine-meta-label {
         font-size: 0.75rem;
         color: var(--text-muted, #888);
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
+      .work-item-meta-value,
       .routine-meta-value {
         font-size: 0.9rem;
         color: var(--text, #fff);
         word-break: break-word;
+      }
+      .routine-status-badge,
+      .work-item-badge {
+        flex-shrink: 0;
       }
       .routine-status-badge {
         padding: 0.25rem 0.6rem;
         border-radius: 999px;
         font-size: 0.75rem;
         font-weight: 600;
-        flex-shrink: 0;
       }
       .routine-status-badge.active {
         background: rgba(34, 197, 94, 0.16);
@@ -505,11 +522,13 @@
         background: rgba(239, 68, 68, 0.18);
         color: #f87171;
       }
+      .work-item-actions,
       .routine-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
       }
+      .work-item-action-btn,
       .routine-action-btn {
         border: 1px solid var(--border, #333);
         background: transparent;
@@ -521,22 +540,27 @@
         cursor: pointer;
         transition: all 0.2s ease;
       }
+      .work-item-action-btn:hover:not(:disabled),
       .routine-action-btn:hover:not(:disabled) {
         border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border, #333));
         color: color-mix(in srgb, var(--accent, #38bdf8) 82%, var(--text, #fff));
       }
+      .work-item-action-btn:disabled,
       .routine-action-btn:disabled {
         opacity: 0.55;
         cursor: wait;
       }
+      .work-item-action-btn.danger:hover:not(:disabled),
       .routine-action-btn.danger:hover:not(:disabled) {
         border-color: rgba(239, 68, 68, 0.7);
         color: #f87171;
       }
+      .work-item-inline-error,
       .routine-inline-error {
         font-size: 0.85rem;
         color: #ef4444;
       }
+      .work-item-empty-state,
       .routine-empty-state {
         padding: 1.5rem;
         text-align: center;
@@ -1932,8 +1956,8 @@
                 <section id="section-tasks" class="legal-card dashboard-section">
                   <h2>Tasks</h2>
                   <p>Tasks that arrive through your connected apps show up here so you can review progress and results.</p>
-                  <div class="tasks-header">
-                    <div class="tasks-controls">
+                  <div class="tasks-header work-section-header">
+                    <div class="tasks-controls work-section-controls">
                       <button id="refresh-tasks-btn" class="auth-btn auth-btn-oauth">
                         Refresh
                       </button>
@@ -1942,18 +1966,18 @@
                         <span>Auto-updating</span>
                       </div>
                     </div>
-                    <span id="tasks-status" class="tasks-status"></span>
+                    <span id="tasks-status" class="tasks-status work-section-status"></span>
                   </div>
-                  <ul id="task-list" class="identifier-list">
-                    <li class="task-item" style="text-align: center; color: var(--text-muted, #888);">Loading tasks...</li>
+                  <ul id="task-list" class="identifier-list work-item-list">
+                    <li class="task-item work-item" style="text-align: center; color: var(--text-muted, #888);">Loading tasks...</li>
                   </ul>
                 </section>
 
                 <section id="section-routines" class="legal-card dashboard-section">
                   <h2>Routines</h2>
                   <p>Review and manage recurring Oliver work across your connected apps.</p>
-                  <div class="tasks-header">
-                    <div class="tasks-controls">
+                  <div class="tasks-header work-section-header">
+                    <div class="tasks-controls work-section-controls">
                       <button id="refresh-routines-btn" class="auth-btn auth-btn-oauth">
                         Refresh
                       </button>
@@ -1962,7 +1986,7 @@
                         <span>Auto-updating</span>
                       </div>
                     </div>
-                    <span id="routines-status" class="tasks-status"></span>
+                    <span id="routines-status" class="tasks-status work-section-status"></span>
                   </div>
                   <div class="routine-tabs" role="tablist" aria-label="Routine views">
                     <button
@@ -1986,8 +2010,8 @@
                       History
                     </button>
                   </div>
-                  <div id="routine-list" class="routine-list" aria-live="polite">
-                    <div class="routine-empty-state">Loading routines...</div>
+                  <div id="routine-list" class="routine-list work-item-list" aria-live="polite">
+                    <div class="routine-empty-state work-item-empty-state">Loading routines...</div>
                   </div>
                 </section>
 
@@ -5834,7 +5858,11 @@
           if (!res.ok) {
             if (res.status === 404) {
               cachedTasks = [];
-              taskList.innerHTML = '<li class="task-item" style="text-align: center; color: var(--text-muted, #888);">No tasks yet. Send Oliver one request from a connected app and it will show up here.</li>';
+              taskList.innerHTML = renderWorkListState({
+                tagName: 'li',
+                className: 'task-item work-item',
+                message: 'No tasks yet. Send Oliver one request from a connected app and it will show up here.'
+              });
               loadWorkspaceSummaryFromStorage();
               renderNextSteps(cachedIdentifiers);
               return;
@@ -5880,7 +5908,11 @@
           }
 
           if (allTasks.length === 0) {
-            taskList.innerHTML = '<li class="task-item" style="text-align: center; color: var(--text-muted, #888);">No tasks yet. Send Oliver one request from a connected app and it will show up here.</li>';
+            taskList.innerHTML = renderWorkListState({
+              tagName: 'li',
+              className: 'task-item work-item',
+              message: 'No tasks yet. Send Oliver one request from a connected app and it will show up here.'
+            });
           } else {
             taskList.innerHTML = allTasks.map(task => renderTask(task)).join('');
           }
@@ -5892,7 +5924,12 @@
           const displayMessage = normalizeApiFetchError(err);
           console.error('Failed to load tasks:', err);
           cachedTasks = [];
-          taskList.innerHTML = `<li class="task-item" style="text-align: center; color: #ef4444;">Error loading tasks: ${escapeHtml(displayMessage)}</li>`;
+          taskList.innerHTML = renderWorkListState({
+            tagName: 'li',
+            className: 'task-item work-item',
+            message: `Error loading tasks: ${displayMessage}`,
+            tone: 'danger'
+          });
           loadWorkspaceSummaryFromStorage();
           renderNextSteps(cachedIdentifiers);
         } finally {
@@ -5901,6 +5938,21 @@
           }
         }
       }
+
+      const WORK_CHANNEL_LABELS = {
+        'email': 'Email',
+        'slack': 'Slack',
+        'discord': 'Discord',
+        'sms': 'SMS',
+        'telegram': 'Telegram',
+        'whatsapp': 'WhatsApp',
+        'google_docs': 'Google Docs',
+        'google_sheets': 'Google Sheets',
+        'google_slides': 'Google Slides',
+        'bluebubbles': 'iMessage',
+        'wechat': 'WeChat',
+        'lark': 'Lark'
+      };
 
       // Build concise task titles that describe what each item is doing
       function humanizeTaskToken(value) {
@@ -5914,92 +5966,178 @@
           .join(' ');
       }
 
+      function formatWorkChannelLabel(channel) {
+        const normalized = String(channel || '').trim().toLowerCase();
+        return WORK_CHANNEL_LABELS[normalized] || humanizeTaskToken(normalized) || 'Unknown';
+      }
+
+      function formatLocalDateTime(dateStr, timeOptions = { hour: '2-digit', minute: '2-digit' }) {
+        if (!dateStr) return 'N/A';
+        const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) return 'N/A';
+        const timeLabel = timeOptions
+          ? date.toLocaleTimeString([], timeOptions)
+          : date.toLocaleTimeString();
+        return `${date.toLocaleDateString()} ${timeLabel}`;
+      }
+
+      function renderWorkListState({ tagName = 'div', className = 'work-item-empty-state', message, tone = 'muted' }) {
+        const color = tone === 'danger' ? '#ef4444' : 'var(--text-muted, #888)';
+        return `<${tagName} class="${className}" style="text-align: center; color: ${color};">${escapeHtml(message)}</${tagName}>`;
+      }
+
+      function renderWorkMetaFlowItem(item) {
+        const toneStyle = item.tone === 'danger' ? ' style="color: #ef4444;"' : '';
+        const value = item.value == null || item.value === '' ? 'N/A' : String(item.value);
+        return `
+          <span class="task-detail work-item-meta-flow-item"${toneStyle}>
+            <span class="task-detail-label work-item-meta-label">${escapeHtml(item.label)}:</span>
+            <span>${escapeHtml(value)}</span>
+          </span>
+        `;
+      }
+
+      function renderWorkMetaFlow(items, trailingHtml = '') {
+        return `
+          <div class="task-details work-item-meta-flow">
+            ${items.map((item) => renderWorkMetaFlowItem(item)).join('')}
+            ${trailingHtml}
+          </div>
+        `;
+      }
+
+      function renderWorkMetaGrid(items) {
+        return `
+          <div class="routine-meta-grid work-item-meta-grid">
+            ${items.map((item) => {
+              const value = item.value == null || item.value === '' ? 'N/A' : String(item.value);
+              return `
+                <div class="routine-meta-item work-item-meta-block">
+                  <span class="routine-meta-label work-item-meta-label">${escapeHtml(item.label)}</span>
+                  <span class="routine-meta-value work-item-meta-value">${escapeHtml(value)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      function renderWorkActionButton(action) {
+        const disabledAttr = action.disabled ? 'disabled' : '';
+        const dangerClass = action.tone === 'danger' ? ' danger' : '';
+        return `
+          <button class="routine-action-btn work-item-action-btn${dangerClass}" type="button" onclick="${action.onClick}" ${disabledAttr}>
+            ${escapeHtml(action.label)}
+          </button>
+        `;
+      }
+
+      function renderWorkActions(actions) {
+        if (!Array.isArray(actions) || actions.length === 0) {
+          return '';
+        }
+        return `
+          <div class="routine-actions work-item-actions">
+            ${actions.map((action) => renderWorkActionButton(action)).join('')}
+          </div>
+        `;
+      }
+
+      function renderWorkItemCard(item) {
+        const metaHtml = item.metaLayout === 'grid'
+          ? renderWorkMetaGrid(item.metaItems || [])
+          : renderWorkMetaFlow(item.metaItems || [], item.metaSuffixHtml || '');
+        const actionsHtml = renderWorkActions(item.actions);
+        const inlineErrorHtml = item.inlineError
+          ? `<div class="routine-inline-error work-item-inline-error">${escapeHtml(item.inlineError)}</div>`
+          : '';
+
+        return `
+          <${item.tagName} class="${item.className}">
+            <div class="${item.headerClassName || 'task-header work-item-header'}">
+              <span class="${item.titleClassName || 'task-name work-item-title'}">${escapeHtml(item.title)}</span>
+              <span class="${item.badgeClassName}">${escapeHtml(item.badgeLabel)}</span>
+            </div>
+            ${metaHtml}
+            ${actionsHtml}
+            ${inlineErrorHtml}
+          </${item.tagName}>
+        `;
+      }
+
       function formatTaskTitle(task) {
         const kind = (task.kind || '').toLowerCase();
         const channel = (task.channel || task.source || '').toLowerCase();
         const requestSummary = (task.request_summary || '').trim();
 
-        const channelMap = {
-          'email': 'Email',
-          'slack': 'Slack',
-          'discord': 'Discord',
-          'sms': 'SMS',
-          'telegram': 'Telegram',
-          'whatsapp': 'WhatsApp',
-          'google_docs': 'Google Docs',
-          'google_sheets': 'Google Sheets',
-          'google_slides': 'Google Slides',
-          'bluebubbles': 'iMessage',
-          'wechat': 'WeChat'
-        };
-
         if (requestSummary) return requestSummary;
         if (kind === 'send_email') return 'Send Reply';
         if (kind === 'noop') return 'No-op';
         if (kind === 'run_task') {
-          const channelLabel = channelMap[channel] || humanizeTaskToken(channel);
+          const channelLabel = formatWorkChannelLabel(channel);
           return channelLabel ? `Handle ${channelLabel}` : 'Handle Task';
         }
 
         return humanizeTaskToken(kind) || 'Task';
       }
 
-      // Render a single task item
-      function renderTask(task) {
-        const status = task.execution_status || 'running';
+      function buildTaskScheduleDisplay(task) {
+        const scheduleType = String(task.schedule_type || '').toLowerCase();
+        if ((scheduleType === 'once' || scheduleType === 'one_shot') && task.run_at) {
+          return `Once at ${formatLocalDateTime(task.run_at)}`;
+        }
+        if (scheduleType === 'cron' && task.next_run) {
+          return `Next: ${formatLocalDateTime(task.next_run)}`;
+        }
+        return task.schedule_type || 'One-time';
+      }
+
+      function buildTaskModalRows(task) {
+        return [
+          { label: 'Task ID', value: task.id || 'N/A' },
+          { label: 'Channel', value: formatWorkChannelLabel(task.channel || task.source) },
+          { label: 'Status', value: task.execution_status || 'running' },
+          { label: 'Enabled', value: task.enabled ? 'Yes' : 'No' },
+          { label: 'Schedule Type', value: task.schedule_type || 'N/A' },
+          { label: 'Created At', value: formatLocalDateTime(task.created_at, null) },
+          { label: 'Next Run', value: formatLocalDateTime(task.next_run, null) },
+          { label: 'Last Run', value: formatLocalDateTime(task.last_run, null) },
+        ];
+      }
+
+      function mapTaskToWorkItem(task) {
+        const status = String(task.execution_status || 'running').toLowerCase();
         const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+        const updatedAt = task.last_run || task.execution_started_at || task.created_at;
+        const taskData = encodeURIComponent(JSON.stringify(task));
+        const metaItems = [
+          { label: 'Channel', value: formatWorkChannelLabel(task.channel || task.source) },
+          { label: 'Schedule', value: buildTaskScheduleDisplay(task) },
+          { label: 'Updated', value: formatLocalDateTime(updatedAt) }
+        ];
 
-        // Format dates
-        const formatDate = (dateStr) => {
-          if (!dateStr) return 'N/A';
-          const date = new Date(dateStr);
-          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        };
-
-        // Determine schedule display
-        let scheduleDisplay = task.schedule_type || 'One-time';
-        if (task.schedule_type === 'once' && task.run_at) {
-          scheduleDisplay = `Once at ${formatDate(task.run_at)}`;
-        } else if (task.schedule_type === 'cron' && task.next_run) {
-          scheduleDisplay = `Next: ${formatDate(task.next_run)}`;
+        if (task.error_message) {
+          metaItems.push({
+            label: 'Error',
+            value: parseErrorMessage(task.error_message),
+            tone: 'danger'
+          });
         }
 
-        // Prefer response time when available, fallback to request creation time
-        const updatedAt = task.last_run || task.execution_started_at || task.created_at;
-        const updatedDisplay = formatDate(updatedAt);
+        return {
+          tagName: 'li',
+          className: 'task-item work-item',
+          title: formatTaskTitle(task),
+          badgeLabel: statusLabel,
+          badgeClassName: `task-badge work-item-badge ${status}`,
+          metaLayout: 'flow',
+          metaItems,
+          metaSuffixHtml: `<button class="task-info-btn" onclick="showTaskModal('${taskData}')" title="View details" style="margin-left: auto;">i</button>`
+        };
+      }
 
-        // Encode task data for modal
-        const taskData = encodeURIComponent(JSON.stringify(task));
-
-        return `
-          <li class="task-item">
-            <div class="task-header">
-              <span class="task-name">${escapeHtml(formatTaskTitle(task))}</span>
-              <span class="task-badge ${status}">${statusLabel}</span>
-            </div>
-            <div class="task-details">
-              <span class="task-detail">
-                <span class="task-detail-label">Channel:</span>
-                <span>${escapeHtml(task.channel || task.source || 'Unknown')}</span>
-              </span>
-              <span class="task-detail">
-                <span class="task-detail-label">Schedule:</span>
-                <span>${scheduleDisplay}</span>
-              </span>
-              <span class="task-detail">
-                <span class="task-detail-label">Updated:</span>
-                <span>${updatedDisplay}</span>
-              </span>
-              ${task.error_message ? `
-                <span class="task-detail" style="color: #ef4444;">
-                  <span class="task-detail-label">Error:</span>
-                  <span>${escapeHtml(parseErrorMessage(task.error_message))}</span>
-                </span>
-              ` : ''}
-              <button class="task-info-btn" onclick="showTaskModal('${taskData}')" title="View details" style="margin-left: auto;">i</button>
-            </div>
-          </li>
-        `;
+      function renderTask(task) {
+        return renderWorkItemCard(mapTaskToWorkItem(task));
       }
 
       // Escape HTML to prevent XSS
@@ -6058,25 +6196,6 @@
       function switchRoutineTab(nextTab) {
         activeRoutineTab = nextTab === 'history' ? 'history' : 'active';
         renderRoutineList();
-      }
-
-      function formatRoutineChannelLabel(channel) {
-        const channelMap = {
-          'email': 'Email',
-          'slack': 'Slack',
-          'discord': 'Discord',
-          'sms': 'SMS',
-          'telegram': 'Telegram',
-          'whatsapp': 'WhatsApp',
-          'google_docs': 'Google Docs',
-          'google_sheets': 'Google Sheets',
-          'google_slides': 'Google Slides',
-          'bluebubbles': 'iMessage',
-          'wechat': 'WeChat',
-          'lark': 'Lark'
-        };
-        const normalized = String(channel || '').trim().toLowerCase();
-        return channelMap[normalized] || humanizeTaskToken(normalized) || 'Unknown';
       }
 
       function formatUtcDateTime(dateStr) {
@@ -6139,6 +6258,69 @@
         return { label: 'Paused', className: 'paused' };
       }
 
+      function buildRoutineModalRows(routine) {
+        return [
+          { label: 'Routine / Task ID', value: routine.id || 'N/A' },
+          { label: 'Title', value: routine.name || 'Scheduled Oliver work' },
+          { label: 'Channel', value: formatWorkChannelLabel(routine.channel) },
+          { label: 'Enabled', value: routine.enabled ? 'Yes' : 'No' },
+          { label: 'Schedule Type', value: formatRoutineCadence(routine) },
+          { label: 'Next Run', value: formatRoutineNextRun(routine) },
+          { label: 'Last Run', value: formatUtcDateTime(routine.last_run) },
+          { label: 'Created At', value: formatUtcDateTime(routine.created_at) },
+          { label: 'Latest Error', value: routine.error_message ? parseErrorMessage(routine.error_message) : 'None' }
+        ];
+      }
+
+      function mapRoutineToWorkItem(routine) {
+        const badge = routineStatusBadge(routine);
+        const routineData = encodeURIComponent(JSON.stringify(routine));
+        const isBusy = routineActionBusyIds.has(routine.id);
+        const errorMessage = routineActionErrors[routine.id];
+        const title = (routine.name || '').trim() || 'Scheduled Oliver work';
+        const busyLabel = isBusy ? 'Working...' : '';
+
+        return {
+          tagName: 'article',
+          className: 'routine-item work-item',
+          title,
+          badgeLabel: badge.label,
+          badgeClassName: `routine-status-badge work-item-badge ${badge.className}`,
+          metaLayout: 'grid',
+          metaItems: [
+            { label: 'Source', value: formatWorkChannelLabel(routine.channel) },
+            { label: 'Cadence', value: formatRoutineCadence(routine) },
+            { label: 'Next Run', value: formatRoutineNextRun(routine) },
+            { label: 'Last Result', value: formatRoutineLastResult(routine) }
+          ],
+          actions: [
+            routine.enabled
+              ? {
+                  label: busyLabel || 'Pause',
+                  onClick: `handleRoutineAction('${routine.id}', 'pause')`,
+                  disabled: isBusy
+                }
+              : {
+                  label: busyLabel || 'Resume',
+                  onClick: `handleRoutineAction('${routine.id}', 'resume')`,
+                  disabled: isBusy
+                },
+            {
+              label: busyLabel || 'Delete',
+              onClick: `handleRoutineAction('${routine.id}', 'delete')`,
+              disabled: isBusy,
+              tone: 'danger'
+            },
+            {
+              label: 'View details',
+              onClick: `showRoutineModal('${routineData}')`,
+              disabled: false
+            }
+          ],
+          inlineError: errorMessage || ''
+        };
+      }
+
       function renderRoutineList() {
         const routineList = document.getElementById('routine-list');
         if (!routineList) return;
@@ -6150,14 +6332,20 @@
         const current = activeRoutineTab === 'history' ? history : active;
 
         if (active.length === 0 && history.length === 0) {
-          routineList.innerHTML = '<div class="routine-empty-state">No routines yet. When Oliver schedules repeat work, you can manage it here.</div>';
+          routineList.innerHTML = renderWorkListState({
+            className: 'routine-empty-state work-item-empty-state',
+            message: 'No routines yet. When Oliver schedules repeat work, you can manage it here.'
+          });
           return;
         }
 
         if (current.length === 0) {
-          routineList.innerHTML = activeRoutineTab === 'history'
-            ? '<div class="routine-empty-state">No routine history yet.</div>'
-            : '<div class="routine-empty-state">No active routines right now.</div>';
+          routineList.innerHTML = renderWorkListState({
+            className: 'routine-empty-state work-item-empty-state',
+            message: activeRoutineTab === 'history'
+              ? 'No routine history yet.'
+              : 'No active routines right now.'
+          });
           return;
         }
 
@@ -6165,57 +6353,7 @@
       }
 
       function renderRoutine(routine) {
-        const badge = routineStatusBadge(routine);
-        const routineData = encodeURIComponent(JSON.stringify(routine));
-        const isBusy = routineActionBusyIds.has(routine.id);
-        const errorMessage = routineActionErrors[routine.id];
-        const title = (routine.name || '').trim() || 'Scheduled Oliver work';
-        const busyLabel = isBusy ? 'Working...' : '';
-
-        return `
-          <article class="routine-item">
-            <div class="task-header">
-              <span class="task-name">${escapeHtml(title)}</span>
-              <span class="routine-status-badge ${badge.className}">${badge.label}</span>
-            </div>
-            <div class="routine-meta-grid">
-              <div class="routine-meta-item">
-                <span class="routine-meta-label">Source</span>
-                <span class="routine-meta-value">${escapeHtml(formatRoutineChannelLabel(routine.channel))}</span>
-              </div>
-              <div class="routine-meta-item">
-                <span class="routine-meta-label">Cadence</span>
-                <span class="routine-meta-value">${escapeHtml(formatRoutineCadence(routine))}</span>
-              </div>
-              <div class="routine-meta-item">
-                <span class="routine-meta-label">Next Run</span>
-                <span class="routine-meta-value">${escapeHtml(formatRoutineNextRun(routine))}</span>
-              </div>
-              <div class="routine-meta-item">
-                <span class="routine-meta-label">Last Result</span>
-                <span class="routine-meta-value">${escapeHtml(formatRoutineLastResult(routine))}</span>
-              </div>
-            </div>
-            <div class="routine-actions">
-              ${routine.enabled ? `
-                <button class="routine-action-btn" type="button" onclick="handleRoutineAction('${routine.id}', 'pause')" ${isBusy ? 'disabled' : ''}>
-                  ${busyLabel || 'Pause'}
-                </button>
-              ` : `
-                <button class="routine-action-btn" type="button" onclick="handleRoutineAction('${routine.id}', 'resume')" ${isBusy ? 'disabled' : ''}>
-                  ${busyLabel || 'Resume'}
-                </button>
-              `}
-              <button class="routine-action-btn danger" type="button" onclick="handleRoutineAction('${routine.id}', 'delete')" ${isBusy ? 'disabled' : ''}>
-                ${busyLabel || 'Delete'}
-              </button>
-              <button class="routine-action-btn" type="button" onclick="showRoutineModal('${routineData}')">
-                View details
-              </button>
-            </div>
-            ${errorMessage ? `<div class="routine-inline-error">${escapeHtml(errorMessage)}</div>` : ''}
-          </article>
-        `;
+        return renderWorkItemCard(mapRoutineToWorkItem(routine));
       }
 
       async function loadRoutines(accessToken) {
@@ -6256,7 +6394,11 @@
           console.error('Failed to load routines:', err);
           setRoutineTabState();
           if (!hadExistingData) {
-            routineList.innerHTML = `<div class="routine-empty-state" style="color: #ef4444;">Error loading routines: ${escapeHtml(displayMessage)}</div>`;
+            routineList.innerHTML = renderWorkListState({
+              className: 'routine-empty-state work-item-empty-state',
+              message: `Error loading routines: ${displayMessage}`,
+              tone: 'danger'
+            });
           }
           routinesStatus.textContent = `Error: ${displayMessage}`;
         }
@@ -6306,73 +6448,36 @@
         }
       }
 
-      function showRoutineModal(encodedRoutine) {
-        const routine = JSON.parse(decodeURIComponent(encodedRoutine));
-        const modalTitle = document.getElementById('task-modal-title');
-        const modalContent = document.getElementById('task-modal-content');
-
-        if (modalTitle) {
-          modalTitle.textContent = 'Routine Details';
-        }
-
-        const rows = [
-          { label: 'Routine / Task ID', value: routine.id || 'N/A' },
-          { label: 'Title', value: routine.name || 'Scheduled Oliver work' },
-          { label: 'Channel', value: formatRoutineChannelLabel(routine.channel) },
-          { label: 'Enabled', value: routine.enabled ? 'Yes' : 'No' },
-          { label: 'Schedule Type', value: formatRoutineCadence(routine) },
-          { label: 'Next Run', value: formatRoutineNextRun(routine) },
-          { label: 'Last Run', value: formatUtcDateTime(routine.last_run) },
-          { label: 'Created At', value: formatUtcDateTime(routine.created_at) },
-          { label: 'Latest Error', value: routine.error_message ? parseErrorMessage(routine.error_message) : 'None' }
-        ];
-
-        modalContent.innerHTML = rows.map((row) => `
+      function renderWorkItemModalRows(rows) {
+        return rows.map((row) => `
           <div class="task-modal-row">
             <span class="task-modal-label">${row.label}</span>
             <span class="task-modal-value">${escapeHtml(String(row.value))}</span>
           </div>
         `).join('');
+      }
 
+      function showWorkItemModal(title, rows) {
+        const modalTitle = document.getElementById('task-modal-title');
+        const modalContent = document.getElementById('task-modal-content');
+
+        if (modalTitle) {
+          modalTitle.textContent = title;
+        }
+
+        modalContent.innerHTML = renderWorkItemModalRows(rows);
         document.getElementById('task-modal-overlay').classList.add('active');
+      }
+
+      function showRoutineModal(encodedRoutine) {
+        const routine = JSON.parse(decodeURIComponent(encodedRoutine));
+        showWorkItemModal('Routine Details', buildRoutineModalRows(routine));
       }
 
       // Show task details modal
       function showTaskModal(encodedTask) {
         const task = JSON.parse(decodeURIComponent(encodedTask));
-        const modalTitle = document.getElementById('task-modal-title');
-        const modalContent = document.getElementById('task-modal-content');
-
-        if (modalTitle) {
-          modalTitle.textContent = 'Task Details';
-        }
-
-        const formatModalDate = (dateStr) => {
-          if (!dateStr) return 'N/A';
-          const date = new Date(dateStr);
-          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
-        };
-
-        // Build modal content
-        const rows = [
-          { label: 'Task ID', value: task.id || 'N/A' },
-          { label: 'Channel', value: task.channel || 'N/A' },
-          { label: 'Status', value: task.execution_status || 'running' },
-          { label: 'Enabled', value: task.enabled ? 'Yes' : 'No' },
-          { label: 'Schedule Type', value: task.schedule_type || 'N/A' },
-          { label: 'Created At', value: formatModalDate(task.created_at) },
-          { label: 'Next Run', value: formatModalDate(task.next_run) },
-          { label: 'Last Run', value: formatModalDate(task.last_run) },
-        ];
-
-        modalContent.innerHTML = rows.map(row => `
-          <div class="task-modal-row">
-            <span class="task-modal-label">${row.label}</span>
-            <span class="task-modal-value">${escapeHtml(String(row.value))}</span>
-          </div>
-        `).join('');
-
-        document.getElementById('task-modal-overlay').classList.add('active');
+        showWorkItemModal('Task Details', buildTaskModalRows(task));
       }
 
       // Close task details modal
