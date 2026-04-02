@@ -6,7 +6,9 @@ use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::account_store::{get_global_account_store, lookup_account_by_identifier};
+use crate::account_store::{
+    get_global_account_store, lookup_account_by_channel, lookup_account_by_identifier,
+};
 use crate::channel::Channel;
 use crate::employee_config;
 use crate::service;
@@ -16,7 +18,8 @@ use super::core::Scheduler;
 use super::executor::TaskExecutor;
 use super::reply::load_reply_context;
 use super::schedule::{next_run_after, validate_cron_expression};
-use super::types::{RunTaskTask, Schedule, SchedulerError, SendReplyTask, TaskKind};
+use super::store::SchedulerStore;
+use super::types::{RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind};
 use super::utils::parse_datetime;
 
 const SECRET_SCAN_MAX_BYTES: u64 = 512 * 1024;
@@ -1324,10 +1327,16 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                 match schedule {
                     Schedule::Cron { expression, .. } => {
                         scheduler.add_cron_task(&expression, TaskKind::RunTask(new_task))?;
+                        if let Some(created_task) = scheduler.tasks().last().cloned() {
+                            mirror_run_task_to_account_storage(&created_task);
+                        }
                         created += 1;
                     }
                     Schedule::OneShot { run_at } => {
                         scheduler.add_one_shot_at(run_at, TaskKind::RunTask(new_task))?;
+                        if let Some(created_task) = scheduler.tasks().last().cloned() {
+                            mirror_run_task_to_account_storage(&created_task);
+                        }
                         created += 1;
                     }
                 }
@@ -1385,6 +1394,82 @@ pub(crate) fn resolve_schedule_request(
     }
 }
 
+fn resolve_account_id_for_run_task(task: &RunTaskTask) -> Option<Uuid> {
+    if let Some(account_id) = task.account_id {
+        return Some(account_id);
+    }
+
+    if let (Some(identifier_type), Some(identifier)) = (
+        task.requester_identifier_type.as_deref(),
+        task.requester_identifier.as_deref(),
+    ) {
+        if let Some(account_id) = lookup_account_by_identifier(identifier_type, identifier) {
+            return Some(account_id);
+        }
+    }
+
+    task.reply_to
+        .first()
+        .and_then(|identifier| lookup_account_by_channel(&task.channel, identifier))
+}
+
+fn mirror_run_task_to_account_storage(task: &ScheduledTask) {
+    let TaskKind::RunTask(run_task) = &task.kind else {
+        return;
+    };
+
+    let Some(account_id) = resolve_account_id_for_run_task(run_task) else {
+        return;
+    };
+
+    let users_root = match std::env::var("USERS_ROOT") {
+        Ok(path) if !path.trim().is_empty() => PathBuf::from(path),
+        Ok(_) | Err(_) => {
+            warn!(
+                "USERS_ROOT not set; cannot mirror scheduler-created routine {} to account storage",
+                task.id
+            );
+            return;
+        }
+    };
+
+    let account_tasks_dir = users_root.join(account_id.to_string()).join("state");
+    if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
+        warn!(
+            "failed to create account tasks dir for scheduler-created routine {} account={}: {}",
+            task.id, account_id, err
+        );
+        return;
+    }
+
+    let account_tasks_db_path = account_tasks_dir.join("tasks.db");
+    match SchedulerStore::new(account_tasks_db_path.clone()) {
+        Ok(store) => {
+            if let Err(err) = store.insert_task(task) {
+                warn!(
+                    "failed to mirror scheduler-created routine {} into account storage {}: {}",
+                    task.id,
+                    account_tasks_db_path.display(),
+                    err
+                );
+            } else {
+                info!(
+                    "mirrored scheduler-created routine {} into account storage account={}",
+                    task.id, account_id
+                );
+            }
+        }
+        Err(err) => {
+            warn!(
+                "failed to open account scheduler store {} for mirrored routine {}: {}",
+                account_tasks_db_path.display(),
+                task.id,
+                err
+            );
+        }
+    }
+}
+
 fn resolve_rel_path(root: &Path, raw: &str) -> Option<PathBuf> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -1409,6 +1494,67 @@ mod tests {
     use std::fs;
     use std::sync::{Mutex, OnceLock};
     use tempfile::TempDir;
+    use uuid::Uuid;
+
+    #[derive(Default)]
+    struct NoopExecutor;
+
+    impl TaskExecutor for NoopExecutor {
+        fn execute(
+            &self,
+            _task: &TaskKind,
+        ) -> Result<super::super::types::TaskExecution, SchedulerError> {
+            Ok(super::super::types::TaskExecution::empty())
+        }
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn skip_if_storage_unavailable<T>(
+        result: Result<T, SchedulerError>,
+        context: &str,
+    ) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(err) if storage_unavailable(&err) => {
+                eprintln!("skipping {context}: {err}");
+                None
+            }
+            Err(err) => panic!("{context}: {err}"),
+        }
+    }
+
+    fn storage_unavailable(err: &SchedulerError) -> bool {
+        let SchedulerError::Storage(message) = err else {
+            return false;
+        };
+        let message = message.to_ascii_lowercase();
+        message.contains("mongodb_uri must be set")
+            || message.contains("server selection timeout")
+            || message.contains("no available servers")
+            || message.contains("connection refused")
+    }
 
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1745,6 +1891,76 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
         // This tests current behavior - reply_to uses exact string match
         assert!(is_routing_identifier_allowed(&task, "User@Example.COM"));
         assert!(!is_routing_identifier_allowed(&task, "user@example.com"));
+    }
+
+    #[test]
+    fn create_run_task_actions_are_mirrored_to_account_storage() {
+        let _lock = env_lock().lock().expect("env lock");
+        let temp = TempDir::new().expect("tempdir");
+        let users_root = temp.path().join("users");
+        fs::create_dir_all(&users_root).expect("users root");
+        let _users_root_guard =
+            EnvVarGuard::set("USERS_ROOT", users_root.to_string_lossy().as_ref());
+
+        let workspace_db = users_root
+            .join("legacy_user")
+            .join("state")
+            .join("tasks.db");
+        fs::create_dir_all(workspace_db.parent().expect("workspace parent"))
+            .expect("workspace dir");
+
+        // This exercises the real scheduler store path when MongoDB is available, but
+        // still keeps the unit suite green on laptops without local Mongo configured.
+        let Some(mut scheduler) = skip_if_storage_unavailable(
+            Scheduler::load(&workspace_db, NoopExecutor),
+            "load scheduler",
+        ) else {
+            return;
+        };
+        let workspace = temp.path().join("workspaces").join("thread_1");
+        let mail_root = temp.path().join("mail");
+        fs::create_dir_all(&workspace).expect("workspace");
+        fs::create_dir_all(&mail_root).expect("mail root");
+
+        let account_id = Uuid::new_v4();
+        let mut task = make_test_task(vec!["logan@example.com".to_string()]);
+        task.workspace_dir = workspace;
+        task.archive_root = Some(mail_root);
+        task.account_id = Some(account_id);
+
+        let actions = vec![run_task_module::SchedulerActionRequest::CreateRunTask {
+            schedule: run_task_module::ScheduleRequest::Cron {
+                expression: "0 0 16 * * *".to_string(),
+            },
+            model_name: None,
+            codex_disabled: None,
+            reply_to: Vec::new(),
+        }];
+
+        apply_scheduler_actions(&mut scheduler, &task, &actions).expect("apply actions");
+
+        let created_task = scheduler.tasks().last().cloned().expect("created task");
+        let account_db = users_root
+            .join(account_id.to_string())
+            .join("state")
+            .join("tasks.db");
+        let Some(account_store) =
+            skip_if_storage_unavailable(SchedulerStore::new(account_db), "open account store")
+        else {
+            return;
+        };
+        let Some(routines) = skip_if_storage_unavailable(
+            account_store.list_routines_with_status(),
+            "list mirrored routines",
+        ) else {
+            return;
+        };
+
+        assert_eq!(routines.len(), 1);
+        assert_eq!(routines[0].id, created_task.id.to_string());
+        assert_eq!(routines[0].schedule_type, "cron");
+        assert_eq!(routines[0].channel, "email");
+        assert!(routines[0].enabled);
     }
 
     #[test]

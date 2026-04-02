@@ -732,6 +732,21 @@ async fn load_account_identifiers(
     })
 }
 
+fn legacy_routine_lookup_identifiers(
+    identifiers: &[crate::account_store::AccountIdentifier],
+) -> Vec<(String, String)> {
+    identifiers
+        .iter()
+        .filter(|identifier| identifier.verified)
+        .map(|identifier| {
+            (
+                identifier.identifier_type.clone(),
+                identifier.identifier.clone(),
+            )
+        })
+        .collect()
+}
+
 fn provider_capabilities_from_state(
     state: &AuthState,
 ) -> crate::service::startup_workspace::ProviderCapabilitySnapshot {
@@ -881,14 +896,13 @@ async fn load_unified_account_task_paths(
     push_unique_task_path(&mut paths, &mut seen, account_tasks_db_path);
 
     let identifiers = load_account_identifiers(state, account_id).await?;
-    for slack_identifier in identifiers
-        .iter()
-        .filter(|identifier| identifier.identifier_type == "slack" && identifier.verified)
-    {
+    // Older scheduled child routines can exist only in legacy per-user storage even when
+    // the account-level dashboard mirror is missing. Check every verified identifier so
+    // existing routines remain visible and routine mutations can reach the live task copy.
+    for (identifier_type, identifier) in legacy_routine_lookup_identifiers(&identifiers) {
         let user_store_clone = user_store.clone();
-        let identifier = slack_identifier.identifier.clone();
         let user_result = task::spawn_blocking(move || {
-            user_store_clone.get_user_by_identifier("slack", &identifier)
+            user_store_clone.get_user_by_identifier(&identifier_type, &identifier)
         })
         .await;
 
@@ -5905,6 +5919,21 @@ mod tests {
         }
     }
 
+    fn sample_account_identifier(
+        identifier_type: &str,
+        identifier: &str,
+        verified: bool,
+    ) -> crate::account_store::AccountIdentifier {
+        crate::account_store::AccountIdentifier {
+            id: Uuid::new_v4(),
+            account_id: Uuid::new_v4(),
+            identifier_type: identifier_type.to_string(),
+            identifier: identifier.to_string(),
+            verified,
+            created_at: Utc::now(),
+        }
+    }
+
     fn sample_routine_summary(
         id: &str,
         enabled: bool,
@@ -6394,6 +6423,27 @@ mod tests {
         assert_eq!(
             merged[0].last_run.as_deref(),
             Some((now + ChronoDuration::minutes(5)).to_rfc3339().as_str())
+        );
+    }
+
+    #[test]
+    fn routine_lookup_identifiers_include_all_verified_account_links() {
+        let identifiers = vec![
+            sample_account_identifier("email", "logan@example.com", true),
+            sample_account_identifier("slack", "U123", true),
+            sample_account_identifier("google_docs", "person-456", true),
+            sample_account_identifier("email", "pending@example.com", false),
+        ];
+
+        let lookup_identifiers = legacy_routine_lookup_identifiers(&identifiers);
+
+        assert_eq!(
+            lookup_identifiers,
+            vec![
+                ("email".to_string(), "logan@example.com".to_string()),
+                ("slack".to_string(), "U123".to_string()),
+                ("google_docs".to_string(), "person-456".to_string()),
+            ]
         );
     }
 
