@@ -208,8 +208,7 @@ For the operational lookup/download/debugging flow, see:
 - `RUN_TASK_TIMEOUT_SECS` (optional) controls each runner command timeout for run_task (default:
   `36000`). Runtime caps it below the effective watchdog budget to avoid stale-task retry loops.
 - `RUN_TASK_CODEX_TIMEOUT_SECS` (optional) caps primary Codex runtime before Claude fallback is
-  considered; if unset, Azure ACI Codex runs default to a 900-second primary budget while local
-  Codex keeps the overall `RUN_TASK_TIMEOUT_SECS` budget.
+  considered; if unset, Codex keeps the overall `RUN_TASK_TIMEOUT_SECS` budget.
 
 In staging/production targets, local codex execution is blocked unless you explicitly avoid that policy.
 
@@ -221,11 +220,10 @@ Docker execution path (local worker):
   executions
 - Azure ACI timeout errors (`az container create` / `az container show`) are treated as
   fallback-eligible primary Codex failures, so long-running or stuck remote Codex attempts can
-  hand off to Claude instead of waiting for the full scheduler timeout window
+  hand off to Claude
 - optional `RUN_TASK_CODEX_FALLBACK_CLAUDE_MODEL=<model>` to force the Claude model used by that fallback
-- optional `RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS=<seconds>` to cap Claude fallback runtime; the
-  default fallback cap is 900 seconds and it is still bounded by the effective overall
-  `RUN_TASK_TIMEOUT_SECS` budget
+- optional `RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS=<seconds>` to cap Claude fallback runtime; if
+  unset, the fallback keeps the overall `RUN_TASK_TIMEOUT_SECS` budget
 - Claude fallback recovery mode now prioritizes writing a useful in-channel reply before starting
   new PDFs or other large deliverables, and it reuses `.codex_remote_output.log` plus
   `.run_task_trace_codex_primary/` when the primary Codex attempt already gathered evidence

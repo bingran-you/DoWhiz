@@ -106,7 +106,6 @@ const REMOTE_EXIT_CODE_FILENAME: &str = ".codex_remote_exit_code";
 const HAG_MCP_CONFIG_START_MARKER: &str = "# BEGIN DOWHIZ HUMAN APPROVAL GATE MCP";
 const HAG_MCP_CONFIG_END_MARKER: &str = "# END DOWHIZ HUMAN APPROVAL GATE MCP";
 const EPHEMERAL_SHARE_PREFIX: &str = "task-";
-const DEFAULT_AZURE_ACI_CODEX_TIMEOUT_SECS: u64 = 900;
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
@@ -562,7 +561,7 @@ pub(super) fn run_codex_task(
         trace_env_overrides.push((key.clone(), value.clone()));
     }
 
-    let timeout = codex_command_timeout(ExecutionBackend::Local);
+    let timeout = codex_command_timeout();
     let mut trace = RunTaskTraceRecorder::new(
         request.workspace_dir,
         runner,
@@ -1017,24 +1016,14 @@ fn resolve_execution_backend() -> ExecutionBackend {
     }
 }
 
-fn codex_command_timeout(backend: ExecutionBackend) -> Duration {
+fn codex_command_timeout() -> Duration {
     let overall_timeout = run_task_timeout();
     let configured_timeout = read_env_trimmed("RUN_TASK_CODEX_TIMEOUT_SECS")
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
         .map(Duration::from_secs);
 
-    let default_timeout = match backend {
-        // Azure ACI primary Codex runs need a shorter budget so Claude fallback can fire before
-        // the overall run_task watchdog window is exhausted.
-        ExecutionBackend::AzureAci => {
-            Some(Duration::from_secs(DEFAULT_AZURE_ACI_CODEX_TIMEOUT_SECS))
-        }
-        ExecutionBackend::Local => None,
-    };
-
     configured_timeout
-        .or(default_timeout)
         .map(|timeout| timeout.min(overall_timeout))
         .unwrap_or(overall_timeout)
 }
@@ -1241,7 +1230,7 @@ fn run_codex_task_azure_aci(
     let container_name = build_aci_container_name();
     timing.set_task_id(&container_name);
     timing.end_setup();
-    let timeout = codex_command_timeout(ExecutionBackend::AzureAci);
+    let timeout = codex_command_timeout();
     let mut trace = RunTaskTraceRecorder::new(
         request.workspace_dir,
         runner,
@@ -4658,7 +4647,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     }
 
     #[test]
-    fn test_codex_command_timeout_defaults_to_overall_budget_locally() {
+    fn test_codex_command_timeout_defaults_to_overall_budget_when_unset() {
         let _lock = env_lock();
         let _guards = vec![
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
@@ -4666,25 +4655,7 @@ addresses = ["dowhiz@deep-tutor.com"]
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
 
-        assert_eq!(
-            codex_command_timeout(ExecutionBackend::Local),
-            Duration::from_secs(1200)
-        );
-    }
-
-    #[test]
-    fn test_codex_command_timeout_caps_azure_aci_by_default() {
-        let _lock = env_lock();
-        let _guards = vec![
-            EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "36000"),
-            EnvVarGuard::unset("RUN_TASK_CODEX_TIMEOUT_SECS"),
-            EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
-        ];
-
-        assert_eq!(
-            codex_command_timeout(ExecutionBackend::AzureAci),
-            Duration::from_secs(DEFAULT_AZURE_ACI_CODEX_TIMEOUT_SECS)
-        );
+        assert_eq!(codex_command_timeout(), Duration::from_secs(1200));
     }
 
     #[test]
@@ -4696,10 +4667,7 @@ addresses = ["dowhiz@deep-tutor.com"]
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
 
-        assert_eq!(
-            codex_command_timeout(ExecutionBackend::AzureAci),
-            Duration::from_secs(300)
-        );
+        assert_eq!(codex_command_timeout(), Duration::from_secs(300));
     }
 
     #[test]

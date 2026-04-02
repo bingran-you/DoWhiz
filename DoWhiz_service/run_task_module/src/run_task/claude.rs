@@ -57,7 +57,6 @@ use super::utils::{
     run_command_with_timeout_and_cancel, run_task_timeout, tail_string, ThreadSupersedeMonitor,
 };
 
-const DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS: u64 = 900;
 const CLAUDE_ALLOWED_TOOLS: &str = "Read,Glob,Grep,Bash,Write,Edit,WebSearch,WebFetch,TodoWrite";
 pub(super) fn run_claude_task(
     request: RunTaskRequest<'_>,
@@ -230,12 +229,12 @@ fn claude_task_timeout(is_codex_fallback: bool) -> std::time::Duration {
         return default_timeout;
     }
 
-    let fallback_timeout_secs = read_env_trimmed("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS")
+    read_env_trimmed("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS")
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS);
-
-    default_timeout.min(std::time::Duration::from_secs(fallback_timeout_secs))
+        .map(std::time::Duration::from_secs)
+        .map(|timeout| default_timeout.min(timeout))
+        .unwrap_or(default_timeout)
 }
 
 fn prepare_claude_env(
@@ -580,10 +579,7 @@ fn extract_claude_fragment(event: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        build_claude_command, claude_task_timeout, CLAUDE_ALLOWED_TOOLS,
-        DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS,
-    };
+    use super::{build_claude_command, claude_task_timeout, CLAUDE_ALLOWED_TOOLS};
     use std::env;
     use std::path::Path;
     use std::sync::{Mutex, OnceLock};
@@ -623,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_fallback_timeout_defaults_to_recovery_cap() {
+    fn claude_fallback_timeout_defaults_to_run_task_timeout() {
         let _lock = env_lock();
         let _guards = vec![
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
@@ -631,10 +627,7 @@ mod tests {
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
 
-        assert_eq!(
-            claude_task_timeout(true),
-            Duration::from_secs(DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS)
-        );
+        assert_eq!(claude_task_timeout(true), Duration::from_secs(1200));
     }
 
     #[test]
