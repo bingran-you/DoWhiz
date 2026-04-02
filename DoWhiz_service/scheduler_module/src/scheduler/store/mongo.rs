@@ -11,9 +11,10 @@ use uuid::Uuid;
 
 use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
 
+use super::super::is_user_visible_routine_task;
 use super::super::types::{Schedule, ScheduledTask, SchedulerError};
 use super::super::utils::{task_kind_channel, task_kind_label};
-use super::{TaskDebugArchiveRecord, TaskStatusSummary};
+use super::{RoutineSummary, TaskDebugArchiveRecord, TaskStatusSummary};
 
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(1);
 const REQUEST_SUMMARY_MAX_CHARS: usize = 72;
@@ -118,15 +119,22 @@ impl MongoSchedulerStore {
                     continue;
                 }
             }
-            let task_json = document.get_str("task_json").map_err(|err| {
-                SchedulerError::Storage(format!("missing task_json for task document: {err}"))
-            })?;
-            let task: ScheduledTask = serde_json::from_str(task_json)
-                .map_err(|err| SchedulerError::Storage(format!("invalid task_json: {err}")))?;
+            let task = deserialize_task_document(&document)?;
             tasks.push(task);
         }
         tasks.sort_by_key(|task| task.created_at);
         Ok(tasks)
+    }
+
+    pub(crate) fn load_task_by_id(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<ScheduledTask>, SchedulerError> {
+        let document = self
+            .tasks
+            .find_one(self.task_filter(task_id), None)
+            .map_err(mongo_err)?;
+        document.as_ref().map(deserialize_task_document).transpose()
     }
 
     pub(crate) fn insert_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
@@ -366,17 +374,6 @@ impl MongoSchedulerStore {
         Ok(())
     }
 
-    pub(crate) fn disable_task_by_id(&self, task_id: &str) -> Result<(), SchedulerError> {
-        self.tasks
-            .update_one(
-                self.task_filter(task_id),
-                doc! { "$set": { "enabled": false } },
-                None,
-            )
-            .map_err(mongo_err)?;
-        Ok(())
-    }
-
     pub(crate) fn list_tasks_with_status(&self) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
         let created_after = BsonDateTime::from_chrono(Utc::now() - ChronoDuration::hours(24));
         let cursor = self
@@ -404,19 +401,7 @@ impl MongoSchedulerStore {
             }
             let request_summary = derive_request_summary(&task_doc);
             let schedule = task_doc.get_document("schedule").ok();
-            let execution = self
-                .executions
-                .find_one(
-                    doc! {
-                        "owner_scope.kind": &self.owner_kind,
-                        "owner_scope.id": &self.owner_id,
-                        "task_id": task_id,
-                    },
-                    FindOneOptions::builder()
-                        .sort(doc! { "started_at": -1 })
-                        .build(),
-                )
-                .map_err(mongo_err)?;
+            let execution = self.latest_execution_for_task(task_id)?;
             summaries.push(TaskStatusSummary {
                 id: task_id.to_string(),
                 kind: task_doc.get_str("kind").unwrap_or("unknown").to_string(),
@@ -446,6 +431,83 @@ impl MongoSchedulerStore {
             });
         }
         Ok(summaries)
+    }
+
+    pub(crate) fn list_routines_with_status(&self) -> Result<Vec<RoutineSummary>, SchedulerError> {
+        let cursor = self
+            .tasks
+            .find(
+                self.owner_filter(),
+                FindOptions::builder()
+                    .sort(doc! { "created_at": -1 })
+                    .build(),
+            )
+            .map_err(mongo_err)?;
+        let mut summaries = Vec::new();
+        let mut seen_task_ids = HashSet::new();
+        let now = Utc::now();
+
+        for row in cursor {
+            let task_doc = row.map_err(mongo_err)?;
+            let task_id = task_doc
+                .get_str("task_id")
+                .map_err(|err| SchedulerError::Storage(format!("missing task_id: {err}")))?;
+            if !seen_task_ids.insert(task_id.to_string()) {
+                continue;
+            }
+
+            let task = deserialize_task_document(&task_doc)?;
+            if !is_user_visible_routine_task(&task, now) {
+                continue;
+            }
+
+            let execution = self.latest_execution_for_task(task_id)?;
+            let channel = task_doc.get_str("channel").unwrap_or("email").to_string();
+            let name =
+                derive_request_summary(&task_doc).unwrap_or_else(|| default_routine_name(&channel));
+            let (schedule_type, next_run, run_at, is_recurring) =
+                routine_schedule_fields(&task.schedule);
+
+            summaries.push(RoutineSummary {
+                id: task_id.to_string(),
+                name,
+                kind: task_doc.get_str("kind").unwrap_or("unknown").to_string(),
+                channel,
+                enabled: task_doc.get_bool("enabled").unwrap_or(task.enabled),
+                schedule_type,
+                next_run,
+                run_at,
+                last_run: task.last_run.map(|value| value.to_rfc3339()),
+                execution_status: execution
+                    .as_ref()
+                    .and_then(|doc| doc.get_str("status").ok())
+                    .map(|value| value.to_string()),
+                error_message: execution.as_ref().and_then(|doc| {
+                    doc.get_str("error_message")
+                        .ok()
+                        .map(|value| value.to_string())
+                }),
+                created_at: task.created_at.to_rfc3339(),
+                is_recurring,
+            });
+        }
+
+        Ok(summaries)
+    }
+
+    fn latest_execution_for_task(&self, task_id: &str) -> Result<Option<Document>, SchedulerError> {
+        self.executions
+            .find_one(
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "task_id": task_id,
+                },
+                FindOneOptions::builder()
+                    .sort(doc! { "started_at": -1 })
+                    .build(),
+            )
+            .map_err(mongo_err)
     }
 
     fn owner_filter(&self) -> Document {
@@ -489,6 +551,28 @@ fn schedule_doc(schedule: &Schedule) -> Document {
             "run_at": BsonDateTime::from_chrono(*run_at),
         },
     }
+}
+
+fn routine_schedule_fields(schedule: &Schedule) -> (String, Option<String>, Option<String>, bool) {
+    match schedule {
+        Schedule::Cron { next_run, .. } => {
+            ("cron".to_string(), Some(next_run.to_rfc3339()), None, true)
+        }
+        Schedule::OneShot { run_at } => (
+            "one_shot".to_string(),
+            None,
+            Some(run_at.to_rfc3339()),
+            false,
+        ),
+    }
+}
+
+fn deserialize_task_document(document: &Document) -> Result<ScheduledTask, SchedulerError> {
+    let task_json = document.get_str("task_json").map_err(|err| {
+        SchedulerError::Storage(format!("missing task_json for task document: {err}"))
+    })?;
+    serde_json::from_str(task_json)
+        .map_err(|err| SchedulerError::Storage(format!("invalid task_json: {err}")))
 }
 
 fn resolve_owner_scope(path: &Path) -> (String, String) {
@@ -811,6 +895,19 @@ fn truncate_summary(value: &str, max_chars: usize) -> String {
     }
 
     output
+}
+
+fn default_routine_name(channel: &str) -> String {
+    match channel {
+        "slack" => "Scheduled Slack work".to_string(),
+        "discord" => "Scheduled Discord work".to_string(),
+        "email" => "Scheduled email work".to_string(),
+        "google_docs" => "Scheduled Google Docs work".to_string(),
+        "google_sheets" => "Scheduled Google Sheets work".to_string(),
+        "google_slides" => "Scheduled Google Slides work".to_string(),
+        "lark" => "Scheduled Lark work".to_string(),
+        _ => "Scheduled Oliver work".to_string(),
+    }
 }
 
 fn mongo_err(err: mongodb::error::Error) -> SchedulerError {

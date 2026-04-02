@@ -420,6 +420,131 @@
         color: var(--bg-primary, #1a1a2e);
       }
 
+      .routine-tabs {
+        display: inline-flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+      .routine-tab {
+        border: 1px solid var(--border, #333);
+        background: transparent;
+        color: var(--text-muted, #888);
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .routine-tab.is-active {
+        color: var(--text, #fff);
+        border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border, #333));
+        background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
+      }
+      .routine-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .routine-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: var(--surface, #1a1a1a);
+        border: 1px solid var(--border, #333);
+        border-radius: 10px;
+      }
+      .routine-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.6rem 1rem;
+      }
+      .routine-meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+      }
+      .routine-meta-label {
+        font-size: 0.75rem;
+        color: var(--text-muted, #888);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .routine-meta-value {
+        font-size: 0.9rem;
+        color: var(--text, #fff);
+        word-break: break-word;
+      }
+      .routine-status-badge {
+        padding: 0.25rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .routine-status-badge.active {
+        background: rgba(34, 197, 94, 0.16);
+        color: #4ade80;
+      }
+      .routine-status-badge.running {
+        background: rgba(59, 130, 246, 0.16);
+        color: #60a5fa;
+      }
+      .routine-status-badge.paused {
+        background: rgba(148, 163, 184, 0.18);
+        color: #cbd5e1;
+      }
+      .routine-status-badge.completed {
+        background: rgba(14, 165, 233, 0.16);
+        color: #38bdf8;
+      }
+      .routine-status-badge.failed {
+        background: rgba(239, 68, 68, 0.18);
+        color: #f87171;
+      }
+      .routine-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .routine-action-btn {
+        border: 1px solid var(--border, #333);
+        background: transparent;
+        color: var(--text, #fff);
+        border-radius: 8px;
+        padding: 0.45rem 0.8rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .routine-action-btn:hover:not(:disabled) {
+        border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border, #333));
+        color: color-mix(in srgb, var(--accent, #38bdf8) 82%, var(--text, #fff));
+      }
+      .routine-action-btn:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+      .routine-action-btn.danger:hover:not(:disabled) {
+        border-color: rgba(239, 68, 68, 0.7);
+        color: #f87171;
+      }
+      .routine-inline-error {
+        font-size: 0.85rem;
+        color: #ef4444;
+      }
+      .routine-empty-state {
+        padding: 1.5rem;
+        text-align: center;
+        color: var(--text-muted, #888);
+        border: 1px dashed var(--border, #333);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--surface, #1a1a1a) 88%, transparent);
+      }
 
       .task-modal-overlay {
         position: fixed;
@@ -572,6 +697,10 @@
           align-items: flex-start;
         }
 
+        .routine-meta-grid {
+          grid-template-columns: 1fr;
+        }
+
         .identifier-item {
           flex-direction: column;
           align-items: flex-start;
@@ -594,7 +723,8 @@
         }
 
         .channel-connect-actions .auth-btn,
-        .memo-actions .auth-btn {
+        .memo-actions .auth-btn,
+        .routine-action-btn {
           width: 100%;
           justify-content: center;
         }
@@ -1545,7 +1675,7 @@
     <div id="task-modal-overlay" class="task-modal-overlay" onclick="closeTaskModal(event)">
       <div class="task-modal" onclick="event.stopPropagation()">
         <div class="task-modal-header">
-          <span class="task-modal-title">Task Details</span>
+          <span id="task-modal-title" class="task-modal-title">Task Details</span>
           <button class="task-modal-close" onclick="closeTaskModal()">&times;</button>
         </div>
         <div id="task-modal-content"></div>
@@ -1686,6 +1816,7 @@
                   <a class="sidebar-link" href="#section-channels">Connected Apps</a>
                   <a class="sidebar-link" href="#section-workspace">Next Steps</a>
                   <a class="sidebar-link" href="#section-tasks">Tasks</a>
+                  <a class="sidebar-link" href="#section-routines">Routines</a>
                   <a class="sidebar-link" href="#section-memo">Memory</a>
                   <a class="sidebar-link" href="#section-settings">Settings</a>
                 </nav>
@@ -1816,6 +1947,48 @@
                   <ul id="task-list" class="identifier-list">
                     <li class="task-item" style="text-align: center; color: var(--text-muted, #888);">Loading tasks...</li>
                   </ul>
+                </section>
+
+                <section id="section-routines" class="legal-card dashboard-section">
+                  <h2>Routines</h2>
+                  <p>Review and manage recurring Oliver work across your connected apps.</p>
+                  <div class="tasks-header">
+                    <div class="tasks-controls">
+                      <button id="refresh-routines-btn" class="auth-btn auth-btn-oauth">
+                        Refresh
+                      </button>
+                      <div class="polling-indicator">
+                        <span class="polling-dot"></span>
+                        <span>Auto-updating</span>
+                      </div>
+                    </div>
+                    <span id="routines-status" class="tasks-status"></span>
+                  </div>
+                  <div class="routine-tabs" role="tablist" aria-label="Routine views">
+                    <button
+                      id="routine-tab-active"
+                      class="routine-tab is-active"
+                      type="button"
+                      data-routine-tab="active"
+                      role="tab"
+                      aria-selected="true"
+                    >
+                      Active
+                    </button>
+                    <button
+                      id="routine-tab-history"
+                      class="routine-tab"
+                      type="button"
+                      data-routine-tab="history"
+                      role="tab"
+                      aria-selected="false"
+                    >
+                      History
+                    </button>
+                  </div>
+                  <div id="routine-list" class="routine-list" aria-live="polite">
+                    <div class="routine-empty-state">Loading routines...</div>
+                  </div>
                 </section>
 
                 <section id="section-memo" class="legal-card dashboard-section">
@@ -2195,6 +2368,7 @@
       const RECOMMENDATION_SECTION_LABELS = {
         'section-channels': 'Open Connected Apps',
         'section-memo': 'Open Memory',
+        'section-routines': 'Open Routines',
         'section-settings': 'Open Settings',
         'section-tasks': 'Open Tasks',
         'section-workspace': 'Open Next Steps'
@@ -2216,6 +2390,10 @@
       let taskPollingInterval = null;
       let cachedIdentifiers = [];
       let cachedTasks = [];
+      let cachedRoutines = { active: [], history: [] };
+      let activeRoutineTab = 'active';
+      let routineActionBusyIds = new Set();
+      let routineActionErrors = {};
       let cachedMemoContent = '';
       let cachedBalance = null;
       let pendingConnectionOnboarding = loadPendingConnectionOnboardingFromStorage();
@@ -4571,6 +4749,10 @@
         stopTaskPolling();
         cachedIdentifiers = [];
         cachedTasks = [];
+        cachedRoutines = { active: [], history: [] };
+        activeRoutineTab = 'active';
+        routineActionBusyIds = new Set();
+        routineActionErrors = {};
         cachedMemoContent = '';
         workspaceRecommendationResponse = null;
         workspaceRecommendationStatus = 'idle';
@@ -4877,6 +5059,7 @@
           loadIdentifiers(session.access_token),
           loadMemo(session.access_token),
           loadTasks(session.access_token),
+          loadRoutines(session.access_token),
           loadWorkspaceRecommendationPreferences(session.access_token),
           loadBalanceAndBadges(session.access_token)
         ]);
@@ -4988,6 +5171,7 @@
           await loadIdentifiers(accessToken);
           // Refresh tasks to remove tasks from the unlinked channel
           await loadTasks(accessToken, { refreshRecommendation: true });
+          await loadRoutines(accessToken);
           renderConnectionOnboardingCard();
         } catch (err) {
           showMessage(normalizeApiFetchError(err));
@@ -5601,6 +5785,7 @@
           await loadIdentifiers(session.access_token);
           // Refresh tasks to include the new channel
           await loadTasks(session.access_token, { refreshRecommendation: true });
+          await loadRoutines(session.access_token);
           renderConnectionOnboardingCard();
         } catch (err) {
           showLinkMessage(err.message);
@@ -5851,10 +6036,316 @@
         return firstLine.length > 150 ? firstLine.substring(0, 150) + '...' : firstLine;
       }
 
+      function setRoutineTabState() {
+        const activeCount = Array.isArray(cachedRoutines.active) ? cachedRoutines.active.length : 0;
+        const historyCount = Array.isArray(cachedRoutines.history) ? cachedRoutines.history.length : 0;
+        const activeButton = document.getElementById('routine-tab-active');
+        const historyButton = document.getElementById('routine-tab-history');
+
+        if (activeButton) {
+          activeButton.textContent = `Active (${activeCount})`;
+          activeButton.classList.toggle('is-active', activeRoutineTab === 'active');
+          activeButton.setAttribute('aria-selected', activeRoutineTab === 'active' ? 'true' : 'false');
+        }
+
+        if (historyButton) {
+          historyButton.textContent = `History (${historyCount})`;
+          historyButton.classList.toggle('is-active', activeRoutineTab === 'history');
+          historyButton.setAttribute('aria-selected', activeRoutineTab === 'history' ? 'true' : 'false');
+        }
+      }
+
+      function switchRoutineTab(nextTab) {
+        activeRoutineTab = nextTab === 'history' ? 'history' : 'active';
+        renderRoutineList();
+      }
+
+      function formatRoutineChannelLabel(channel) {
+        const channelMap = {
+          'email': 'Email',
+          'slack': 'Slack',
+          'discord': 'Discord',
+          'sms': 'SMS',
+          'telegram': 'Telegram',
+          'whatsapp': 'WhatsApp',
+          'google_docs': 'Google Docs',
+          'google_sheets': 'Google Sheets',
+          'google_slides': 'Google Slides',
+          'bluebubbles': 'iMessage',
+          'wechat': 'WeChat',
+          'lark': 'Lark'
+        };
+        const normalized = String(channel || '').trim().toLowerCase();
+        return channelMap[normalized] || humanizeTaskToken(normalized) || 'Unknown';
+      }
+
+      function formatUtcDateTime(dateStr) {
+        if (!dateStr) return 'N/A';
+        const date = new Date(dateStr);
+        if (Number.isNaN(date.getTime())) return 'N/A';
+        const formatted = new Intl.DateTimeFormat(undefined, {
+          timeZone: 'UTC',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        }).format(date);
+        return `${formatted} UTC`;
+      }
+
+      function formatRoutineCadence(routine) {
+        return routine.schedule_type === 'cron' ? 'Recurring (UTC)' : 'One-time';
+      }
+
+      function formatRoutineNextRun(routine) {
+        return formatUtcDateTime(routine.next_run || routine.run_at);
+      }
+
+      function formatRoutineLastResult(routine) {
+        const status = String(routine.execution_status || '').toLowerCase();
+        if (status === 'success' || status === 'superseded') {
+          return routine.last_run
+            ? `Succeeded on ${formatUtcDateTime(routine.last_run)}`
+            : 'Succeeded';
+        }
+        if (status === 'failed') {
+          const summary = parseErrorMessage(routine.error_message || '');
+          return summary ? `Failed: ${summary}` : 'Failed';
+        }
+        if (status === 'running') {
+          return 'Currently running';
+        }
+        if (routine.last_run) {
+          return `Last run ${formatUtcDateTime(routine.last_run)}`;
+        }
+        return 'Waiting for first run';
+      }
+
+      function routineStatusBadge(routine) {
+        const status = String(routine.execution_status || '').toLowerCase();
+        if (routine.enabled && status === 'running') {
+          return { label: 'Running', className: 'running' };
+        }
+        if (routine.enabled) {
+          return { label: 'Active', className: 'active' };
+        }
+        if (status === 'failed') {
+          return { label: 'Failed', className: 'failed' };
+        }
+        if (status === 'success' || status === 'superseded') {
+          return { label: 'Completed', className: 'completed' };
+        }
+        return { label: 'Paused', className: 'paused' };
+      }
+
+      function renderRoutineList() {
+        const routineList = document.getElementById('routine-list');
+        if (!routineList) return;
+
+        setRoutineTabState();
+
+        const active = Array.isArray(cachedRoutines.active) ? cachedRoutines.active : [];
+        const history = Array.isArray(cachedRoutines.history) ? cachedRoutines.history : [];
+        const current = activeRoutineTab === 'history' ? history : active;
+
+        if (active.length === 0 && history.length === 0) {
+          routineList.innerHTML = '<div class="routine-empty-state">No routines yet. When Oliver schedules repeat work, you can manage it here.</div>';
+          return;
+        }
+
+        if (current.length === 0) {
+          routineList.innerHTML = activeRoutineTab === 'history'
+            ? '<div class="routine-empty-state">No routine history yet.</div>'
+            : '<div class="routine-empty-state">No active routines right now.</div>';
+          return;
+        }
+
+        routineList.innerHTML = current.map((routine) => renderRoutine(routine)).join('');
+      }
+
+      function renderRoutine(routine) {
+        const badge = routineStatusBadge(routine);
+        const routineData = encodeURIComponent(JSON.stringify(routine));
+        const isBusy = routineActionBusyIds.has(routine.id);
+        const errorMessage = routineActionErrors[routine.id];
+        const title = (routine.name || '').trim() || 'Scheduled Oliver work';
+        const busyLabel = isBusy ? 'Working...' : '';
+
+        return `
+          <article class="routine-item">
+            <div class="task-header">
+              <span class="task-name">${escapeHtml(title)}</span>
+              <span class="routine-status-badge ${badge.className}">${badge.label}</span>
+            </div>
+            <div class="routine-meta-grid">
+              <div class="routine-meta-item">
+                <span class="routine-meta-label">Source</span>
+                <span class="routine-meta-value">${escapeHtml(formatRoutineChannelLabel(routine.channel))}</span>
+              </div>
+              <div class="routine-meta-item">
+                <span class="routine-meta-label">Cadence</span>
+                <span class="routine-meta-value">${escapeHtml(formatRoutineCadence(routine))}</span>
+              </div>
+              <div class="routine-meta-item">
+                <span class="routine-meta-label">Next Run</span>
+                <span class="routine-meta-value">${escapeHtml(formatRoutineNextRun(routine))}</span>
+              </div>
+              <div class="routine-meta-item">
+                <span class="routine-meta-label">Last Result</span>
+                <span class="routine-meta-value">${escapeHtml(formatRoutineLastResult(routine))}</span>
+              </div>
+            </div>
+            <div class="routine-actions">
+              ${routine.enabled ? `
+                <button class="routine-action-btn" type="button" onclick="handleRoutineAction('${routine.id}', 'pause')" ${isBusy ? 'disabled' : ''}>
+                  ${busyLabel || 'Pause'}
+                </button>
+              ` : `
+                <button class="routine-action-btn" type="button" onclick="handleRoutineAction('${routine.id}', 'resume')" ${isBusy ? 'disabled' : ''}>
+                  ${busyLabel || 'Resume'}
+                </button>
+              `}
+              <button class="routine-action-btn danger" type="button" onclick="handleRoutineAction('${routine.id}', 'delete')" ${isBusy ? 'disabled' : ''}>
+                ${busyLabel || 'Delete'}
+              </button>
+              <button class="routine-action-btn" type="button" onclick="showRoutineModal('${routineData}')">
+                View details
+              </button>
+            </div>
+            ${errorMessage ? `<div class="routine-inline-error">${escapeHtml(errorMessage)}</div>` : ''}
+          </article>
+        `;
+      }
+
+      async function loadRoutines(accessToken) {
+        const routineList = document.getElementById('routine-list');
+        const routinesStatus = document.getElementById('routines-status');
+        const hadExistingData = (
+          (Array.isArray(cachedRoutines.active) && cachedRoutines.active.length > 0) ||
+          (Array.isArray(cachedRoutines.history) && cachedRoutines.history.length > 0)
+        );
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/api/account/routines`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!res.ok) {
+            throw new Error(await readApiErrorMessage(res, `Failed to load routines (HTTP ${res.status}).`));
+          }
+
+          const data = await res.json();
+          cachedRoutines = {
+            active: Array.isArray(data.active) ? data.active : [],
+            history: Array.isArray(data.history) ? data.history : []
+          };
+
+          const visibleIds = new Set([
+            ...cachedRoutines.active.map((routine) => routine.id),
+            ...cachedRoutines.history.map((routine) => routine.id)
+          ]);
+          routineActionErrors = Object.fromEntries(
+            Object.entries(routineActionErrors).filter(([taskId]) => visibleIds.has(taskId))
+          );
+
+          renderRoutineList();
+          routinesStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        } catch (err) {
+          const displayMessage = normalizeApiFetchError(err);
+          console.error('Failed to load routines:', err);
+          setRoutineTabState();
+          if (!hadExistingData) {
+            routineList.innerHTML = `<div class="routine-empty-state" style="color: #ef4444;">Error loading routines: ${escapeHtml(displayMessage)}</div>`;
+          }
+          routinesStatus.textContent = `Error: ${displayMessage}`;
+        }
+      }
+
+      async function handleRoutineAction(taskId, action) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          showMessage('Please sign in first.');
+          return;
+        }
+
+        if (action === 'delete') {
+          const confirmed = window.confirm('Delete this routine? This MVP keeps the underlying task as a disabled routine rather than removing it permanently.');
+          if (!confirmed) {
+            return;
+          }
+        }
+
+        const routinesStatus = document.getElementById('routines-status');
+        routineActionBusyIds.add(taskId);
+        delete routineActionErrors[taskId];
+        renderRoutineList();
+        routinesStatus.textContent = `${humanizeTaskToken(action)} in progress...`;
+
+        try {
+          const endpoint = action === 'delete'
+            ? `${DOWHIZ_API_URL}/api/account/routines/${encodeURIComponent(taskId)}`
+            : `${DOWHIZ_API_URL}/api/account/routines/${encodeURIComponent(taskId)}/${action}`;
+          const res = await fetch(endpoint, {
+            method: action === 'delete' ? 'DELETE' : 'POST',
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+
+          if (!res.ok) {
+            throw new Error(await readApiErrorMessage(res, `Failed to ${action} routine.`));
+          }
+
+          await loadRoutines(session.access_token);
+        } catch (err) {
+          console.error(`Failed to ${action} routine:`, err);
+          routineActionErrors[taskId] = normalizeApiFetchError(err);
+          routinesStatus.textContent = '';
+        } finally {
+          routineActionBusyIds.delete(taskId);
+          renderRoutineList();
+        }
+      }
+
+      function showRoutineModal(encodedRoutine) {
+        const routine = JSON.parse(decodeURIComponent(encodedRoutine));
+        const modalTitle = document.getElementById('task-modal-title');
+        const modalContent = document.getElementById('task-modal-content');
+
+        if (modalTitle) {
+          modalTitle.textContent = 'Routine Details';
+        }
+
+        const rows = [
+          { label: 'Routine / Task ID', value: routine.id || 'N/A' },
+          { label: 'Title', value: routine.name || 'Scheduled Oliver work' },
+          { label: 'Channel', value: formatRoutineChannelLabel(routine.channel) },
+          { label: 'Enabled', value: routine.enabled ? 'Yes' : 'No' },
+          { label: 'Schedule Type', value: formatRoutineCadence(routine) },
+          { label: 'Next Run', value: formatRoutineNextRun(routine) },
+          { label: 'Last Run', value: formatUtcDateTime(routine.last_run) },
+          { label: 'Created At', value: formatUtcDateTime(routine.created_at) },
+          { label: 'Latest Error', value: routine.error_message ? parseErrorMessage(routine.error_message) : 'None' }
+        ];
+
+        modalContent.innerHTML = rows.map((row) => `
+          <div class="task-modal-row">
+            <span class="task-modal-label">${row.label}</span>
+            <span class="task-modal-value">${escapeHtml(String(row.value))}</span>
+          </div>
+        `).join('');
+
+        document.getElementById('task-modal-overlay').classList.add('active');
+      }
+
       // Show task details modal
       function showTaskModal(encodedTask) {
         const task = JSON.parse(decodeURIComponent(encodedTask));
+        const modalTitle = document.getElementById('task-modal-title');
         const modalContent = document.getElementById('task-modal-content');
+
+        if (modalTitle) {
+          modalTitle.textContent = 'Task Details';
+        }
 
         const formatModalDate = (dateStr) => {
           if (!dateStr) return 'N/A';
@@ -5893,6 +6384,8 @@
 
       // Expose modal functions globally for onclick handlers
       window.showTaskModal = showTaskModal;
+      window.showRoutineModal = showRoutineModal;
+      window.handleRoutineAction = handleRoutineAction;
       window.closeTaskModal = closeTaskModal;
 
       // Start polling for task updates
@@ -5906,7 +6399,10 @@
         taskPollingInterval = setInterval(async () => {
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
-            loadTasks(session.access_token);
+            await Promise.all([
+              loadTasks(session.access_token),
+              loadRoutines(session.access_token)
+            ]);
           } else {
             // Session expired completely, stop polling
             stopTaskPolling();
@@ -5928,6 +6424,20 @@
         if (session) {
           document.getElementById('tasks-status').textContent = 'Refreshing...';
           await loadTasks(session.access_token);
+        }
+      });
+
+      document.querySelectorAll('[data-routine-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+          switchRoutineTab(button.dataset.routineTab);
+        });
+      });
+
+      document.getElementById('refresh-routines-btn').addEventListener('click', async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          document.getElementById('routines-status').textContent = 'Refreshing...';
+          await loadRoutines(session.access_token);
         }
       });
 

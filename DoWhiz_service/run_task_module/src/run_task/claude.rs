@@ -59,7 +59,6 @@ use super::utils::{
 
 const DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS: u64 = 900;
 const CLAUDE_ALLOWED_TOOLS: &str = "Read,Glob,Grep,Bash,Write,Edit,WebSearch,WebFetch,TodoWrite";
-
 pub(super) fn run_claude_task(
     request: RunTaskRequest<'_>,
     runner: &str,
@@ -581,7 +580,74 @@ fn extract_claude_fragment(event: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        build_claude_command, claude_task_timeout, CLAUDE_ALLOWED_TOOLS,
+        DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS,
+    };
+    use std::env;
+    use std::path::Path;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let previous = env::var(key).ok();
+            env::set_var(key, value);
+            Self { key, previous }
+        }
+
+        fn unset(key: &'static str) -> Self {
+            let previous = env::var(key).ok();
+            env::remove_var(key);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => env::set_var(self.key, value),
+                None => env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn claude_fallback_timeout_defaults_to_recovery_cap() {
+        let _lock = env_lock();
+        let _guards = vec![
+            EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
+            EnvVarGuard::unset("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS"),
+            EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
+        ];
+
+        assert_eq!(
+            claude_task_timeout(true),
+            Duration::from_secs(DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS)
+        );
+    }
+
+    #[test]
+    fn claude_fallback_timeout_respects_explicit_cap() {
+        let _lock = env_lock();
+        let _guards = vec![
+            EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
+            EnvVarGuard::set("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS", "300"),
+            EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
+        ];
+
+        assert_eq!(claude_task_timeout(true), Duration::from_secs(300));
+    }
 
     #[test]
     fn build_claude_command_includes_web_and_todo_tools() {

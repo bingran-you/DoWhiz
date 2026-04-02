@@ -3412,6 +3412,8 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 #[derive(Debug, serde::Deserialize)]
 struct TaskCompletion {
     task_id: String,
+    #[serde(default)]
+    container_name: Option<String>,
     exit_code: i32,
 }
 
@@ -3552,7 +3554,23 @@ pub fn run_codex_warm_pool(
         eprintln!("[run_task] warm_pool failed to delete share: {:?}", e);
     }
 
-    // 8. Replenish pool (container exited after processing)
+    // 8. Delete the completed container
+    if let Some(container_name) = &completion.container_name {
+        eprintln!(
+            "[run_task] warm_pool deleting container: {}",
+            container_name
+        );
+        if let Err(e) = crate::run_task::pool_manager::delete_container(
+            &pool_manager.config().resource_group,
+            container_name,
+        ) {
+            eprintln!("[run_task] warm_pool failed to delete container: {:?}", e);
+        }
+    } else {
+        eprintln!("[run_task] warm_pool completion missing container_name, skipping delete");
+    }
+
+    // 9. Replenish pool (container exited after processing)
     pool_manager.replenish();
 
     // 9. Read output files and construct response
@@ -5599,5 +5617,67 @@ printf '%s\n' "$@" > "$capture_file"
             .position(|a| a == "--azure-file-volume-share-name")
             .unwrap();
         assert_eq!(args[share_idx + 1], "task-ephemeral-share");
+    }
+
+    #[test]
+    fn test_task_completion_deserialize_with_container_name() {
+        let json = r#"{"task_id":"abc123","container_name":"dwz-warm-xyz789","exit_code":0}"#;
+        let completion: TaskCompletion = serde_json::from_str(json).unwrap();
+        assert_eq!(completion.task_id, "abc123");
+        assert_eq!(
+            completion.container_name,
+            Some("dwz-warm-xyz789".to_string())
+        );
+        assert_eq!(completion.exit_code, 0);
+    }
+
+    #[test]
+    fn test_task_completion_deserialize_without_container_name() {
+        // Backwards compatibility: old completion messages without container_name
+        let json = r#"{"task_id":"abc123","exit_code":1}"#;
+        let completion: TaskCompletion = serde_json::from_str(json).unwrap();
+        assert_eq!(completion.task_id, "abc123");
+        assert_eq!(completion.container_name, None);
+        assert_eq!(completion.exit_code, 1);
+    }
+
+    #[test]
+    fn test_task_completion_deserialize_with_null_container_name() {
+        let json = r#"{"task_id":"abc123","container_name":null,"exit_code":0}"#;
+        let completion: TaskCompletion = serde_json::from_str(json).unwrap();
+        assert_eq!(completion.task_id, "abc123");
+        assert_eq!(completion.container_name, None);
+        assert_eq!(completion.exit_code, 0);
+    }
+
+    #[test]
+    fn test_task_completion_matches_warm_worker_format() {
+        // This test verifies that TaskCompletion can parse the JSON format
+        // produced by warm_worker.sh:
+        //   jq -n --arg tid "$TASK_ID" --arg cname "$CONTAINER_NAME" --argjson code "$EXIT_CODE" \
+        //       '{task_id: $tid, container_name: $cname, exit_code: $code}'
+
+        // Simulate what jq produces with typical values
+        let json = serde_json::json!({
+            "task_id": "72fdf768-1234-5678-abcd-ef0123456789",
+            "container_name": "dwz-warm-048872263421470fa1ca623fee83d5a6",
+            "exit_code": 0
+        });
+
+        let completion: TaskCompletion = serde_json::from_value(json).unwrap();
+        assert_eq!(completion.task_id, "72fdf768-1234-5678-abcd-ef0123456789");
+        assert_eq!(
+            completion.container_name,
+            Some("dwz-warm-048872263421470fa1ca623fee83d5a6".to_string())
+        );
+        assert_eq!(completion.exit_code, 0);
+    }
+
+    #[test]
+    fn test_task_completion_with_nonzero_exit_code() {
+        let json = r#"{"task_id":"failed-task","container_name":"dwz-warm-xyz","exit_code":1}"#;
+        let completion: TaskCompletion = serde_json::from_str(json).unwrap();
+        assert_eq!(completion.exit_code, 1);
+        assert_eq!(completion.container_name, Some("dwz-warm-xyz".to_string()));
     }
 }

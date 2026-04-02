@@ -9,6 +9,7 @@ use crate::channel::{Channel, ChannelMetadata};
 
 use super::{
     actions::{apply_scheduler_actions, schedule_send_email},
+    is_user_visible_routine_task, prepare_task_for_resume,
     snapshot::build_scheduler_snapshot,
     RunTaskTask, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskExecution, TaskExecutor,
     TaskKind,
@@ -1085,4 +1086,168 @@ fn run_task_channel_is_preserved_in_sync() {
         let tasks = store.list_tasks_with_status().expect("list");
         assert_eq!(tasks[0].channel, "email");
     }
+}
+
+#[test]
+fn user_visible_routine_task_heuristic_is_conservative_for_one_shots() {
+    let temp = TempDir::new().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+    let run_task = base_run_task(&workspace, &mail_root);
+    let now = Utc::now();
+
+    let recurring = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task.clone()),
+        schedule: Schedule::Cron {
+            expression: "0 * * * * *".to_string(),
+            next_run: now + chrono::Duration::minutes(30),
+        },
+        enabled: true,
+        created_at: now,
+        last_run: None,
+    };
+    assert!(
+        is_user_visible_routine_task(&recurring, now),
+        "cron run_task should always surface as a routine"
+    );
+
+    let future_one_shot = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task.clone()),
+        schedule: Schedule::OneShot {
+            run_at: now + chrono::Duration::minutes(2),
+        },
+        enabled: true,
+        created_at: now,
+        last_run: None,
+    };
+    assert!(
+        is_user_visible_routine_task(&future_one_shot, now),
+        "future one-shot run_task should surface as a routine"
+    );
+
+    let delayed_one_shot = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task.clone()),
+        schedule: Schedule::OneShot {
+            run_at: now + chrono::Duration::minutes(10),
+        },
+        enabled: false,
+        created_at: now,
+        last_run: Some(now + chrono::Duration::minutes(10)),
+    };
+    assert!(
+        is_user_visible_routine_task(&delayed_one_shot, now + chrono::Duration::minutes(20)),
+        "intentionally delayed one-shot should remain visible in history after it fires"
+    );
+
+    let ambiguous_one_shot = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task),
+        schedule: Schedule::OneShot {
+            run_at: now + chrono::Duration::minutes(2),
+        },
+        enabled: false,
+        created_at: now,
+        last_run: Some(now + chrono::Duration::minutes(2)),
+    };
+    assert!(
+        !is_user_visible_routine_task(&ambiguous_one_shot, now + chrono::Duration::minutes(15)),
+        "near-immediate one-shots should stay hidden once they are no longer future-scheduled"
+    );
+}
+
+#[test]
+fn user_visible_routine_task_excludes_non_run_task_kinds() {
+    let now = Utc::now();
+    let send_reply = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::Noop,
+        schedule: Schedule::Cron {
+            expression: "0 * * * * *".to_string(),
+            next_run: now + chrono::Duration::minutes(5),
+        },
+        enabled: true,
+        created_at: now,
+        last_run: None,
+    };
+
+    assert!(
+        !is_user_visible_routine_task(&send_reply, now),
+        "only run_task items should be visible as routines"
+    );
+}
+
+#[test]
+fn prepare_task_for_resume_refreshes_schedule_safely() {
+    let temp = TempDir::new().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+    let run_task = base_run_task(&workspace, &mail_root);
+    let now = Utc::now();
+
+    let paused_cron = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task.clone()),
+        schedule: Schedule::Cron {
+            expression: "0 * * * * *".to_string(),
+            next_run: now - chrono::Duration::minutes(30),
+        },
+        enabled: false,
+        created_at: now - chrono::Duration::days(1),
+        last_run: Some(now - chrono::Duration::hours(1)),
+    };
+    let resumed_cron = prepare_task_for_resume(&paused_cron, now).expect("resume cron");
+    assert!(resumed_cron.enabled);
+    match resumed_cron.schedule {
+        Schedule::Cron { next_run, .. } => {
+            assert!(
+                next_run > now,
+                "cron resume should refresh next_run into the future"
+            );
+        }
+        _ => panic!("expected cron schedule"),
+    }
+
+    let future_one_shot = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task.clone()),
+        schedule: Schedule::OneShot {
+            run_at: now + chrono::Duration::hours(4),
+        },
+        enabled: false,
+        created_at: now - chrono::Duration::hours(2),
+        last_run: None,
+    };
+    let resumed_one_shot =
+        prepare_task_for_resume(&future_one_shot, now).expect("resume future one-shot");
+    assert!(resumed_one_shot.enabled);
+    match resumed_one_shot.schedule {
+        Schedule::OneShot { run_at } => {
+            assert_eq!(run_at, now + chrono::Duration::hours(4));
+        }
+        _ => panic!("expected one-shot schedule"),
+    }
+
+    let past_one_shot = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task),
+        schedule: Schedule::OneShot {
+            run_at: now - chrono::Duration::minutes(1),
+        },
+        enabled: false,
+        created_at: now - chrono::Duration::hours(3),
+        last_run: Some(now - chrono::Duration::minutes(1)),
+    };
+    let error =
+        prepare_task_for_resume(&past_one_shot, now).expect_err("past one-shot should fail");
+    assert!(
+        error.to_string().contains("run_at is in the past"),
+        "resume should fail clearly for stale one-shot routines"
+    );
 }

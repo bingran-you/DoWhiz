@@ -1,13 +1,15 @@
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use base64::Engine;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::task;
 use tracing::{error, info, warn};
@@ -19,6 +21,10 @@ use crate::account_store::{
 use crate::blob_store::BlobStore;
 use crate::google_auth::GoogleAuthConfig;
 use crate::notion_store::{NotionCredential, NotionStore};
+use crate::scheduler::{
+    is_user_visible_routine_task, load_routines_with_status, load_scheduled_task,
+    persist_scheduled_task, prepare_task_for_resume, RoutineSummary, ScheduledTask,
+};
 use crate::slack_store::{SlackInstallation, SlackStore};
 use crate::user_store::UserStore;
 use crate::{load_tasks_with_status, TaskStatusSummary};
@@ -840,6 +846,287 @@ async fn try_load_unified_account_tasks(
     }
 
     tasks
+}
+
+async fn load_authenticated_account_from_headers(
+    state: &AuthState,
+    headers: &HeaderMap,
+) -> Result<crate::account_store::Account, Response> {
+    let token = extract_bearer_token(headers).ok_or_else(|| {
+        json_error_response(StatusCode::UNAUTHORIZED, "Missing Authorization header")
+    })?;
+    let auth_user = validate_supabase_token(&state.supabase_url, &token)
+        .await
+        .map_err(|(status, msg)| json_error_response(status, &msg))?;
+    load_account_for_auth_user(state, auth_user.id).await
+}
+
+async fn load_unified_account_task_paths(
+    state: &AuthState,
+    account_id: Uuid,
+) -> Result<Vec<PathBuf>, Response> {
+    let (Some(user_store), Some(users_root)) = (&state.user_store, &state.users_root) else {
+        return Err(json_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Task storage not configured",
+        ));
+    };
+
+    let mut seen = HashSet::new();
+    let mut paths = Vec::new();
+    let account_tasks_db_path = users_root
+        .join(account_id.to_string())
+        .join("state")
+        .join("tasks.db");
+    push_unique_task_path(&mut paths, &mut seen, account_tasks_db_path);
+
+    let identifiers = load_account_identifiers(state, account_id).await?;
+    for slack_identifier in identifiers
+        .iter()
+        .filter(|identifier| identifier.identifier_type == "slack" && identifier.verified)
+    {
+        let user_store_clone = user_store.clone();
+        let identifier = slack_identifier.identifier.clone();
+        let user_result = task::spawn_blocking(move || {
+            user_store_clone.get_user_by_identifier("slack", &identifier)
+        })
+        .await;
+
+        if let Ok(Ok(Some(user_record))) = user_result {
+            let user_paths = user_store.user_paths(users_root, &user_record.user_id);
+            push_unique_task_path(&mut paths, &mut seen, user_paths.tasks_db_path);
+        }
+    }
+
+    Ok(paths)
+}
+
+fn push_unique_task_path(paths: &mut Vec<PathBuf>, seen: &mut HashSet<String>, path: PathBuf) {
+    let key = path.to_string_lossy().to_string();
+    if seen.insert(key) {
+        paths.push(path);
+    }
+}
+
+fn merge_routine_summaries(
+    mut base: Vec<RoutineSummary>,
+    incoming: Vec<RoutineSummary>,
+) -> Vec<RoutineSummary> {
+    for candidate in incoming {
+        if let Some(existing_idx) = base.iter().position(|routine| routine.id == candidate.id) {
+            if should_prefer_routine_summary(&candidate, &base[existing_idx]) {
+                base[existing_idx] = candidate;
+            }
+        } else {
+            base.push(candidate);
+        }
+    }
+    base
+}
+
+fn should_prefer_routine_summary(candidate: &RoutineSummary, existing: &RoutineSummary) -> bool {
+    let candidate_rank = routine_status_rank(candidate.execution_status.as_deref());
+    let existing_rank = routine_status_rank(existing.execution_status.as_deref());
+    if candidate_rank != existing_rank {
+        return candidate_rank > existing_rank;
+    }
+
+    let candidate_error = candidate.error_message.as_deref().unwrap_or("").trim();
+    let existing_error = existing.error_message.as_deref().unwrap_or("").trim();
+    if !candidate_error.is_empty() && existing_error.is_empty() {
+        return true;
+    }
+
+    routine_latest_activity_at(candidate) > routine_latest_activity_at(existing)
+}
+
+fn routine_status_rank(status: Option<&str>) -> i32 {
+    match status {
+        Some("success") | Some("failed") | Some("superseded") => 3,
+        Some("running") => 2,
+        Some(_) => 1,
+        None => 0,
+    }
+}
+
+fn partition_routines(mut routines: Vec<RoutineSummary>) -> RoutinesResponse {
+    let mut active = Vec::new();
+    let mut history = Vec::new();
+
+    for routine in routines.drain(..) {
+        if routine.enabled {
+            active.push(routine);
+        } else {
+            history.push(routine);
+        }
+    }
+
+    active.sort_by(|left, right| {
+        let left_next = routine_next_occurrence_at(left);
+        let right_next = routine_next_occurrence_at(right);
+        left_next
+            .cmp(&right_next)
+            .then_with(|| routine_created_at(right).cmp(&routine_created_at(left)))
+    });
+
+    history.sort_by(|left, right| {
+        routine_latest_activity_at(right).cmp(&routine_latest_activity_at(left))
+    });
+    history.truncate(50);
+
+    RoutinesResponse { active, history }
+}
+
+fn routine_next_occurrence_at(routine: &RoutineSummary) -> Option<DateTime<Utc>> {
+    parse_rfc3339_utc(routine.next_run.as_deref())
+        .or_else(|| parse_rfc3339_utc(routine.run_at.as_deref()))
+}
+
+fn routine_latest_activity_at(routine: &RoutineSummary) -> Option<DateTime<Utc>> {
+    parse_rfc3339_utc(routine.last_run.as_deref())
+        .or_else(|| parse_rfc3339_utc(routine.run_at.as_deref()))
+        .or_else(|| parse_rfc3339_utc(Some(routine.created_at.as_str())))
+}
+
+fn routine_created_at(routine: &RoutineSummary) -> Option<DateTime<Utc>> {
+    parse_rfc3339_utc(Some(routine.created_at.as_str()))
+}
+
+fn parse_rfc3339_utc(value: Option<&str>) -> Option<DateTime<Utc>> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|parsed| parsed.with_timezone(&Utc))
+}
+
+async fn try_load_unified_account_routines(
+    state: &AuthState,
+    account_id: Uuid,
+) -> Result<RoutinesResponse, Response> {
+    let task_paths = load_unified_account_task_paths(state, account_id).await?;
+    let mut routines = Vec::new();
+    for task_path in task_paths {
+        routines = merge_routine_summaries(routines, load_routines_with_status(&task_path));
+    }
+    Ok(partition_routines(routines))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RoutineMutationAction {
+    Pause,
+    Resume,
+    Delete,
+}
+
+fn mutate_routine_task(
+    task: &ScheduledTask,
+    action: RoutineMutationAction,
+    now: DateTime<Utc>,
+) -> Result<ScheduledTask, String> {
+    match action {
+        RoutineMutationAction::Pause | RoutineMutationAction::Delete => {
+            let mut updated = task.clone();
+            updated.enabled = false;
+            Ok(updated)
+        }
+        RoutineMutationAction::Resume => {
+            prepare_task_for_resume(task, now).map_err(|err| err.to_string())
+        }
+    }
+}
+
+async fn mutate_unified_account_routine(
+    state: &AuthState,
+    account_id: Uuid,
+    task_id: &str,
+    action: RoutineMutationAction,
+) -> Result<bool, Response> {
+    let task_paths = load_unified_account_task_paths(state, account_id).await?;
+    let task_id = task_id.to_string();
+    let action_name = match action {
+        RoutineMutationAction::Pause => "pause",
+        RoutineMutationAction::Resume => "resume",
+        RoutineMutationAction::Delete => "delete",
+    }
+    .to_string();
+    let task_id_for_log = task_id.clone();
+    let action_name_for_log = action_name.clone();
+
+    task::spawn_blocking(move || {
+        mutate_unified_account_routine_blocking(&task_paths, &task_id, action, &action_name)
+    })
+    .await
+    .map_err(|err| {
+        error!(
+            "spawn_blocking panicked while applying routine action {} to {}: {}",
+            action_name_for_log, task_id_for_log, err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    })?
+}
+
+fn mutate_unified_account_routine_blocking(
+    task_paths: &[PathBuf],
+    task_id: &str,
+    action: RoutineMutationAction,
+    action_name: &str,
+) -> Result<bool, Response> {
+    let now = Utc::now();
+    let mut updates = Vec::new();
+
+    for task_path in task_paths {
+        let task = load_scheduled_task(task_path, task_id).map_err(|err| {
+            error!(
+                "failed to load task {} from {} for routine {}: {}",
+                task_id,
+                task_path.display(),
+                action_name,
+                err
+            );
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routine")
+        })?;
+
+        let Some(task) = task else {
+            continue;
+        };
+
+        if !is_user_visible_routine_task(&task, now) {
+            continue;
+        }
+
+        let updated = mutate_routine_task(&task, action, now).map_err(|message| {
+            json_error_response(
+                StatusCode::CONFLICT,
+                &format!("Routine cannot be {}d safely: {}", action_name, message),
+            )
+        })?;
+        updates.push((task_path.clone(), updated));
+    }
+
+    if updates.is_empty() {
+        return Ok(false);
+    }
+
+    for (task_path, updated_task) in updates {
+        persist_scheduled_task(&task_path, &updated_task).map_err(|err| {
+            error!(
+                "failed to persist routine {} to {} during {}: {}",
+                updated_task.id,
+                task_path.display(),
+                action_name,
+                err
+            );
+            json_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update routine",
+            )
+        })?;
+    }
+
+    Ok(true)
 }
 
 // ============================================================================
@@ -5074,6 +5361,18 @@ pub struct TasksResponse {
     pub tasks: Vec<TaskStatusSummary>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct RoutinesResponse {
+    pub active: Vec<RoutineSummary>,
+    pub history: Vec<RoutineSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct RoutineMutationResponse {
+    ok: bool,
+    task_id: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TasksQuery {
     pub channel: Option<String>,
@@ -5328,6 +5627,72 @@ pub async fn get_account_tasks(
     (StatusCode::OK, Json(TasksResponse { tasks })).into_response()
 }
 
+/// GET /api/account/routines
+/// Returns user-visible scheduled run_task routines for the authenticated user's unified account.
+pub async fn get_account_routines(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
+
+    match try_load_unified_account_routines(&state, account.id).await {
+        Ok(routines) => (StatusCode::OK, Json(routines)).into_response(),
+        Err(response) => response,
+    }
+}
+
+/// POST /api/account/routines/:task_id/pause
+pub async fn pause_account_routine(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    mutate_account_routine_endpoint(state, headers, task_id, RoutineMutationAction::Pause).await
+}
+
+/// POST /api/account/routines/:task_id/resume
+pub async fn resume_account_routine(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    mutate_account_routine_endpoint(state, headers, task_id, RoutineMutationAction::Resume).await
+}
+
+/// DELETE /api/account/routines/:task_id
+pub async fn delete_account_routine(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    mutate_account_routine_endpoint(state, headers, task_id, RoutineMutationAction::Delete).await
+}
+
+async fn mutate_account_routine_endpoint(
+    state: AuthState,
+    headers: HeaderMap,
+    task_id: String,
+    action: RoutineMutationAction,
+) -> Response {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
+
+    match mutate_unified_account_routine(&state, account.id, &task_id, action).await {
+        Ok(true) => (
+            StatusCode::OK,
+            Json(RoutineMutationResponse { ok: true, task_id }),
+        )
+            .into_response(),
+        Ok(false) => json_error_response(StatusCode::NOT_FOUND, "Routine not found"),
+        Err(response) => response,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct InstallOnboardingResendRequest {
     platform: InstallPlatform,
@@ -5482,6 +5847,19 @@ pub fn auth_router(state: AuthState) -> Router {
         )
         .route("/api/tasks", get(get_tasks))
         .route("/api/account/tasks", get(get_account_tasks))
+        .route("/api/account/routines", get(get_account_routines))
+        .route(
+            "/api/account/routines/:task_id/pause",
+            post(pause_account_routine),
+        )
+        .route(
+            "/api/account/routines/:task_id/resume",
+            post(resume_account_routine),
+        )
+        .route(
+            "/api/account/routines/:task_id",
+            delete(delete_account_routine),
+        )
         .with_state(state)
 }
 
@@ -5492,9 +5870,71 @@ pub fn auth_router(state: AuthState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Duration as ChronoDuration, TimeZone};
+    use std::path::PathBuf;
+
+    use crate::channel::Channel;
+    use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
 
     // Unit tests for GitHub OAuth structs and encoding logic
     // These don't require a database connection
+
+    fn sample_run_task_task() -> RunTaskTask {
+        RunTaskTask {
+            workspace_dir: PathBuf::from("/tmp/routine-workspace"),
+            input_email_dir: PathBuf::from("incoming_email"),
+            input_attachments_dir: PathBuf::from("incoming_attachments"),
+            memory_dir: PathBuf::from("memory"),
+            reference_dir: PathBuf::from("references"),
+            model_name: "gpt-test".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec!["C123".to_string()],
+            reply_from: None,
+            archive_root: None,
+            thread_id: Some("slack:C123:1234.5678".to_string()),
+            thread_epoch: Some(1),
+            thread_state_path: None,
+            channel: Channel::Slack,
+            slack_team_id: Some("T123".to_string()),
+            employee_id: None,
+            requester_identifier_type: None,
+            requester_identifier: None,
+            account_id: None,
+            channel_metadata: Default::default(),
+        }
+    }
+
+    fn sample_routine_summary(
+        id: &str,
+        enabled: bool,
+        execution_status: Option<&str>,
+        last_run: Option<chrono::DateTime<Utc>>,
+        run_at: Option<chrono::DateTime<Utc>>,
+        created_at: chrono::DateTime<Utc>,
+    ) -> RoutineSummary {
+        RoutineSummary {
+            id: id.to_string(),
+            name: format!("Routine {}", id),
+            kind: "run_task".to_string(),
+            channel: "slack".to_string(),
+            enabled,
+            schedule_type: if run_at.is_some() {
+                "one_shot".to_string()
+            } else {
+                "cron".to_string()
+            },
+            next_run: None,
+            run_at: run_at.map(|value| value.to_rfc3339()),
+            last_run: last_run.map(|value| value.to_rfc3339()),
+            execution_status: execution_status.map(|value| value.to_string()),
+            error_message: execution_status
+                .filter(|value| *value == "failed")
+                .map(|_| "temporary failure".to_string()),
+            created_at: created_at.to_rfc3339(),
+            is_recurring: run_at.is_none(),
+        }
+    }
 
     #[test]
     fn github_callback_query_deserializes_correctly() {
@@ -5933,5 +6373,115 @@ mod tests {
         assert_ne!(first, different);
         assert_eq!(first.len(), 16);
         assert!(!first.contains("oauth-code-123"));
+    }
+
+    #[test]
+    fn merged_account_routines_prefer_terminal_legacy_status() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let account_copy = sample_routine_summary("task-1", true, Some("running"), None, None, now);
+        let legacy_copy = sample_routine_summary(
+            "task-1",
+            true,
+            Some("success"),
+            Some(now + ChronoDuration::minutes(5)),
+            None,
+            now,
+        );
+
+        let merged = merge_routine_summaries(vec![account_copy], vec![legacy_copy]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].execution_status.as_deref(), Some("success"));
+        assert_eq!(
+            merged[0].last_run.as_deref(),
+            Some((now + ChronoDuration::minutes(5)).to_rfc3339().as_str())
+        );
+    }
+
+    #[test]
+    fn account_routines_partition_active_and_cap_history() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let mut routines = vec![sample_routine_summary(
+            "active-1",
+            true,
+            Some("running"),
+            None,
+            Some(now + ChronoDuration::hours(1)),
+            now,
+        )];
+
+        for index in 0..60 {
+            routines.push(sample_routine_summary(
+                &format!("history-{index}"),
+                false,
+                Some("success"),
+                Some(now + ChronoDuration::minutes(index as i64)),
+                Some(now + ChronoDuration::minutes(index as i64)),
+                now - ChronoDuration::days(1),
+            ));
+        }
+
+        let partitioned = partition_routines(routines);
+        assert_eq!(partitioned.active.len(), 1);
+        assert_eq!(partitioned.history.len(), 50);
+        assert_eq!(partitioned.history[0].id, "history-59");
+        assert_eq!(
+            partitioned
+                .history
+                .last()
+                .map(|routine| routine.id.as_str()),
+            Some("history-10")
+        );
+    }
+
+    #[test]
+    fn routine_mutation_actions_disable_and_resume_safely() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot {
+                run_at: now + ChronoDuration::hours(2),
+            },
+            enabled: true,
+            created_at: now - ChronoDuration::hours(1),
+            last_run: None,
+        };
+
+        let paused =
+            mutate_routine_task(&task, RoutineMutationAction::Pause, now).expect("pause routine");
+        assert!(!paused.enabled);
+
+        let deleted =
+            mutate_routine_task(&task, RoutineMutationAction::Delete, now).expect("delete routine");
+        assert!(!deleted.enabled);
+
+        let resumed = mutate_routine_task(&paused, RoutineMutationAction::Resume, now)
+            .expect("resume routine");
+        assert!(resumed.enabled);
+        match resumed.schedule {
+            Schedule::OneShot { run_at } => {
+                assert_eq!(run_at, now + ChronoDuration::hours(2));
+            }
+            _ => panic!("expected one-shot schedule"),
+        }
+    }
+
+    #[test]
+    fn routine_resume_fails_for_stale_one_shot() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot {
+                run_at: now - ChronoDuration::minutes(1),
+            },
+            enabled: false,
+            created_at: now - ChronoDuration::hours(2),
+            last_run: Some(now - ChronoDuration::minutes(1)),
+        };
+
+        let error = mutate_routine_task(&task, RoutineMutationAction::Resume, now)
+            .expect_err("stale one-shot");
+        assert!(error.contains("run_at is in the past"));
     }
 }

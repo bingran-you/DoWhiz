@@ -101,8 +101,9 @@ while true; do
         # Signal completion (scheduler handles retry logic based on exit_code)
         COMPLETION_MSG=$(jq -n \
             --arg tid "$TASK_ID" \
+            --arg cname "${CONTAINER_NAME:-unknown}" \
             --argjson code "$AGENT_EXIT_CODE" \
-            '{task_id: $tid, exit_code: $code}' | base64 -w0)
+            '{task_id: $tid, container_name: $cname, exit_code: $code}' | base64 -w0)
 
         az storage message put \
             --queue-name "$COMPLETION_QUEUE" \

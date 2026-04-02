@@ -24,6 +24,13 @@ impl SchedulerStore {
         self.mongo.load_tasks()
     }
 
+    pub(crate) fn load_task_by_id(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<ScheduledTask>, SchedulerError> {
+        self.mongo.load_task_by_id(task_id)
+    }
+
     pub(crate) fn insert_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
         self.mongo.insert_task(task)
     }
@@ -85,11 +92,19 @@ impl SchedulerStore {
     }
 
     pub(crate) fn disable_task_by_id(&self, task_id: &str) -> Result<(), SchedulerError> {
-        self.mongo.disable_task_by_id(task_id)
+        if let Some(mut task) = self.load_task_by_id(task_id)? {
+            task.enabled = false;
+            self.update_task(&task)?;
+        }
+        Ok(())
     }
 
     pub fn list_tasks_with_status(&self) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
         self.mongo.list_tasks_with_status()
+    }
+
+    pub fn list_routines_with_status(&self) -> Result<Vec<RoutineSummary>, SchedulerError> {
+        self.mongo.list_routines_with_status()
     }
 }
 
@@ -112,6 +127,24 @@ pub struct TaskStatusSummary {
     pub execution_status: Option<String>,
     pub error_message: Option<String>,
     pub execution_started_at: Option<String>,
+}
+
+/// Summary of a user-visible scheduled run_task surfaced as a dashboard routine.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RoutineSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub channel: String,
+    pub enabled: bool,
+    pub schedule_type: String,
+    pub next_run: Option<String>,
+    pub run_at: Option<String>,
+    pub last_run: Option<String>,
+    pub execution_status: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: String,
+    pub is_recurring: bool,
 }
 
 #[derive(Debug, Clone)]

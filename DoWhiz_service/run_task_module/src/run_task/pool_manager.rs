@@ -359,7 +359,10 @@ async fn provision_warm_container(config: &PoolConfig) -> Result<String, String>
 
     eprintln!("[pool_manager] Provisioning container: {}", container_name);
 
-    let env_vars = collect_warm_container_env_vars(config);
+    let mut env_vars = collect_warm_container_env_vars(config);
+    // Pass container name so it can be included in completion message
+    env_vars.push(format!("CONTAINER_NAME={}", container_name));
+    env_vars.push(format!("RESOURCE_GROUP={}", config.resource_group));
 
     let output = tokio::task::spawn_blocking({
         let config = config.clone();

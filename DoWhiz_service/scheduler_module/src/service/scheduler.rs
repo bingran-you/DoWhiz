@@ -18,10 +18,13 @@ use super::config::ServiceConfig;
 use super::state::{ClaimResult, ConcurrencyLimiter, SchedulerClaims, TaskClaim};
 use super::BoxError;
 
-/// Default task timeout in seconds (100 minutes)
-const DEFAULT_TASK_TIMEOUT_SECS: u64 = 6000;
 /// Keep run_task timeout below watchdog timeout by this margin.
 const WATCHDOG_TIMEOUT_HEADROOM_SECS: u64 = 30;
+/// Default run_task runner budget in seconds (10 hours).
+const DEFAULT_RUN_TASK_TIMEOUT_SECS: u64 = 36_000;
+/// Default task watchdog budget in seconds (Codex + Claude fallback + headroom).
+const DEFAULT_TASK_TIMEOUT_SECS: u64 =
+    DEFAULT_RUN_TASK_TIMEOUT_SECS * 2 + WATCHDOG_TIMEOUT_HEADROOM_SECS;
 /// Maximum number of retries before giving up
 const MAX_TASK_RETRIES: u32 = 3;
 /// Exponential backoff delays in seconds: 10s, 100s, 1000s
@@ -48,8 +51,10 @@ fn resolve_watchdog_task_timeout_secs() -> u64 {
     }
 
     let run_task_timeout =
-        parse_timeout_secs_env("RUN_TASK_TIMEOUT_SECS").unwrap_or(DEFAULT_TASK_TIMEOUT_SECS);
-    DEFAULT_TASK_TIMEOUT_SECS.max(run_task_timeout.saturating_add(WATCHDOG_TIMEOUT_HEADROOM_SECS))
+        parse_timeout_secs_env("RUN_TASK_TIMEOUT_SECS").unwrap_or(DEFAULT_RUN_TASK_TIMEOUT_SECS);
+    run_task_timeout
+        .saturating_mul(2)
+        .saturating_add(WATCHDOG_TIMEOUT_HEADROOM_SECS)
 }
 
 #[derive(Clone, Copy)]
@@ -822,7 +827,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::env;
     use std::fs;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Instant;
     use tempfile::TempDir;
 
@@ -837,6 +842,12 @@ mod tests {
             env::set_var(key, value);
             Self { key, prev }
         }
+
+        fn unset(key: &'static str) -> Self {
+            let prev = env::var(key).ok();
+            env::remove_var(key);
+            Self { key, prev }
+        }
     }
 
     impl Drop for EnvGuard {
@@ -846,6 +857,29 @@ mod tests {
                 None => env::remove_var(self.key),
             }
         }
+    }
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn watchdog_timeout_defaults_to_two_runner_windows_plus_headroom() {
+        let _lock = env_lock();
+        let _run_task = EnvGuard::unset("RUN_TASK_TIMEOUT_SECS");
+        let _task_timeout = EnvGuard::unset("TASK_TIMEOUT_SECS");
+
+        assert_eq!(resolve_watchdog_task_timeout_secs(), 72_030);
+    }
+
+    #[test]
+    fn watchdog_timeout_scales_with_run_task_timeout_when_unset() {
+        let _lock = env_lock();
+        let _run_task = EnvGuard::set("RUN_TASK_TIMEOUT_SECS", "300");
+        let _task_timeout = EnvGuard::unset("TASK_TIMEOUT_SECS");
+
+        assert_eq!(resolve_watchdog_task_timeout_secs(), 630);
     }
 
     fn require_supabase_db_url() -> Option<String> {
