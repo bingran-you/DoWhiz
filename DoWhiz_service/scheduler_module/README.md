@@ -19,6 +19,8 @@ Responsibilities:
 
 Schedules:
 - `Cron` (6 fields: `sec min hour day month weekday`, UTC)
+  - Prefer named weekdays like `MON-FRI` for weekday schedules. Numeric weekday ranges are
+    parser-ambiguous here; for example, `1-5` can behave like Sunday-Thursday.
 - `OneShot` (`run_at` timestamp)
 
 ## Channels

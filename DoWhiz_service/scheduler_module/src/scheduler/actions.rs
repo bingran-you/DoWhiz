@@ -16,8 +16,11 @@ use crate::thread_state::{current_thread_epoch, default_thread_state_path};
 
 use super::core::Scheduler;
 use super::executor::TaskExecutor;
+use super::load_run_task_request_context;
 use super::reply::load_reply_context;
-use super::schedule::{next_run_after, validate_cron_expression};
+use super::schedule::{
+    next_run_after, normalize_weekday_cron_expression, validate_cron_expression,
+};
 use super::store::SchedulerStore;
 use super::types::{RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind};
 use super::utils::parse_datetime;
@@ -1247,6 +1250,7 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
     let mut rescheduled = 0usize;
     let mut created = 0usize;
     let mut skipped = 0usize;
+    let request_context = load_run_task_request_context(task);
 
     for action in actions {
         match action {
@@ -1279,7 +1283,11 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                         continue;
                     }
                 };
-                match resolve_schedule_request(schedule, now) {
+                match resolve_schedule_request_with_context(
+                    schedule,
+                    now,
+                    request_context.as_deref(),
+                ) {
                     Ok(new_schedule) => {
                         target.schedule = new_schedule;
                         target.enabled = true;
@@ -1301,7 +1309,11 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                 codex_disabled,
                 reply_to,
             } => {
-                let schedule = match resolve_schedule_request(schedule, now) {
+                let schedule = match resolve_schedule_request_with_context(
+                    schedule,
+                    now,
+                    request_context.as_deref(),
+                ) {
                     Ok(schedule) => schedule,
                     Err(err) => {
                         warn!(
@@ -1369,16 +1381,19 @@ fn parse_action_task_ids(task_ids: &[String]) -> (HashSet<Uuid>, Vec<String>) {
     (ids, invalid)
 }
 
-pub(crate) fn resolve_schedule_request(
+pub(crate) fn resolve_schedule_request_with_context(
     schedule: &run_task_module::ScheduleRequest,
     now: DateTime<Utc>,
+    request_context: Option<&str>,
 ) -> Result<Schedule, SchedulerError> {
     match schedule {
         run_task_module::ScheduleRequest::Cron { expression } => {
-            validate_cron_expression(expression)?;
-            let next_run = next_run_after(expression, now)?;
+            let normalized_expression =
+                normalize_weekday_cron_expression(expression, request_context);
+            validate_cron_expression(&normalized_expression)?;
+            let next_run = next_run_after(&normalized_expression, now)?;
             Ok(Schedule::Cron {
-                expression: expression.clone(),
+                expression: normalized_expression,
                 next_run,
             })
         }

@@ -11,9 +11,9 @@ use uuid::Uuid;
 
 use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
 
-use super::super::is_user_visible_routine_task;
 use super::super::types::{Schedule, ScheduledTask, SchedulerError};
 use super::super::utils::{task_kind_channel, task_kind_label};
+use super::super::{is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task};
 use super::{RoutineSummary, TaskDebugArchiveRecord, TaskStatusSummary};
 
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(1);
@@ -112,6 +112,7 @@ impl MongoSchedulerStore {
             .map_err(mongo_err)?;
         let mut seen_task_ids = HashSet::new();
         let mut tasks = Vec::new();
+        let now = Utc::now();
         for row in cursor {
             let document = row.map_err(mongo_err)?;
             if let Ok(task_id) = document.get_str("task_id") {
@@ -119,7 +120,10 @@ impl MongoSchedulerStore {
                     continue;
                 }
             }
-            let task = deserialize_task_document(&document)?;
+            let mut task = deserialize_task_document(&document)?;
+            if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
+                self.update_task(&task)?;
+            }
             tasks.push(task);
         }
         tasks.sort_by_key(|task| task.created_at);
@@ -134,7 +138,15 @@ impl MongoSchedulerStore {
             .tasks
             .find_one(self.task_filter(task_id), None)
             .map_err(mongo_err)?;
-        document.as_ref().map(deserialize_task_document).transpose()
+        let Some(document) = document else {
+            return Ok(None);
+        };
+
+        let mut task = deserialize_task_document(&document)?;
+        if maybe_repair_legacy_weekday_cron_task(&mut task, Utc::now())? {
+            self.update_task(&task)?;
+        }
+        Ok(Some(task))
     }
 
     pub(crate) fn insert_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
@@ -391,6 +403,7 @@ impl MongoSchedulerStore {
             .map_err(mongo_err)?;
         let mut summaries = Vec::new();
         let mut seen_task_ids = HashSet::new();
+        let now = Utc::now();
         for row in cursor {
             let task_doc = row.map_err(mongo_err)?;
             let task_id = task_doc
@@ -399,23 +412,31 @@ impl MongoSchedulerStore {
             if !seen_task_ids.insert(task_id.to_string()) {
                 continue;
             }
+            let mut task = deserialize_task_document(&task_doc)?;
+            if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
+                self.update_task(&task)?;
+            }
             let request_summary = derive_request_summary(&task_doc);
-            let schedule = task_doc.get_document("schedule").ok();
             let execution = self.latest_execution_for_task(task_id)?;
+            let (schedule_type, next_run, run_at) = match &task.schedule {
+                Schedule::Cron { next_run, .. } => {
+                    ("cron".to_string(), Some(next_run.to_rfc3339()), None)
+                }
+                Schedule::OneShot { run_at } => {
+                    ("one_shot".to_string(), None, Some(run_at.to_rfc3339()))
+                }
+            };
             summaries.push(TaskStatusSummary {
                 id: task_id.to_string(),
                 kind: task_doc.get_str("kind").unwrap_or("unknown").to_string(),
                 channel: task_doc.get_str("channel").unwrap_or("email").to_string(),
                 request_summary,
-                enabled: task_doc.get_bool("enabled").unwrap_or(false),
-                created_at: datetime_field_to_rfc3339(&task_doc, "created_at").unwrap_or_default(),
-                last_run: datetime_field_to_rfc3339(&task_doc, "last_run"),
-                schedule_type: schedule
-                    .and_then(|doc| doc.get_str("type").ok())
-                    .unwrap_or("one_shot")
-                    .to_string(),
-                next_run: schedule.and_then(|doc| datetime_field_to_rfc3339(doc, "next_run")),
-                run_at: schedule.and_then(|doc| datetime_field_to_rfc3339(doc, "run_at")),
+                enabled: task.enabled,
+                created_at: task.created_at.to_rfc3339(),
+                last_run: task.last_run.map(|value| value.to_rfc3339()),
+                schedule_type,
+                next_run,
+                run_at,
                 execution_status: execution
                     .as_ref()
                     .and_then(|doc| doc.get_str("status").ok())
@@ -456,7 +477,10 @@ impl MongoSchedulerStore {
                 continue;
             }
 
-            let task = deserialize_task_document(&task_doc)?;
+            let mut task = deserialize_task_document(&task_doc)?;
+            if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
+                self.update_task(&task)?;
+            }
             if !is_user_visible_routine_task(&task, now) {
                 continue;
             }

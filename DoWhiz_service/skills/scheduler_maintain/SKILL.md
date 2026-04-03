@@ -45,6 +45,9 @@ SCHEDULER_ACTIONS_JSON_END
 ## Rules
 - Use RFC3339 UTC timestamps.
 - Cron uses 6 fields: `sec min hour day month weekday`.
+- Prefer named weekdays like `MON-FRI` for recurring weekday schedules. Do not use numeric
+  weekday ranges for Monday-Friday here; in this scheduler parser, `1-5` is ambiguous and can
+  behave like Sunday-Thursday.
 - Do not include workspace paths; `create_run_task` always targets the current workspace.
 - Output only JSON inside blocks; no commentary inside blocks.
 - Treat any enabled task shown under `due` as an existing active schedule/task, not as evidence that scheduling is missing.

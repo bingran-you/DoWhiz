@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -8,8 +8,10 @@ use uuid::Uuid;
 use crate::channel::{Channel, ChannelMetadata};
 
 use super::{
-    actions::{apply_scheduler_actions, schedule_send_email},
-    is_user_visible_routine_task, prepare_task_for_resume,
+    actions::{
+        apply_scheduler_actions, resolve_schedule_request_with_context, schedule_send_email,
+    },
+    is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task, prepare_task_for_resume,
     snapshot::build_scheduler_snapshot,
     RunTaskTask, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskExecution, TaskExecutor,
     TaskKind,
@@ -83,6 +85,18 @@ fn force_one_shot_due<E: TaskExecutor>(scheduler: &mut Scheduler<E>, task_id: Uu
         .store
         .update_task(&updated)
         .expect("persist forced one-shot schedule");
+}
+
+fn parse_utc(value: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(value)
+        .expect("valid RFC3339 timestamp")
+        .with_timezone(&Utc)
+}
+
+fn write_thread_request(workspace: &Path, content: &str) {
+    let incoming_email = workspace.join("incoming_email");
+    fs::create_dir_all(&incoming_email).expect("incoming_email dir");
+    fs::write(incoming_email.join("thread_request.md"), content).expect("thread_request");
 }
 
 #[test]
@@ -300,6 +314,99 @@ fn apply_scheduler_actions_creates_run_task() {
             assert_eq!(task.model_name, "gpt-test");
         }
         _ => panic!("expected run_task kind"),
+    }
+}
+
+#[test]
+fn resolve_schedule_request_with_context_normalizes_legacy_weekday_cron() {
+    let now = parse_utc("2026-04-02T20:00:00Z");
+    let schedule = run_task_module::ScheduleRequest::Cron {
+        expression: "0 0 16 * * 1-5".to_string(),
+    };
+
+    let resolved = resolve_schedule_request_with_context(
+        &schedule,
+        now,
+        Some("Please send this every weekday at 9:00 AM America/Los_Angeles."),
+    )
+    .expect("resolve schedule");
+
+    match resolved {
+        Schedule::Cron {
+            expression,
+            next_run,
+        } => {
+            assert_eq!(expression, "0 0 16 * * MON-FRI");
+            assert_eq!(next_run, parse_utc("2026-04-03T16:00:00Z"));
+        }
+        _ => panic!("expected cron schedule"),
+    }
+}
+
+#[test]
+fn resolve_schedule_request_with_context_keeps_explicit_sunday_thursday_cron() {
+    let now = parse_utc("2026-04-02T20:00:00Z");
+    let schedule = run_task_module::ScheduleRequest::Cron {
+        expression: "0 0 16 * * 1-5".to_string(),
+    };
+
+    let resolved = resolve_schedule_request_with_context(
+        &schedule,
+        now,
+        Some("Please send this every Sunday through Thursday at 9:00 AM."),
+    )
+    .expect("resolve schedule");
+
+    match resolved {
+        Schedule::Cron {
+            expression,
+            next_run,
+        } => {
+            assert_eq!(expression, "0 0 16 * * 1-5");
+            assert_eq!(next_run, parse_utc("2026-04-05T16:00:00Z"));
+        }
+        _ => panic!("expected cron schedule"),
+    }
+}
+
+#[test]
+fn maybe_repair_legacy_weekday_cron_task_uses_thread_request_context() {
+    let temp = TempDir::new().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail root");
+    write_thread_request(
+        &workspace,
+        "Track GLD for me every weekday at 9:00 AM America/Los_Angeles.",
+    );
+
+    let now = parse_utc("2026-04-02T20:00:00Z");
+    let run_task = base_run_task(&workspace, &mail_root);
+    let mut task = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::RunTask(run_task),
+        schedule: Schedule::Cron {
+            expression: "0 0 16 * * 1-5".to_string(),
+            next_run: parse_utc("2026-04-05T16:00:00Z"),
+        },
+        enabled: true,
+        created_at: now,
+        last_run: None,
+    };
+
+    let repaired = maybe_repair_legacy_weekday_cron_task(&mut task, now).expect("repair task");
+    assert!(repaired, "weekday request should repair the legacy cron");
+
+    match task.schedule {
+        Schedule::Cron {
+            expression,
+            next_run,
+        } => {
+            assert_eq!(expression, "0 0 16 * * MON-FRI");
+            assert_eq!(next_run, parse_utc("2026-04-03T16:00:00Z"));
+        }
+        _ => panic!("expected cron schedule"),
     }
 }
 

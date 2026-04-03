@@ -4,6 +4,17 @@ use std::str::FromStr;
 
 use super::types::SchedulerError;
 
+const WEEKDAY_REQUEST_MARKERS: &[&str] = &[
+    "weekday",
+    "weekdays",
+    "business day",
+    "business days",
+    "monday through friday",
+    "monday to friday",
+    "mon-fri",
+    "mon thru fri",
+];
+
 pub(crate) fn validate_cron_expression(expression: &str) -> Result<(), SchedulerError> {
     let fields = expression.split_whitespace().count();
     if fields != 6 {
@@ -24,4 +35,42 @@ pub(crate) fn next_run_after(
         }
     }
     Err(SchedulerError::NoNextRun)
+}
+
+/// Normalize legacy ambiguous weekday cron expressions for explicit weekday requests.
+///
+/// The cron parser used by the scheduler does not follow the common Unix-cron numeric weekday
+/// convention. In practice, numeric weekday ranges like `1-5` are ambiguous for model output and
+/// have historically produced Sunday-Thursday runs when the user asked for Monday-Friday
+/// weekdays. When the request text clearly asks for a Monday-Friday cadence, rewrite legacy
+/// numeric weekday fields to the unambiguous `MON-FRI`.
+pub(crate) fn normalize_weekday_cron_expression(
+    expression: &str,
+    request_context: Option<&str>,
+) -> String {
+    let Some(request_context) = request_context else {
+        return expression.to_string();
+    };
+    if !request_implies_monday_through_friday(request_context) {
+        return expression.to_string();
+    }
+
+    let mut fields: Vec<&str> = expression.split_whitespace().collect();
+    if fields.len() != 6 || !is_legacy_weekday_field(fields[5]) {
+        return expression.to_string();
+    }
+
+    fields[5] = "MON-FRI";
+    fields.join(" ")
+}
+
+fn request_implies_monday_through_friday(text: &str) -> bool {
+    let normalized = text.to_ascii_lowercase();
+    WEEKDAY_REQUEST_MARKERS
+        .iter()
+        .any(|marker| normalized.contains(marker))
+}
+
+fn is_legacy_weekday_field(field: &str) -> bool {
+    matches!(field.trim(), "0-4" | "0,1,2,3,4" | "1-5" | "1,2,3,4,5")
 }

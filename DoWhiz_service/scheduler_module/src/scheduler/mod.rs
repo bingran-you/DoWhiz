@@ -19,9 +19,10 @@ pub use types::{
 pub use utils::load_google_access_token_from_service_env;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use std::fs;
 use std::path::Path;
 
-use self::schedule::next_run_after;
+use self::schedule::{next_run_after, normalize_weekday_cron_expression};
 
 const ROUTINE_ONE_SHOT_DELAY_THRESHOLD_MINUTES: i64 = 5;
 
@@ -125,6 +126,61 @@ pub fn prepare_task_for_resume(
     resumed.schedule = refreshed_schedule_for_resume(&task.schedule, now)?;
     resumed.enabled = true;
     Ok(resumed)
+}
+
+pub(crate) fn load_run_task_request_context(task: &RunTaskTask) -> Option<String> {
+    let input_email_dir = if task.input_email_dir.is_absolute() {
+        task.input_email_dir.clone()
+    } else {
+        task.workspace_dir.join(&task.input_email_dir)
+    };
+
+    let thread_request_path = input_email_dir.join("thread_request.md");
+    if let Ok(content) = fs::read_to_string(thread_request_path) {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    None
+}
+
+/// Repair legacy weekday cron expressions for stored run_task schedules.
+///
+/// This is a compatibility shim for older model-generated schedules that encoded a Monday-Friday
+/// request with numeric weekday fields like `1-5`, which the scheduler's cron parser can
+/// interpret as Sunday-Thursday. We only rewrite the cron when the original request context
+/// clearly asked for weekdays, so legitimate Sunday-Thursday routines remain untouched.
+pub(crate) fn maybe_repair_legacy_weekday_cron_task(
+    task: &mut ScheduledTask,
+    now: DateTime<Utc>,
+) -> Result<bool, SchedulerError> {
+    let request_context = match &task.kind {
+        TaskKind::RunTask(run_task) => load_run_task_request_context(run_task),
+        _ => return Ok(false),
+    };
+
+    let Schedule::Cron {
+        expression,
+        next_run,
+    } = &mut task.schedule
+    else {
+        return Ok(false);
+    };
+
+    let normalized = normalize_weekday_cron_expression(expression, request_context.as_deref());
+    if normalized == *expression {
+        return Ok(false);
+    }
+
+    let reference_time = task
+        .last_run
+        .map(|value| if value > now { value } else { now })
+        .unwrap_or(now);
+    *expression = normalized;
+    *next_run = next_run_after(expression, reference_time)?;
+    Ok(true)
 }
 
 #[cfg(test)]
