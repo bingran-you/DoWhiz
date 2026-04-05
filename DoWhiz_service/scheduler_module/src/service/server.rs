@@ -33,6 +33,7 @@ use super::auth::{auth_router, verify_slack_bot_access, AuthState};
 use super::billing::{billing_router, BillingState};
 use super::browser_handoff::browser_handoff_router;
 use super::chat_history::search_chat_history;
+use super::grocery::{grocery_router, GroceryState};
 
 use super::config::ServiceConfig;
 use super::ingestion::spawn_ingestion_consumer;
@@ -282,6 +283,11 @@ pub async fn run_server(
     // Add billing routes if Stripe is configured
     if let Some(billing) = billing_state {
         app = app.merge(billing_router(billing));
+    }
+
+    // Add grocery routes if MongoDB is available
+    if let Some(grocery_state) = GroceryState::from_env() {
+        app = app.merge(grocery_router(grocery_state));
     }
 
     let app = app

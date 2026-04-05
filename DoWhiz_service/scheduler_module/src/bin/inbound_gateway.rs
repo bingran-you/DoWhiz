@@ -16,6 +16,8 @@ mod routes;
 mod state;
 #[path = "inbound_gateway/verify.rs"]
 mod verify;
+#[path = "inbound_gateway/zoom_rtms.rs"]
+mod zoom_rtms;
 
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
@@ -46,6 +48,7 @@ use config::{
 use discord::spawn_discord_gateway;
 use google_drive_webhook::handle_google_drive_webhook;
 use google_workspace::spawn_google_workspace_poller;
+use zoom_rtms::handle_zoom_rtms_webhook;
 use handlers::{
     create_90_day_plan, create_workspace_brief, health, ingest_bluebubbles, ingest_lark,
     ingest_postmark, ingest_slack, ingest_sms, ingest_telegram, ingest_wechat, ingest_whatsapp,
@@ -241,6 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "/webhooks/google-drive-changes",
             post(handle_google_drive_webhook),
         )
+        .route("/webhooks/zoom-rtms", post(handle_zoom_rtms_webhook))
         .route("/api/workspace/create-brief", post(create_workspace_brief))
         .route(
             "/api/workspace/create-90-day-plan",

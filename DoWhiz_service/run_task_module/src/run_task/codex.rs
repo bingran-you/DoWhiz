@@ -3656,6 +3656,12 @@ if [ -n "${{GITHUB_USERNAME:-}}" ]; then
   export GIT_COMMITTER_EMAIL="${{GITHUB_USERNAME}}@users.noreply.github.com"
 fi
 
+# Export GitHub token for gh CLI (needs GH_TOKEN or GITHUB_TOKEN)
+if [ -n "${{GITHUB_PERSONAL_ACCESS_TOKEN:-}}" ]; then
+  export GH_TOKEN="${{GITHUB_PERSONAL_ACCESS_TOKEN}}"
+  export GITHUB_TOKEN="${{GITHUB_PERSONAL_ACCESS_TOKEN}}"
+fi
+
 # Set GIT_ASKPASS to use the uploaded askpass script (same as ACI flow)
 askpass_script="$(find .codex -name 'dowhiz-git-askpass-*' -type f 2>/dev/null | head -n1)"
 if [ -n "$askpass_script" ] && [ -x "$askpass_script" ]; then

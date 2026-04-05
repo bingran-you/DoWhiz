@@ -11,6 +11,7 @@ mod sms;
 mod telegram;
 mod wechat;
 mod whatsapp;
+mod zoom;
 
 pub(super) use bluebubbles::process_bluebubbles_event;
 pub(crate) use discord::hydrate_discord_attachments;
@@ -33,3 +34,4 @@ pub(super) use sms::process_sms_message;
 pub(super) use telegram::process_telegram_event;
 pub(super) use wechat::process_wechat_event;
 pub(super) use whatsapp::process_whatsapp_event;
+pub(super) use zoom::process_zoom_message;

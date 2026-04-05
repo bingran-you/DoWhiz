@@ -36,6 +36,8 @@ pub enum Channel {
     WeChat,
     /// Lark (飞书) via Open Platform API
     Lark,
+    /// Zoom RTMS audio stream
+    Zoom,
 }
 
 impl Default for Channel {
@@ -60,6 +62,7 @@ impl std::fmt::Display for Channel {
             Channel::Notion => write!(f, "notion"),
             Channel::WeChat => write!(f, "wechat"),
             Channel::Lark => write!(f, "lark"),
+            Channel::Zoom => write!(f, "zoom"),
         }
     }
 }
@@ -82,6 +85,7 @@ impl std::str::FromStr for Channel {
             "notion" => Ok(Channel::Notion),
             "wechat" | "weixin" => Ok(Channel::WeChat),
             "lark" | "feishu" => Ok(Channel::Lark),
+            "zoom" => Ok(Channel::Zoom),
             _ => Err(format!("unknown channel: {}", s)),
         }
     }
@@ -221,6 +225,12 @@ pub struct ChannelMetadata {
     pub lark_chat_id: Option<String>,
     /// Lark-specific: Message ID
     pub lark_message_id: Option<String>,
+    /// Zoom-specific: Meeting UUID
+    pub zoom_meeting_uuid: Option<String>,
+    /// Zoom-specific: User ID of the speaker
+    pub zoom_user_id: Option<String>,
+    /// Zoom-specific: User email (for reply routing)
+    pub zoom_user_email: Option<String>,
 
     // =========================================================================
     // Multi-channel collaboration support

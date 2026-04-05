@@ -125,6 +125,7 @@ jobs:
             DoWhiz_service/target/release/discord_cli
             DoWhiz_service/target/release/lark_cli
             DoWhiz_service/target/release/identity_lookup_cli
+            DoWhiz_service/target/release/grocery_cli
           if-no-files-found: error
 
   deploy:
@@ -241,6 +242,7 @@ jobs:
           install -m 755 /tmp/dowhiz-release/discord_cli "$RELEASE_DIR/discord_cli"
           install -m 755 /tmp/dowhiz-release/lark_cli "$RELEASE_DIR/lark_cli"
           install -m 755 /tmp/dowhiz-release/identity_lookup_cli "$RELEASE_DIR/identity_lookup_cli"
+          install -m 755 /tmp/dowhiz-release/grocery_cli "$RELEASE_DIR/grocery_cli"
           rm -rf /tmp/dowhiz-release
           EOF
 
@@ -297,6 +299,12 @@ jobs:
             exit 1
           fi
           chmod 600 "$APP_DIR/.env"
+          EOF
+
+          # Append Kroger API credentials
+          ssh -F ~/.ssh/config azureproduction << EOF
+          echo "KROGER_CLIENT_ID=${{ secrets.KROGER_CLIENT_ID }}" >> /home/${{ secrets.STAGING_AZURE_VM_USER }}/server/DoWhiz/DoWhiz_service/.env
+          echo "KROGER_CLIENT_SECRET=${{ secrets.KROGER_CLIENT_SECRET }}" >> /home/${{ secrets.STAGING_AZURE_VM_USER }}/server/DoWhiz/DoWhiz_service/.env
           EOF
 
       - name: Restart DoWhiz services before ACI build
@@ -483,7 +491,7 @@ jobs:
 
           ctx_release_dir="$build_context_root/DoWhiz_service/target/release"
           mkdir -p "$ctx_release_dir"
-          required_runtime_bins=(rust_service inbound_fanout inbound_gateway google-docs google-sheets google-slides notion_api_cli tpm_cli slack_cli discord_cli lark_cli identity_lookup_cli)
+          required_runtime_bins=(rust_service inbound_fanout inbound_gateway google-docs google-sheets google-slides notion_api_cli tpm_cli slack_cli discord_cli lark_cli identity_lookup_cli grocery_cli)
           for bin_name in "${required_runtime_bins[@]}"; do
             src_bin="$GITHUB_WORKSPACE/rust-binaries/$bin_name"
             [[ -f "$src_bin" ]] || {

@@ -10,6 +10,8 @@ pub mod google_auth;
 pub mod google_docs_poller;
 pub mod google_drive_changes;
 pub mod google_workspace_poller;
+pub mod grocery_store;
+pub mod kroger_api;
 pub mod ingestion;
 pub mod ingestion_queue;
 pub mod mailbox;
@@ -22,6 +24,7 @@ pub mod raw_payload_store;
 pub mod service_bus_queue;
 pub mod slack_store;
 pub mod storage_backend;
+pub mod zoom_rtms;
 pub(crate) mod thread_state;
 
 pub mod account_store;

@@ -6,6 +6,7 @@ mod browser_handoff;
 mod chat_history;
 mod config;
 mod email;
+pub mod grocery;
 mod html;
 mod inbound;
 mod ingestion;

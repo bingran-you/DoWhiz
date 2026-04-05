@@ -189,6 +189,26 @@ The marker file `.notion_api_replied` is REQUIRED. Without it, the task retries 
 
 Keep your reply concise. Use the API only - no browser automation."#
             }
+            "zoom" => {
+                r#"2. After finishing the task (step one), you MUST route your reply to a linked channel since Zoom has no API for in-meeting replies.
+
+REQUIRED STEPS:
+1. Check the "User Context" section below for the user's linked channels
+2. Route to the FIRST available channel in this precedence order:
+   - Email (preferred): {"channel": "email", "identifier": "<email>"}
+   - Lark: {"channel": "lark", "identifier": "<open_id>"}
+   - Slack: {"channel": "slack", "identifier": "<user_id>"}
+   - WeChat: {"channel": "wechat", "identifier": "<user_id>"}
+   - Discord: {"channel": "discord", "identifier": "<user_id>"}
+3. Write reply_routing.json with the chosen channel
+4. Write your reply in the TARGET channel's format:
+   - email: reply_email_draft.html (HTML), attachments in reply_email_attachments/
+   - all others: reply_message.txt (plain text or channel-appropriate markdown)
+
+If no channels are linked, complete the task but note in your logs that the reply cannot be delivered.
+
+Do not pretend the job has been done without actually doing it."#
+            }
             _ => {
                 // Default to email (HTML)
                 if prefer_fast_completion {
@@ -365,14 +385,57 @@ GitHub CLI (`gh`) - for GitHub repository operations:
 IMPORTANT: For GitHub operations, ALWAYS use `gh` CLI (already authenticated).
 Do NOT use browser automation for GitHub - the CLI is faster and more reliable.
 
+IMPORTANT: When sharing source code with the user:
+- If the user has a linked GitHub account (check User Context section below), create a GitHub repo and add them as a collaborator instead of creating tar.gz archives.
+- Use `gh repo create <name> --private` to create the repo, then `gh api repos/OWNER/REPO/collaborators/GITHUB_USERNAME -X PUT` to add the user as a collaborator.
+- This provides a better experience: version control, easy cloning, and future updates.
+- If the user explicitly requests ownership transfer, use `gh api repos/OWNER/REPO/transfer -X POST -f new_owner=GITHUB_USERNAME` to transfer the repo to them. Note: they must accept the transfer, and you will lose access until they re-add you as collaborator.
+- If the user does NOT have a linked GitHub account, tar.gz archives are acceptable.
+
 Identity Lookup - for inviting Discord guild members to shared resources:
 - When you need to share Google Docs/GitHub repos with Discord guild members, read `skills/identity-lookup/SKILL.md` for the `identity_lookup_cli` commands.
 
 Group Project Coordination:
 - When coordinating team workspaces or shared resources for multiple people, read `skills/group-project-coordination/SKILL.md` for the workflow.
 
+Grocery Price Comparison (for shopping/price queries):
+- When user asks to compare grocery prices, find deals, or get shopping recommendations, use `skills/grocery-comparison/SKILL.md`.
+- This skill helps compare prices across Weee, Asian markets (H Mart, 168), and mainstream stores (Kroger, Costco, Aldi).
+- Consider user's taste preferences (e.g., "American cakes are too sweet"), distance, and cultural factors.
+- Use browser-use to scrape prices from online stores like Weee and Yami when needed.
+- Store user preferences (zip code, taste preferences, memberships) in their memory files.
+- For local Asian markets without online presence, check user's reported baseline prices in their memory.
+
 Security: Only access files the CURRENT USER has shared. Never access other users' files.
 See `.agents/skills/google-*/SKILL.md` for detailed command references.
+
+Notion Tools (channel-agnostic - use these for ANY Notion operation regardless of inbound channel):
+- ALWAYS use `notion_api_cli` for Notion operations. Do NOT use browser automation for Notion.
+- Do NOT try to log into Notion via Google, Okta, or any other OAuth flow in the browser.
+
+Available commands:
+- `notion_api_cli read-page <page_id>` - Read page content
+- `notion_api_cli get-comments <page_id>` - Get all comments on a page
+- `notion_api_cli create-comment <page_id> "message"` - Create a new comment
+- `notion_api_cli reply <comment_id> "message"` - Reply to an existing comment
+- `notion_api_cli search "query"` - Search for pages
+- `notion_api_cli create-page --parent-id <page_id> --title "Title"` - Create a new page
+- `notion_api_cli update-page <page_id> --property "Key=Value"` - Update page properties
+
+Authentication check (IMPORTANT):
+1. First, check if `.notion_env` exists in the workspace - if so, `source .notion_env` to load the token
+2. If `.notion_env` does NOT exist, check if `NOTION_API_TOKEN` is set in the environment
+3. If neither is available, the user has NOT linked their Notion integration - politely tell them:
+   "To use Notion features, please link your Notion workspace at dowhiz.com first."
+   Do NOT attempt browser login as a fallback.
+
+Example workflow for "create a Notion page about X":
+1. Check for Notion token: `source .notion_env 2>/dev/null || true`
+2. Verify token exists: `[ -n "$NOTION_API_TOKEN" ] || echo "No Notion integration"`
+3. If token exists: `notion_api_cli create-page --parent-id <workspace_root_or_page> --title "X"`
+4. If no token: Reply to user asking them to link Notion at dowhiz.com
+
+See `.agents/skills/notion/SKILL.md` for detailed command reference.
 
 "#
 }
@@ -405,10 +468,10 @@ fn build_chat_history_capabilities_section(workspace_dir: &Path, channel: &str) 
 }
 
 fn build_web_auth_capabilities_section() -> &'static str {
-    r#"Web Workspace Auth (Notion / Google web pages):
+    r#"Web Workspace Auth (Google web pages):
 - ALWAYS prefer CLI tools when available:
   - For Google Docs/Sheets/Slides operations (create, edit, share, read), use `google-docs`, `google-sheets`, `google-slides` CLI tools.
-  - For Notion operations, use `notion` CLI tool if available.
+  - For Notion operations, ALWAYS use `notion_api_cli` (see Notion Tools section above). NEVER use browser automation for Notion.
 - Only use browser automation (`playwright-cli`) as a FALLBACK when:
   - No CLI tool exists for the service, OR
   - You need to scrape/read a private page that has no API access, OR
@@ -470,7 +533,8 @@ fn build_user_identities_section(identities: &UserIdentities) -> String {
         || !identities.phone_numbers.is_empty()
         || !identities.telegram_user_ids.is_empty()
         || !identities.lark_user_ids.is_empty()
-        || !identities.wechat_user_ids.is_empty();
+        || !identities.wechat_user_ids.is_empty()
+        || !identities.github_usernames.is_empty();
 
     if !has_any {
         return "User Context: Not available (user has no linked DoWhiz account). \
@@ -520,6 +584,12 @@ politely explain they need to link their accounts at dowhiz.com first.\n"
         channels.push(format!(
             "- WeChat User IDs: {}",
             identities.wechat_user_ids.join(", ")
+        ));
+    }
+    if !identities.github_usernames.is_empty() {
+        channels.push(format!(
+            "- GitHub: {}",
+            identities.github_usernames.join(", ")
         ));
     }
 
@@ -1175,6 +1245,8 @@ mod tests {
             telegram_user_ids: vec!["12345678".to_string()],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec![],
         };
         let section = build_user_identities_section(&identities);
@@ -1425,6 +1497,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec![],
         };
 
@@ -1463,6 +1537,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec![user_uuid.to_string()],
         };
 
@@ -1506,6 +1582,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec![
                 email_uuid.to_string(),
                 slack_uuid.to_string(),
@@ -1549,6 +1627,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec![], // Empty even though account exists
         };
 
@@ -1683,6 +1763,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
         };
 
@@ -1724,6 +1806,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             // Each channel has its own filesystem user directory
             allowed_user_ids: vec![
                 "uuid-email-bob".to_string(),
@@ -1779,6 +1863,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             // In production, identifiers_to_user_identities deduplicates
             // So if email and slack both map to same user_id, only one entry
             allowed_user_ids: vec!["uuid-charlie-shared".to_string()],
@@ -1820,6 +1906,8 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            zoom_user_ids: vec![],
+            github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],
         };
 

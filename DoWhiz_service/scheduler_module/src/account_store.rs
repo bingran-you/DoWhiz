@@ -1736,6 +1736,7 @@ pub fn channel_to_identifier_type(channel: &crate::channel::Channel) -> &'static
         Channel::Lark => "lark",
         Channel::GoogleDocs | Channel::GoogleSheets | Channel::GoogleSlides => "email",
         Channel::Notion => "email", // Notion accounts are linked by email
+        Channel::Zoom => "zoom", // Zoom meetings identified by meeting_uuid
     }
 }
 

@@ -451,6 +451,12 @@ fn identifiers_to_user_identities(
             "wechat" | "wechat_user_id" => {
                 result.wechat_user_ids.push(identifier.identifier.clone())
             }
+            "zoom" | "zoom_user_id" => {
+                result.zoom_user_ids.push(identifier.identifier.clone())
+            }
+            "github" => {
+                result.github_usernames.push(identifier.identifier.clone())
+            }
             _ => {
                 // Unknown identifier type, skip
             }
@@ -638,6 +644,15 @@ fn dispatch_send_reply_task(task: &SendReplyTask) -> Result<(), SchedulerError> 
         }
         Channel::Notion => {
             execute_notion_send(task)?;
+        }
+        Channel::Zoom => {
+            // Zoom has no direct reply API. Replies should use cross-channel routing
+            // via reply_routing.json. If we get here, no routing was specified.
+            warn!(
+                "Zoom reply cannot be delivered directly - no reply_routing.json was written. \
+                Reply at {} will not be sent.",
+                task.html_path.display()
+            );
         }
     }
     Ok(())
@@ -2102,5 +2117,26 @@ mod tests {
         assert!(result.allowed_user_ids.is_empty());
         // But account_id is always set
         assert_eq!(result.account_id, Some(account_id.to_string()));
+    }
+
+    #[test]
+    fn identifiers_to_user_identities_maps_zoom() {
+        let account_id = Uuid::new_v4();
+        let identifiers = vec![make_identifier(account_id, "zoom", "zoom_user_123", true)];
+        let result = identifiers_to_user_identities(account_id, &identifiers);
+        assert_eq!(result.zoom_user_ids, vec!["zoom_user_123"]);
+    }
+
+    #[test]
+    fn identifiers_to_user_identities_maps_zoom_user_id_alias() {
+        let account_id = Uuid::new_v4();
+        let identifiers = vec![make_identifier(
+            account_id,
+            "zoom_user_id",
+            "zoom_U456",
+            true,
+        )];
+        let result = identifiers_to_user_identities(account_id, &identifiers);
+        assert_eq!(result.zoom_user_ids, vec!["zoom_U456"]);
     }
 }
