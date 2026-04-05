@@ -408,7 +408,7 @@ pub async fn ingest_notion_webhook(
             .get("verification_token")
             .and_then(|v| v.as_str())
         {
-            info!("notion webhook verification request received");
+            info!("notion webhook verification token: {}", token);
             return (StatusCode::OK, Json(json!({"verification_token": token})));
         }
     }
