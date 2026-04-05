@@ -93,11 +93,18 @@ The markdown report includes:
 
 It also breaks out:
 
+- keywords with no Search Console data
 - missing target pages
 - keywords with no volume data
 - keywords ranking in positions 4-20
 - high-impression low-CTR pages
 - likely cannibalization candidates
+
+Behavior notes:
+
+- The report auto-discovers the newest matching metrics file in `website/seo/metrics/` if the preferred `*_latest.csv` name is missing.
+- Search Console data is sufficient for ranking and CTR analysis.
+- Keyword volume still informs prioritization, but missing volume alone should not fully block ranking-based recommendations.
 
 ## Adding a Keyword
 
