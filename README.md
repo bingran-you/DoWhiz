@@ -124,5 +124,5 @@ Inbound message
 
 ## Branch / Deploy Policy
 
-- Staging deploy branch: `dev`
+- Staging deploy branch: `dev` (automatic deploy on push to `dev`)
 - Production deploy branch: `main`

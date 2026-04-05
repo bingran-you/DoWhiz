@@ -408,7 +408,7 @@ Preferred ingress path remains `inbound_gateway`.
 ## 6) Staging / Production Deployment
 
 Deployment branch policy:
-- staging VM deploys from `dev`
+- staging VM deploys from `dev` via automatic pushes to `dev`
 - production VM deploys from `main`
 
 Runtime env policy:

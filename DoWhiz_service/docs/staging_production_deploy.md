@@ -132,8 +132,8 @@ Deployment workflows should:
 4. After release binaries and `.env` are installed, source `.env` and restart PM2-managed services immediately so live traffic moves onto the new worker/gateway before any long-running follow-up work.
 5. Disable any legacy `systemd` worker unit (for example `dowhiz-oliver.service`) so PM2 remains the only supervisor.
 6. Keep build/deploy deterministic: checkout by trigger commit and pass `deploy_sha` from build job into deploy job so VM and image build use the exact same code revision.
-7. Restrict manual release safety gates by branch (`workflow_dispatch` must run from `dev` for staging and `main` for production).
-8. Skip staging/production workflow runs when PR merge changes only files under `website/**`.
+7. Keep automatic staging releases on pushes to `dev`, and restrict manual release safety gates by branch (`workflow_dispatch` must run from `dev` for staging and `main` for production).
+8. Skip automatic staging workflow runs when changes stay outside deploy inputs (for example docs-only or `website/**` updates).
 9. Use layered image strategy for Azure ACI:
 - `Dockerfile.base` for heavy shared dependencies.
 - `Dockerfile.aci` for runtime assembly from prebuilt binaries.
@@ -155,7 +155,7 @@ Deployment workflows should:
 
 1. `RUN_TASK_AZURE_ACI_IMAGE` must include an explicit tag; mutable env tags (`:staging`, `:prod`) are overwritten on each successful release.
 2. Base image tags are version/hash derived and effectively immutable for cache reuse.
-3. `paths-ignore: website/**` applies only to PR-triggered workflow execution; manual `workflow_dispatch` can still run full deployment.
+3. Automatic trigger path filters apply only to event-driven workflow execution; manual `workflow_dispatch` can still run full deployment.
 4. If runtime binaries change, update all related points together:
 - artifact upload list
 - VM install step
