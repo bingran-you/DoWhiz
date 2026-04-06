@@ -420,7 +420,10 @@ fn count_existing_containers(resource_group: &str) -> Result<usize, String> {
         .arg("--resource-group")
         .arg(resource_group)
         .arg("--query")
-        .arg(format!("[?starts_with(name, '{}')].name", CONTAINER_PREFIX))
+        .arg(format!(
+            "[?starts_with(name, '{}') && instanceView.state == 'Running'].name",
+            CONTAINER_PREFIX
+        ))
         .arg("-o")
         .arg("tsv")
         .output()
