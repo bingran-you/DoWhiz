@@ -1,4 +1,6 @@
 use chrono::{DateTime, Utc};
+use mongodb::bson::{doc, Document};
+use mongodb::options::FindOptions;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -6,6 +8,7 @@ use tempfile::TempDir;
 use uuid::Uuid;
 
 use crate::channel::{Channel, ChannelMetadata};
+use crate::mongo_store::{create_client_from_env, database_from_env};
 
 use super::{
     actions::{
@@ -97,6 +100,48 @@ fn write_thread_request(workspace: &Path, content: &str) {
     let incoming_email = workspace.join("incoming_email");
     fs::create_dir_all(&incoming_email).expect("incoming_email dir");
     fs::write(incoming_email.join("thread_request.md"), content).expect("thread_request");
+}
+
+fn mongo_execution_tests_enabled() -> bool {
+    dotenvy::dotenv().ok();
+    matches!(
+        (
+            std::env::var("MONGODB_URI"),
+            std::env::var("MONGODB_DATABASE"),
+        ),
+        (Ok(uri), Ok(database)) if !uri.trim().is_empty() && !database.trim().is_empty()
+    )
+}
+
+fn user_scoped_tasks_db(temp: &TempDir, user_id: &str) -> PathBuf {
+    let tasks_db = temp
+        .path()
+        .join("users")
+        .join(user_id)
+        .join("state")
+        .join("tasks.db");
+    fs::create_dir_all(tasks_db.parent().expect("tasks db parent")).expect("create state dir");
+    tasks_db
+}
+
+fn load_execution_documents(user_id: &str, task_id: Uuid) -> Vec<Document> {
+    let client = create_client_from_env().expect("mongo client");
+    let db = database_from_env(&client);
+    let collection = db.collection::<Document>("task_executions");
+    collection
+        .find(
+            doc! {
+                "owner_scope.kind": "user",
+                "owner_scope.id": user_id,
+                "task_id": task_id.to_string(),
+            },
+            FindOptions::builder()
+                .sort(doc! { "started_at": 1 })
+                .build(),
+        )
+        .expect("find executions")
+        .map(|row| row.expect("execution document"))
+        .collect()
 }
 
 #[test]
@@ -612,6 +657,161 @@ fn execution_status_can_be_recorded_for_task() {
         assert_eq!(tasks[0].id, specific_id.to_string());
         assert_eq!(tasks[0].execution_status, Some("success".to_string()));
     }
+}
+
+#[test]
+fn reconcile_stale_running_execution_supersedes_older_duplicate() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-duplicate-user");
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::Noop)
+            .expect("add task")
+    };
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let started_at_1 = parse_utc("2026-04-01T00:00:00Z");
+    let started_at_2 = parse_utc("2026-04-01T00:05:00Z");
+    store
+        .record_execution_start(task_id, started_at_1)
+        .expect("record start 1");
+    let running_handle = store
+        .record_execution_start(task_id, started_at_2)
+        .expect("record start 2");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:10:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 1);
+    assert_eq!(summary.failed_count, 0);
+    assert!(store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-duplicate-user", task_id);
+    assert_eq!(executions.len(), 2);
+    assert_eq!(
+        executions[0].get_str("status").expect("status"),
+        "superseded"
+    );
+    assert_eq!(executions[1].get_str("status").expect("status"), "running");
+    assert_eq!(
+        executions[1].get_i64("execution_id").expect("execution id"),
+        running_handle.execution_id
+    );
+}
+
+#[test]
+fn reconcile_stale_running_execution_fails_orphaned_latest_row_after_timeout() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-timeout-user");
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::Noop)
+            .expect("add task")
+    };
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:00:00Z"))
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-02T02:00:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 0);
+    assert_eq!(summary.failed_count, 1);
+    assert!(!store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-timeout-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].get_str("status").expect("status"), "failed");
+}
+
+#[test]
+fn reconcile_stale_running_execution_supersedes_overlap_after_later_completion() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-overlap-user");
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::Noop)
+            .expect("add task")
+    };
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let successful_handle = store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:00:00Z"))
+        .expect("record start success");
+    store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:05:00Z"))
+        .expect("record stale start");
+    store
+        .record_execution_finish(
+            task_id,
+            successful_handle,
+            parse_utc("2026-04-01T00:10:00Z"),
+            "success",
+            None,
+        )
+        .expect("record finish success");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:15:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 1);
+    assert_eq!(summary.failed_count, 0);
+    assert!(!store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-overlap-user", task_id);
+    assert_eq!(executions.len(), 2);
+    assert_eq!(executions[0].get_str("status").expect("status"), "success");
+    assert_eq!(
+        executions[1].get_str("status").expect("status"),
+        "superseded"
+    );
 }
 
 #[test]
