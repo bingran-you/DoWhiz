@@ -694,11 +694,16 @@ pub(super) async fn ingest_wechat(
     State(state): State<Arc<GatewayState>>,
     body: Bytes,
 ) -> impl IntoResponse {
+    info!(
+        "wechat POST received, body_len={}",
+        body.len()
+    );
+
     let adapter = WeChatInboundAdapter::new();
     let message = match adapter.parse(&body) {
         Ok(message) => message,
         Err(err) => {
-            debug!("gateway ignoring wechat event: {}", err);
+            info!("gateway ignoring wechat event: {}", err);
             return (StatusCode::OK, Json(json!({"status": "ignored"})));
         }
     };
@@ -709,10 +714,21 @@ pub(super) async fn ingest_wechat(
         .clone()
         .unwrap_or_else(|| message.sender.clone());
 
+    info!(
+        "wechat message parsed: user_id={}, content_preview={}",
+        user_id,
+        message.text_body.as_deref().unwrap_or("").chars().take(50).collect::<String>()
+    );
+
     let Some(route) = resolve_route(Channel::WeChat, &user_id, &state) else {
         info!("gateway no route for wechat user_id={}", user_id);
         return (StatusCode::OK, Json(json!({"status": "no_route"})));
     };
+
+    info!(
+        "wechat route found: tenant={}, employee={}",
+        route.tenant_id, route.employee_id
+    );
 
     let external_message_id = message.message_id.clone();
     let envelope =
@@ -726,6 +742,7 @@ pub(super) async fn ingest_wechat(
                 );
             }
         };
+    info!("wechat message enqueuing");
     enqueue_envelope(state.queue.clone(), envelope).await
 }
 
