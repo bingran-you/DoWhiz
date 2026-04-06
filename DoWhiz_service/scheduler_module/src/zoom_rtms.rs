@@ -340,8 +340,114 @@ fn generate_signature(secret: &str, message: &str) -> String {
 }
 
 fn contains_wake_word(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    lower.contains("hey proto") || lower.contains("proto") || lower.contains("oliver")
+    // Normalize: lowercase and split into words (strip punctuation)
+    let words: Vec<String> = text
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric() && c != '@')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+
+    // Single-word wake words (exact match on any token)
+    const SINGLE_WAKE_WORDS: &[&str] = &[
+        // Proto and variations
+        "proto",
+        "prodo",   // mishearing
+        "protto",  // mishearing
+        "prado",   // mishearing
+        "@proto",
+        // Oliver and variations
+        "oliver",
+        "olliver", // mishearing
+        "ollie",   // nickname
+        "@oliver",
+        // DoWhiz brand
+        "dowhiz",
+    ];
+
+    // Check single-word wake words
+    for word in &words {
+        if SINGLE_WAKE_WORDS.contains(&word.as_str()) {
+            return true;
+        }
+    }
+
+    // Multi-word wake phrases (check consecutive tokens)
+    const MULTI_WAKE_PHRASES: &[&[&str]] = &[
+        // Proto - greetings
+        &["hey", "proto"],
+        &["hi", "proto"],
+        &["yo", "proto"],
+        &["okay", "proto"],
+        &["ok", "proto"],
+        &["alright", "proto"],
+        // Proto - requests
+        &["ask", "proto"],
+        &["tell", "proto"],
+        &["have", "proto"],
+        &["let", "proto"],
+        &["get", "proto", "to"],
+        &["can", "proto"],
+        &["could", "proto"],
+        &["would", "proto"],
+        &["proto", "can", "you"],
+        &["proto", "could", "you"],
+        &["proto", "please"],
+        &["proto", "help"],
+        &["proto", "do"],
+        &["proto", "create"],
+        &["proto", "make"],
+        &["proto", "find"],
+        &["proto", "check"],
+        &["proto", "look"],
+        &["proto", "send"],
+        &["proto", "write"],
+        &["proto", "schedule"],
+        // Proto - mentions
+        &["at", "proto"],
+        // Proto - mishearings
+        &["hey", "prodo"],
+        // Oliver - greetings
+        &["hey", "oliver"],
+        &["hi", "oliver"],
+        &["yo", "oliver"],
+        &["okay", "oliver"],
+        &["ok", "oliver"],
+        // Oliver - requests
+        &["ask", "oliver"],
+        &["tell", "oliver"],
+        &["have", "oliver"],
+        &["let", "oliver"],
+        &["get", "oliver", "to"],
+        &["can", "oliver"],
+        &["could", "oliver"],
+        &["would", "oliver"],
+        &["oliver", "can", "you"],
+        &["oliver", "could", "you"],
+        &["oliver", "please"],
+        &["oliver", "help"],
+        // Oliver - mentions
+        &["at", "oliver"],
+        // DoWhiz brand
+        &["hey", "dowhiz"],
+        &["do", "whiz"],
+        &["doo", "whiz"],
+        &["du", "whiz"],
+    ];
+
+    // Check multi-word phrases for exact phrase matchings
+    for phrase in MULTI_WAKE_PHRASES {
+        if words.windows(phrase.len()).any(|window| {
+            window
+                .iter()
+                .zip(phrase.iter())
+                .all(|(w, p)| w.as_str() == *p)
+        }) {
+            return true;
+        }
+    }
+
+    false
 }
 
 async fn transcribe_audio(
@@ -475,21 +581,72 @@ mod tests {
 
     #[test]
     fn test_contains_wake_word() {
-        // Should detect "proto"
+        // Proto - greetings
         assert!(contains_wake_word("Hey Proto, can you help me?"));
+        assert!(contains_wake_word("hi proto what's up"));
+        assert!(contains_wake_word("yo proto"));
+        assert!(contains_wake_word("okay proto do this"));
+        assert!(contains_wake_word("alright proto let's go"));
+
+        // Proto - requests
+        assert!(contains_wake_word("ask proto to create a repo"));
+        assert!(contains_wake_word("tell proto about the meeting"));
+        assert!(contains_wake_word("have proto schedule something"));
+        assert!(contains_wake_word("let proto handle it"));
+        assert!(contains_wake_word("get proto to check the logs"));
+        assert!(contains_wake_word("can proto help with this?"));
+        assert!(contains_wake_word("could proto send an email?"));
         assert!(contains_wake_word("proto please do this"));
+        assert!(contains_wake_word("proto help me out"));
+        assert!(contains_wake_word("proto create a new document"));
+        assert!(contains_wake_word("proto schedule a meeting"));
+
+        // Proto - mentions
+        assert!(contains_wake_word("@proto check this out"));
+        assert!(contains_wake_word("proto, can you do this?"));
+
+        // Proto - mishearings (common transcription errors)
+        assert!(contains_wake_word("prodo can you help"));
+        assert!(contains_wake_word("hey prodo"));
+        assert!(contains_wake_word("protto do this"));
+        assert!(contains_wake_word("prado please"));
+
+        // Proto - case insensitive
         assert!(contains_wake_word("PROTO"));
+        assert!(contains_wake_word("Proto"));
+        assert!(contains_wake_word("PROTO HELP"));
 
-        // Should detect "hey proto"
-        assert!(contains_wake_word("hey proto, what's up?"));
+        // Oliver - greetings
+        assert!(contains_wake_word("hey oliver what's up"));
+        assert!(contains_wake_word("hi oliver"));
+        assert!(contains_wake_word("yo oliver"));
 
-        // Should detect "oliver"
-        assert!(contains_wake_word("Oliver, can you create a repo?"));
+        // Oliver - requests
         assert!(contains_wake_word("ask oliver about this"));
+        assert!(contains_wake_word("tell oliver to create a repo"));
+        assert!(contains_wake_word("can oliver do this?"));
+        assert!(contains_wake_word("oliver please help"));
+        assert!(contains_wake_word("Oliver, can you create a repo?"));
+
+        // Oliver - mentions
+        assert!(contains_wake_word("@oliver check this"));
+        assert!(contains_wake_word("oliver, look at this"));
+
+        // Oliver - mishearings
+        assert!(contains_wake_word("olliver can you help"));
+        assert!(contains_wake_word("ollie do this"));
+
+        // DoWhiz brand
+        assert!(contains_wake_word("hey dowhiz"));
+        assert!(contains_wake_word("dowhiz create a doc"));
+        assert!(contains_wake_word("do whiz help me"));
+        assert!(contains_wake_word("doo whiz schedule this"));
 
         // Should NOT detect without wake word
         assert!(!contains_wake_word("This is a normal conversation"));
         assert!(!contains_wake_word("Let's talk about the project"));
+        assert!(!contains_wake_word("The protocol is ready"));
+        assert!(!contains_wake_word("We need to deliver this"));
         assert!(!contains_wake_word(""));
     }
 

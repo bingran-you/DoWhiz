@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import {
   canonicalToPath,
   loadStructuredRows,
@@ -16,6 +17,19 @@ const CONTENT_REGISTRY_PATH = 'seo/content-registry.json';
 const DEFAULT_SEARCH_CONSOLE_PATH = 'seo/metrics/search_console_latest.csv';
 const DEFAULT_KEYWORD_VOLUME_PATH = 'seo/metrics/keyword_volume_latest.csv';
 const OUTPUT_DIR = 'reports';
+const DEFAULT_METRICS_DIR = 'seo/metrics';
+
+const SEARCH_CONSOLE_PATTERNS = [
+  /^search[_-]?console.*\.(csv|json)$/i,
+  /^gsc.*\.(csv|json)$/i,
+  /^google[_-]?search[_-]?console.*\.(csv|json)$/i
+];
+
+const KEYWORD_VOLUME_PATTERNS = [
+  /^keyword[_-]?volume.*\.(csv|json)$/i,
+  /^search[_-]?volume.*\.(csv|json)$/i,
+  /^keyword.*search.*\.(csv|json)$/i
+];
 
 function findFirstValue(row, keys) {
   for (const key of keys) {
@@ -24,6 +38,72 @@ function findFirstValue(row, keys) {
     }
   }
   return '';
+}
+
+function toRelativePath(absolutePath) {
+  return path.relative(process.cwd(), absolutePath).replaceAll(path.sep, '/');
+}
+
+function resolveMetricsInput(requestedPath, defaultPath, patterns) {
+  if (requestedPath) {
+    return {
+      requestedPath,
+      resolvedPath: requestedPath,
+      sourceKind: 'explicit',
+      exists: fs.existsSync(path.resolve(process.cwd(), requestedPath))
+    };
+  }
+
+  const defaultAbsolutePath = path.resolve(process.cwd(), defaultPath);
+  if (fs.existsSync(defaultAbsolutePath)) {
+    return {
+      requestedPath: defaultPath,
+      resolvedPath: defaultPath,
+      sourceKind: 'default',
+      exists: true
+    };
+  }
+
+  const metricsDirAbsolutePath = path.resolve(process.cwd(), DEFAULT_METRICS_DIR);
+  if (!fs.existsSync(metricsDirAbsolutePath)) {
+    return {
+      requestedPath: defaultPath,
+      resolvedPath: defaultPath,
+      sourceKind: 'default-missing',
+      exists: false
+    };
+  }
+
+  const bestMatch = fs
+    .readdirSync(metricsDirAbsolutePath, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => ({
+      entry,
+      absolutePath: path.join(metricsDirAbsolutePath, entry.name)
+    }))
+    .filter(({ entry }) => patterns.some((pattern) => pattern.test(entry.name)))
+    .map(({ absolutePath }) => ({
+      absolutePath,
+      relativePath: toRelativePath(absolutePath),
+      modifiedTimeMs: fs.statSync(absolutePath).mtimeMs
+    }))
+    .sort((left, right) => right.modifiedTimeMs - left.modifiedTimeMs)[0];
+
+  if (bestMatch) {
+    return {
+      requestedPath: defaultPath,
+      resolvedPath: bestMatch.relativePath,
+      sourceKind: 'auto-discovered',
+      exists: true
+    };
+  }
+
+  return {
+    requestedPath: defaultPath,
+    resolvedPath: defaultPath,
+    sourceKind: 'default-missing',
+    exists: false
+  };
 }
 
 function aggregateSearchConsoleRows(rawRows) {
@@ -125,20 +205,28 @@ function buildRecommendation(row) {
     return 'Consolidate or retarget competing pages';
   }
 
-  if (!row.has_volume_data) {
-    return 'Collect search volume data';
-  }
-
-  if (row.impressions >= 100 && row.ctr < 0.03) {
+  if (row.search_console_input_available && row.impressions >= 100 && row.ctr < 0.03) {
     return 'Test title and meta for CTR';
   }
 
-  if (row.avg_position >= 4 && row.avg_position <= 20) {
+  if (row.search_console_input_available && row.avg_position >= 4 && row.avg_position <= 20) {
     return 'Refresh on-page content and internal links';
   }
 
-  if (row.avg_position > 20 && row.impressions >= 50) {
+  if (row.search_console_input_available && row.avg_position > 20 && row.impressions >= 50) {
     return 'Expand content depth and supporting links';
+  }
+
+  if (!row.search_console_input_available && !row.has_volume_data) {
+    return 'Collect Search Console and keyword volume data';
+  }
+
+  if (!row.search_console_input_available) {
+    return 'Collect Search Console data';
+  }
+
+  if (!row.has_volume_data) {
+    return row.has_search_console_row ? 'Add keyword volume data for prioritization' : 'No ranking data yet; add search volume';
   }
 
   if (row.clicks === 0 && row.impressions === 0) {
@@ -165,11 +253,12 @@ function formatPercent(value) {
 function buildMarkdownReport({
   generatedAt,
   dataMode,
-  searchConsolePath,
-  keywordVolumePath,
+  searchConsoleInput,
+  keywordVolumeInput,
   rows,
   missingTargetPages,
   noVolumeData,
+  noSearchConsoleData,
   rankingOpportunities,
   highImpressionLowCtr,
   cannibalizationCandidates
@@ -178,8 +267,10 @@ function buildMarkdownReport({
     '# SEO Keyword Report',
     '',
     `Generated at: ${generatedAt}`,
-    `Search Console input: \`${searchConsolePath}\``,
-    `Keyword volume input: \`${keywordVolumePath}\``,
+    `Search Console input: \`${searchConsoleInput.resolvedPath}\``,
+    `Search Console status: ${searchConsoleInput.exists ? `${searchConsoleInput.sourceKind}` : 'missing'}`,
+    `Keyword volume input: \`${keywordVolumeInput.resolvedPath}\``,
+    `Keyword volume status: ${keywordVolumeInput.exists ? `${keywordVolumeInput.sourceKind}` : 'missing'}`,
     `Data mode: ${dataMode}`,
     '',
     '## Keyword Table',
@@ -205,6 +296,11 @@ function buildMarkdownReport({
   lines.push('## Missing Target Pages');
   lines.push('');
   lines.push(...renderKeywordList(missingTargetPages, (row) => `- ${row.keyword}: ${row.recommended_action}`));
+
+  lines.push('');
+  lines.push('## Keywords With No Search Console Data');
+  lines.push('');
+  lines.push(...renderKeywordList(noSearchConsoleData, (row) => `- ${row.keyword}: collect Search Console data before ranking analysis.`));
 
   lines.push('');
   lines.push('## Keywords With No Volume Data');
@@ -248,11 +344,11 @@ function buildMarkdownReport({
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const searchConsolePath = args['search-console'] || DEFAULT_SEARCH_CONSOLE_PATH;
-  const keywordVolumePath = args['keyword-volume'] || DEFAULT_KEYWORD_VOLUME_PATH;
+  const searchConsoleInput = resolveMetricsInput(args['search-console'], DEFAULT_SEARCH_CONSOLE_PATH, SEARCH_CONSOLE_PATTERNS);
+  const keywordVolumeInput = resolveMetricsInput(args['keyword-volume'], DEFAULT_KEYWORD_VOLUME_PATH, KEYWORD_VOLUME_PATTERNS);
 
-  const searchConsoleSource = loadStructuredRows(searchConsolePath);
-  const keywordVolumeSource = loadStructuredRows(keywordVolumePath);
+  const searchConsoleSource = loadStructuredRows(searchConsoleInput.resolvedPath);
+  const keywordVolumeSource = loadStructuredRows(keywordVolumeInput.resolvedPath);
 
   const inventory = readJsonFile(KEYWORDS_PATH).keywords || [];
   const pages = readJsonFile(CONTENT_REGISTRY_PATH).pages || [];
@@ -262,12 +358,25 @@ function main() {
   const volumeGroups = aggregateVolumeRows(keywordVolumeSource.rows);
   const generatedAt = new Date().toISOString();
   const reportDate = generatedAt.slice(0, 10);
-  const dataMode =
-    searchConsolePath.includes('/fixtures/') || keywordVolumePath.includes('/fixtures/')
-      ? 'fixture'
-      : searchConsoleSource.format === 'missing' || keywordVolumeSource.format === 'missing'
-        ? 'missing-inputs'
-        : 'live-or-local';
+  const usesFixtures =
+    searchConsoleInput.resolvedPath.includes('/fixtures/') || keywordVolumeInput.resolvedPath.includes('/fixtures/');
+  const searchConsoleAvailable = searchConsoleSource.format !== 'missing';
+  const keywordVolumeAvailable = keywordVolumeSource.format !== 'missing';
+  let dataMode = 'missing-inputs';
+
+  if (usesFixtures && searchConsoleAvailable && keywordVolumeAvailable) {
+    dataMode = 'fixture';
+  } else if (usesFixtures && searchConsoleAvailable) {
+    dataMode = 'fixture-search-console-only';
+  } else if (usesFixtures && keywordVolumeAvailable) {
+    dataMode = 'fixture-keyword-volume-only';
+  } else if (searchConsoleAvailable && keywordVolumeAvailable) {
+    dataMode = 'live-or-local';
+  } else if (searchConsoleAvailable) {
+    dataMode = 'search-console-only';
+  } else if (keywordVolumeAvailable) {
+    dataMode = 'keyword-volume-only';
+  }
 
   const rows = inventory.map((keywordRow) => {
     const keywordKey = normalizeKeyword(keywordRow.keyword);
@@ -293,6 +402,9 @@ function main() {
       priority: keywordRow.priority,
       target_page: targetPath || '(unassigned)',
       target_page_title: targetPage?.title || '',
+      search_console_input_available: searchConsoleAvailable,
+      keyword_volume_input_available: keywordVolumeAvailable,
+      has_search_console_row: Boolean(searchMetrics),
       avg_position: avgPosition,
       impressions,
       clicks,
@@ -320,6 +432,7 @@ function main() {
   });
 
   const missingTargetPages = rows.filter((row) => row.target_page === '(unassigned)');
+  const noSearchConsoleData = rows.filter((row) => !row.has_search_console_row);
   const noVolumeData = rows.filter((row) => !row.has_volume_data);
   const rankingOpportunities = rows.filter((row) => Number.isFinite(row.avg_position) && row.avg_position >= 4 && row.avg_position <= 20);
   const highImpressionLowCtr = rows.filter((row) => row.impressions >= 100 && row.ctr < 0.03);
@@ -328,10 +441,23 @@ function main() {
   const reportPayload = {
     generated_at: generatedAt,
     data_mode: dataMode,
-    search_console_input: path.resolve(process.cwd(), searchConsolePath),
-    keyword_volume_input: path.resolve(process.cwd(), keywordVolumePath),
+    search_console_input: path.resolve(process.cwd(), searchConsoleInput.resolvedPath),
+    search_console_status: {
+      requested_path: searchConsoleInput.requestedPath,
+      resolved_path: searchConsoleInput.resolvedPath,
+      source_kind: searchConsoleInput.sourceKind,
+      available: searchConsoleAvailable
+    },
+    keyword_volume_input: path.resolve(process.cwd(), keywordVolumeInput.resolvedPath),
+    keyword_volume_status: {
+      requested_path: keywordVolumeInput.requestedPath,
+      resolved_path: keywordVolumeInput.resolvedPath,
+      source_kind: keywordVolumeInput.sourceKind,
+      available: keywordVolumeAvailable
+    },
     summary: {
       tracked_keywords: rows.length,
+      missing_search_console_data: noSearchConsoleData.length,
       missing_target_pages: missingTargetPages.length,
       missing_volume_data: noVolumeData.length,
       ranking_opportunities: rankingOpportunities.length,
@@ -340,6 +466,7 @@ function main() {
     },
     rows,
     sections: {
+      no_search_console_data: noSearchConsoleData,
       missing_target_pages: missingTargetPages,
       no_volume_data: noVolumeData,
       ranking_opportunities: rankingOpportunities,
@@ -351,11 +478,12 @@ function main() {
   const markdown = buildMarkdownReport({
     generatedAt,
     dataMode,
-    searchConsolePath,
-    keywordVolumePath,
+    searchConsoleInput,
+    keywordVolumeInput,
     rows,
     missingTargetPages,
     noVolumeData,
+    noSearchConsoleData,
     rankingOpportunities,
     highImpressionLowCtr,
     cannibalizationCandidates

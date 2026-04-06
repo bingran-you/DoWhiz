@@ -33,6 +33,7 @@ Open the local URL shown in the terminal (defaults to http://localhost:5173).
 
 Build output goes to `website/dist/`.
 SEO crawl reports are written to `website/reports/` as dated `.md` + `.json` files.
+The SEO keyword report can run with Search Console data only, but keyword volume is still recommended for prioritization.
 
 ## VM Deployment Workflow
 
