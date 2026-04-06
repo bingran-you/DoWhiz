@@ -630,5 +630,5 @@ and thus needs to get a tokio thread from tokio pool for async processing
 
 **Alternative considered:** Using `az container show` for each individual ACI container does return the state, but took ~75 seconds for 20 containers - too slow for runtime replenishment checks.
 
-**Fix:** Reverted to atomic manual tracking using `Arc<AtomicUsize>`. The counter is incremented on successful container creation and decremented after container deletion. `Arc` is used because `replenish()`, which performs the atomic counter updates, is called in within a `tokio` thread. Sequential `az container show` calls are only used during initialization (acceptable startup cost), while runtime replenishment uses the instant counter check.
+**Fix:** Reverted to atomic manual tracking using `Arc<AtomicUsize>`. The counter is incremented on successful container creation and decremented after container deletion. `Arc` is used because `replenish()`, which performs the atomic counter updates, is called in within a `tokio` thread. Sequential `az container show` calls are only used during warm pool initialization (acceptable startup cost), while runtime replenishment uses the instant counter check.
 
