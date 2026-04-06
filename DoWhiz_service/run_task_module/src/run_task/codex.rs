@@ -3543,7 +3543,7 @@ pub fn run_codex_warm_pool(
         eprintln!("[run_task] warm_pool failed to delete share: {:?}", e);
     }
 
-    // 8. Delete the completed container
+    // 8. Delete the completed container and decrement counter
     if let Some(container_name) = &completion.container_name {
         eprintln!(
             "[run_task] warm_pool deleting container: {}",
@@ -3554,6 +3554,8 @@ pub fn run_codex_warm_pool(
             container_name,
         ) {
             eprintln!("[run_task] warm_pool failed to delete container: {:?}", e);
+        } else {
+            pool_manager.decrement_count();
         }
     } else {
         eprintln!("[run_task] warm_pool completion missing container_name, skipping delete");

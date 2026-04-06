@@ -53,6 +53,22 @@ log for lines like:
 - `[run_task] azure_aci finished ...`
 - `[task_debug_archive] upload attempt failed ...`
 
+## 2a) Understand stale `running` execution cleanup
+
+Recent scheduler builds reconcile orphaned `task_executions.status="running"` rows in two places:
+- once on worker startup
+- again right before a due task checks whether it is already running
+
+The reconciliation rules are:
+- older `running` rows that are already covered by a newer execution start or a later terminal
+  completion are closed as `superseded`
+- the newest `running` row is preserved if it is still within the watchdog timeout window
+- the newest `running` row is closed as `failed` once it ages past the watchdog timeout without a
+  terminal status
+
+When debugging a live task, expect at most one recent `running` row for a task after the worker has
+had a chance to start up and sweep stale state.
+
 ## 3) Find the archive row in Mongo
 
 Latest rows:

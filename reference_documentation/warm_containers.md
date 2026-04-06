@@ -623,3 +623,12 @@ and thus needs to get a tokio thread from tokio pool for async processing
 
 **Fix:** Added `timing.set_task_id()` and `TIMING_COLLECTOR.record(timing.finish())` to `run_codex_warm_pool()` function.
 
+### 9. Atomic manual tracking of running containers
+**Commit:** `8dca144` - Revert to atomic manual counter for warm pool container tracking
+
+**Problem:** `az container list` did not show container status correctly - the `instanceView.state` field is null in list responses. This caused dead containers (Succeeded/Terminated state) to be counted as available, preventing replenishment.
+
+**Alternative considered:** Using `az container show` for each individual ACI container does return the state, but took ~75 seconds for 20 containers - too slow for runtime replenishment checks.
+
+**Fix:** Reverted to atomic manual tracking using `Arc<AtomicUsize>`. The counter is incremented on successful container creation and decremented after container deletion. Sequential `az container show` calls are only used during initialization (acceptable startup cost), while runtime replenishment uses the instant counter check.
+

@@ -14,10 +14,33 @@ use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index
 use super::super::types::{Schedule, ScheduledTask, SchedulerError};
 use super::super::utils::{task_kind_channel, task_kind_label};
 use super::super::{is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task};
-use super::{RoutineSummary, TaskDebugArchiveRecord, TaskStatusSummary};
+use super::{
+    ExecutionReconciliationSummary, ExecutionRecordHandle, RoutineSummary, TaskDebugArchiveRecord,
+    TaskStatusSummary,
+};
 
-static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(1);
+static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
 const REQUEST_SUMMARY_MAX_CHARS: usize = 72;
+
+#[derive(Debug, Clone)]
+struct ExecutionRow {
+    doc_id: Bson,
+    started_at: chrono::DateTime<Utc>,
+    finished_at: Option<chrono::DateTime<Utc>>,
+    status: String,
+}
+
+fn next_execution_id(started_at: chrono::DateTime<Utc>) -> i64 {
+    let base = started_at.timestamp_micros();
+    let mut current = EXECUTION_SEQ.load(Ordering::Relaxed);
+    loop {
+        let next = base.max(current.saturating_add(1));
+        match EXECUTION_SEQ.compare_exchange(current, next, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return next,
+            Err(observed) => current = observed,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct MongoSchedulerStore {
@@ -251,13 +274,16 @@ impl MongoSchedulerStore {
         &self,
         task_id: Uuid,
         started_at: chrono::DateTime<Utc>,
-    ) -> Result<i64, SchedulerError> {
-        let execution_id = EXECUTION_SEQ.fetch_add(1, Ordering::Relaxed);
+    ) -> Result<ExecutionRecordHandle, SchedulerError> {
+        let execution = ExecutionRecordHandle {
+            execution_id: next_execution_id(started_at),
+            started_at,
+        };
         self.executions
             .insert_one(
                 doc! {
                     "owner_scope": self.owner_scope_doc(),
-                    "execution_id": execution_id,
+                    "execution_id": execution.execution_id,
                     "task_id": task_id.to_string(),
                     "started_at": BsonDateTime::from_chrono(started_at),
                     "finished_at": Bson::Null,
@@ -267,24 +293,27 @@ impl MongoSchedulerStore {
                 None,
             )
             .map_err(mongo_err)?;
-        Ok(execution_id)
+        Ok(execution)
     }
 
     pub(crate) fn record_execution_finish(
         &self,
         task_id: Uuid,
-        execution_id: i64,
+        execution: ExecutionRecordHandle,
         finished_at: chrono::DateTime<Utc>,
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        self.executions
+        let result = self
+            .executions
             .update_one(
                 doc! {
                     "owner_scope.kind": &self.owner_kind,
                     "owner_scope.id": &self.owner_id,
                     "task_id": task_id.to_string(),
-                    "execution_id": execution_id,
+                    "execution_id": execution.execution_id,
+                    "started_at": BsonDateTime::from_chrono(execution.started_at),
+                    "status": "running",
                 },
                 doc! {
                     "$set": {
@@ -296,7 +325,119 @@ impl MongoSchedulerStore {
                 None,
             )
             .map_err(mongo_err)?;
+        if result.matched_count == 0 {
+            return Err(SchedulerError::Storage(format!(
+                "missing running execution row for task {} execution_id={} started_at={}",
+                task_id,
+                execution.execution_id,
+                execution.started_at.to_rfc3339()
+            )));
+        }
         Ok(())
+    }
+
+    pub(crate) fn reconcile_stale_running_executions(
+        &self,
+        now: chrono::DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        let task_ids = self
+            .executions
+            .distinct(
+                "task_id",
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "status": "running",
+                },
+                None,
+            )
+            .map_err(mongo_err)?;
+
+        let mut summary = ExecutionReconciliationSummary::default();
+        for task_id in task_ids {
+            let Some(task_id) = task_id.as_str() else {
+                continue;
+            };
+            summary.merge(self.reconcile_stale_running_executions_for_task(
+                task_id,
+                now,
+                stale_after,
+            )?);
+        }
+        Ok(summary)
+    }
+
+    pub(crate) fn reconcile_stale_running_executions_for_task(
+        &self,
+        task_id: &str,
+        now: chrono::DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        let rows = self.load_execution_rows_for_task(task_id)?;
+        if rows.iter().all(|row| row.status != "running") {
+            return Ok(ExecutionReconciliationSummary::default());
+        }
+
+        let latest_started_at = rows.first().map(|row| row.started_at);
+        let latest_terminal_finished_at = rows
+            .iter()
+            .filter(|row| row.status != "running")
+            .filter_map(|row| row.finished_at)
+            .max();
+        let stale_before = now - stale_after;
+        let stale_timeout_secs = stale_after.num_seconds();
+
+        let mut summary = ExecutionReconciliationSummary::default();
+        for row in rows.iter().filter(|row| row.status == "running") {
+            let action = if latest_terminal_finished_at
+                .map(|finished_at| row.started_at <= finished_at)
+                .unwrap_or(false)
+            {
+                Some((
+                    "superseded",
+                    format!(
+                        "reconciled stale running execution after a later execution completed at {}",
+                        latest_terminal_finished_at
+                            .expect("checked above")
+                            .to_rfc3339()
+                    ),
+                ))
+            } else if latest_started_at
+                .map(|started_at| row.started_at < started_at)
+                .unwrap_or(false)
+            {
+                Some((
+                    "superseded",
+                    format!(
+                        "reconciled stale running execution after a newer execution started at {}",
+                        latest_started_at.expect("checked above").to_rfc3339()
+                    ),
+                ))
+            } else if row.started_at <= stale_before {
+                Some((
+                    "failed",
+                    format!(
+                        "reconciled stale running execution after worker restart; execution exceeded {}s without a terminal status",
+                        stale_timeout_secs
+                    ),
+                ))
+            } else {
+                None
+            };
+
+            let Some((status, reason)) = action else {
+                continue;
+            };
+
+            self.finish_execution_row(&row.doc_id, now, status, Some(&reason))?;
+            match status {
+                "superseded" => summary.superseded_count += 1,
+                "failed" => summary.failed_count += 1,
+                _ => {}
+            }
+        }
+        Ok(summary)
     }
 
     pub(crate) fn record_task_debug_archive(
@@ -350,6 +491,65 @@ impl MongoSchedulerStore {
                 UpdateOptions::builder().upsert(Some(true)).build(),
             )
             .map_err(mongo_err)?;
+        Ok(())
+    }
+
+    fn load_execution_rows_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<ExecutionRow>, SchedulerError> {
+        let cursor = self
+            .executions
+            .find(
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "task_id": task_id,
+                },
+                FindOptions::builder()
+                    .sort(doc! { "started_at": -1 })
+                    .build(),
+            )
+            .map_err(mongo_err)?;
+
+        let mut rows = Vec::new();
+        for row in cursor {
+            rows.push(parse_execution_row(row.map_err(mongo_err)?)?);
+        }
+        Ok(rows)
+    }
+
+    fn finish_execution_row(
+        &self,
+        doc_id: &Bson,
+        finished_at: chrono::DateTime<Utc>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        let result = self
+            .executions
+            .update_one(
+                doc! {
+                    "_id": doc_id.clone(),
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "status": "running",
+                },
+                doc! {
+                    "$set": {
+                        "finished_at": BsonDateTime::from_chrono(finished_at),
+                        "status": status,
+                        "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+                    }
+                },
+                None,
+            )
+            .map_err(mongo_err)?;
+        if result.matched_count == 0 {
+            return Err(SchedulerError::Storage(
+                "missing running execution row while reconciling stale execution".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -554,6 +754,51 @@ impl MongoSchedulerStore {
             "kind": &self.owner_kind,
             "id": &self.owner_id,
         }
+    }
+}
+
+fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerError> {
+    let doc_id = document
+        .get("_id")
+        .cloned()
+        .ok_or_else(|| SchedulerError::Storage("missing _id for execution row".to_string()))?;
+    bson_i64(document.get("execution_id"), "execution_id")?;
+    document.get_str("task_id").map_err(|err| {
+        SchedulerError::Storage(format!("missing task_id for execution row: {err}"))
+    })?;
+    let started_at = document
+        .get_datetime("started_at")
+        .map_err(|err| {
+            SchedulerError::Storage(format!("missing started_at for execution row: {err}"))
+        })?
+        .to_chrono();
+    let finished_at = match document.get("finished_at") {
+        Some(Bson::DateTime(value)) => Some(value.to_chrono()),
+        _ => None,
+    };
+    let status = document
+        .get_str("status")
+        .map_err(|err| SchedulerError::Storage(format!("missing status for execution row: {err}")))?
+        .to_string();
+
+    Ok(ExecutionRow {
+        doc_id,
+        started_at,
+        finished_at,
+        status,
+    })
+}
+
+fn bson_i64(value: Option<&Bson>, field: &str) -> Result<i64, SchedulerError> {
+    match value {
+        Some(Bson::Int64(value)) => Ok(*value),
+        Some(Bson::Int32(value)) => Ok(i64::from(*value)),
+        Some(other) => Err(SchedulerError::Storage(format!(
+            "invalid {field} type for execution row: {other:?}"
+        ))),
+        None => Err(SchedulerError::Storage(format!(
+            "missing {field} for execution row"
+        ))),
     }
 }
 

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -11,6 +11,29 @@ use mongo::MongoSchedulerStore;
 #[derive(Debug)]
 pub(crate) struct SchedulerStore {
     mongo: MongoSchedulerStore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ExecutionRecordHandle {
+    pub execution_id: i64,
+    pub started_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ExecutionReconciliationSummary {
+    pub superseded_count: usize,
+    pub failed_count: usize,
+}
+
+impl ExecutionReconciliationSummary {
+    pub(crate) fn total_reconciled(self) -> usize {
+        self.superseded_count + self.failed_count
+    }
+
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.superseded_count += other.superseded_count;
+        self.failed_count += other.failed_count;
+    }
 }
 
 impl SchedulerStore {
@@ -51,25 +74,39 @@ impl SchedulerStore {
         &self,
         task_id: Uuid,
         started_at: DateTime<Utc>,
-    ) -> Result<i64, SchedulerError> {
+    ) -> Result<ExecutionRecordHandle, SchedulerError> {
         self.mongo.record_execution_start(task_id, started_at)
     }
 
     pub(crate) fn record_execution_finish(
         &self,
         task_id: Uuid,
-        execution_id: i64,
+        execution: ExecutionRecordHandle,
         finished_at: DateTime<Utc>,
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        self.mongo.record_execution_finish(
-            task_id,
-            execution_id,
-            finished_at,
-            status,
-            error_message,
-        )
+        self.mongo
+            .record_execution_finish(task_id, execution, finished_at, status, error_message)
+    }
+
+    pub(crate) fn reconcile_stale_running_executions(
+        &self,
+        now: DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        self.mongo
+            .reconcile_stale_running_executions(now, stale_after)
+    }
+
+    pub(crate) fn reconcile_stale_running_executions_for_task(
+        &self,
+        task_id: &str,
+        now: DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        self.mongo
+            .reconcile_stale_running_executions_for_task(task_id, now, stale_after)
     }
 
     pub(crate) fn record_task_debug_archive(
@@ -123,7 +160,7 @@ pub struct TaskStatusSummary {
     pub schedule_type: String,
     pub next_run: Option<String>,
     pub run_at: Option<String>,
-    /// Status from the latest execution: "running", "success", "failed", or None if never executed
+    /// Status from the latest execution: "running", "success", "failed", "superseded", or None if never executed
     pub execution_status: Option<String>,
     pub error_message: Option<String>,
     pub execution_started_at: Option<String>,

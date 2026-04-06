@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -15,7 +15,7 @@ use super::outbound::execute_slack_send;
 use super::reply::load_reply_context;
 use super::schedule::{next_run_after, validate_cron_expression};
 use super::snapshot::{snapshot_reply_draft, write_scheduler_snapshot};
-use super::store::SchedulerStore;
+use super::store::{ExecutionReconciliationSummary, SchedulerStore};
 use super::types::{
     RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind,
     RUN_TASK_FAILURE_DIR, RUN_TASK_FAILURE_LIMIT, RUN_TASK_FAILURE_NOTICE,
@@ -240,18 +240,21 @@ impl<E: TaskExecutor> Scheduler<E> {
             }
         }
         let started_at = Utc::now();
-        let execution_id = self.store.record_execution_start(task_id, started_at)?;
-        let mut archive_session =
-            match PendingTaskDebugArchive::begin(&task_before_snapshot, execution_id, started_at) {
-                Ok(session) => session,
-                Err(err) => {
-                    warn!(
-                        "failed to capture pre-run debug archive snapshot for task {}: {}",
-                        task_id, err
-                    );
-                    None
-                }
-            };
+        let execution_handle = self.store.record_execution_start(task_id, started_at)?;
+        let mut archive_session = match PendingTaskDebugArchive::begin(
+            &task_before_snapshot,
+            execution_handle.execution_id,
+            started_at,
+        ) {
+            Ok(session) => session,
+            Err(err) => {
+                warn!(
+                    "failed to capture pre-run debug archive snapshot for task {}: {}",
+                    task_id, err
+                );
+                None
+            }
+        };
         let result = self.executor.execute(&task_kind);
         let executed_at = Utc::now();
 
@@ -271,7 +274,7 @@ impl<E: TaskExecutor> Scheduler<E> {
                 let terminal_note = execution.terminal_note.clone();
                 self.store.record_execution_finish(
                     task_id,
-                    execution_id,
+                    execution_handle,
                     executed_at,
                     terminal_status,
                     terminal_note.as_deref(),
@@ -394,7 +397,7 @@ impl<E: TaskExecutor> Scheduler<E> {
                 let message = err.to_string();
                 self.store.record_execution_finish(
                     task_id,
-                    execution_id,
+                    execution_handle,
                     executed_at,
                     "failed",
                     Some(&message),
@@ -538,6 +541,25 @@ impl<E: TaskExecutor> Scheduler<E> {
         self.store.has_running_execution(task_id)
     }
 
+    pub(crate) fn reconcile_stale_running_executions(
+        &self,
+        now: DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        self.store
+            .reconcile_stale_running_executions(now, stale_after)
+    }
+
+    pub(crate) fn reconcile_stale_running_executions_for_task(
+        &self,
+        task_id: &str,
+        now: DateTime<Utc>,
+        stale_after: ChronoDuration,
+    ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
+        self.store
+            .reconcile_stale_running_executions_for_task(task_id, now, stale_after)
+    }
+
     /// Disable a task by its ID (used when max retries exceeded)
     pub fn disable_task_by_id(&mut self, task_id: &str) -> Result<(), SchedulerError> {
         // Update in-memory task list
@@ -632,10 +654,10 @@ fn sync_task_status_to_user_storage(
         Ok(store) => {
             // Record execution start and finish to update status
             match store.record_execution_start(task_id, executed_at) {
-                Ok(execution_id) => {
+                Ok(execution) => {
                     if let Err(err) = store.record_execution_finish(
                         task_id,
-                        execution_id,
+                        execution,
                         executed_at,
                         status,
                         error_message,

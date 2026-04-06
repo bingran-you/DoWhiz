@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -55,6 +55,11 @@ fn resolve_watchdog_task_timeout_secs() -> u64 {
     run_task_timeout
         .saturating_mul(2)
         .saturating_add(WATCHDOG_TIMEOUT_HEADROOM_SECS)
+}
+
+fn resolve_stale_execution_timeout() -> ChronoDuration {
+    let timeout_secs = resolve_watchdog_task_timeout_secs();
+    ChronoDuration::seconds(timeout_secs.min(i64::MAX as u64) as i64)
 }
 
 #[derive(Clone, Copy)]
@@ -200,7 +205,7 @@ pub(super) fn start_scheduler_threads(
     let running_threads = Arc::new(Mutex::new(HashMap::new()));
     let limiter = Arc::new(ConcurrencyLimiter::new(scheduler_max_concurrency));
 
-    let mut handles = Vec::with_capacity(2);
+    let mut handles = Vec::with_capacity(3);
 
     {
         let config = config.clone();
@@ -332,6 +337,28 @@ pub(super) fn start_scheduler_threads(
                     }
                 }
                 thread::sleep(scheduler_poll_interval);
+            }
+        });
+        handles.push(handle);
+    }
+
+    {
+        let scheduler_stop = scheduler_stop.clone();
+        let user_store = user_store.clone();
+        let users_root = config.users_root.clone();
+        let stale_after = resolve_stale_execution_timeout();
+
+        let handle = thread::spawn(move || {
+            if let Err(err) = reconcile_stale_executions_after_worker_restart(
+                &user_store,
+                &users_root,
+                &scheduler_stop,
+                stale_after,
+            ) {
+                warn!(
+                    "worker startup stale execution reconciliation failed: {}",
+                    err
+                );
             }
         });
         handles.push(handle);
@@ -520,6 +547,73 @@ fn notify_task_failure(
     Ok(())
 }
 
+fn reconcile_stale_executions_after_worker_restart(
+    user_store: &UserStore,
+    users_root: &Path,
+    scheduler_stop: &AtomicBool,
+    stale_after: ChronoDuration,
+) -> Result<(), BoxError> {
+    let user_ids = user_store.list_user_ids()?;
+    let stale_after_secs = stale_after.num_seconds();
+    let mut users_changed = 0usize;
+    let mut total_superseded = 0usize;
+    let mut total_failed = 0usize;
+
+    for user_id in user_ids {
+        if scheduler_stop.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        let user_paths = user_store.user_paths(users_root, &user_id);
+        let scheduler = match Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())
+        {
+            Ok(scheduler) => scheduler,
+            Err(err) => {
+                warn!(
+                    "worker startup reconciliation failed to load scheduler for user {}: {}",
+                    user_id, err
+                );
+                continue;
+            }
+        };
+
+        let summary = match scheduler.reconcile_stale_running_executions(Utc::now(), stale_after) {
+            Ok(summary) => summary,
+            Err(err) => {
+                warn!(
+                    "worker startup reconciliation failed for user {}: {}",
+                    user_id, err
+                );
+                continue;
+            }
+        };
+        if summary.total_reconciled() == 0 {
+            continue;
+        }
+
+        users_changed += 1;
+        total_superseded += summary.superseded_count;
+        total_failed += summary.failed_count;
+        info!(
+            "worker startup reconciled stale execution rows user_id={} superseded={} failed={} stale_after_secs={}",
+            user_id,
+            summary.superseded_count,
+            summary.failed_count,
+            stale_after_secs
+        );
+    }
+
+    info!(
+        "worker startup stale execution reconciliation completed users_changed={} superseded={} failed={} stale_after_secs={}",
+        users_changed,
+        total_superseded,
+        total_failed,
+        stale_after_secs
+    );
+
+    Ok(())
+}
+
 fn execute_due_task(
     config: &ServiceConfig,
     user_store: &UserStore,
@@ -544,6 +638,30 @@ fn execute_due_task(
     };
 
     let mut scheduler = Scheduler::load(&tasks_db_path, ModuleExecutor::default())?;
+
+    let stale_after = resolve_stale_execution_timeout();
+    match scheduler.reconcile_stale_running_executions_for_task(
+        &task_ref.task_id,
+        Utc::now(),
+        stale_after,
+    ) {
+        Ok(summary) if summary.total_reconciled() > 0 => {
+            info!(
+                "scheduler reconciled stale execution rows task_id={} user_id={} superseded={} failed={}",
+                task_ref.task_id,
+                task_ref.user_id,
+                summary.superseded_count,
+                summary.failed_count
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            warn!(
+                "scheduler failed to reconcile stale execution rows task_id={} user_id={}: {}",
+                task_ref.task_id, task_ref.user_id, err
+            );
+        }
+    }
 
     // Check for existing running execution in MongoDB.
     // This prevents duplicate executions when the worker restarts and loses in-memory claims.
