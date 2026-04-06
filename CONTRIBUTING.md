@@ -2,9 +2,10 @@
 
 ## Development Flow
 
-1. Branch from latest `dev` for non-trivial work.
-2. Keep commits scoped and easy to review.
-3. Update related docs when behavior/config changes.
+1. Please firstly read `reference_documentation` to understand the DoWhiz end-to-end flow.
+2. Branch from latest `dev` for non-trivial work.
+3. Keep commits scoped and easy to review.
+4. Update related docs when behavior/config changes.
 
 ## Documentation and Accuracy
 
