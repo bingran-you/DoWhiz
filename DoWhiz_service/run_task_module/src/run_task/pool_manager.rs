@@ -11,7 +11,8 @@
 //! - Scheduler polls completion queue, then calls replenish()
 
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 use uuid::Uuid;
 
 const DEFAULT_POOL_SIZE: usize = 5;
@@ -52,8 +53,8 @@ pub struct PoolManager {
     target_size: usize,
     /// Tokio runtime handle captured during initialization for use in sync contexts
     runtime_handle: OnceLock<tokio::runtime::Handle>,
-    /// Mutex to serialize replenish checks and prevent over-provisioning
-    replenish_lock: Mutex<()>,
+    /// Manual counter for active containers (Arc for sharing across async tasks)
+    active_count: Arc<AtomicUsize>,
 }
 
 impl PoolManager {
@@ -63,7 +64,7 @@ impl PoolManager {
             config,
             target_size: target_size.unwrap_or(DEFAULT_POOL_SIZE),
             runtime_handle: OnceLock::new(),
-            replenish_lock: Mutex::new(()),
+            active_count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -77,8 +78,10 @@ impl PoolManager {
         ensure_queue_exists(&self.config, &self.config.task_queue_name)?;
         ensure_queue_exists(&self.config, &self.config.completion_queue_name)?;
 
-        // Count existing warm containers
+        // Count existing warm containers and initialize the counter
         let existing_count = count_existing_containers(&self.config.resource_group)?;
+        self.active_count.store(existing_count, Ordering::SeqCst);
+
         let containers_needed = self.target_size.saturating_sub(existing_count);
 
         eprintln!(
@@ -99,11 +102,10 @@ impl PoolManager {
             }));
         }
 
-        let mut provisioned = 0;
         for handle in handles {
             match handle.await {
                 Ok(Ok(name)) => {
-                    provisioned += 1;
+                    self.active_count.fetch_add(1, Ordering::SeqCst);
                     eprintln!("[pool_manager] Provisioned: {}", name);
                 }
                 Ok(Err(e)) => eprintln!("[pool_manager] Provision failed: {}", e),
@@ -113,34 +115,18 @@ impl PoolManager {
 
         eprintln!(
             "[pool_manager] Pool ready with {} containers (target: {})",
-            existing_count + provisioned, self.target_size
+            self.active_count(), self.target_size
         );
         Ok(())
     }
 
     /// Called after a task completes to replenish the pool.
-    /// Queries Azure for actual container count to avoid sync issues.
+    /// Uses the manual counter for instant checks (no Azure query).
     pub fn replenish(&self) {
-        // Lock to serialize replenish calls
-        let _guard = match self.replenish_lock.lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                eprintln!("[pool_manager] Failed to acquire replenish lock: {}", e);
-                return;
-            }
-        };
-
-        // Query Azure for actual container count
-        let current = match count_existing_containers(&self.config.resource_group) {
-            Ok(count) => count,
-            Err(e) => {
-                eprintln!("[pool_manager] Failed to count containers: {}", e);
-                return;
-            }
-        };
+        let current = self.active_count.load(Ordering::SeqCst);
 
         eprintln!(
-            "[pool_manager] Replenish check: {} containers exist, target is {}",
+            "[pool_manager] Replenish check: {} containers, target is {}",
             current, self.target_size
         );
 
@@ -158,13 +144,13 @@ impl PoolManager {
         };
 
         let config = self.config.clone();
-
-        drop(_guard); // Release lock before spawning async work
+        let counter = Arc::clone(&self.active_count);
 
         handle.spawn(async move {
             eprintln!("[pool_manager] Replenishing pool...");
             match provision_warm_container(&config).await {
                 Ok(name) => {
+                    counter.fetch_add(1, Ordering::SeqCst);
                     eprintln!("[pool_manager] Replenished with: {}", name);
                 }
                 Err(e) => {
@@ -174,9 +160,17 @@ impl PoolManager {
         });
     }
 
-    /// Get current number of active containers by querying Azure.
+    /// Get current number of active containers from the manual counter.
     pub fn active_count(&self) -> usize {
-        count_existing_containers(&self.config.resource_group).unwrap_or(0)
+        self.active_count.load(Ordering::SeqCst)
+    }
+
+    /// Decrement the active container count. Call this after deleting a container.
+    pub fn decrement_count(&self) {
+        // Use saturating sub to avoid underflow
+        self.active_count.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
+            Some(x.saturating_sub(1))
+        }).ok();
     }
 
     /// Get target pool size.
@@ -412,18 +406,17 @@ async fn provision_warm_container(config: &PoolConfig) -> Result<String, String>
     Ok(container_name)
 }
 
-/// Count existing warm containers in the resource group.
+/// Count existing RUNNING warm containers in the resource group.
+/// Used only on init to seed the manual counter. Sequential to avoid Azure rate limits.
 fn count_existing_containers(resource_group: &str) -> Result<usize, String> {
+    // First get all warm container names
     let output = Command::new("az")
         .arg("container")
         .arg("list")
         .arg("--resource-group")
         .arg(resource_group)
         .arg("--query")
-        .arg(format!(
-            "[?starts_with(name, '{}') && instanceView.state == 'Running'].name",
-            CONTAINER_PREFIX
-        ))
+        .arg(format!("[?starts_with(name, '{}')].name", CONTAINER_PREFIX))
         .arg("-o")
         .arg("tsv")
         .output()
@@ -437,9 +430,43 @@ fn count_existing_containers(resource_group: &str) -> Result<usize, String> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let count = stdout.lines().filter(|l| !l.trim().is_empty()).count();
+    let container_names: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+    let total_count = container_names.len();
 
-    Ok(count)
+    if total_count == 0 {
+        return Ok(0);
+    }
+
+    // Check each container's state sequentially
+    let mut running_count = 0;
+    for name in &container_names {
+        let show_output = Command::new("az")
+            .arg("container")
+            .arg("show")
+            .arg("--resource-group")
+            .arg(resource_group)
+            .arg("--name")
+            .arg(name)
+            .arg("--query")
+            .arg("instanceView.state")
+            .arg("-o")
+            .arg("tsv")
+            .output();
+
+        if let Ok(out) = show_output {
+            let state = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if state == "Running" {
+                running_count += 1;
+            }
+        }
+    }
+
+    eprintln!(
+        "[pool_manager] Found {} total containers, {} running",
+        total_count, running_count
+    );
+
+    Ok(running_count)
 }
 
 /// Ensure an Azure Storage Queue exists (idempotent).
