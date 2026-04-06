@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             codex_disabled: false,
             channel: "email".to_string(),
             google_access_token: None,
+            notion_access_token: None,
             has_unified_account: false,
             user_identities: Default::default(),
             thread_epoch: None,

@@ -1927,6 +1927,10 @@
                         <img src="../svgs/lark.svg" width="20" height="20" alt="Lark">
                         Lark
                       </button>
+                      <button id="wechat-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <img src="../svgs/wecom.svg" width="20" height="20" alt="WeCom">
+                        WeCom
+                      </button>
                     </div>
                     <div class="settings-status-stack">
                       <span id="discord-oauth-status"></span>
@@ -1934,6 +1938,7 @@
                       <span id="github-connect-status"></span>
                       <span id="notion-oauth-status"></span>
                       <span id="lark-oauth-status"></span>
+                      <span id="wechat-oauth-status"></span>
                     </div>
                     <div id="connect-onboarding-panel" class="connection-onboarding-panel hidden" aria-live="polite"></div>
                   </div>
@@ -2441,7 +2446,8 @@
         github: 'github-connect-btn',
         notion: 'notion-oauth-btn',
         slack: 'slack-oauth-btn',
-        lark: 'lark-oauth-btn'
+        lark: 'lark-oauth-btn',
+        wechat: 'wechat-oauth-btn'
       };
       const RECOMMENDATION_SECTION_LABELS = {
         'section-work': 'Open Work',
@@ -3165,7 +3171,7 @@
       }
 
       function buildPreferredProviderOrder(preferredChannels = []) {
-        const baseOrder = ['notion', 'slack', 'github', 'discord', 'lark'];
+        const baseOrder = ['notion', 'slack', 'github', 'discord', 'lark', 'wechat'];
         const preferredOrder = [];
 
         (Array.isArray(preferredChannels) ? preferredChannels : []).forEach((channel) => {
@@ -4308,6 +4314,14 @@
           identifierType: 'lark',
           channelKey: 'lark',
           oauthButtonId: 'lark-oauth-btn'
+        },
+        {
+          id: 'connect-wechat',
+          title: 'Connect WeCom',
+          description: 'Link your WeCom (企业微信) account for enterprise messaging.',
+          identifierType: 'wechat',
+          channelKey: 'wechat',
+          oauthButtonId: 'wechat-oauth-btn'
         }
       ];
 
@@ -5839,6 +5853,59 @@
         window.history.replaceState({}, document.title, buildDashboardReturnUrl('#section-channels'));
       }
 
+      // WeCom OAuth button
+      document.getElementById('wechat-oauth-btn').addEventListener('click', async () => {
+        const wechatStatus = document.getElementById('wechat-oauth-status');
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          wechatStatus.textContent = 'Please sign in first';
+          wechatStatus.style.color = '#ef4444';
+          return;
+        }
+
+        wechatStatus.textContent = 'Redirecting to WeCom...';
+        wechatStatus.style.color = 'var(--text-muted, #888)';
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/wechat`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to start WeCom OAuth');
+          }
+
+          const data = await res.json();
+          // Redirect to WeCom OAuth page
+          window.location.href = data.redirect_url;
+        } catch (err) {
+          console.error('WeCom OAuth error:', err);
+          wechatStatus.textContent = `Error: ${err.message}`;
+          wechatStatus.style.color = '#ef4444';
+        }
+      });
+
+      // Check for WeCom OAuth callback result
+      const wechatResult = urlParams.get('wechat');
+      if (wechatResult) {
+        const wechatStatus = document.getElementById('wechat-oauth-status');
+        if (wechatResult === 'success') {
+          wechatStatus.textContent = 'WeCom connected. Review the setup guidance below.';
+          wechatStatus.style.color = '#22c55e';
+          queueConnectionOnboarding('wechat', {
+            source: 'oauth_callback'
+          });
+        } else if (wechatResult === 'error') {
+          const reason = urlParams.get('reason') || 'unknown error';
+          wechatStatus.textContent = `Failed to connect WeCom: ${reason}`;
+          wechatStatus.style.color = '#ef4444';
+        }
+        // Clean up URL
+        window.history.replaceState({}, document.title, buildDashboardReturnUrl('#section-channels'));
+      }
+
       // Check for email verification token (from magic link in email)
       const verifyEmailToken = urlParams.get('verify_email');
       if (verifyEmailToken) {
@@ -6091,7 +6158,7 @@
         'google_sheets': 'Google Sheets',
         'google_slides': 'Google Slides',
         'bluebubbles': 'iMessage',
-        'wechat': 'WeChat',
+        'wechat': 'WeCom',
         'lark': 'Lark'
       };
 

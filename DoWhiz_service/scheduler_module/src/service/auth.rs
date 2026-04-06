@@ -72,6 +72,10 @@ pub struct AuthState {
     pub lark_client_id: Option<String>,
     pub lark_client_secret: Option<String>,
     pub lark_redirect_uri: Option<String>,
+    // WeCom OAuth config
+    pub wechat_corp_id: Option<String>,
+    pub wechat_corp_secret: Option<String>,
+    pub wechat_redirect_uri: Option<String>,
     // Frontend URL for redirects after OAuth
     pub frontend_url: String,
     pub install_onboarding_config: InstallOnboardingConfig,
@@ -5231,6 +5235,339 @@ pub async fn lark_oauth_callback(
 }
 
 // ============================================================================
+// WeCom OAuth (Enterprise WeChat)
+// ============================================================================
+
+/// Query params for WeCom OAuth callback
+#[derive(Debug, Deserialize)]
+pub struct WeComCallbackQuery {
+    pub code: String,
+    pub state: String,
+}
+
+/// WeCom access token response
+#[derive(Debug, Deserialize)]
+struct WeComAccessTokenResponse {
+    errcode: Option<i32>,
+    errmsg: Option<String>,
+    access_token: Option<String>,
+    expires_in: Option<i64>,
+}
+
+/// WeCom user info response
+#[derive(Debug, Deserialize)]
+struct WeComUserInfoResponse {
+    errcode: Option<i32>,
+    errmsg: Option<String>,
+    #[serde(rename = "UserId")]
+    user_id: Option<String>,
+    #[serde(rename = "OpenId")]
+    open_id: Option<String>,
+}
+
+/// GET /auth/wechat
+/// Initiates WeCom OAuth flow - returns redirect URL to WeCom's authorization page.
+pub async fn wecom_oauth_start(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    // Check if WeCom OAuth is configured
+    let (corp_id, redirect_uri) = match (&state.wechat_corp_id, &state.wechat_redirect_uri) {
+        (Some(id), Some(uri)) => (id.clone(), uri.clone()),
+        _ => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "error": "WeCom OAuth not configured"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Extract and validate Supabase token
+    let token = match extract_bearer_token(&headers) {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Missing Authorization header"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    // Validate the token to ensure user is authenticated
+    if let Err((status, msg)) = validate_supabase_token(&state.supabase_url, &token).await {
+        return (status, Json(serde_json::json!({ "error": msg }))).into_response();
+    }
+
+    // Encode the Supabase token in state so we can identify the user on callback
+    let encoded_state = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token.as_bytes());
+
+    // Build WeCom OAuth URL
+    // Using snsapi_privateinfo scope for internal employees (gets UserId)
+    let wecom_auth_url = format!(
+        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&state={}#wechat_redirect",
+        corp_id,
+        urlencoding::encode(&redirect_uri),
+        encoded_state
+    );
+
+    // Return the URL for the frontend to redirect to
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "redirect_url": wecom_auth_url
+        })),
+    )
+        .into_response()
+}
+
+/// GET /auth/wechat/callback
+/// Handles WeCom OAuth callback - exchanges code for user identity, links account.
+pub async fn wecom_oauth_callback(
+    State(state): State<AuthState>,
+    Query(params): Query<WeComCallbackQuery>,
+) -> impl IntoResponse {
+    // Helper to build redirect URLs to the frontend
+    let frontend_url = state.frontend_url.clone();
+    let redirect_to = |path: &str| -> axum::response::Response {
+        Redirect::to(&format!("{}{}", frontend_url, path)).into_response()
+    };
+
+    // Check if WeCom OAuth is configured
+    let (corp_id, corp_secret) = match (&state.wechat_corp_id, &state.wechat_corp_secret) {
+        (Some(id), Some(secret)) => (id.clone(), secret.clone()),
+        _ => {
+            return redirect_to("/auth/index.html?wechat=error&reason=not_configured");
+        }
+    };
+
+    // Decode state to get the Supabase token
+    let token = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(&params.state) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(t) => t,
+            Err(_) => {
+                return redirect_to("/auth/index.html?wechat=error&reason=invalid_state");
+            }
+        },
+        Err(_) => {
+            return redirect_to("/auth/index.html?wechat=error&reason=invalid_state");
+        }
+    };
+
+    // Validate Supabase token and get user
+    let auth_user_id = match validate_supabase_token(&state.supabase_url, &token).await {
+        Ok(user) => user.id,
+        Err(_) => {
+            return redirect_to("/auth/index.html?wechat=error&reason=invalid_token");
+        }
+    };
+
+    let client = reqwest::Client::new();
+
+    // Step 1: Get corp access_token
+    let access_token_url = format!(
+        "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={}&corpsecret={}",
+        corp_id, corp_secret
+    );
+
+    let access_token_res = client.get(&access_token_url).send().await;
+
+    let access_token = match access_token_res {
+        Ok(res) if res.status().is_success() => {
+            match res.json::<WeComAccessTokenResponse>().await {
+                Ok(t) if t.errcode.unwrap_or(0) == 0 => match t.access_token {
+                    Some(token) => token,
+                    None => {
+                        error!("WeCom access token response missing token");
+                        return redirect_to(
+                            "/auth/index.html?wechat=error&reason=access_token_missing",
+                        );
+                    }
+                },
+                Ok(t) => {
+                    error!(
+                        "WeCom access token error {}: {:?}",
+                        t.errcode.unwrap_or(-1),
+                        t.errmsg
+                    );
+                    return redirect_to("/auth/index.html?wechat=error&reason=access_token_error");
+                }
+                Err(e) => {
+                    error!("Failed to parse WeCom access token response: {}", e);
+                    return redirect_to(
+                        "/auth/index.html?wechat=error&reason=access_token_parse_error",
+                    );
+                }
+            }
+        }
+        Ok(res) => {
+            error!("WeCom access token request failed: {}", res.status());
+            return redirect_to("/auth/index.html?wechat=error&reason=access_token_request_failed");
+        }
+        Err(e) => {
+            error!("WeCom access token request failed: {}", e);
+            return redirect_to("/auth/index.html?wechat=error&reason=access_token_request_failed");
+        }
+    };
+
+    // Step 2: Get user identity using the OAuth code
+    let user_info_url = format!(
+        "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo?access_token={}&code={}",
+        access_token, params.code
+    );
+
+    let user_res = client.get(&user_info_url).send().await;
+
+    let (wecom_user_id, wecom_display) = match user_res {
+        Ok(res) if res.status().is_success() => match res.json::<WeComUserInfoResponse>().await {
+            Ok(r) if r.errcode.unwrap_or(0) == 0 => {
+                // UserId is for internal employees, OpenId is for external contacts
+                match (r.user_id, r.open_id) {
+                    (Some(uid), _) => (uid.clone(), uid),
+                    (None, Some(oid)) => (oid.clone(), format!("external:{}", oid)),
+                    (None, None) => {
+                        error!("WeCom user info response missing both UserId and OpenId");
+                        return redirect_to(
+                            "/auth/index.html?wechat=error&reason=user_info_missing",
+                        );
+                    }
+                }
+            }
+            Ok(r) => {
+                error!(
+                    "WeCom user info error {}: {:?}",
+                    r.errcode.unwrap_or(-1),
+                    r.errmsg
+                );
+                return redirect_to("/auth/index.html?wechat=error&reason=user_info_error");
+            }
+            Err(e) => {
+                error!("Failed to parse WeCom user info response: {}", e);
+                return redirect_to("/auth/index.html?wechat=error&reason=user_parse_error");
+            }
+        },
+        Ok(res) => {
+            error!("WeCom user info request failed: {}", res.status());
+            return redirect_to("/auth/index.html?wechat=error&reason=user_request_failed");
+        }
+        Err(e) => {
+            error!("WeCom user info request failed: {}", e);
+            return redirect_to("/auth/index.html?wechat=error&reason=user_request_failed");
+        }
+    };
+
+    info!(
+        "WeCom OAuth successful for user {} (WeCom: {} in corp {})",
+        auth_user_id, wecom_display, corp_id
+    );
+
+    // Step 3: Get user's DoWhiz account
+    let store = state.account_store.clone();
+    let account_result =
+        task::spawn_blocking(move || store.get_account_by_auth_user(auth_user_id)).await;
+
+    let account = match account_result {
+        Ok(Ok(Some(acc))) => acc,
+        Ok(Ok(None)) => {
+            return redirect_to("/auth/index.html?wechat=error&reason=account_not_found");
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get account: {}", e);
+            return redirect_to("/auth/index.html?wechat=error&reason=db_error");
+        }
+        Err(e) => {
+            error!("spawn_blocking panicked: {}", e);
+            return redirect_to("/auth/index.html?wechat=error&reason=internal_error");
+        }
+    };
+
+    // Step 4: Link WeCom identifier to account
+    // Format: {corp_id}_{user_id} to avoid collisions across corps
+    let wecom_identifier = format!("{}_{}", corp_id, wecom_user_id);
+    let store = state.account_store.clone();
+    let identifier_for_link = wecom_identifier.clone();
+    let link_result =
+        task::spawn_blocking(move || store.create_identifier(account.id, "wechat", &identifier_for_link))
+            .await;
+
+    match link_result {
+        Ok(Ok(_identifier)) => {
+            info!(
+                "Linked WeCom {} to account {}",
+                wecom_identifier, account.id
+            );
+            track_auth_event(
+                &state.account_store,
+                "channel_connect_succeeded",
+                Some(account.id),
+                Some(account.auth_user_id),
+                Some(format!(
+                    "channel_connect:{}:wechat:{}",
+                    account.id, wecom_identifier
+                )),
+                Some("/auth/wechat/callback"),
+                serde_json::json!({
+                    "identifier_type": "wechat",
+                    "identifier": wecom_identifier,
+                    "provider": "wecom",
+                    "corp_id": corp_id,
+                    "user_id": wecom_user_id,
+                }),
+            );
+            redirect_to("/auth/index.html?wechat=success")
+        }
+        Ok(Err(AccountStoreError::IdentifierTaken)) => {
+            track_auth_event(
+                &state.account_store,
+                "channel_connect_failed",
+                Some(account.id),
+                Some(account.auth_user_id),
+                Some(format!(
+                    "channel_connect_failed:{}:wechat:{}",
+                    account.id, wecom_identifier
+                )),
+                Some("/auth/wechat/callback"),
+                serde_json::json!({
+                    "identifier_type": "wechat",
+                    "identifier": wecom_identifier,
+                    "error_reason": "identifier_taken",
+                }),
+            );
+            redirect_to("/auth/index.html?wechat=error&reason=already_linked")
+        }
+        Ok(Err(e)) => {
+            error!("Failed to link WeCom: {}", e);
+            track_auth_event(
+                &state.account_store,
+                "channel_connect_failed",
+                Some(account.id),
+                Some(account.auth_user_id),
+                Some(format!(
+                    "channel_connect_failed:{}:wechat:{}",
+                    account.id, wecom_identifier
+                )),
+                Some("/auth/wechat/callback"),
+                serde_json::json!({
+                    "identifier_type": "wechat",
+                    "identifier": wecom_identifier,
+                    "error_reason": "link_failed",
+                }),
+            );
+            redirect_to("/auth/index.html?wechat=error&reason=link_failed")
+        }
+        Err(e) => {
+            error!("spawn_blocking panicked: {}", e);
+            redirect_to("/auth/index.html?wechat=error&reason=internal_error")
+        }
+    }
+}
+
+// ============================================================================
 // Email Verification
 // ============================================================================
 
@@ -5834,6 +6171,8 @@ pub fn auth_router(state: AuthState) -> Router {
         .route("/auth/notion/callback", get(notion_oauth_callback))
         .route("/auth/lark", get(lark_oauth_start))
         .route("/auth/lark/callback", get(lark_oauth_callback))
+        .route("/auth/wechat", get(wecom_oauth_start))
+        .route("/auth/wechat/callback", get(wecom_oauth_callback))
         .route(
             "/api/channel-install-onboarding/resend",
             post(resend_install_onboarding),
@@ -6533,5 +6872,104 @@ mod tests {
         let error = mutate_routine_task(&task, RoutineMutationAction::Resume, now)
             .expect_err("stale one-shot");
         assert!(error.contains("run_at is in the past"));
+    }
+
+    // ==================== WeCom OAuth Tests ====================
+
+    #[test]
+    fn wecom_callback_query_deserializes_correctly() {
+        let query = "code=abc123&state=encoded_token";
+        let parsed: WeComCallbackQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.code, "abc123");
+        assert_eq!(parsed.state, "encoded_token");
+    }
+
+    #[test]
+    fn wecom_callback_query_handles_special_chars() {
+        let query = "code=abc%2B123%3D&state=token%2Fwith%2Fslashes";
+        let parsed: WeComCallbackQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.code, "abc+123=");
+        assert_eq!(parsed.state, "token/with/slashes");
+    }
+
+    #[test]
+    fn wecom_access_token_response_deserializes_correctly() {
+        let json = r#"{"errcode":0,"errmsg":"ok","access_token":"accesstoken123","expires_in":7200}"#;
+        let parsed: WeComAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.errcode, Some(0));
+        assert_eq!(parsed.access_token, Some("accesstoken123".to_string()));
+        assert_eq!(parsed.expires_in, Some(7200));
+    }
+
+    #[test]
+    fn wecom_access_token_response_handles_error() {
+        let json = r#"{"errcode":40013,"errmsg":"invalid corpid"}"#;
+        let parsed: WeComAccessTokenResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.errcode, Some(40013));
+        assert_eq!(parsed.errmsg, Some("invalid corpid".to_string()));
+        assert_eq!(parsed.access_token, None);
+    }
+
+    #[test]
+    fn wecom_user_info_response_deserializes_internal_user() {
+        let json = r#"{"errcode":0,"errmsg":"ok","UserId":"zhangsan","DeviceId":"device123"}"#;
+        let parsed: WeComUserInfoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.errcode, Some(0));
+        assert_eq!(parsed.user_id, Some("zhangsan".to_string()));
+        assert_eq!(parsed.open_id, None);
+    }
+
+    #[test]
+    fn wecom_user_info_response_deserializes_external_contact() {
+        let json = r#"{"errcode":0,"errmsg":"ok","OpenId":"oU1234567890"}"#;
+        let parsed: WeComUserInfoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.errcode, Some(0));
+        assert_eq!(parsed.user_id, None);
+        assert_eq!(parsed.open_id, Some("oU1234567890".to_string()));
+    }
+
+    #[test]
+    fn wecom_user_info_response_handles_error() {
+        let json = r#"{"errcode":40029,"errmsg":"invalid code"}"#;
+        let parsed: WeComUserInfoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.errcode, Some(40029));
+        assert_eq!(parsed.user_id, None);
+        assert_eq!(parsed.open_id, None);
+    }
+
+    #[test]
+    fn wecom_oauth_url_format() {
+        let corp_id = "ww1234567890abcdef";
+        let redirect_uri = "https://api.dowhiz.com/auth/wechat/callback";
+        let state = "encoded_state";
+
+        let url = format!(
+            "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&state={}#wechat_redirect",
+            corp_id,
+            urlencoding::encode(redirect_uri),
+            state
+        );
+
+        assert!(url.contains("appid=ww1234567890abcdef"));
+        assert!(url.contains("redirect_uri=https%3A%2F%2Fapi.dowhiz.com%2Fauth%2Fwechat%2Fcallback"));
+        assert!(url.contains("scope=snsapi_privateinfo"));
+        assert!(url.contains("state=encoded_state"));
+        assert!(url.ends_with("#wechat_redirect"));
+    }
+
+    #[test]
+    fn wecom_identifier_format_combines_corp_and_user() {
+        let corp_id = "ww1234567890abcdef";
+        let user_id = "zhangsan";
+        let identifier = format!("{}_{}", corp_id, user_id);
+        assert_eq!(identifier, "ww1234567890abcdef_zhangsan");
+    }
+
+    #[test]
+    fn wecom_identifier_format_handles_external_contact() {
+        let corp_id = "ww1234567890abcdef";
+        let open_id = "oU1234567890";
+        let identifier = format!("{}_{}", corp_id, open_id);
+        assert_eq!(identifier, "ww1234567890abcdef_oU1234567890");
     }
 }

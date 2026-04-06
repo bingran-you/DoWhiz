@@ -42,7 +42,7 @@ pub mod warm_pool;
 mod scheduler;
 
 pub use scheduler::{
-    load_google_access_token_from_service_env, load_tasks_with_status, ModuleExecutor, RunTaskTask,
-    Schedule, ScheduledTask, Scheduler, SchedulerError, SendReplyTask, TaskExecution, TaskExecutor,
-    TaskKind, TaskStatusSummary,
+    load_google_access_token_from_service_env, load_notion_access_token_for_account,
+    load_tasks_with_status, ModuleExecutor, RunTaskTask, Schedule, ScheduledTask, Scheduler,
+    SchedulerError, SendReplyTask, TaskExecution, TaskExecutor, TaskKind, TaskStatusSummary,
 };

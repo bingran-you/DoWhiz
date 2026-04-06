@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
 use std::path::Path;
+use uuid::Uuid;
 
 use crate::channel::Channel;
 use crate::google_auth::{GoogleAuth, GoogleAuthConfig};
+use crate::notion_store::NotionStore;
 
 use super::types::{SchedulerError, TaskKind};
 
@@ -97,6 +99,58 @@ pub fn load_google_access_token_from_service_env() -> Option<String> {
         },
         Err(e) => {
             tracing::warn!("Failed to initialize Google auth: {}", e);
+            None
+        }
+    }
+}
+
+/// Load Notion access token for a user account.
+///
+/// This function queries the user's Notion OAuth credentials from MongoDB
+/// and returns the access token if available. This enables channel-agnostic
+/// Notion operations - agents can use Notion tools regardless of the trigger channel.
+///
+/// Returns `None` if:
+/// - No account_id provided
+/// - NotionStore initialization fails (MongoDB unavailable)
+/// - User has no linked Notion workspaces
+pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<String> {
+    let account_id = account_id?;
+
+    let store = match NotionStore::new() {
+        Ok(store) => store,
+        Err(e) => {
+            tracing::debug!(
+                "NotionStore unavailable for loading access token: {}",
+                e
+            );
+            return None;
+        }
+    };
+
+    match store.get_credentials_for_account(account_id) {
+        Ok(credentials) => {
+            if let Some(cred) = credentials.first() {
+                tracing::debug!(
+                    "Loaded Notion access token for account {} (workspace: {})",
+                    account_id,
+                    cred.workspace_name.as_deref().unwrap_or("unknown")
+                );
+                Some(cred.access_token.clone())
+            } else {
+                tracing::debug!(
+                    "No Notion credentials found for account {}",
+                    account_id
+                );
+                None
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to load Notion credentials for account {}: {}",
+                account_id,
+                e
+            );
             None
         }
     }

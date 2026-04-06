@@ -140,6 +140,7 @@ fn build_request<'a>(
         reply_to: &params.reply_to,
         channel: &params.channel,
         google_access_token: params.google_access_token.as_deref(),
+        notion_access_token: params.notion_access_token.as_deref(),
         has_unified_account: params.has_unified_account,
         user_identities: &params.user_identities,
         thread_epoch: params.thread_epoch,
