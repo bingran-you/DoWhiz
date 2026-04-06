@@ -63,6 +63,8 @@ pub struct RunTaskParams {
     pub channel: String,
     /// Pre-generated Google access token (for sandbox environments without network access)
     pub google_access_token: Option<String>,
+    /// Pre-generated Notion access token (for channel-agnostic Notion operations)
+    pub notion_access_token: Option<String>,
     /// Whether the user has a unified DoWhiz account (for cross-channel memo sync)
     pub has_unified_account: bool,
     /// User's linked channel identifiers for cross-channel routing
@@ -84,6 +86,7 @@ pub(super) struct RunTaskRequest<'a> {
     pub(super) reply_to: &'a [String],
     pub(super) channel: &'a str,
     pub(super) google_access_token: Option<&'a str>,
+    pub(super) notion_access_token: Option<&'a str>,
     pub(super) has_unified_account: bool,
     pub(super) user_identities: &'a UserIdentities,
     pub(super) thread_epoch: Option<u64>,

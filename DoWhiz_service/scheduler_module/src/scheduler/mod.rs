@@ -16,7 +16,7 @@ pub use store::{RoutineSummary, TaskStatusSummary};
 pub use types::{
     RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskExecution, TaskKind,
 };
-pub use utils::load_google_access_token_from_service_env;
+pub use utils::{load_google_access_token_from_service_env, load_notion_access_token_for_account};
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::fs;

@@ -648,6 +648,18 @@ pub(super) fn run_codex_task(
                 );
             }
         }
+        // Write Notion access token for channel-agnostic Notion operations
+        if let Some(ref token) = request.notion_access_token {
+            cmd.arg("-e").arg(format!("NOTION_API_TOKEN={}", token));
+            // Also write to .notion_env file for CLI tools
+            let notion_env_file = host_workspace_dir.join(".notion_env");
+            if let Err(e) = std::fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
+                eprintln!(
+                    "[run_task] Warning: Failed to write Notion env file: {}",
+                    e
+                );
+            }
+        }
         for (key, value) in &payment_env_overrides {
             cmd.arg("-e").arg(format!("{}={}", key, value));
         }
@@ -800,6 +812,18 @@ pub(super) fn run_codex_task(
             if let Err(e) = fs::write(&token_file, token) {
                 eprintln!(
                     "[run_task] Warning: Failed to write Google access token file: {}",
+                    e
+                );
+            }
+        }
+        // Write Notion access token for channel-agnostic Notion operations
+        if let Some(ref token) = request.notion_access_token {
+            cmd.env("NOTION_API_TOKEN", token);
+            // Also write to .notion_env file for CLI tools
+            let notion_env_file = request.workspace_dir.join(".notion_env");
+            if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
+                eprintln!(
+                    "[run_task] Warning: Failed to write Notion env file: {}",
                     e
                 );
             }
@@ -1134,6 +1158,14 @@ fn run_codex_task_azure_aci(
     if let Some(token) = request.google_access_token {
         // Keep token as workspace file so remote container tools can access it.
         fs::write(host_workspace_dir.join(".google_access_token"), token)?;
+    }
+
+    // Write Notion access token for channel-agnostic Notion operations
+    if let Some(token) = request.notion_access_token {
+        fs::write(
+            host_workspace_dir.join(".notion_env"),
+            format!("NOTION_API_TOKEN={}\n", token),
+        )?;
     }
 
     let askpass_container_path = github_auth.askpass_path.as_ref().and_then(|path| {
@@ -3469,6 +3501,14 @@ pub fn run_codex_warm_pool(
     // 0e. Write Google access token to workspace if provided
     if let Some(ref token) = request.google_access_token {
         fs::write(workspace_dir.join(".google_access_token"), token)?;
+    }
+
+    // 0f. Write Notion access token for channel-agnostic Notion operations
+    if let Some(ref token) = request.notion_access_token {
+        fs::write(
+            workspace_dir.join(".notion_env"),
+            format!("NOTION_API_TOKEN={}\n", token),
+        )?;
     }
 
     // 1. Create ephemeral share and upload workspace

@@ -88,7 +88,7 @@ use super::outbound::{
     execute_telegram_send, execute_wechat_send, execute_whatsapp_send,
 };
 use super::types::{SchedulerError, SendReplyTask, TaskExecution, TaskKind};
-use super::utils::load_google_access_token_from_service_env;
+use super::utils::{load_google_access_token_from_service_env, load_notion_access_token_for_account};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GitHubInboundContext {
@@ -1433,6 +1433,7 @@ impl TaskExecutor for ModuleExecutor {
                     codex_disabled: task.codex_disabled,
                     channel: task.channel.to_string(),
                     google_access_token: load_google_access_token_from_service_env(),
+                    notion_access_token: load_notion_access_token_for_account(account_id),
                     has_unified_account: account_id.is_some(),
                     user_identities,
                     thread_epoch: task.thread_epoch,

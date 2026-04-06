@@ -109,6 +109,7 @@ impl TaskExecutor for RecordingExecutor {
                     channel: run.channel.to_string(),
                     google_access_token:
                         scheduler_module::load_google_access_token_from_service_env(),
+                    notion_access_token: None,
                     has_unified_account: false,
                     user_identities: Default::default(),
                     thread_epoch: run.thread_epoch,
