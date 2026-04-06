@@ -300,7 +300,7 @@ fn process_ingestion_envelope(
                 return Ok(());
             }
             let raw_payload = envelope.raw_payload_bytes();
-            process_wechat_event(config, user_store, index_store, &message, &raw_payload)
+            process_wechat_event(config, user_store, index_store, account_store, &message, &raw_payload)
         }
         Channel::Lark => {
             let message = envelope.to_inbound_message();
