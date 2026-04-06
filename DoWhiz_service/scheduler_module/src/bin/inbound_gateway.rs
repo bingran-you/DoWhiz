@@ -195,6 +195,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let lark_client_secret = env::var("LARK_APP_SECRET").ok();
     let lark_redirect_uri = env::var("LARK_REDIRECT_URI").ok();
 
+    // WeCom OAuth config (optional)
+    let wecom_corp_id = env::var("WECOM_CORP_ID").ok();
+    let wecom_corp_secret = env::var("WECOM_CORP_SECRET").ok();
+    let wecom_redirect_uri = env::var("WECOM_REDIRECT_URI").ok();
+
     // Frontend URL for OAuth redirects
     let frontend_url =
         env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
@@ -220,6 +225,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         lark_client_id,
         lark_client_secret,
         lark_redirect_uri,
+        wecom_corp_id,
+        wecom_corp_secret,
+        wecom_redirect_uri,
         frontend_url,
         install_onboarding_config: InstallOnboardingConfig::from_env(),
         user_store: None, // Task lookups not available in inbound gateway
