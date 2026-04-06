@@ -28,8 +28,15 @@ impl InboundAdapter for WeChatInboundAdapter {
         let payload_str = std::str::from_utf8(raw_payload)
             .map_err(|e| AdapterError::ParseError(format!("invalid UTF-8: {}", e)))?;
 
+        // Check if message is encrypted and decrypt if needed
+        let xml_to_parse = if is_encrypted_wechat_message(payload_str) {
+            decrypt_wechat_message(payload_str)?
+        } else {
+            payload_str.to_string()
+        };
+
         // Parse XML payload
-        let msg = parse_wechat_xml(payload_str)?;
+        let msg = parse_wechat_xml(&xml_to_parse)?;
 
         // Only handle text messages for now
         if msg.msg_type != "text" {
@@ -300,6 +307,134 @@ fn parse_wechat_xml(xml: &str) -> Result<WeChatMessage, AdapterError> {
         msg_id,
         agent_id,
     })
+}
+
+// ============================================================================
+// WeChat Message Decryption
+// ============================================================================
+
+/// Decrypt an encrypted WeChat message payload.
+///
+/// WeChat Work sends encrypted messages in this format:
+/// ```xml
+/// <xml>
+///   <ToUserName><![CDATA[corp_id]]></ToUserName>
+///   <Encrypt><![CDATA[base64_encrypted_content]]></Encrypt>
+/// </xml>
+/// ```
+///
+/// This function extracts the Encrypt content, decrypts it using AES-256-CBC,
+/// and returns the decrypted XML containing the actual message fields.
+pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
+    use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, KeyIvInit};
+    use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+    use base64::Engine;
+    type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+
+    // Extract the encrypted content from <Encrypt> tag
+    let encrypt_start = xml.find("<Encrypt><![CDATA[")
+        .ok_or_else(|| AdapterError::ParseError("missing Encrypt tag".to_string()))?;
+    let content_start = encrypt_start + "<Encrypt><![CDATA[".len();
+    let content_end = xml[content_start..].find("]]></Encrypt>")
+        .ok_or_else(|| AdapterError::ParseError("malformed Encrypt tag".to_string()))?;
+    let encrypted_base64 = &xml[content_start..content_start + content_end];
+
+    // Get the EncodingAESKey from environment
+    let encoding_aes_key = std::env::var("WECHAT_ENCODING_AES_KEY")
+        .map_err(|_| AdapterError::ConfigError("WECHAT_ENCODING_AES_KEY not set".to_string()))?;
+
+    // Derive AESKey: Base64_Decode(EncodingAESKey + "=")
+    let trimmed_key = encoding_aes_key.trim();
+    let aes_key_b64 = format!("{}=", trimmed_key);
+
+    let lenient_engine = GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent)
+            .with_decode_allow_trailing_bits(true),
+    );
+    let aes_key = lenient_engine.decode(&aes_key_b64)
+        .map_err(|e| AdapterError::ParseError(format!("invalid encoding_aes_key: {}", e)))?;
+
+    if aes_key.len() != 32 {
+        return Err(AdapterError::ParseError(format!(
+            "invalid aes key length: {} (expected 32)",
+            aes_key.len()
+        )));
+    }
+
+    // Decode the encrypted content from Base64
+    let encrypted = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_base64)
+        .map_err(|e| AdapterError::ParseError(format!("invalid base64: {}", e)))?;
+
+    // IV is first 16 bytes of AESKey
+    let iv: [u8; 16] = aes_key[..16].try_into()
+        .map_err(|_| AdapterError::ParseError("iv error".to_string()))?;
+    let key: [u8; 32] = aes_key.try_into()
+        .map_err(|_| AdapterError::ParseError("key error".to_string()))?;
+
+    // Decrypt using AES-256-CBC
+    let mut buf = encrypted.clone();
+    let decryptor = Aes256CbcDec::new(&key.into(), &iv.into());
+    let decrypted = decryptor
+        .decrypt_padded_mut::<NoPadding>(&mut buf)
+        .map_err(|_| AdapterError::ParseError("decryption failed".to_string()))?;
+
+    // Remove PKCS#7 padding
+    let decrypted = remove_pkcs7_padding(decrypted)
+        .map_err(|e| AdapterError::ParseError(format!("padding error: {}", e)))?;
+
+    // Message format: random(16B) + msg_len(4B big-endian) + msg + receiveid
+    if decrypted.len() < 20 {
+        return Err(AdapterError::ParseError("decrypted content too short".to_string()));
+    }
+
+    // Skip 16 random bytes
+    let content = &decrypted[16..];
+
+    // Read msg_len (4 bytes, big endian)
+    let msg_len = u32::from_be_bytes(
+        content[0..4].try_into()
+            .map_err(|_| AdapterError::ParseError("msg_len parse error".to_string()))?
+    ) as usize;
+
+    if content.len() < 4 + msg_len {
+        return Err(AdapterError::ParseError(format!(
+            "msg length mismatch: expected {}, have {}",
+            msg_len,
+            content.len() - 4
+        )));
+    }
+
+    // Extract the message (the decrypted XML)
+    let msg = &content[4..4 + msg_len];
+
+    String::from_utf8(msg.to_vec())
+        .map_err(|_| AdapterError::ParseError("invalid utf8 in decrypted message".to_string()))
+}
+
+/// Remove PKCS#7 padding from decrypted data
+fn remove_pkcs7_padding(data: &[u8]) -> Result<&[u8], &'static str> {
+    if data.is_empty() {
+        return Err("empty_data");
+    }
+    let padding_len = data[data.len() - 1] as usize;
+    if padding_len == 0 || padding_len > 32 || padding_len > data.len() {
+        return Err("invalid_padding");
+    }
+    // Verify all padding bytes are correct
+    for &byte in &data[data.len() - padding_len..] {
+        if byte as usize != padding_len {
+            return Err("invalid_padding_bytes");
+        }
+    }
+    Ok(&data[..data.len() - padding_len])
+}
+
+/// Check if a WeChat XML payload is encrypted (contains <Encrypt> tag)
+pub fn is_encrypted_wechat_message(xml: &str) -> bool {
+    xml.contains("<Encrypt>")
 }
 
 // ============================================================================
@@ -697,5 +832,207 @@ Line 3]]></Content>
 
         let msg = parse_wechat_xml(xml).unwrap();
         assert_eq!(msg.agent_id, 0);
+    }
+
+    // ==================== Encryption Detection Tests ====================
+
+    #[test]
+    fn is_encrypted_detects_encrypt_tag() {
+        let encrypted_xml = r#"<xml><ToUserName><![CDATA[ww33c299595bee0107]]></ToUserName><Encrypt><![CDATA[kvSw6XAlZ9q9T0Es4VRz...]]></Encrypt></xml>"#;
+        assert!(is_encrypted_wechat_message(encrypted_xml));
+    }
+
+    #[test]
+    fn is_encrypted_returns_false_for_plaintext() {
+        let plaintext_xml = r#"<xml>
+            <ToUserName><![CDATA[corp]]></ToUserName>
+            <FromUserName><![CDATA[user]]></FromUserName>
+            <CreateTime>1000</CreateTime>
+            <MsgType><![CDATA[text]]></MsgType>
+            <Content><![CDATA[Hello]]></Content>
+            <MsgId>1</MsgId>
+            <AgentID>1</AgentID>
+        </xml>"#;
+        assert!(!is_encrypted_wechat_message(plaintext_xml));
+    }
+
+    // ==================== Decryption Tests ====================
+
+    #[test]
+    fn decrypt_wechat_message_extracts_and_decrypts() {
+        use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
+        use base64::Engine;
+        type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+
+        // Use a test EncodingAESKey (43 chars of 'A' = 32 zero bytes when decoded)
+        let encoding_aes_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        std::env::set_var("WECHAT_ENCODING_AES_KEY", encoding_aes_key);
+
+        // Derive the AES key
+        let aes_key = base64::engine::general_purpose::STANDARD
+            .decode(format!("{}=", encoding_aes_key))
+            .unwrap();
+        let iv: [u8; 16] = aes_key[..16].try_into().unwrap();
+        let key: [u8; 32] = aes_key.clone().try_into().unwrap();
+
+        // Build the inner XML message that will be encrypted
+        let inner_xml = r#"<xml><ToUserName><![CDATA[ww33c299595bee0107]]></ToUserName><FromUserName><![CDATA[TestUser]]></FromUserName><CreateTime>1712345678</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[Hello Proto!]]></Content><MsgId>123456</MsgId><AgentID>1000002</AgentID></xml>"#;
+        let receiveid = b"ww33c299595bee0107";
+
+        // Build plaintext: random(16B) + msg_len(4B big-endian) + msg + receiveid
+        let random_bytes: [u8; 16] = [0u8; 16]; // Use zeros for determinism
+        let msg_len = (inner_xml.len() as u32).to_be_bytes();
+
+        let mut plaintext = Vec::new();
+        plaintext.extend_from_slice(&random_bytes);
+        plaintext.extend_from_slice(&msg_len);
+        plaintext.extend_from_slice(inner_xml.as_bytes());
+        plaintext.extend_from_slice(receiveid);
+
+        // Encrypt with PKCS7 padding
+        let encryptor = Aes256CbcEnc::new(&key.into(), &iv.into());
+        let encrypted = encryptor.encrypt_padded_vec_mut::<Pkcs7>(&plaintext);
+        let encrypted_base64 = base64::engine::general_purpose::STANDARD.encode(&encrypted);
+
+        // Build the encrypted XML payload (matching WeChat's format)
+        let encrypted_xml = format!(
+            r#"<xml><ToUserName><![CDATA[ww33c299595bee0107]]></ToUserName><Encrypt><![CDATA[{}]]></Encrypt></xml>"#,
+            encrypted_base64
+        );
+
+        // Test decryption
+        let decrypted = decrypt_wechat_message(&encrypted_xml).unwrap();
+
+        std::env::remove_var("WECHAT_ENCODING_AES_KEY");
+
+        assert_eq!(decrypted, inner_xml);
+    }
+
+    #[test]
+    fn decrypt_wechat_message_fails_without_encrypt_tag() {
+        std::env::set_var("WECHAT_ENCODING_AES_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+
+        let plaintext_xml = r#"<xml><ToUserName><![CDATA[corp]]></ToUserName></xml>"#;
+        let result = decrypt_wechat_message(plaintext_xml);
+
+        std::env::remove_var("WECHAT_ENCODING_AES_KEY");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing Encrypt tag"));
+    }
+
+    #[test]
+    fn decrypt_wechat_message_fails_without_aes_key() {
+        std::env::remove_var("WECHAT_ENCODING_AES_KEY");
+
+        let encrypted_xml = r#"<xml><ToUserName><![CDATA[corp]]></ToUserName><Encrypt><![CDATA[somebase64data]]></Encrypt></xml>"#;
+        let result = decrypt_wechat_message(encrypted_xml);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("WECHAT_ENCODING_AES_KEY not set"));
+    }
+
+    #[test]
+    fn full_encrypted_message_parsing() {
+        use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
+        use base64::Engine;
+        type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
+
+        // Use a test EncodingAESKey
+        let encoding_aes_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        std::env::set_var("WECHAT_ENCODING_AES_KEY", encoding_aes_key);
+
+        // Derive the AES key
+        let aes_key = base64::engine::general_purpose::STANDARD
+            .decode(format!("{}=", encoding_aes_key))
+            .unwrap();
+        let iv: [u8; 16] = aes_key[..16].try_into().unwrap();
+        let key: [u8; 32] = aes_key.clone().try_into().unwrap();
+
+        // Build the inner XML message
+        let inner_xml = r#"<xml><ToUserName><![CDATA[ww33c299595bee0107]]></ToUserName><FromUserName><![CDATA[TestUser]]></FromUserName><CreateTime>1712345678</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[Hello Proto!]]></Content><MsgId>123456</MsgId><AgentID>1000002</AgentID></xml>"#;
+        let receiveid = b"ww33c299595bee0107";
+
+        // Build plaintext
+        let random_bytes: [u8; 16] = [0u8; 16];
+        let msg_len = (inner_xml.len() as u32).to_be_bytes();
+
+        let mut plaintext = Vec::new();
+        plaintext.extend_from_slice(&random_bytes);
+        plaintext.extend_from_slice(&msg_len);
+        plaintext.extend_from_slice(inner_xml.as_bytes());
+        plaintext.extend_from_slice(receiveid);
+
+        // Encrypt
+        let encryptor = Aes256CbcEnc::new(&key.into(), &iv.into());
+        let encrypted = encryptor.encrypt_padded_vec_mut::<Pkcs7>(&plaintext);
+        let encrypted_base64 = base64::engine::general_purpose::STANDARD.encode(&encrypted);
+
+        // Build encrypted XML
+        let encrypted_xml = format!(
+            r#"<xml><ToUserName><![CDATA[ww33c299595bee0107]]></ToUserName><Encrypt><![CDATA[{}]]></Encrypt></xml>"#,
+            encrypted_base64
+        );
+
+        // Test full parsing flow (adapter should detect encryption, decrypt, then parse)
+        let adapter = WeChatInboundAdapter::new();
+        let message = adapter.parse(encrypted_xml.as_bytes()).unwrap();
+
+        std::env::remove_var("WECHAT_ENCODING_AES_KEY");
+
+        assert_eq!(message.sender, "TestUser");
+        assert_eq!(message.text_body, Some("Hello Proto!".to_string()));
+        assert_eq!(message.metadata.wechat_corp_id, Some("ww33c299595bee0107".to_string()));
+        assert_eq!(message.metadata.wechat_user_id, Some("TestUser".to_string()));
+        assert_eq!(message.metadata.wechat_agent_id, Some("1000002".to_string()));
+    }
+
+    // ==================== PKCS7 Padding Tests ====================
+
+    #[test]
+    fn remove_pkcs7_padding_valid() {
+        // Data with 5 bytes of padding (0x05)
+        let data = vec![1, 2, 3, 4, 5, 5, 5, 5, 5, 5];
+        let result = remove_pkcs7_padding(&data).unwrap();
+        assert_eq!(result, &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn remove_pkcs7_padding_single_byte() {
+        // Data with 1 byte of padding (0x01)
+        let data = vec![1, 2, 3, 1];
+        let result = remove_pkcs7_padding(&data).unwrap();
+        assert_eq!(result, &[1, 2, 3]);
+    }
+
+    #[test]
+    fn remove_pkcs7_padding_full_block() {
+        // Full block of padding (16 bytes of 0x10)
+        let mut data = vec![1, 2, 3];
+        data.extend(vec![16u8; 16]);
+        let result = remove_pkcs7_padding(&data).unwrap();
+        assert_eq!(result, &[1, 2, 3]);
+    }
+
+    #[test]
+    fn remove_pkcs7_padding_invalid_zero() {
+        let data = vec![1, 2, 3, 0];
+        let result = remove_pkcs7_padding(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_pkcs7_padding_invalid_mismatch() {
+        // Padding bytes don't match
+        let data = vec![1, 2, 3, 3, 3, 2]; // Last byte says 2 but third-to-last is 3
+        let result = remove_pkcs7_padding(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_pkcs7_padding_empty() {
+        let data: Vec<u8> = vec![];
+        let result = remove_pkcs7_padding(&data);
+        assert!(result.is_err());
     }
 }
