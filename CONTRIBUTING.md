@@ -2,7 +2,7 @@
 
 ## Development Flow
 
-1. Please firstly read `reference_documentation` to understand the DoWhiz end-to-end flow.
+1. Please firstly read `reference_documentation` to understand the DoWhiz end-to-end flow. A flowchart of DoWhiz system infra can be found at `dowhiz_flow.png`.
 2. Branch from latest `dev` for non-trivial work.
 3. Keep commits scoped and easy to review.
 4. Update related docs when behavior/config changes.
