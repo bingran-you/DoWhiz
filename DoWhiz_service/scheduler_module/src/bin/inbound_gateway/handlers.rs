@@ -694,9 +694,11 @@ pub(super) async fn ingest_wechat(
     State(state): State<Arc<GatewayState>>,
     body: Bytes,
 ) -> impl IntoResponse {
+    let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
     info!(
-        "wechat POST received, body_len={}",
-        body.len()
+        "wechat POST received, body_len={}, preview={}",
+        body.len(),
+        body_preview
     );
 
     let adapter = WeChatInboundAdapter::new();
