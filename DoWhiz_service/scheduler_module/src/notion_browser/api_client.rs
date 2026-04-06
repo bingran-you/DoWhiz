@@ -12,6 +12,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -22,10 +23,16 @@ const NOTION_API_BASE: &str = "https://api.notion.com/v1";
 const NOTION_API_VERSION: &str = "2022-06-28";
 
 /// Notion API client.
+///
+/// Supports two modes:
+/// 1. Static token mode: Uses a token from NOTION_API_TOKEN env var (for ACI/agent use)
+/// 2. OAuth store mode: Looks up tokens from MongoDB (for worker/server use)
 pub struct NotionApiClient {
     http_client: Client,
     oauth_store: NotionOAuthStore,
     employee_id: String,
+    /// Static token for direct API access (bypasses oauth_store lookup)
+    static_token: Option<String>,
 }
 
 /// Error types specific to the Notion API.
@@ -263,7 +270,7 @@ impl BlockInput {
 }
 
 impl NotionApiClient {
-    /// Create a new API client.
+    /// Create a new API client with OAuth store (for worker/server use).
     pub fn new(oauth_store: NotionOAuthStore, employee_id: &str) -> Self {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(30))
@@ -274,13 +281,51 @@ impl NotionApiClient {
             http_client,
             oauth_store,
             employee_id: employee_id.to_string(),
+            static_token: None,
+        }
+    }
+
+    /// Create a client with a static token (for ACI/agent use).
+    ///
+    /// This mode does not require MongoDB access - the token is used directly
+    /// for all API requests regardless of workspace_id.
+    pub fn with_static_token(token: String) -> Self {
+        let http_client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        info!("Created NotionApiClient with static token mode");
+
+        Self {
+            http_client,
+            oauth_store: NotionOAuthStore::noop(),
+            employee_id: String::new(),
+            static_token: Some(token),
         }
     }
 
     /// Create a client from environment configuration.
-    pub fn from_env(employee_id: &str) -> Result<Self, NotionError> {
-        let oauth_store = NotionOAuthStore::from_env(employee_id)?;
-        Ok(Self::new(oauth_store, employee_id))
+    ///
+    /// Priority:
+    /// 1. NOTION_API_TOKEN env var → static token mode (for ACI/agent)
+    /// 2. If not set → returns error (MongoDB not available in ACI)
+    ///
+    /// For worker/server use where MongoDB is available, use `new()` directly.
+    pub fn from_env(_employee_id: &str) -> Result<Self, NotionError> {
+        // Check for static token from environment (written to .notion_env by worker)
+        if let Ok(token) = env::var("NOTION_API_TOKEN") {
+            let token = token.trim().to_string();
+            if !token.is_empty() {
+                info!("Using NOTION_API_TOKEN from environment");
+                return Ok(Self::with_static_token(token));
+            }
+        }
+
+        // No token available - user needs to link their Notion account
+        Err(NotionError::ConfigError(
+            "No Notion integration available. Please link your Notion workspace at dowhiz.com first.".to_string()
+        ))
     }
 
     /// Build headers for API requests.
@@ -299,7 +344,16 @@ impl NotionApiClient {
     }
 
     /// Get access token for a workspace.
+    ///
+    /// If static_token is set, returns that token (ignores workspace_id).
+    /// Otherwise falls back to oauth_store lookup.
     fn get_token(&self, workspace_id: &str) -> Result<String, NotionApiError> {
+        // Static token mode - use directly
+        if let Some(ref token) = self.static_token {
+            return Ok(token.clone());
+        }
+
+        // OAuth store mode - lookup from MongoDB
         self.oauth_store
             .get_token(workspace_id, &self.employee_id)
             .map_err(|e| NotionApiError::RequestFailed(e.to_string()))?
