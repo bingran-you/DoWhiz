@@ -198,6 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // WeCom OAuth config (optional)
     let wechat_corp_id = env::var("WECHAT_CORP_ID").ok();
     let wechat_corp_secret = env::var("WECHAT_SECRET").ok();
+    let wechat_agent_id = env::var("WECHAT_AGENT_ID").ok();
     let wechat_redirect_uri = env::var("WECHAT_REDIRECT_URI").ok();
 
     // Frontend URL for OAuth redirects
@@ -227,6 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         lark_redirect_uri,
         wechat_corp_id,
         wechat_corp_secret,
+        wechat_agent_id,
         wechat_redirect_uri,
         frontend_url,
         install_onboarding_config: InstallOnboardingConfig::from_env(),

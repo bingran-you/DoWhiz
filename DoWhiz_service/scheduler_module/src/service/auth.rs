@@ -75,6 +75,7 @@ pub struct AuthState {
     // WeCom OAuth config
     pub wechat_corp_id: Option<String>,
     pub wechat_corp_secret: Option<String>,
+    pub wechat_agent_id: Option<String>,
     pub wechat_redirect_uri: Option<String>,
     // Frontend URL for redirects after OAuth
     pub frontend_url: String,
@@ -5272,8 +5273,12 @@ pub async fn wecom_oauth_start(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // Check if WeCom OAuth is configured
-    let (corp_id, redirect_uri) = match (&state.wechat_corp_id, &state.wechat_redirect_uri) {
-        (Some(id), Some(uri)) => (id.clone(), uri.clone()),
+    let (corp_id, agent_id, redirect_uri) = match (
+        &state.wechat_corp_id,
+        &state.wechat_agent_id,
+        &state.wechat_redirect_uri,
+    ) {
+        (Some(id), Some(agent), Some(uri)) => (id.clone(), agent.clone(), uri.clone()),
         _ => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -5309,10 +5314,12 @@ pub async fn wecom_oauth_start(
 
     // Build WeCom OAuth URL
     // Using snsapi_privateinfo scope for internal employees (gets UserId)
+    // agentid is required for snsapi_privateinfo scope
     let wecom_auth_url = format!(
-        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&state={}#wechat_redirect",
+        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&agentid={}&state={}#wechat_redirect",
         corp_id,
         urlencoding::encode(&redirect_uri),
+        agent_id,
         encoded_state
     );
 
@@ -6940,19 +6947,22 @@ mod tests {
     #[test]
     fn wecom_oauth_url_format() {
         let corp_id = "ww1234567890abcdef";
+        let agent_id = "1000002";
         let redirect_uri = "https://api.dowhiz.com/auth/wechat/callback";
         let state = "encoded_state";
 
         let url = format!(
-            "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&state={}#wechat_redirect",
+            "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&agentid={}&state={}#wechat_redirect",
             corp_id,
             urlencoding::encode(redirect_uri),
+            agent_id,
             state
         );
 
         assert!(url.contains("appid=ww1234567890abcdef"));
         assert!(url.contains("redirect_uri=https%3A%2F%2Fapi.dowhiz.com%2Fauth%2Fwechat%2Fcallback"));
         assert!(url.contains("scope=snsapi_privateinfo"));
+        assert!(url.contains("agentid=1000002"));
         assert!(url.contains("state=encoded_state"));
         assert!(url.ends_with("#wechat_redirect"));
     }
