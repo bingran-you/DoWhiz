@@ -13,7 +13,7 @@ For deployment pipeline details, see:
 
 ## 1) Deployment Policy
 
-- Staging deploy branch: `dev`
+- Staging deploy branch: `dev` (automatic deploy on push to `dev`)
 - Production deploy branch: `main`
 
 Runtime environment policy:
