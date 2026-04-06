@@ -73,9 +73,9 @@ pub struct AuthState {
     pub lark_client_secret: Option<String>,
     pub lark_redirect_uri: Option<String>,
     // WeCom OAuth config
-    pub wecom_corp_id: Option<String>,
-    pub wecom_corp_secret: Option<String>,
-    pub wecom_redirect_uri: Option<String>,
+    pub wechat_corp_id: Option<String>,
+    pub wechat_corp_secret: Option<String>,
+    pub wechat_redirect_uri: Option<String>,
     // Frontend URL for redirects after OAuth
     pub frontend_url: String,
     pub install_onboarding_config: InstallOnboardingConfig,
@@ -5272,7 +5272,7 @@ pub async fn wecom_oauth_start(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // Check if WeCom OAuth is configured
-    let (corp_id, redirect_uri) = match (&state.wecom_corp_id, &state.wecom_redirect_uri) {
+    let (corp_id, redirect_uri) = match (&state.wechat_corp_id, &state.wechat_redirect_uri) {
         (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         _ => {
             return (
@@ -5339,7 +5339,7 @@ pub async fn wecom_oauth_callback(
     };
 
     // Check if WeCom OAuth is configured
-    let (corp_id, corp_secret) = match (&state.wecom_corp_id, &state.wecom_corp_secret) {
+    let (corp_id, corp_secret) = match (&state.wechat_corp_id, &state.wechat_corp_secret) {
         (Some(id), Some(secret)) => (id.clone(), secret.clone()),
         _ => {
             return redirect_to("/auth/index.html?wechat=error&reason=not_configured");
