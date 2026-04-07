@@ -75,3 +75,10 @@ channel = "lark"
 key = "*"
 employee_id = "little_bear"
 tenant_id = "default"
+
+# SMS (Twilio) routing
+[[routes]]
+channel = "sms"
+key = "*"
+employee_id = "little_bear"
+tenant_id = "default"
