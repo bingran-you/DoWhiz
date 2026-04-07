@@ -1,0 +1,58 @@
+# Caddyfile for production1 (dowhizprod1)
+#
+# This file is a reference copy - CI/CD does NOT auto-deploy it.
+# To apply changes, manually copy to server and reload:
+#   scp Caddyfile.production1 dowhizprod1:/etc/caddy/Caddyfile
+#   ssh dowhizprod1 "sudo systemctl reload caddy"
+#
+# Routing:
+# - /service/* -> worker (9001) - API endpoints (auth, tasks, billing, etc.)
+# - /* -> gateway (9100) - webhooks (Slack, Discord, Twilio, etc.)
+
+api.production1.dowhiz.com {
+  # WeCom domain verification
+  handle /WW_verify_kWJjDYp4qoHuIy10.txt {
+    respond "kWJjDYp4qoHuIy10"
+  }
+
+  # API endpoints -> worker (port 9001)
+  # Includes: /auth/*, /api/*, /billing/*, /analytics/*
+  handle /service/* {
+    uri strip_prefix /service
+    reverse_proxy localhost:9001 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Webhooks and other routes -> gateway (port 9100)
+  # Includes: /slack/events, /sms/twilio, /postmark/inbound, etc.
+  handle {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+}
+
+# Legacy domain (no DNS currently, but kept for future use)
+api.dowhiz.com {
+  handle /WW_verify_kWJjDYp4qoHuIy10.txt {
+    respond "kWJjDYp4qoHuIy10"
+  }
+
+  handle /service/* {
+    uri strip_prefix /service
+    reverse_proxy localhost:9001 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+}
+
+localhost {
+  respond "Hello"
+}
