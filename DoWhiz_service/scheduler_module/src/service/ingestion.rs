@@ -242,7 +242,7 @@ fn process_ingestion_envelope(
         Channel::Sms => {
             let message = envelope.to_inbound_message();
             let raw_payload = envelope.raw_payload_bytes();
-            process_sms_message(config, user_store, index_store, &message, &raw_payload)
+            process_sms_message(config, user_store, index_store, account_store, &message, &raw_payload)
         }
         Channel::GoogleDocs | Channel::GoogleSheets | Channel::GoogleSlides => {
             let message = envelope.to_inbound_message();
