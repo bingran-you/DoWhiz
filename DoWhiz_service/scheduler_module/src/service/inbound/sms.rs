@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use tracing::{info, warn};
 
+use crate::account_store::AccountStore;
 use crate::channel::Channel;
 use crate::index_store::IndexStore;
 use crate::user_store::UserStore;
@@ -19,6 +20,7 @@ pub(crate) fn process_sms_message(
     config: &ServiceConfig,
     user_store: &UserStore,
     index_store: &IndexStore,
+    account_store: &AccountStore,
     message: &crate::channel::InboundMessage,
     raw_payload: &[u8],
 ) -> Result<(), BoxError> {
@@ -97,6 +99,9 @@ pub(crate) fn process_sms_message(
         channel_metadata: message.metadata.clone(),
     };
 
+    // Clone run_task before consuming it, in case we need to write to account-level storage
+    let run_task_for_account = run_task.clone();
+
     let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())?;
     if let Err(err) = cancel_pending_thread_tasks(&mut scheduler, &workspace, thread_state.epoch) {
         warn!(
@@ -116,6 +121,48 @@ pub(crate) fn process_sms_message(
         workspace.display(),
         thread_state.epoch
     );
+
+    // If the SMS user has linked their phone number, also write to account-level tasks.db
+    if let Ok(Some(account)) = account_store.get_account_by_identifier("phone", &normalized_from) {
+        let account_tasks_dir = config.users_root.join(account.id.to_string()).join("state");
+        if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
+            warn!(
+                "failed to create account tasks dir for account {}: {}",
+                account.id, err
+            );
+        } else {
+            let account_tasks_db_path = account_tasks_dir.join("tasks.db");
+            match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
+                Ok(mut account_scheduler) => {
+                    // Use the same task_id so we can update status at completion
+                    match account_scheduler.add_one_shot_in_with_id(
+                        task_id,
+                        Duration::from_secs(0),
+                        TaskKind::RunTask(run_task_for_account),
+                    ) {
+                        Ok(()) => {
+                            info!(
+                                "also enqueued SMS task to account-level storage account={} task_id={}",
+                                account.id, task_id
+                            );
+                        }
+                        Err(err) => {
+                            warn!(
+                                "failed to add SMS task to account scheduler for account {}: {}",
+                                account.id, err
+                            );
+                        }
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "failed to load account scheduler for account {}: {}",
+                        account.id, err
+                    );
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -269,6 +316,7 @@ mod tests {
 
         let user_store = UserStore::new(&config.users_db_path)?;
         let index_store = IndexStore::new(&config.task_index_path)?;
+        let account_store = AccountStore::new(&ingestion_db_url)?;
 
         let sender = "+1 (555) 123-4567".to_string();
         let recipient = "+1 555-999-0000".to_string();
@@ -293,7 +341,7 @@ mod tests {
             },
         };
 
-        process_sms_message(&config, &user_store, &index_store, &message, &raw_payload)?;
+        process_sms_message(&config, &user_store, &index_store, &account_store, &message, &raw_payload)?;
 
         let user = user_store.get_or_create_user("phone", &sender)?;
         let user_paths = user_store.user_paths(&config.users_root, &user.user_id);

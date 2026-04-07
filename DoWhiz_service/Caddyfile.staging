@@ -1,0 +1,113 @@
+# Caddyfile for staging (dowhizstaging)
+#
+# This file is a reference copy - CI/CD does NOT auto-deploy it.
+# To apply changes, manually copy to server and reload:
+#   scp Caddyfile.staging dowhizstaging:/etc/caddy/Caddyfile
+#   ssh dowhizstaging "sudo systemctl reload caddy"
+#
+# This server also hosts the frontend static files.
+#
+# Routing:
+# - /service/* -> worker (9001) - API endpoints
+# - /auth/* API endpoints -> worker (9001)
+# - Webhook paths -> gateway (9100)
+# - Everything else -> static files from website/dist
+#
+# NOTE: Unlike production1, webhook paths (/slack/*, /sms/*, etc.) must be
+# explicitly listed here. This is because the static file handler uses
+# `try_files` which falls back to serving index.html for unknown paths.
+# Without explicit routes, /slack/events would serve index.html instead
+# of proxying to the gateway.
+
+api.staging.dowhiz.com {
+  # API routes (strip /service prefix)
+  handle /service/* {
+    uri strip_prefix /service
+    reverse_proxy localhost:9001 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Gateway webhook routes -> gateway (9100)
+  handle /postmark/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /slack/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /discord/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /whatsapp/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /wechat/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /webhook/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /telegram/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /sms/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle /lark/* {
+    reverse_proxy localhost:9100 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Auth API routes (backend endpoints, not static files)
+  @auth_api {
+    path /auth/signup /auth/account /auth/link /auth/verify /auth/verify-email
+    path /auth/unlink /auth/memo
+    path /auth/discord /auth/discord/callback
+    path /auth/slack /auth/slack/callback
+    path /auth/github /auth/github/callback
+    path /auth/notion /auth/notion/callback
+    path /auth/lark /auth/lark/callback
+    path /auth/wechat /auth/wechat/callback
+  }
+  handle @auth_api {
+    reverse_proxy localhost:9001 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Serve website static files (includes /auth/index.html)
+  handle {
+    root * /home/azureuser/server/DoWhiz/website/dist
+    try_files {path} {path}/ /index.html
+    file_server
+  }
+}
+
+localhost {
+  respond "ok"
+}

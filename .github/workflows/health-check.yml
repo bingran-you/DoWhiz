@@ -240,6 +240,28 @@ jobs:
               echo "FAILED_CONTAINERS:$FAILED"
             fi
 
+            # Warm pool containers (dwz-warm-* prefix)
+            echo ""
+            echo "### Warm Pool Containers"
+            WARM_CONTAINERS=$(echo "$CONTAINERS" | jq '[.[] | select(.name | startswith("dwz-warm"))]')
+            WARM_TOTAL=$(echo "$WARM_CONTAINERS" | jq 'length')
+            WARM_RUNNING=$(echo "$WARM_CONTAINERS" | jq '[.[] | select(.provisioningState == "Running")] | length')
+            WARM_SUCCEEDED=$(echo "$WARM_CONTAINERS" | jq '[.[] | select(.provisioningState == "Succeeded")] | length')
+            WARM_FAILED=$(echo "$WARM_CONTAINERS" | jq '[.[] | select(.provisioningState == "Failed")] | length')
+            WARM_CREATING=$(echo "$WARM_CONTAINERS" | jq '[.[] | select(.provisioningState == "Creating")] | length')
+
+            echo "| Status | Count |"
+            echo "|--------|-------|"
+            echo "| Total warm | $WARM_TOTAL |"
+            echo "| Running (active) | $WARM_RUNNING |"
+            echo "| Succeeded (ready) | $WARM_SUCCEEDED |"
+            echo "| Creating | $WARM_CREATING |"
+            echo "| Failed | $WARM_FAILED |"
+
+            echo "WARM_TOTAL:$WARM_TOTAL"
+            echo "WARM_RUNNING:$WARM_RUNNING"
+            echo "WARM_SUCCEEDED:$WARM_SUCCEEDED"
+
             # Alert thresholds
             if [[ "$FAILED" -gt 5 ]]; then
               echo "ACI_CRITICAL_FAILURES"
@@ -258,6 +280,14 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "$ACI_CHECK" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Extract warm pool counts
+          WARM_TOTAL=$(echo "$ACI_CHECK" | grep "WARM_TOTAL:" | cut -d: -f2 || echo "0")
+          WARM_RUNNING=$(echo "$ACI_CHECK" | grep "WARM_RUNNING:" | cut -d: -f2 || echo "0")
+          WARM_SUCCEEDED=$(echo "$ACI_CHECK" | grep "WARM_SUCCEEDED:" | cut -d: -f2 || echo "0")
+          echo "warm_total=$WARM_TOTAL" >> $GITHUB_OUTPUT
+          echo "warm_running=$WARM_RUNNING" >> $GITHUB_OUTPUT
+          echo "warm_succeeded=$WARM_SUCCEEDED" >> $GITHUB_OUTPUT
 
           if [[ "$ACI_CHECK" == *"ACI_CRITICAL_FAILURES"* ]]; then
             FAILED_COUNT=$(echo "$ACI_CHECK" | grep "FAILED_CONTAINERS:" | cut -d: -f2)
@@ -312,6 +342,7 @@ jobs:
           echo "| Gateway HTTP | ${{ steps.endpoints.outputs.gateway_health }} |" >> $GITHUB_STEP_SUMMARY
           echo "| MongoDB | ${{ steps.mongodb.outputs.mongo_healthy }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Azure ACI | ${{ steps.aci_containers.outputs.aci_status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Warm Pool (total/running/ready) | ${{ steps.aci_containers.outputs.warm_total }}/${{ steps.aci_containers.outputs.warm_running }}/${{ steps.aci_containers.outputs.warm_succeeded }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Disk Space | ${{ steps.disk.outputs.disk_ok }} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if Critical Issues (${{ matrix.env }})
