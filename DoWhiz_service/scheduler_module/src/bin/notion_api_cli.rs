@@ -14,6 +14,9 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     dotenvy::dotenv().ok();
+    // Load .notion_env for channel-agnostic Notion token support
+    // (written by codex.rs when user has linked Notion account)
+    dotenvy::from_filename(".notion_env").ok();
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
