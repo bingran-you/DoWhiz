@@ -8,9 +8,10 @@ use chrono::{DateTime, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Instant;
 use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -5266,6 +5267,46 @@ struct WeComUserInfoResponse {
     open_id: Option<String>,
 }
 
+/// Ephemeral KV store for WeCom OAuth state
+/// Maps short state key -> (supabase_token, created_at)
+/// TTL: 10 minutes (OAuth should complete quickly)
+const WECOM_OAUTH_STATE_TTL_SECS: u64 = 600;
+
+fn wecom_oauth_states() -> &'static Mutex<HashMap<String, (String, Instant)>> {
+    static STATES: OnceLock<Mutex<HashMap<String, (String, Instant)>>> = OnceLock::new();
+    STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Store a token with a short key, returns the key
+fn store_wecom_oauth_state(token: &str) -> String {
+    let key = Uuid::new_v4().to_string(); // 36 chars, well under 128 limit
+    let mut store = wecom_oauth_states().lock().expect("wecom oauth state lock");
+
+    // Prune expired entries
+    let now = Instant::now();
+    store.retain(|_, (_, created)| now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS);
+
+    store.insert(key.clone(), (token.to_string(), now));
+    info!("WeCom OAuth: stored state key={} (token_len={}, store_size={})", key, token.len(), store.len());
+    key
+}
+
+/// Retrieve and remove a token by key (one-time use)
+fn take_wecom_oauth_state(key: &str) -> Option<String> {
+    let mut store = wecom_oauth_states().lock().expect("wecom oauth state lock");
+
+    // Prune expired entries
+    let now = Instant::now();
+    store.retain(|_, (_, created)| now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS);
+
+    let result = store.remove(key);
+    match &result {
+        Some((token, _)) => info!("WeCom OAuth: retrieved state key={} (token_len={}, remaining_store_size={})", key, token.len(), store.len()),
+        None => info!("WeCom OAuth: state key={} not found (store_size={})", key, store.len()),
+    }
+    result.map(|(token, _)| token)
+}
+
 /// GET /auth/wechat
 /// Initiates WeCom OAuth flow - returns redirect URL to WeCom's authorization page.
 pub async fn wecom_oauth_start(
@@ -5308,8 +5349,8 @@ pub async fn wecom_oauth_start(
         return (status, Json(serde_json::json!({ "error": msg }))).into_response();
     }
 
-    // Encode the Supabase token in state so we can identify the user on callback
-    let encoded_state = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token.as_bytes());
+    // Store token in ephemeral KV, use short key as state (WeChat has 128 char limit)
+    let state_key = store_wecom_oauth_state(&token);
 
     // Build WeCom OAuth URL
     // Using snsapi_base scope for silent auth - returns userid for enterprise members
@@ -5318,7 +5359,7 @@ pub async fn wecom_oauth_start(
         "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_base&state={}#wechat_redirect",
         corp_id,
         urlencoding::encode(&redirect_uri),
-        encoded_state
+        state_key
     );
 
     info!(
@@ -5362,15 +5403,11 @@ pub async fn wecom_oauth_callback(
         }
     };
 
-    // Decode state to get the Supabase token
-    let token = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(&params.state) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(t) => t,
-            Err(_) => {
-                return redirect_to("/auth/index.html?wechat=error&reason=invalid_state");
-            }
-        },
-        Err(_) => {
+    // Retrieve token from ephemeral KV store (one-time use)
+    let token = match take_wecom_oauth_state(&params.state) {
+        Some(t) => t,
+        None => {
+            warn!("WeCom OAuth state not found or expired: {}", params.state);
             return redirect_to("/auth/index.html?wechat=error&reason=invalid_state");
         }
     };
