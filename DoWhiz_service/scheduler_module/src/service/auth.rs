@@ -5265,6 +5265,9 @@ struct WeComUserInfoResponse {
     user_id: Option<String>,
     #[serde(rename = "OpenId")]
     open_id: Option<String>,
+    // QR code login returns lowercase userid
+    userid: Option<String>,
+    user_ticket: Option<String>,
 }
 
 /// Ephemeral KV store for WeCom OAuth state
@@ -5479,33 +5482,39 @@ pub async fn wecom_oauth_callback(
     let user_res = client.get(&user_info_url).send().await;
 
     let (wecom_user_id, wecom_display) = match user_res {
-        Ok(res) if res.status().is_success() => match res.json::<WeComUserInfoResponse>().await {
-            Ok(r) if r.errcode.unwrap_or(0) == 0 => {
-                // UserId is for internal employees, OpenId is for external contacts
-                match (r.user_id, r.open_id) {
-                    (Some(uid), _) => (uid.clone(), uid),
-                    (None, Some(oid)) => (oid.clone(), format!("external:{}", oid)),
-                    (None, None) => {
-                        error!("WeCom user info response missing both UserId and OpenId");
-                        return redirect_to(
-                            "/auth/index.html?wechat=error&reason=user_info_missing",
-                        );
+        Ok(res) if res.status().is_success() => {
+            let body = res.text().await.unwrap_or_default();
+            info!("WeCom user info raw response: {}", body);
+            match serde_json::from_str::<WeComUserInfoResponse>(&body) {
+                Ok(r) if r.errcode.unwrap_or(0) == 0 => {
+                    // UserId/userid is for internal employees, OpenId is for external contacts
+                    // QR code login returns lowercase "userid", OAuth returns "UserId"
+                    let effective_user_id = r.user_id.or(r.userid);
+                    match (effective_user_id, r.open_id) {
+                        (Some(uid), _) => (uid.clone(), uid),
+                        (None, Some(oid)) => (oid.clone(), format!("external:{}", oid)),
+                        (None, None) => {
+                            error!("WeCom user info response missing both UserId and OpenId: {:?}", r.user_ticket);
+                            return redirect_to(
+                                "/auth/index.html?wechat=error&reason=user_info_missing",
+                            );
+                        }
                     }
                 }
+                Ok(r) => {
+                    error!(
+                        "WeCom user info error {}: {:?}",
+                        r.errcode.unwrap_or(-1),
+                        r.errmsg
+                    );
+                    return redirect_to("/auth/index.html?wechat=error&reason=user_info_error");
+                }
+                Err(e) => {
+                    error!("Failed to parse WeCom user info response: {}", e);
+                    return redirect_to("/auth/index.html?wechat=error&reason=user_parse_error");
+                }
             }
-            Ok(r) => {
-                error!(
-                    "WeCom user info error {}: {:?}",
-                    r.errcode.unwrap_or(-1),
-                    r.errmsg
-                );
-                return redirect_to("/auth/index.html?wechat=error&reason=user_info_error");
-            }
-            Err(e) => {
-                error!("Failed to parse WeCom user info response: {}", e);
-                return redirect_to("/auth/index.html?wechat=error&reason=user_parse_error");
-            }
-        },
+        }
         Ok(res) => {
             error!("WeCom user info request failed: {}", res.status());
             return redirect_to("/auth/index.html?wechat=error&reason=user_request_failed");
