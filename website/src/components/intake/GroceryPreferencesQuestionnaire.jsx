@@ -1,14 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import './GroceryPreferencesQuestionnaire.css';
+import { useTranslation } from './groceryTranslations';
 
-const STEPS = [
-  { id: 'profile', title: 'Basic Profile', titleZh: '基本信息' },
-  { id: 'shopping', title: 'Shopping Habits', titleZh: '购物习惯' },
-  { id: 'categories', title: 'Categories', titleZh: '常买品类' },
-  { id: 'category_prefs', title: 'Category Preferences', titleZh: '品类偏好' },
-  { id: 'taste', title: 'Taste Profile', titleZh: '口味偏好' },
-  { id: 'budget', title: 'Budget & Priorities', titleZh: '预算与优先级' }
-];
+const STEP_IDS = ['profile', 'shopping', 'categories', 'category_prefs', 'taste', 'budget'];
 
 const CULTURAL_BACKGROUNDS = [
   { value: 'mainland_china', label: '中国大陆' },
@@ -195,7 +189,7 @@ function RangeSlider({ value, onChange, min = 1, max = 5, labels }) {
   );
 }
 
-function DraggablePriorityList({ items, order, onChange }) {
+function DraggablePriorityList({ items, order, onChange, hint }) {
   const [draggedIdx, setDraggedIdx] = useState(null);
 
   const handleDragStart = useCallback((idx) => {
@@ -228,7 +222,7 @@ function DraggablePriorityList({ items, order, onChange }) {
 
   return (
     <div className="gq-priority-list">
-      <p className="gq-hint">拖拽排序（1 = 最重要）</p>
+      <p className="gq-hint">{hint}</p>
       {order.map((value, idx) => (
         <div
           key={value}
@@ -250,8 +244,10 @@ function DraggablePriorityList({ items, order, onChange }) {
 function GroceryPreferencesQuestionnaire({
   onComplete,
   onCancel,
-  initialData = {}
+  initialData = {},
+  locale = 'zh-CN'
 }) {
+  const { t } = useTranslation(locale);
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     // Step 1: Profile
@@ -322,7 +318,7 @@ function GroceryPreferencesQuestionnaire({
   }, [currentStep, formData]);
 
   const handleNext = () => {
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < STEP_IDS.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
       onComplete?.(formData);
@@ -340,13 +336,13 @@ function GroceryPreferencesQuestionnaire({
       case 0:
         return (
           <div className="gq-step-content">
-            <h3>你好！我是你的智能买菜助手</h3>
-            <p>为了给你更好的推荐，先了解一下你的情况</p>
+            <h3>{t.profileGreeting}</h3>
+            <p>{t.profileIntro}</p>
 
             <div className="gq-field">
-              <label>你的文化背景是？</label>
+              <label>{t.culturalBackground}</label>
               <SingleSelect
-                options={CULTURAL_BACKGROUNDS}
+                options={Object.entries(t.culturalBackgrounds).map(([value, label]) => ({ value, label }))}
                 value={formData.cultural_background}
                 onChange={(v) => updateField('cultural_background', v)}
                 name="cultural_background"
@@ -355,21 +351,21 @@ function GroceryPreferencesQuestionnaire({
 
             <div className="gq-field gq-field-row">
               <div className="gq-field-half">
-                <label>你住在哪个城市？</label>
+                <label>{t.city}</label>
                 <input
                   type="text"
                   className="gq-input"
-                  placeholder="例如：Ann Arbor, MI"
+                  placeholder={t.cityPlaceholder}
                   value={formData.city}
                   onChange={(e) => updateField('city', e.target.value)}
                 />
               </div>
               <div className="gq-field-half">
-                <label>Zip Code <span className="required">*</span></label>
+                <label>{t.zipCode} <span className="required">{t.required}</span></label>
                 <input
                   type="text"
                   className="gq-input"
-                  placeholder="例如：48109"
+                  placeholder={t.zipCodePlaceholder}
                   value={formData.zip_code}
                   onChange={(e) => updateField('zip_code', e.target.value)}
                 />
@@ -377,9 +373,9 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>你一般是为几个人买菜？</label>
+              <label>{t.householdSize}</label>
               <SingleSelect
-                options={HOUSEHOLD_SIZES}
+                options={Object.entries(t.householdSizes).map(([value, label]) => ({ value, label }))}
                 value={formData.household_size}
                 onChange={(v) => updateField('household_size', v)}
                 name="household_size"
@@ -391,12 +387,12 @@ function GroceryPreferencesQuestionnaire({
       case 1:
         return (
           <div className="gq-step-content">
-            <h3>购物习惯</h3>
+            <h3>{t.shoppingTitle}</h3>
 
             <div className="gq-field">
-              <label>你有车吗？最远愿意开多久去买菜？</label>
+              <label>{t.transportQuestion}</label>
               <SingleSelect
-                options={TRANSPORT_OPTIONS}
+                options={Object.entries(t.transportOptions).map(([value, label]) => ({ value, label }))}
                 value={formData.transport}
                 onChange={(v) => updateField('transport', v)}
                 name="transport"
@@ -404,9 +400,9 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>你更喜欢？</label>
+              <label>{t.shoppingPreferenceQuestion}</label>
               <SingleSelect
-                options={SHOPPING_PREFERENCES}
+                options={Object.entries(t.shoppingPreferences).map(([value, label]) => ({ value, label }))}
                 value={formData.shopping_preference}
                 onChange={(v) => updateField('shopping_preference', v)}
                 name="shopping_preference"
@@ -414,7 +410,7 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>你有这些会员卡吗？（多选）</label>
+              <label>{t.membershipsQuestion}</label>
               <MultiSelect
                 options={MEMBERSHIPS}
                 values={formData.memberships}
@@ -424,18 +420,18 @@ function GroceryPreferencesQuestionnaire({
               <input
                 type="text"
                 className="gq-input gq-input-small"
-                placeholder="其他会员卡..."
+                placeholder={t.otherMembershipPlaceholder}
                 value={formData.other_membership}
                 onChange={(e) => updateField('other_membership', e.target.value)}
               />
             </div>
 
             <div className="gq-field">
-              <label>你平时在哪些超市买菜？（多选）</label>
-              <p className="gq-hint">选择你常去的超市，我们会优先比较这些店的价格</p>
+              <label>{t.storesQuestion}</label>
+              <p className="gq-hint">{t.storesHint}</p>
 
               <div className="gq-store-section">
-                <h5>亚洲超市 - 网购</h5>
+                <h5>{t.storeCategories.asian_online}</h5>
                 <MultiSelect
                   options={STORES_ASIAN_ONLINE}
                   values={formData.preferred_stores}
@@ -445,7 +441,7 @@ function GroceryPreferencesQuestionnaire({
               </div>
 
               <div className="gq-store-section">
-                <h5>亚洲超市 - 实体店</h5>
+                <h5>{t.storeCategories.asian_physical}</h5>
                 <MultiSelect
                   options={STORES_ASIAN_PHYSICAL}
                   values={formData.preferred_stores}
@@ -455,7 +451,7 @@ function GroceryPreferencesQuestionnaire({
               </div>
 
               <div className="gq-store-section">
-                <h5>仓储会员店</h5>
+                <h5>{t.storeCategories.warehouse}</h5>
                 <MultiSelect
                   options={STORES_WAREHOUSE}
                   values={formData.preferred_stores}
@@ -465,7 +461,7 @@ function GroceryPreferencesQuestionnaire({
               </div>
 
               <div className="gq-store-section">
-                <h5>美国主流超市</h5>
+                <h5>{t.storeCategories.mainstream}</h5>
                 <MultiSelect
                   options={STORES_MAINSTREAM}
                   values={formData.preferred_stores}
@@ -477,7 +473,7 @@ function GroceryPreferencesQuestionnaire({
               <input
                 type="text"
                 className="gq-input gq-input-small"
-                placeholder="其他超市（如本地华人超市）..."
+                placeholder={t.otherStorePlaceholder}
                 value={formData.other_stores}
                 onChange={(e) => updateField('other_stores', e.target.value)}
               />
@@ -488,12 +484,12 @@ function GroceryPreferencesQuestionnaire({
       case 2:
         return (
           <div className="gq-step-content">
-            <h3>你主要买哪些品类？</h3>
-            <p className="gq-hint">选择后会针对你选的品类问更细的问题</p>
+            <h3>{t.categoriesTitle}</h3>
+            <p className="gq-hint">{t.categoriesHint}</p>
 
             <div className="gq-field">
               <MultiSelect
-                options={MAIN_CATEGORIES}
+                options={Object.entries(t.mainCategories).map(([value, label]) => ({ value, label }))}
                 values={formData.main_categories}
                 onChange={(v) => updateField('main_categories', v)}
                 name="main_categories"
@@ -505,47 +501,34 @@ function GroceryPreferencesQuestionnaire({
       case 3:
         return (
           <div className="gq-step-content">
-            <h3>品类偏好细节</h3>
-            <p className="gq-hint">根据你选择的品类，我们想了解更多细节</p>
+            <h3>{t.categoryPrefsTitle}</h3>
+            <p className="gq-hint">{t.categoryPrefsHint}</p>
 
             {formData.main_categories.includes('meat') && (
               <div className="gq-category-section">
-                <h4>关于肉类</h4>
+                <h4>{t.meatTitle}</h4>
                 <div className="gq-field">
-                  <label>你更常买哪种肉？（多选）</label>
+                  <label>{t.meatTypeQuestion}</label>
                   <MultiSelect
-                    options={[
-                      { value: 'pork', label: '猪肉' },
-                      { value: 'beef', label: '牛肉' },
-                      { value: 'chicken', label: '鸡肉' },
-                      { value: 'lamb', label: '羊肉' }
-                    ]}
+                    options={Object.entries(t.meatTypes).map(([value, label]) => ({ value, label }))}
                     values={formData.meat_type}
                     onChange={(v) => updateField('meat_type', v)}
                     name="meat_type"
                   />
                 </div>
                 <div className="gq-field">
-                  <label>你会自己处理生肉吗？</label>
+                  <label>{t.meatProcessingQuestion}</label>
                   <SingleSelect
-                    options={[
-                      { value: 'can_process', label: '可以，没问题' },
-                      { value: 'prefer_cut', label: '更喜欢买切好的' },
-                      { value: 'must_cut', label: '必须切好的，不会处理' }
-                    ]}
+                    options={Object.entries(t.meatProcessing).map(([value, label]) => ({ value, label }))}
                     value={formData.meat_processing}
                     onChange={(v) => updateField('meat_processing', v)}
                     name="meat_processing"
                   />
                 </div>
                 <div className="gq-field">
-                  <label>对肉的分量有要求吗？</label>
+                  <label>{t.meatQuantityQuestion}</label>
                   <SingleSelect
-                    options={[
-                      { value: 'small', label: '一次只买1-2lb' },
-                      { value: 'medium', label: '可以买3-5lb' },
-                      { value: 'bulk', label: '可以批量买冷冻' }
-                    ]}
+                    options={Object.entries(t.meatQuantity).map(([value, label]) => ({ value, label }))}
                     value={formData.meat_quantity}
                     onChange={(v) => updateField('meat_quantity', v)}
                     name="meat_quantity"
@@ -556,36 +539,32 @@ function GroceryPreferencesQuestionnaire({
 
             {formData.main_categories.includes('snacks') && (
               <div className="gq-category-section">
-                <h4>关于零食</h4>
+                <h4>{t.snacksTitle}</h4>
                 <div className="gq-field">
-                  <label>口味偏好？（多选）</label>
+                  <label>{t.snackFlavorQuestion}</label>
                   <MultiSelect
-                    options={[
-                      { value: 'salty', label: '咸口' },
-                      { value: 'sweet', label: '甜口' },
-                      { value: 'spicy', label: '辣口' }
-                    ]}
+                    options={Object.entries(t.snackFlavors).map(([value, label]) => ({ value, label }))}
                     values={formData.snack_flavor}
                     onChange={(v) => updateField('snack_flavor', v)}
                     name="snack_flavor"
                   />
                 </div>
                 <div className="gq-field">
-                  <label>喜欢的品牌？</label>
+                  <label>{t.snackBrandsLikeLabel}</label>
                   <input
                     type="text"
                     className="gq-input"
-                    placeholder="例如：旺旺、乐事、百草味"
+                    placeholder={t.snackBrandsLikePlaceholder}
                     value={formData.snack_brands_like}
                     onChange={(e) => updateField('snack_brands_like', e.target.value)}
                   />
                 </div>
                 <div className="gq-field">
-                  <label>排斥的品牌/口味？</label>
+                  <label>{t.snackBrandsAvoidLabel}</label>
                   <input
                     type="text"
                     className="gq-input"
-                    placeholder="例如：美式糖果"
+                    placeholder={t.snackBrandsAvoidPlaceholder}
                     value={formData.snack_brands_avoid}
                     onChange={(e) => updateField('snack_brands_avoid', e.target.value)}
                   />
@@ -595,25 +574,21 @@ function GroceryPreferencesQuestionnaire({
 
             {formData.main_categories.includes('vegetables') && (
               <div className="gq-category-section">
-                <h4>关于蔬菜</h4>
+                <h4>{t.vegetablesTitle}</h4>
                 <div className="gq-field">
-                  <label>你常买哪些蔬菜？</label>
+                  <label>{t.vegetableTypesLabel}</label>
                   <input
                     type="text"
                     className="gq-input"
-                    placeholder="例如：韭菜、空心菜、小白菜"
+                    placeholder={t.vegetableTypesPlaceholder}
                     value={formData.vegetable_types}
                     onChange={(e) => updateField('vegetable_types', e.target.value)}
                   />
                 </div>
                 <div className="gq-field">
-                  <label>有机蔬菜重要吗？</label>
+                  <label>{t.vegetableOrganicQuestion}</label>
                   <SingleSelect
-                    options={[
-                      { value: 'important', label: '很重要' },
-                      { value: 'nice_to_have', label: '有更好' },
-                      { value: 'not_important', label: '不重要' }
-                    ]}
+                    options={Object.entries(t.vegetableOrganic).map(([value, label]) => ({ value, label }))}
                     value={formData.vegetable_organic}
                     onChange={(v) => updateField('vegetable_organic', v)}
                     name="vegetable_organic"
@@ -624,41 +599,31 @@ function GroceryPreferencesQuestionnaire({
 
             {formData.main_categories.includes('hotpot') && (
               <div className="gq-category-section">
-                <h4>关于火锅</h4>
+                <h4>{t.hotpotTitle}</h4>
                 <div className="gq-field">
-                  <label>多久吃一次火锅？</label>
+                  <label>{t.hotpotFrequencyQuestion}</label>
                   <SingleSelect
-                    options={[
-                      { value: 'weekly', label: '每周' },
-                      { value: 'biweekly', label: '每两周' },
-                      { value: 'monthly', label: '每月1-2次' },
-                      { value: 'rarely', label: '偶尔' }
-                    ]}
+                    options={Object.entries(t.hotpotFrequency).map(([value, label]) => ({ value, label }))}
                     value={formData.hotpot_frequency}
                     onChange={(v) => updateField('hotpot_frequency', v)}
                     name="hotpot_frequency"
                   />
                 </div>
                 <div className="gq-field">
-                  <label>喜欢什么锅底？（多选）</label>
+                  <label>{t.hotpotBaseQuestion}</label>
                   <MultiSelect
-                    options={[
-                      { value: 'spicy', label: '麻辣' },
-                      { value: 'clear', label: '清汤' },
-                      { value: 'tomato', label: '番茄' },
-                      { value: 'mushroom', label: '菌菇' }
-                    ]}
+                    options={Object.entries(t.hotpotBases).map(([value, label]) => ({ value, label }))}
                     values={formData.hotpot_base}
                     onChange={(v) => updateField('hotpot_base', v)}
                     name="hotpot_base"
                   />
                 </div>
                 <div className="gq-field">
-                  <label>喜欢的火锅品牌？</label>
+                  <label>{t.hotpotBrandsLabel}</label>
                   <input
                     type="text"
                     className="gq-input"
-                    placeholder="例如：海底捞、小龙坎、德庄"
+                    placeholder={t.hotpotBrandsPlaceholder}
                     value={formData.hotpot_brands}
                     onChange={(e) => updateField('hotpot_brands', e.target.value)}
                   />
@@ -667,7 +632,7 @@ function GroceryPreferencesQuestionnaire({
             )}
 
             {formData.main_categories.length === 0 && (
-              <p className="gq-empty-hint">请先在上一步选择你常买的品类</p>
+              <p className="gq-empty-hint">{t.emptyCategoryHint}</p>
             )}
           </div>
         );
@@ -675,25 +640,21 @@ function GroceryPreferencesQuestionnaire({
       case 4:
         return (
           <div className="gq-step-content">
-            <h3>口味偏好</h3>
+            <h3>{t.tasteTitle}</h3>
 
             <div className="gq-field">
-              <label>甜度接受度</label>
+              <label>{t.sweetnessLabel}</label>
               <RangeSlider
                 value={formData.sweetness}
                 onChange={(v) => updateField('sweetness', v)}
-                labels={['很淡', '偏淡', '适中', '偏甜', '很甜']}
+                labels={t.sweetnessLevels}
               />
             </div>
 
             <div className="gq-field">
-              <label>美式甜品对你来说通常：</label>
+              <label>{t.americanSweetsQuestion}</label>
               <SingleSelect
-                options={[
-                  { value: 'too_sweet', label: '太甜' },
-                  { value: 'just_right', label: '刚好' },
-                  { value: 'could_be_sweeter', label: '可以更甜' }
-                ]}
+                options={Object.entries(t.americanSweets).map(([value, label]) => ({ value, label }))}
                 value={formData.american_sweets_opinion}
                 onChange={(v) => updateField('american_sweets_opinion', v)}
                 name="american_sweets_opinion"
@@ -701,22 +662,18 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>辣度接受度</label>
+              <label>{t.spicyLabel}</label>
               <RangeSlider
                 value={formData.spiciness}
                 onChange={(v) => updateField('spiciness', v)}
-                labels={['不能吃辣', '微辣', '中辣', '辣', '越辣越好']}
+                labels={t.spicyLevels}
               />
             </div>
 
             <div className="gq-field">
-              <label>咸度偏好</label>
+              <label>{t.saltinessLabel}</label>
               <SingleSelect
-                options={[
-                  { value: 'light', label: '偏淡' },
-                  { value: 'normal', label: '正常' },
-                  { value: 'salty', label: '偏咸' }
-                ]}
+                options={Object.entries(t.saltiness).map(([value, label]) => ({ value, label }))}
                 value={formData.saltiness}
                 onChange={(v) => updateField('saltiness', v)}
                 name="saltiness"
@@ -724,10 +681,10 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>有什么特别排斥的食物/品牌吗？</label>
+              <label>{t.avoidFoodsLabel}</label>
               <textarea
                 className="gq-textarea"
-                placeholder="例如：Kraft芝士、美式糖果、某些调味品等"
+                placeholder={t.avoidFoodsPlaceholder}
                 value={formData.avoid_foods}
                 onChange={(e) => updateField('avoid_foods', e.target.value)}
                 rows={3}
@@ -735,9 +692,9 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>有饮食限制吗？（多选）</label>
+              <label>{t.dietaryLabel}</label>
               <MultiSelect
-                options={DIETARY_RESTRICTIONS}
+                options={Object.entries(t.dietary).map(([value, label]) => ({ value, label }))}
                 values={formData.dietary_restrictions}
                 onChange={(v) => updateField('dietary_restrictions', v)}
                 name="dietary_restrictions"
@@ -745,7 +702,7 @@ function GroceryPreferencesQuestionnaire({
               <input
                 type="text"
                 className="gq-input gq-input-small"
-                placeholder="其他过敏/限制..."
+                placeholder={t.otherDietaryPlaceholder}
                 value={formData.other_dietary}
                 onChange={(e) => updateField('other_dietary', e.target.value)}
               />
@@ -756,12 +713,12 @@ function GroceryPreferencesQuestionnaire({
       case 5:
         return (
           <div className="gq-step-content">
-            <h3>预算与优先级</h3>
+            <h3>{t.budgetTitle}</h3>
 
             <div className="gq-field">
-              <label>买菜预算大概是？</label>
+              <label>{t.budgetQuestion}</label>
               <SingleSelect
-                options={BUDGET_MINDSETS}
+                options={Object.entries(t.budgetMindsets).map(([value, label]) => ({ value, label }))}
                 value={formData.budget_mindset}
                 onChange={(v) => updateField('budget_mindset', v)}
                 name="budget_mindset"
@@ -769,11 +726,12 @@ function GroceryPreferencesQuestionnaire({
             </div>
 
             <div className="gq-field">
-              <label>以下因素对你的重要程度排序：</label>
+              <label>{t.priorityLabel}</label>
               <DraggablePriorityList
-                items={PRIORITY_FACTORS}
+                items={Object.entries(t.priorities).map(([value, label]) => ({ value, label }))}
                 order={formData.priority_order}
                 onChange={(v) => updateField('priority_order', v)}
+                hint={t.priorityHint}
               />
             </div>
           </div>
@@ -787,18 +745,18 @@ function GroceryPreferencesQuestionnaire({
   return (
     <div className="gq-container">
       <div className="gq-header">
-        <h2>智能买菜助手</h2>
-        <p className="gq-subtitle">Smart Grocery Preferences</p>
+        <h2>{t.title}</h2>
+        <p className="gq-subtitle">{t.subtitle}</p>
       </div>
 
-      <ProgressBar currentStep={currentStep} totalSteps={STEPS.length} />
+      <ProgressBar currentStep={currentStep} totalSteps={STEP_IDS.length} />
 
       <div className="gq-step-indicator">
-        {STEPS.map((step, idx) => (
+        {STEP_IDS.map((stepId, idx) => (
           <div
-            key={step.id}
+            key={stepId}
             className={`gq-step-dot ${idx === currentStep ? 'active' : ''} ${idx < currentStep ? 'completed' : ''}`}
-            title={step.titleZh}
+            title={t.steps[stepId]}
           />
         ))}
       </div>
@@ -811,7 +769,7 @@ function GroceryPreferencesQuestionnaire({
           className="gq-btn gq-btn-secondary"
           onClick={currentStep === 0 ? onCancel : handleBack}
         >
-          {currentStep === 0 ? '取消' : '上一步'}
+          {currentStep === 0 ? t.cancel : t.back}
         </button>
         <button
           type="button"
@@ -819,7 +777,7 @@ function GroceryPreferencesQuestionnaire({
           onClick={handleNext}
           disabled={!canProceed}
         >
-          {currentStep === STEPS.length - 1 ? '完成' : '下一步'}
+          {currentStep === STEP_IDS.length - 1 ? t.complete : t.next}
         </button>
       </div>
     </div>
