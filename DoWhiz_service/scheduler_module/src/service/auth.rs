@@ -5273,12 +5273,11 @@ pub async fn wecom_oauth_start(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // Check if WeCom OAuth is configured
-    let (corp_id, agent_id, redirect_uri) = match (
+    let (corp_id, redirect_uri) = match (
         &state.wechat_corp_id,
-        &state.wechat_agent_id,
         &state.wechat_redirect_uri,
     ) {
-        (Some(id), Some(agent), Some(uri)) => (id.clone(), agent.clone(), uri.clone()),
+        (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         _ => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -5313,14 +5312,18 @@ pub async fn wecom_oauth_start(
     let encoded_state = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token.as_bytes());
 
     // Build WeCom OAuth URL
-    // Using snsapi_privateinfo scope for internal employees (gets UserId)
-    // agentid is required for snsapi_privateinfo scope
+    // Using snsapi_base scope for silent auth - returns userid for enterprise members
+    // This works in any browser and doesn't require user confirmation
     let wecom_auth_url = format!(
-        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_privateinfo&agentid={}&state={}#wechat_redirect",
+        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_base&state={}#wechat_redirect",
         corp_id,
         urlencoding::encode(&redirect_uri),
-        agent_id,
         encoded_state
+    );
+
+    info!(
+        "WeCom OAuth start: corp_id={} redirect_uri={} full_url={}",
+        corp_id, redirect_uri, wecom_auth_url
     );
 
     // Return the URL for the frontend to redirect to
@@ -5339,6 +5342,12 @@ pub async fn wecom_oauth_callback(
     State(state): State<AuthState>,
     Query(params): Query<WeComCallbackQuery>,
 ) -> impl IntoResponse {
+    info!(
+        "WeCom OAuth callback received: code={} state_len={}",
+        params.code,
+        params.state.len()
+    );
+
     // Helper to build redirect URLs to the frontend
     let frontend_url = state.frontend_url.clone();
     let redirect_to = |path: &str| -> axum::response::Response {
