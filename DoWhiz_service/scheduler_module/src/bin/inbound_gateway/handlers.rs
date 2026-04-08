@@ -327,6 +327,16 @@ fn should_enqueue_slack_message(wrapper: &SlackEventWrapper, bot_user_id: Option
     if event.subtype.is_some() {
         return false;
     }
+    // Filter out bot messages to prevent self-loops
+    if event.bot_id.is_some() {
+        return false;
+    }
+    // Also filter out messages from our own bot user ID
+    if let (Some(user), Some(bot_id)) = (event.user.as_deref(), bot_user_id) {
+        if user == bot_id {
+            return false;
+        }
+    }
 
     match event.event_type.as_str() {
         "app_mention" => {
