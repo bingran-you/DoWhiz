@@ -4,6 +4,13 @@ import GroceryPreferencesQuestionnaire from '../components/intake/GroceryPrefere
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+// Detect browser language
+function detectLocale() {
+  const browserLang = navigator.language || navigator.userLanguage;
+  if (browserLang.startsWith('zh')) return 'zh-CN';
+  return 'en-US';
+}
+
 function GroceryOnboardingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -12,9 +19,20 @@ function GroceryOnboardingPage() {
   const [success, setSuccess] = useState(false);
   const [initialData, setInitialData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [locale, setLocale] = useState(() => {
+    // Check URL param first, then browser language
+    const urlLocale = searchParams.get('lang');
+    if (urlLocale === 'en') return 'en-US';
+    if (urlLocale === 'zh') return 'zh-CN';
+    return detectLocale();
+  });
 
   const userId = searchParams.get('user_id');
   const accountId = searchParams.get('account_id');
+
+  const toggleLocale = useCallback(() => {
+    setLocale(prev => prev === 'zh-CN' ? 'en-US' : 'zh-CN');
+  }, []);
 
   // Load existing preferences if any
   useEffect(() => {
@@ -168,6 +186,9 @@ function GroceryOnboardingPage() {
 
   return (
     <div className="grocery-onboarding-page">
+      <button className="locale-toggle" onClick={toggleLocale}>
+        {locale === 'zh-CN' ? 'English' : '中文'}
+      </button>
       {error && (
         <div className="error-banner">
           {error}
@@ -178,6 +199,7 @@ function GroceryOnboardingPage() {
         onComplete={handleComplete}
         onCancel={handleCancel}
         initialData={initialData || {}}
+        locale={locale}
       />
       {submitting && (
         <div className="submitting-overlay">
@@ -190,6 +212,24 @@ function GroceryOnboardingPage() {
           min-height: 100vh;
           background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
           padding: 2rem 1rem;
+          position: relative;
+        }
+        .locale-toggle {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          padding: 0.5rem 1rem;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          cursor: pointer;
+          color: #374151;
+          transition: all 0.2s;
+        }
+        .locale-toggle:hover {
+          background: #f9fafb;
+          border-color: #d1d5db;
         }
         .loading-container {
           display: flex;
