@@ -215,8 +215,8 @@ function GroceryOnboardingPage() {
           position: relative;
         }
         .locale-toggle {
-          position: absolute;
-          top: 1rem;
+          position: fixed;
+          bottom: 1rem;
           right: 1rem;
           padding: 0.5rem 1rem;
           background: white;
@@ -226,6 +226,8 @@ function GroceryOnboardingPage() {
           cursor: pointer;
           color: #374151;
           transition: all 0.2s;
+          z-index: 100;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         .locale-toggle:hover {
           background: #f9fafb;

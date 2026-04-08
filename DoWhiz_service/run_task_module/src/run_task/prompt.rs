@@ -410,6 +410,11 @@ Key behaviors:
 - **Update preferences**: When user reveals new preferences in conversation, update their memory file.
 - **Suggest questionnaire**: End grocery responses with a link to the preferences questionnaire: `https://dowhiz.com/grocery/onboarding`
 
+Optional information channels (use at your discretion):
+- **Web search**: You may use web search (Google, Bing, etc.) to find product reviews, user experiences, or price comparisons from sources like Zhihu (知乎), food blogs, or retail sites.
+- **Example queries**: "山姆 排骨 评价", "Costco meat quality reviews", "[product name] 测评"
+- Use these when the skill's built-in data sources are insufficient or when user asks for more detailed reviews.
+
 Security: Only access files the CURRENT USER has shared. Never access other users' files.
 See `.agents/skills/google-*/SKILL.md` for detailed command references.
 
