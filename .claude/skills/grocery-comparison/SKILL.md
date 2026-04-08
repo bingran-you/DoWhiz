@@ -413,11 +413,18 @@ browser-use state  # Look for reviews mentioning prices
 - Recent review dates (prioritize recent ones)
 
 #### 小红书 (Xiaohongshu) Price Discovery
+
+**⚠️ CURRENT STATUS: Direct scraping blocked**
+- Xiaohongshu blocks datacenter IPs (Azure, AWS, etc.) with error 300012 "IP存在风险"
+- Fallback: Use web search (Google/Bing) to find Xiaohongshu content indexed by search engines
+- Alternative: Use Zhihu (知乎) or other review platforms for similar user-generated content
+
 ```bash
-# Search for store + location + price keywords
-IN_DOCKER=true browser-use open "https://www.xiaohongshu.com/search_result?keyword=168亚洲超市+密歇根+价格"
-browser-use state
-browser-use screenshot /tmp/xhs_search.png
+# BLOCKED - Direct access no longer works from cloud IPs
+# IN_DOCKER=true browser-use open "https://www.xiaohongshu.com/search_result?keyword=168亚洲超市+密歇根+价格"
+
+# ALTERNATIVE: Use web search to find indexed Xiaohongshu content
+# Search engines have limited Xiaohongshu indexing, but some content is available
 
 # Alternative searches:
 # "密歇根 华人超市 价格"
@@ -522,7 +529,38 @@ browser-use scroll down  # Scroll to reviews
 browser-use state
 ```
 
-### Tier 4: User-Reported Data (Baseline Prices)
+### Tier 4: Web Search (Supplementary Channel)
+
+When direct platform access is blocked or data sources are insufficient, use web search as a supplementary channel:
+
+```bash
+# General product reviews and comparisons
+# Use search queries like:
+# - "山姆 排骨 评价" (Sam's Club ribs reviews)
+# - "Costco meat quality reviews 2026"
+# - "[product] 测评 知乎" (product review on Zhihu)
+# - "site:zhihu.com [product] 推荐" (search Zhihu specifically)
+```
+
+**Best search queries by intent:**
+
+| Intent | Query Pattern | Example |
+|--------|---------------|---------|
+| Product quality | `{store} {product} 评价/review` | "山姆 五花肉 评价" |
+| Price comparison | `{product} 价格 对比` | "Costco vs Sam's 排骨 价格" |
+| User recommendations | `{store} 必买/值得买` | "山姆 必买清单 肉类" |
+| Avoid list | `{store} 不要买/避雷` | "Costco 肉类 避雷" |
+| Cooking tips | `{product} 怎么做/食谱` | "美国超市排骨 红烧" |
+
+**Useful sources accessible via web search:**
+- **知乎 (Zhihu)**: `site:zhihu.com` - Chinese Q&A platform with detailed product discussions
+- **Reddit**: `site:reddit.com` - English-language discussions on r/Costco, r/samsclub, local city subreddits
+- **Food blogs**: General queries often surface recipe sites with ingredient recommendations
+- **腾讯新闻/网易**: Aggregated content sometimes includes 小红书 summaries
+
+**Note**: Web search provides indexed snapshots - content may be outdated. Prioritize recent results (check dates).
+
+### Tier 5: User-Reported Data (Baseline Prices)
 
 For stores where social media mining doesn't yield results:
 
@@ -542,12 +580,16 @@ browser-use state
 # Click on store → scroll to reviews → extract price mentions
 ```
 
-### Step 2: 小红书 Deep Dive (Best for Chinese stores)
+### Step 2: Web Search for Reviews (Fallback for 小红书)
 ```bash
-# 小红书 is the BEST source for Chinese grocery price info
-IN_DOCKER=true browser-use open "https://www.xiaohongshu.com/search_result?keyword={store_name}+{city}"
-browser-use state
-browser-use screenshot /tmp/xhs_results.png
+# Direct 小红书 access is BLOCKED from cloud IPs
+# Use web search to find indexed content instead:
+
+# Search Zhihu (知乎) - often has similar user-generated content
+# Search pattern: site:zhihu.com {store_name} {product} 评价
+
+# Or general web search for Chinese grocery reviews:
+# Query: "{store_name} {city} 评价 买菜"
 ```
 
 **Parsing 小红书 Results:**
