@@ -31,6 +31,10 @@
     {
       "source": "/cn/:path*",
       "destination": "/:path*"
+    },
+    {
+      "source": "/grocery/:path*",
+      "destination": "/"
     }
   ],
   "redirects": [
