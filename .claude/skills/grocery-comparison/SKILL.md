@@ -179,6 +179,68 @@ Use your judgment: if user's question can be answered with partial info, answer 
 
 ## Response Requirements
 
+### 0. Price Accuracy (CRITICAL)
+
+**价格准确性是用户信任的基础。** 错误的价格会让用户失去对我们的信任。
+
+#### 实时验证流程 (REQUIRED)
+
+在给出价格推荐之前，**必须使用 browser-use 实时验证价格**：
+
+```bash
+# 1. 搜索产品
+IN_DOCKER=true browser-use open "https://www.sayweee.com/en/search?keyword=orion+choco+pie"
+browser-use state  # 获取搜索结果
+
+# 2. 点击具体产品页面获取准确价格
+browser-use click <product_index>
+browser-use state  # 获取产品详情页的准确价格
+
+# 3. 截图作为证据（可选但推荐）
+browser-use screenshot /tmp/price_verification.png
+```
+
+**验证要点：**
+- 不要只依赖 web search 返回的价格（可能是缓存/过期数据）
+- 必须进入产品详情页确认当前价格
+- 注意区分原价和促销价
+- 检查是否有会员专属价格
+
+#### 查询时间戳 (REQUIRED)
+
+所有价格推荐必须包含查询时间：
+
+```markdown
+## 价格比较 (查询时间: 2026-04-08 13:30 EST)
+
+| 渠道 | 价格 | 链接 |
+|------|------|------|
+| Weee | $4.49 | [购买](url) |
+```
+
+#### 免责声明 (REQUIRED)
+
+每次价格推荐的结尾必须添加免责声明：
+
+```markdown
+---
+⚠️ **价格说明**: 以上价格为查询时的实时价格，可能随时变动。最终价格以实际页面为准。
+促销价可能需要满足特定条件（如会员、满减等）。
+```
+
+#### 处理价格不确定性
+
+如果无法实时验证价格（如实体店），明确标注数据来源和时效：
+
+```markdown
+| 店铺 | 价格 | 数据来源 | 可信度 |
+|------|------|---------|--------|
+| 168 Asian Mart | ~$3.99/lb | 小红书@用户 (2026-03-15) | ⚠️ 可能有变化 |
+| Weee | $4.49 | 实时查询 (2026-04-08) | ✅ 已验证 |
+```
+
+---
+
 ### 1. Purchase Links (REQUIRED)
 
 Every product recommendation MUST include clickable purchase links:
@@ -193,13 +255,16 @@ Every product recommendation MUST include clickable purchase links:
 
 **示例输出:**
 ```markdown
-## 五花肉比价
+## 五花肉比价 (查询时间: 2026-04-08 13:30 EST)
 
-| 渠道 | 价格 | 购买链接 |
-|------|------|---------|
-| [168 Asian Mart](https://maps.google.com/?q=168+Asian+Mart+Madison+Heights+MI) | $3.99/lb | 实体店 |
-| [Weee](https://www.sayweee.com/en/product/12345) | $5.49/lb | [立即购买](https://www.sayweee.com/en/product/12345) |
-| [Costco](https://maps.google.com/?q=Costco+Ann+Arbor) | $3.29/lb | 需会员 |
+| 渠道 | 价格 | 数据来源 | 购买链接 |
+|------|------|---------|---------|
+| [168 Asian Mart](https://maps.google.com/?q=168+Asian+Mart+Madison+Heights+MI) | ~$3.99/lb | 小红书 (3/15) | 实体店 |
+| [Weee](https://www.sayweee.com/en/product/12345) | $5.49/lb | ✅ 实时验证 | [立即购买](https://www.sayweee.com/en/product/12345) |
+| [Costco](https://maps.google.com/?q=Costco+Ann+Arbor) | $3.29/lb | 用户报价 (3/20) | 需会员 |
+
+---
+⚠️ **价格说明**: 以上价格为查询时的实时价格，可能随时变动。最终价格以实际页面为准。
 ```
 
 ### 2. Questionnaire Link (回复结尾)
