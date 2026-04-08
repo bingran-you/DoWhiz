@@ -35,6 +35,10 @@
     {
       "source": "/grocery/:path*",
       "destination": "/"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.production1.dowhiz.com/:path*"
     }
   ],
   "redirects": [
