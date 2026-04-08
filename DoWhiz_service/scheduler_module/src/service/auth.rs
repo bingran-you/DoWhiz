@@ -5314,11 +5314,12 @@ pub async fn wecom_oauth_start(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     // Check if WeCom OAuth is configured
-    let (corp_id, redirect_uri) = match (
+    let (corp_id, agent_id, redirect_uri) = match (
         &state.wechat_corp_id,
+        &state.wechat_agent_id,
         &state.wechat_redirect_uri,
     ) {
-        (Some(id), Some(uri)) => (id.clone(), uri.clone()),
+        (Some(id), Some(aid), Some(uri)) => (id.clone(), aid.clone(), uri.clone()),
         _ => {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -5352,19 +5353,20 @@ pub async fn wecom_oauth_start(
     // Store token in ephemeral KV, use short key as state (WeChat has 128 char limit)
     let state_key = store_wecom_oauth_state(&token);
 
-    // Build WeCom OAuth URL
-    // Using snsapi_base scope for silent auth - returns userid for enterprise members
-    // This works in any browser and doesn't require user confirmation
+    // Build WeCom QR Code Login URL
+    // This endpoint shows a QR code that users scan with WeCom app - works in any browser
+    // (The open.weixin.qq.com/connect/oauth2/authorize endpoint only works inside WeCom's built-in browser)
     let wecom_auth_url = format!(
-        "https://open.weixin.qq.com/connect/oauth2/authorize?appid={}&redirect_uri={}&response_type=code&scope=snsapi_base&state={}#wechat_redirect",
+        "https://login.work.weixin.qq.com/wwlogin/sso/login?login_type=CorpApp&appid={}&agentid={}&redirect_uri={}&state={}",
         corp_id,
+        agent_id,
         urlencoding::encode(&redirect_uri),
         state_key
     );
 
     info!(
-        "WeCom OAuth start: corp_id={} redirect_uri={} full_url={}",
-        corp_id, redirect_uri, wecom_auth_url
+        "WeCom OAuth start (QR login): corp_id={} agent_id={} redirect_uri={} full_url={}",
+        corp_id, agent_id, redirect_uri, wecom_auth_url
     );
 
     // Return the URL for the frontend to redirect to
