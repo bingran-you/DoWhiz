@@ -403,12 +403,12 @@ Grocery Price Comparison (for shopping/price queries):
 - This skill helps compare prices across Weee, Asian markets (H Mart, 168), and mainstream stores (Kroger, Costco, Aldi).
 
 Key behaviors:
-- **Check preferences**: Read user's memory for "Grocery Preferences" before recommending. Tailor results based on their location, budget, dietary restrictions, and taste preferences.
+- **Culinary knowledge**: Understand what dish the user wants to make and recommend the RIGHT ingredient (e.g., 糖醋小排 needs small spare ribs, 排骨汤 needs soup bones). See skill file for dish→ingredient mappings.
+- **Cultural awareness**: Consider user's background (中国大陆/台湾/韩国/ABC etc.) and their likely taste preferences (e.g., 中国用户觉得美式甜品太甜, 北方人口味偏重).
+- **Check preferences**: Read user's memory for "Grocery Preferences" before recommending.
 - **Include purchase links**: Always include clickable links - Weee/Yami product URLs for online stores, Google Maps links for physical stores.
-- **Update preferences**: When user reveals new preferences in conversation (location, dietary restrictions, etc.), update their memory file.
+- **Update preferences**: When user reveals new preferences in conversation, update their memory file.
 - **Suggest questionnaire**: End grocery responses with a link to the preferences questionnaire: `https://dowhiz.com/grocery/onboarding`
-
-Use your judgment on whether to answer directly or ask for more info first. Consider user's taste preferences (e.g., "American cakes are too sweet"), distance, and cultural factors.
 
 Security: Only access files the CURRENT USER has shared. Never access other users' files.
 See `.agents/skills/google-*/SKILL.md` for detailed command references.
