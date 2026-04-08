@@ -85,23 +85,49 @@ Agent: 你是想做什么菜呢？
 
 ---
 
-## Data Source Availability Status (Tested 2026-04-02)
+## Data Source Availability Status (Tested 2026-04-08)
 
 | 数据源 | 状态 | 抓取方法 | 备注 |
 |--------|------|----------|------|
-| **Weee** | **可用** | browser-use | 成功抓取产品名称、价格、单位 |
-| **Google Maps** | **可用** | browser-use | 成功获取店铺评分、评论、营业时间 |
-| **H Mart** | 部分可用 | browser-use | 主页可访问，搜索功能需进一步测试 |
-| **Yami** | 待测试 | browser-use | 应该可用，类似Weee |
-| **小红书** | 被限制 | browser-use | 非中国IP被block，需VPN/代理 |
-| **Kroger** | **可用** | 官方API | 已配置 OAuth2，支持产品搜索+店铺查询+价格 |
-| **Costco** | 被限制 | 需登录+cookie | headless browser被block，需会员登录 |
-| **Sam's Club** | 被限制 | 需登录+cookie | 有人机验证，需会员登录后导出cookie |
+| **Weee** | ✅ 可用 | browser-use | 成功抓取产品名称、价格、单位 |
+| **Yami** | ✅ 可用 | browser-use | 已验证，价格/产品信息可抓取 |
+| **Google Maps** | ✅ 可用 | browser-use | 成功获取店铺评分、评论、营业时间 |
+| **Kroger** | ✅ 可用 | 官方API | 已配置 OAuth2，支持产品搜索+店铺查询+价格 |
+| **H Mart** | ⚠️ 部分可用 | browser-use | 主页可访问，搜索功能需进一步测试 |
+| **Sam's Club** | ⚠️ CAPTCHA | cookies + browser-use | 有 `.samsclub_cookies.json`，但 headless 被检测，需 human_approval_gate |
+| **Costco** | ❌ 被限制 | 需登录+cookie | headless browser 被 block |
+| **小红书** | ❌ IP blocked | 需 Azure Asia | Error 300012 "IP at risk"，需中国 IP |
+
+### Cookies 文件位置 (Staging/Production)
+```
+~/server/DoWhiz/DoWhiz_service/.samsclub_cookies.json  # Sam's Club 会员登录
+~/server/DoWhiz/DoWhiz_service/.notion_cookies_liuxt.json  # Notion (测试用)
+```
+
+### 小红书访问方案 (TODO)
+
+小红书对非中国 IP 有严格限制。解决方案：
+
+**方案 1: Azure Asia VM (推荐)**
+```bash
+# 在 Azure East Asia / China North 创建小型 VM
+# 专门用于抓取小红书
+# 通过 API 调用或 SSH tunnel 访问
+```
+
+**方案 2: 代理服务**
+- 使用中国代理 IP 池
+- 或用户自己的 VPN 账号
+
+**方案 3: 用户自助**
+- 让用户自己搜索小红书，提供关键词
+- 用户粘贴相关笔记链接，agent 解析
 
 **推荐抓取策略：**
-1. **首选**: Weee + Google Maps (可直接browser-use)
-2. **需API**: Kroger (申请developer API key)
-3. **需特殊处理**: Costco (用户提供cookie)、小红书 (中国代理)
+1. **首选**: Weee + Yami + Google Maps (直接 browser-use)
+2. **需 API**: Kroger (`grocery_cli kroger search`)
+3. **需 cookies**: Sam's Club (有 cookies，但需处理 CAPTCHA)
+4. **需特殊处理**: 小红书 (Azure Asia VM 或用户自助)
 
 ---
 
