@@ -74,165 +74,126 @@ import GroceryPreferencesQuestionnaire from './components/intake/GroceryPreferen
 grocery_cli preferences get <user_id>
 ```
 
-If no preferences found, direct user to the onboarding questionnaire:
-- Web UI: `/grocery/onboarding?user_id=<user_id>`
-- Or run the conversational onboarding below
+If preferences not found or incomplete, you have two options:
+1. **Ask in conversation** - If you need critical info (like location), ask directly
+2. **Point to questionnaire** - For comprehensive setup: `https://dowhiz.com/grocery/onboarding`
+
+Use your judgment: if user's question can be answered with partial info, answer first and suggest completing preferences later.
 
 ---
 
-## User Onboarding Questionnaire
+## Response Requirements
 
-When a user first asks for grocery help and has no preference data in memory, run through this onboarding flow. This can be done conversationally (via email/chat) or through a UI questionnaire.
+### 1. Purchase Links (REQUIRED)
 
-### Onboarding Flow (Conversational)
+Every product recommendation MUST include clickable purchase links:
 
-**Step 1: Basic Profile**
-```
-你好！我是你的智能买菜助手。为了给你更好的推荐，我想先了解一下你的情况：
+| 渠道 | 链接获取方法 | 格式 |
+|------|------------|------|
+| **Weee** | browser-use 抓取搜索结果 | `[产品名](https://www.sayweee.com/en/product/...)` |
+| **Yami** | browser-use 抓取 | `[产品名](https://www.yamibuy.com/en/p/...)` |
+| **Kroger** | `grocery_cli kroger search` 返回的 URL | `[产品名](https://www.kroger.com/p/...)` |
+| **H Mart** | 搜索页链接 | `[Search H Mart](https://www.hmart.com/search?q=...)` |
+| **实体店** | Google Maps | `[店名](https://maps.google.com/?q=...)` |
 
-1. 你的文化背景是？
-   - 中国大陆
-   - 台湾/港澳
-   - ABC/华裔美国人
-   - 韩国/日本
-   - 东南亚
-   - 其他亚裔
-   - 非亚裔但喜欢亚洲食品
+**示例输出:**
+```markdown
+## 五花肉比价
 
-2. 你住在哪个城市/zip code？
-   (用于计算到各超市的距离)
-
-3. 你一般是为几个人买菜？
-   - 1人（自己）
-   - 2人（情侣/室友）
-   - 3-4人（小家庭）
-   - 5人以上（大家庭）
+| 渠道 | 价格 | 购买链接 |
+|------|------|---------|
+| [168 Asian Mart](https://maps.google.com/?q=168+Asian+Mart+Madison+Heights+MI) | $3.99/lb | 实体店 |
+| [Weee](https://www.sayweee.com/en/product/12345) | $5.49/lb | [立即购买](https://www.sayweee.com/en/product/12345) |
+| [Costco](https://maps.google.com/?q=Costco+Ann+Arbor) | $3.29/lb | 需会员 |
 ```
 
-**Step 2: Shopping Habits**
-```
-4. 你有车吗？最远愿意开多久去买菜？
-   - 没有车，靠公共交通/走路
-   - 有车，15分钟内
-   - 有车，30分钟内
-   - 有车，1小时内也可以
+### 2. Questionnaire Link (回复结尾)
 
-5. 你更喜欢？
-   - 网购送货（Weee/Instacart）
-   - 线下超市
-   - 两者都可以
-
-6. 你有这些会员卡吗？（多选）
-   - [ ] Costco
-   - [ ] Sam's Club
-   - [ ] Kroger Plus Card
-   - [ ] 其他: ___
-```
-
-**Step 3: Main Shopping Categories**
-```
-7. 你主要买哪些品类？（多选，我会针对你选的品类问更细的问题）
-   - [ ] 肉类（猪/牛/羊/鸡）
-   - [ ] 海鲜
-   - [ ] 蔬菜
-   - [ ] 水果
-   - [ ] 零食饮料
-   - [ ] 火锅/烧烤食材
-   - [ ] 调味料/酱料
-   - [ ] 速食/方便面
-   - [ ] 奶制品/鸡蛋
-   - [ ] 面包/烘焙
-```
-
-**Step 4: Category-Specific Preferences (根据Step 3动态生成)**
-
-如果选了**肉类**：
-```
-关于肉类：
-- 你更常买哪种肉？猪肉 / 牛肉 / 鸡肉 / 羊肉
-- 有宗教/饮食限制吗？（如不吃猪肉）
-- 你会自己处理生肉吗？还是更喜欢买切好的？
-- 对肉的分量有要求吗？（例如：一次只买1-2lb，或者可以批量买冷冻）
-```
-
-如果选了**零食**：
-```
-关于零食：
-- 口味偏好？咸口 / 甜口 / 辣口 / 都喜欢
-- 有特别喜欢的品牌吗？（如旺旺、乐事、百草味等）
-- 有特别排斥的品牌/口味吗？
-- ABC/华裔：你习惯中式零食还是美式零食？
-```
-
-如果选了**蔬菜**：
-```
-关于蔬菜：
-- 你常买哪些蔬菜？（中式特有的如韭菜、空心菜还是常见蔬菜）
-- 对新鲜度要求高吗？（愿意为更新鲜的多跑一趟店吗）
-- 有机蔬菜重要吗？
-```
-
-如果选了**火锅食材**：
-```
-关于火锅：
-- 多久吃一次火锅？
-- 喜欢什么锅底？（麻辣/清汤/番茄/菌菇）
-- 喜欢的火锅品牌？（海底捞/小龙坎/德庄等）
-```
-
-**Step 5: Taste Profile**
-```
-8. 口味偏好：
-- 甜度接受度？1-5（1=很淡，5=很甜）
-  美式甜品对你来说通常：太甜 / 刚好 / 可以更甜
-- 辣度接受度？1-5（1=不能吃辣，5=越辣越好）
-- 咸度偏好：偏淡 / 正常 / 偏咸
-
-9. 有什么特别排斥的食物/品牌吗？
-   例如：Kraft芝士、美式糖果、某些调味品等
-
-10. 有什么饮食限制吗？
-   - 无
-   - 素食/纯素
-   - 不吃猪肉（宗教原因）
-   - 乳糖不耐受
-   - 麸质过敏
-   - 其他过敏: ___
-```
-
-**Step 6: Budget & Priorities**
-```
-11. 买菜预算大概是？
-   - 能省则省，价格最重要
-   - 性价比优先，质量也要看
-   - 质量优先，价格其次
-   - 不太在意价格
-
-12. 以下因素对你的重要程度排序：
-   - 价格便宜
-   - 产品新鲜/质量好
-   - 距离近/方便
-   - 选择多样
-   - 有特定想买的品牌
-```
-
-### Onboarding Result → Memory Storage
-
-完成问卷后，生成并保存到用户memory：
+在回复结尾附上问卷链接，让用户选择是否完善偏好:
 
 ```markdown
-## Grocery Preferences (Generated from Onboarding 2026-04-02)
+---
+💡 完成偏好问卷可获得更精准推荐: https://dowhiz.com/grocery/onboarding
+```
+
+### 3. Preference Updates (Agent Judgment)
+
+当用户在对话中透露偏好信息时，**自主判断**是否值得保存:
+
+- 明确的偏好 (如 "我不吃猪肉") → 保存到 memory
+- 一次性需求 (如 "今天想吃辣的") → 不需要保存
+- 位置信息 (如 "我住安娜堡") → 保存到 memory
+
+保存格式: 更新用户 memory 文件的 `## Grocery Preferences` 部分
+
+---
+
+## Conversational Preference Collection
+
+如果用户没有完整偏好且你需要关键信息才能回答，可以在对话中自然地询问。
+
+**原则:**
+- 不要一次问太多问题
+- 只问回答当前问题必需的信息
+- 让用户选择是回答还是跳过
+
+**示例:**
+```
+用户: 排骨哪里买便宜？
+Agent: 为了给你推荐最近的店，请问你住在哪个城市/zip code？
+       (或者直接告诉我你方便去的超市，我帮你比价)
+```
+
+---
+
+## Legacy: Detailed Questionnaire Reference
+
+以下问题仅供参考，用于理解完整的偏好维度。实际收集通过 UI 问卷完成。
+
+**可收集的偏好维度:**
+- 位置: city, zip_code
+- 交通: has_car, max_drive_minutes
+- 购物方式: online/offline/both
+- 会员: costco, sams_club, kroger_plus
+- 常买品类: meat, seafood, vegetables, snacks, hotpot...
+- 口味: sweetness_tolerance, spice_tolerance, american_sweets_opinion
+- 饮食限制: vegetarian, no_pork, lactose_intolerant, gluten_free
+- 预算: price_first, value_focused, quality_first
+
+详见 `website/src/components/intake/GroceryPreferencesQuestionnaire.jsx`
+
+---
+
+## Shopping Habits Reference
+
+以下内容描述用户可能的购物习惯，用于理解上下文:
+
+**交通选项:**
+- 没有车，靠公共交通/走路
+- 有车，15分钟内
+- 有车，30分钟内
+- 有车，1小时内也可以
+
+---
+
+## User Preferences Schema
+
+偏好数据由 UI 问卷收集并存储在后端。Agent 通过 `grocery_cli preferences get <user_id>` 读取。
+
+**Memory 文件格式示例:**
+```markdown
+## Grocery Preferences
 
 ### Profile
-- background: chinese_mainland  # chinese_mainland/taiwan_hk/abc/korean/japanese/southeast_asian/other
+- background: chinese_mainland
 - city: Ann Arbor, MI
 - zip_code: 48109
-- household_size: 2  # 为2人购物
+- household_size: 2
 
 ### Transportation
 - has_car: true
 - max_drive_minutes: 30
-- prefers: both  # online/offline/both
+- prefers: both
 
 ### Memberships
 - costco: true
@@ -243,97 +204,23 @@ When a user first asks for grocery help and has no preference data in memory, ru
 - primary: [meat, vegetables, snacks, hotpot]
 - secondary: [condiments, instant_noodles]
 
-### Category Preferences
-
-#### Meat
-- preferred: [pork, chicken]  # 常买猪肉和鸡肉
-- avoid: []  # 无忌口
-- processing: prefer_precut  # 喜欢买切好的
-- bulk_buy: no  # 不喜欢批量买
-
-#### Snacks
-- taste: salty  # 偏咸口
-- favorite_brands: [旺旺, 乐事, 百草味]
-- avoid_brands: [某品牌]
-- style: chinese  # 中式零食为主
-
-#### Vegetables
-- types: [chinese_special, common]  # 买中式特色菜和普通蔬菜
-- freshness_priority: high
-- organic: not_important
-
-#### Hotpot
-- frequency: monthly
-- base_flavor: [mala, tomato]
-- favorite_brands: [海底捞, 小龙坎]
-
 ### Taste Profile
 - sweetness_tolerance: 2  # 1-5，美式甜品太甜
 - spice_tolerance: 4  # 能吃辣
-- saltiness: normal
+- american_sweets: too_sweet
 
 ### Exclusions
-- brands: [Kraft cheese, Hershey's]
-- products: [American-style cakes, overly sweet desserts]
 - dietary: []  # 无饮食限制
 
 ### Budget & Priorities
-- budget_sensitivity: value_focused  # price_first/value_focused/quality_first/price_insensitive
+- budget_mindset: value_focused  # price_first/value_focused/quality_first
 - priority_order: [price, quality, convenience, variety]
 
-### Notes
-- 自动生成于 2026-04-02
-- 用户可随时说"更新我的买菜偏好"来修改
-```
-
-### Quick Onboarding (Minimal Version)
-
-如果用户不想回答那么多问题，提供简化版：
-
-```
-快速设置（3个问题）：
-
-1. 你的zip code？
-2. 有Costco会员卡吗？有/没有
-3. 有什么不吃的吗？（留空表示无）
-
-好的！我会根据你的位置推荐附近的超市。之后如果你想设置更详细的偏好，
-随时说"完善我的买菜偏好"就可以继续。
-```
-
----
-
-## User Preferences Schema
-
-Store user preferences in their memory file. Expected format:
-
-```markdown
-## Grocery Preferences
-
-### Location
-- zip_code: 48109
-- address: Ann Arbor, MI
-
-### Taste Preferences
-- avoid: ["American-style sweets (too sweet)", "Kraft cheese"]
-- prefer: ["Chinese-style pastries", "Asian brands"]
-- dietary: ["no pork"] (optional)
-
-### Shopping Habits
-- has_car: true
-- max_drive_time: 30 minutes
-- preferred_stores: ["168 Asian Mart", "Weee", "Costco"]
-- costco_membership: true
-- sams_membership: false
-
 ### Known Baselines (user-reported prices)
-Last updated: 2026-04-01
-| Item | Store | Price | Unit | Notes |
-|------|-------|-------|------|-------|
-| 五花肉 Pork Belly | 168 Asian Mart | $3.99 | /lb | Fresh, good quality |
-| 五花肉 Pork Belly | H Mart | $4.49 | /lb | |
-| 老干妈 Lao Gan Ma | 168 Asian Mart | $3.29 | 280g | |
-| 旺旺仙贝 Want Want | Weee | $4.99 | 472g | Often on sale |
+| Item | Store | Price | Unit |
+|------|-------|-------|------|
+| 五花肉 | 168 Asian Mart | $3.99 | /lb |
+| 老干妈 | 168 Asian Mart | $3.29 | 280g |
 ```
 
 ## Data Sources (Priority Order)
