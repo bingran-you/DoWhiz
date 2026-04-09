@@ -38,7 +38,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://api.dowhiz.com/service/api/:path*"
+      "destination": "https://api.production1.dowhiz.com/service/api/:path*"
     }
   ],
   "redirects": [
