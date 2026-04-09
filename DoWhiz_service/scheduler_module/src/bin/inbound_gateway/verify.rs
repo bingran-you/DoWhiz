@@ -178,8 +178,126 @@ pub(super) fn verify_wechat(
     nonce: Option<&str>,
     echostr: Option<&str>,
 ) -> Result<String, &'static str> {
-    let token = env::var("WECHAT_TOKEN").ok();
-    let encoding_aes_key = env::var("WECHAT_ENCODING_AES_KEY").ok();
+    verify_wechat_with_env(
+        "WECHAT_TOKEN",
+        "WECHAT_ENCODING_AES_KEY",
+        msg_signature,
+        timestamp,
+        nonce,
+        echostr,
+    )
+}
+
+/// Verify WeChat Official Account webhook callback URL.
+/// Returns the echostr if verification succeeds.
+pub(super) fn verify_wechat_mp(
+    signature: Option<&str>,
+    timestamp: Option<&str>,
+    nonce: Option<&str>,
+    echostr: Option<&str>,
+) -> Result<String, &'static str> {
+    let token = env::var("WECHAT_MP_TOKEN").ok();
+    let Some(token) = token.filter(|value| !value.trim().is_empty()) else {
+        // If token not configured, just return echostr (allows testing)
+        return echostr.map(|e| e.to_string()).ok_or("missing_echostr");
+    };
+
+    let signature = signature.ok_or("missing_signature")?;
+    let timestamp = timestamp.ok_or("missing_timestamp")?;
+    let nonce = nonce.ok_or("missing_nonce")?;
+    let echostr = echostr.ok_or("missing_echostr")?;
+
+    // Official Account URL verification uses SHA1(sort([token, timestamp, nonce]))
+    let expected = sha1_of_sorted_parts(vec![token.as_str(), timestamp, nonce]);
+    if expected != signature {
+        return Err("invalid_signature");
+    }
+
+    Ok(echostr.to_string())
+}
+
+/// Verify WeChat Official Account webhook signature for POST messages.
+///
+/// - Plain mode: signature = SHA1(sort([token, timestamp, nonce]))
+/// - Safe mode: msg_signature = SHA1(sort([token, timestamp, nonce, Encrypt]))
+pub(super) fn verify_wechat_mp_message(
+    signature: Option<&str>,
+    msg_signature: Option<&str>,
+    timestamp: Option<&str>,
+    nonce: Option<&str>,
+    body: &[u8],
+) -> Result<(), &'static str> {
+    let token = env::var("WECHAT_MP_TOKEN").ok();
+    let Some(token) = token.filter(|value| !value.trim().is_empty()) else {
+        // If token not configured, skip verification for local testing.
+        return Ok(());
+    };
+
+    let timestamp = timestamp.ok_or("missing_timestamp")?;
+    let nonce = nonce.ok_or("missing_nonce")?;
+    let body_str = std::str::from_utf8(body).map_err(|_| "invalid_body_utf8")?;
+
+    if let Some(encrypt) = extract_encrypt_field(body_str) {
+        // Safe mode strictly uses msg_signature.
+        let provided = msg_signature.ok_or("missing_msg_signature")?;
+        let expected =
+            sha1_of_sorted_parts(vec![token.as_str(), timestamp, nonce, encrypt.as_str()]);
+        if expected != provided {
+            return Err("invalid_signature");
+        }
+        return Ok(());
+    }
+
+    // Plain mode strictly uses signature.
+    let provided = signature.ok_or("missing_signature")?;
+    let expected = sha1_of_sorted_parts(vec![token.as_str(), timestamp, nonce]);
+    if expected != provided {
+        return Err("invalid_signature");
+    }
+    Ok(())
+}
+
+fn sha1_of_sorted_parts(mut parts: Vec<&str>) -> String {
+    use sha1::{Digest, Sha1};
+    parts.sort();
+    let data = parts.join("");
+    let mut hasher = Sha1::new();
+    hasher.update(data.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn extract_encrypt_field(xml: &str) -> Option<String> {
+    let cdata_start = "<Encrypt><![CDATA[";
+    let cdata_end = "]]></Encrypt>";
+    if let Some(start) = xml.find(cdata_start) {
+        let value_start = start + cdata_start.len();
+        if let Some(end) = xml[value_start..].find(cdata_end) {
+            return Some(xml[value_start..value_start + end].to_string());
+        }
+    }
+
+    let start_tag = "<Encrypt>";
+    let end_tag = "</Encrypt>";
+    if let Some(start) = xml.find(start_tag) {
+        let value_start = start + start_tag.len();
+        if let Some(end) = xml[value_start..].find(end_tag) {
+            return Some(xml[value_start..value_start + end].trim().to_string());
+        }
+    }
+
+    None
+}
+
+fn verify_wechat_with_env(
+    token_env_var: &str,
+    encoding_key_env_var: &str,
+    msg_signature: Option<&str>,
+    timestamp: Option<&str>,
+    nonce: Option<&str>,
+    echostr: Option<&str>,
+) -> Result<String, &'static str> {
+    let token = env::var(token_env_var).ok();
+    let encoding_aes_key = env::var(encoding_key_env_var).ok();
 
     let Some(token) = token.filter(|value| !value.trim().is_empty()) else {
         // If token not configured, just return echostr (allows testing)
@@ -660,6 +778,122 @@ mod tests {
 
         // Should fail during decryption due to invalid key length
         assert!(result.is_err(), "Expected Err, got {:?}", result);
+    }
+
+    #[test]
+    fn verify_wechat_mp_get_validates_standard_signature() {
+        let token = "wechat_mp_token";
+        let timestamp = "1712345678";
+        let nonce = "nonce_123";
+        let echostr = "challenge_echo";
+
+        std::env::set_var("WECHAT_MP_TOKEN", token);
+
+        let mut parts = vec![token, timestamp, nonce];
+        parts.sort();
+        let mut hasher = Sha1::new();
+        hasher.update(parts.join("").as_bytes());
+        let signature = hex::encode(hasher.finalize());
+
+        let result = verify_wechat_mp(
+            Some(&signature),
+            Some(timestamp),
+            Some(nonce),
+            Some(echostr),
+        );
+
+        std::env::remove_var("WECHAT_MP_TOKEN");
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), echostr);
+    }
+
+    #[test]
+    fn verify_wechat_mp_message_plain_mode_requires_signature_param() {
+        let token = "wechat_mp_token";
+        let timestamp = "1712345678";
+        let nonce = "nonce_abc";
+        let body = br#"<xml><ToUserName><![CDATA[gh_xxx]]></ToUserName><Content><![CDATA[hello]]></Content></xml>"#;
+
+        std::env::set_var("WECHAT_MP_TOKEN", token);
+
+        let mut parts = vec![token, timestamp, nonce];
+        parts.sort();
+        let mut hasher = Sha1::new();
+        hasher.update(parts.join("").as_bytes());
+        let msg_signature = hex::encode(hasher.finalize());
+
+        let result = verify_wechat_mp_message(
+            None,
+            Some(&msg_signature),
+            Some(timestamp),
+            Some(nonce),
+            body,
+        );
+
+        std::env::remove_var("WECHAT_MP_TOKEN");
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "missing_signature");
+    }
+
+    #[test]
+    fn verify_wechat_mp_message_safe_mode_requires_msg_signature_param() {
+        let token = "wechat_mp_token";
+        let timestamp = "1712345678";
+        let nonce = "nonce_safe";
+        let encrypt = "encrypted_payload_for_test";
+        let body = format!("<xml><Encrypt><![CDATA[{encrypt}]]></Encrypt></xml>");
+
+        std::env::set_var("WECHAT_MP_TOKEN", token);
+
+        let mut parts = vec![token, timestamp, nonce, encrypt];
+        parts.sort();
+        let mut hasher = Sha1::new();
+        hasher.update(parts.join("").as_bytes());
+        let signature = hex::encode(hasher.finalize());
+
+        let result = verify_wechat_mp_message(
+            Some(&signature),
+            None,
+            Some(timestamp),
+            Some(nonce),
+            body.as_bytes(),
+        );
+
+        std::env::remove_var("WECHAT_MP_TOKEN");
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "missing_msg_signature");
+    }
+
+    #[test]
+    fn verify_wechat_mp_message_safe_mode_validates_msg_signature() {
+        let token = "wechat_mp_token";
+        let timestamp = "1712345678";
+        let nonce = "nonce_safe_ok";
+        let encrypt = "encrypt_blob_123";
+        let body = format!("<xml><Encrypt><![CDATA[{encrypt}]]></Encrypt></xml>");
+
+        std::env::set_var("WECHAT_MP_TOKEN", token);
+
+        let mut parts = vec![token, timestamp, nonce, encrypt];
+        parts.sort();
+        let mut hasher = Sha1::new();
+        hasher.update(parts.join("").as_bytes());
+        let msg_signature = hex::encode(hasher.finalize());
+
+        let result = verify_wechat_mp_message(
+            Some("ignored_for_safe_mode"),
+            Some(&msg_signature),
+            Some(timestamp),
+            Some(nonce),
+            body.as_bytes(),
+        );
+
+        std::env::remove_var("WECHAT_MP_TOKEN");
+
+        assert!(result.is_ok());
     }
 
     // ==================== WhatsApp Verification Tests ====================

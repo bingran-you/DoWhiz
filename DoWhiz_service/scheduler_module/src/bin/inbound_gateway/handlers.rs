@@ -24,6 +24,7 @@ use scheduler_module::adapters::slack::{
 };
 use scheduler_module::adapters::telegram::TelegramInboundAdapter;
 use scheduler_module::adapters::wechat::WeChatInboundAdapter;
+use scheduler_module::adapters::wechat_mp::WeChatMpInboundAdapter;
 use scheduler_module::adapters::whatsapp::WhatsAppInboundAdapter;
 use scheduler_module::channel::{Channel, ChannelMetadata, InboundAdapter, InboundMessage};
 use scheduler_module::ingestion::{IngestionEnvelope, IngestionPayload};
@@ -37,7 +38,8 @@ use super::routes::{build_dedupe_key, normalize_email, normalize_phone_number, r
 use super::state::{find_service_address, GatewayState, RouteDecision, RouteKey, RouteTarget};
 use super::verify::{
     verify_bluebubbles, verify_lark, verify_lark_challenge, verify_postmark, verify_slack,
-    verify_twilio, verify_wechat, verify_whatsapp_subscription,
+    verify_twilio, verify_wechat, verify_wechat_mp, verify_wechat_mp_message,
+    verify_whatsapp_subscription,
 };
 
 const SLACK_ENGAGED_THREAD_TTL: StdDuration = StdDuration::from_secs(12 * 60 * 60);
@@ -667,6 +669,16 @@ pub(super) struct WeChatVerifyParams {
     pub echostr: Option<String>,
 }
 
+/// Query parameters for WeChat Official Account webhook (GET/POST)
+#[derive(Debug, Deserialize)]
+pub(super) struct WeChatMpWebhookParams {
+    pub signature: Option<String>,
+    pub msg_signature: Option<String>,
+    pub timestamp: Option<String>,
+    pub nonce: Option<String>,
+    pub echostr: Option<String>,
+}
+
 /// Handle WeChat webhook verification (GET request)
 pub(super) async fn verify_wechat_webhook(
     Query(params): Query<WeChatVerifyParams>,
@@ -694,6 +706,39 @@ pub(super) async fn verify_wechat_webhook(
         }
         Err(reason) => {
             warn!("wechat webhook verification failed: {}", reason);
+            (StatusCode::FORBIDDEN, reason.to_string())
+        }
+    }
+}
+
+/// Handle WeChat Official Account webhook verification (GET request)
+pub(super) async fn verify_wechat_mp_webhook(
+    Query(params): Query<WeChatMpWebhookParams>,
+) -> impl IntoResponse {
+    info!(
+        "wechat_mp verification request: signature={:?} msg_signature={:?} timestamp={:?} nonce={:?} echostr_len={:?}",
+        params.signature.as_deref(),
+        params.msg_signature.as_deref(),
+        params.timestamp.as_deref(),
+        params.nonce.as_deref(),
+        params.echostr.as_ref().map(|s| s.len())
+    );
+
+    match verify_wechat_mp(
+        params.signature.as_deref(),
+        params.timestamp.as_deref(),
+        params.nonce.as_deref(),
+        params.echostr.as_deref(),
+    ) {
+        Ok(echostr) => {
+            info!(
+                "wechat_mp verification succeeded, returning echostr len={}",
+                echostr.len()
+            );
+            (StatusCode::OK, echostr)
+        }
+        Err(reason) => {
+            warn!("wechat_mp webhook verification failed: {}", reason);
             (StatusCode::FORBIDDEN, reason.to_string())
         }
     }
@@ -729,7 +774,13 @@ pub(super) async fn ingest_wechat(
     info!(
         "wechat message parsed: user_id={}, content_preview={}",
         user_id,
-        message.text_body.as_deref().unwrap_or("").chars().take(50).collect::<String>()
+        message
+            .text_body
+            .as_deref()
+            .unwrap_or("")
+            .chars()
+            .take(50)
+            .collect::<String>()
     );
 
     let Some(route) = resolve_route(Channel::WeChat, &user_id, &state) else {
@@ -755,6 +806,90 @@ pub(super) async fn ingest_wechat(
             }
         };
     info!("wechat message enqueuing");
+    enqueue_envelope(state.queue.clone(), envelope).await
+}
+
+/// Handle WeChat Official Account inbound messages (POST request)
+pub(super) async fn ingest_wechat_mp(
+    State(state): State<Arc<GatewayState>>,
+    Query(params): Query<WeChatMpWebhookParams>,
+    body: Bytes,
+) -> impl IntoResponse {
+    if let Err(reason) = verify_wechat_mp_message(
+        params.signature.as_deref(),
+        params.msg_signature.as_deref(),
+        params.timestamp.as_deref(),
+        params.nonce.as_deref(),
+        &body,
+    ) {
+        warn!("wechat_mp POST signature verification failed: {}", reason);
+        return (StatusCode::UNAUTHORIZED, Json(json!({"status": reason})));
+    }
+
+    let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
+    info!(
+        "wechat_mp POST received, body_len={}, preview={}",
+        body.len(),
+        body_preview
+    );
+
+    let adapter = WeChatMpInboundAdapter::new();
+    let message = match adapter.parse(&body) {
+        Ok(message) => message,
+        Err(err) => {
+            info!("gateway ignoring wechat_mp event: {}", err);
+            return (StatusCode::OK, Json(json!({"status": "ignored"})));
+        }
+    };
+
+    let open_id = message
+        .metadata
+        .wechat_mp_open_id
+        .clone()
+        .unwrap_or_else(|| message.sender.clone());
+
+    info!(
+        "wechat_mp message parsed: open_id={}, content_preview={}",
+        open_id,
+        message
+            .text_body
+            .as_deref()
+            .unwrap_or("")
+            .chars()
+            .take(50)
+            .collect::<String>()
+    );
+
+    let Some(route) = resolve_route(Channel::WeChatMp, &open_id, &state) else {
+        info!("gateway no route for wechat_mp open_id={}", open_id);
+        return (StatusCode::OK, Json(json!({"status": "no_route"})));
+    };
+
+    info!(
+        "wechat_mp route found: tenant={}, employee={}",
+        route.tenant_id, route.employee_id
+    );
+
+    let external_message_id = message.message_id.clone();
+    let envelope = match build_envelope(
+        route,
+        Channel::WeChatMp,
+        external_message_id,
+        &message,
+        &body,
+    )
+    .await
+    {
+        Ok(envelope) => envelope,
+        Err(err) => {
+            error!("gateway failed to store raw payload: {}", err);
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({"status": "payload_store_failed"})),
+            );
+        }
+    };
+    info!("wechat_mp message enqueuing");
     enqueue_envelope(state.queue.clone(), envelope).await
 }
 

@@ -9,6 +9,7 @@ use crate::adapters::bluebubbles::send_quick_bluebubbles_response;
 use crate::adapters::google_common::GoogleCommentsClient;
 use crate::adapters::telegram::send_quick_telegram_response;
 use crate::adapters::wechat::WeChatOutboundAdapter;
+use crate::adapters::wechat_mp::WeChatMpOutboundAdapter;
 use crate::adapters::whatsapp::send_quick_whatsapp_response;
 use crate::blob_store::get_blob_store;
 use crate::channel::Channel;
@@ -1120,6 +1121,86 @@ fn send_quick_wechat_response(user_id: &str, response: &str) -> Result<(), BoxEr
 
     if !result.success {
         return Err(format!("WeChat send failed: {:?}", result.error).into());
+    }
+
+    Ok(())
+}
+
+/// Try to handle a WeChat Official Account message with the upstream classifier.
+/// Returns Ok(true) if the message was handled, Ok(false) if it should go to the full pipeline.
+pub(crate) fn try_quick_response_wechat_mp(
+    config: &ServiceConfig,
+    user_store: &UserStore,
+    message_router: &MessageRouter,
+    runtime: &tokio::runtime::Handle,
+    message: &crate::channel::InboundMessage,
+) -> Result<bool, BoxError> {
+    let Some(text) = message.text_body.as_deref() else {
+        return Ok(false);
+    };
+
+    let open_id = &message.sender;
+
+    let account_id = lookup_account_by_channel(&Channel::WeChatMp, open_id);
+    let user = user_store.get_or_create_user("wechat_mp", open_id)?;
+    let user_paths = user_store.user_paths(&config.users_root, &user.user_id);
+    let memory = read_user_memo(runtime, account_id, &user_paths.memory_dir);
+
+    let employee_name = config.employee_profile.display_name.as_deref();
+    let decision =
+        runtime.block_on(message_router.classify(text, memory.as_deref(), employee_name, None));
+
+    match decision {
+        RouterDecision::Simple {
+            response,
+            memory_update,
+        } => {
+            if let Some(update) = memory_update {
+                if let Err(e) =
+                    write_memory_update(account_id, &user.user_id, &user_paths.memory_dir, &update)
+                {
+                    warn!("Failed to write memory update: {}", e);
+                }
+            }
+
+            if send_quick_wechat_mp_response(open_id, &response).is_ok() {
+                info!("wechat_mp quick response sent: open_id={}", open_id);
+                return Ok(true);
+            }
+            Ok(false)
+        }
+        RouterDecision::Complex | RouterDecision::Passthrough => Ok(false),
+    }
+}
+
+/// Send a quick response to a WeChat Official Account user.
+fn send_quick_wechat_mp_response(open_id: &str, response: &str) -> Result<(), BoxError> {
+    use crate::channel::{ChannelMetadata, OutboundAdapter};
+
+    let adapter = WeChatMpOutboundAdapter::from_env()
+        .map_err(|e| format!("Failed to create WeChat MP adapter: {}", e))?;
+
+    let message = OutboundMessage {
+        channel: Channel::WeChatMp,
+        from: None,
+        to: vec![open_id.to_string()],
+        cc: Vec::new(),
+        bcc: Vec::new(),
+        subject: String::new(),
+        text_body: response.to_string(),
+        html_body: String::new(),
+        html_path: None,
+        attachments_dir: None,
+        thread_id: None,
+        metadata: ChannelMetadata::default(),
+    };
+
+    let result = adapter
+        .send(&message)
+        .map_err(|e| format!("Failed to send WeChat MP message: {}", e))?;
+
+    if !result.success {
+        return Err(format!("WeChat MP send failed: {:?}", result.error).into());
     }
 
     Ok(())

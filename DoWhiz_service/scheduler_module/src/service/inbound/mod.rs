@@ -10,6 +10,7 @@ mod slack;
 mod sms;
 mod telegram;
 mod wechat;
+mod wechat_mp;
 mod whatsapp;
 mod zoom;
 
@@ -27,11 +28,13 @@ pub(super) use notion_email::process_notion_email;
 pub(super) use quick_responses::{
     try_quick_response_bluebubbles, try_quick_response_discord,
     try_quick_response_google_workspace, try_quick_response_lark, try_quick_response_slack,
-    try_quick_response_telegram, try_quick_response_wechat, try_quick_response_whatsapp,
+    try_quick_response_telegram, try_quick_response_wechat, try_quick_response_wechat_mp,
+    try_quick_response_whatsapp,
 };
 pub(super) use slack::process_slack_event;
 pub(super) use sms::process_sms_message;
 pub(super) use telegram::process_telegram_event;
 pub(super) use wechat::process_wechat_event;
+pub(super) use wechat_mp::process_wechat_mp_event;
 pub(super) use whatsapp::process_whatsapp_event;
 pub(super) use zoom::process_zoom_message;

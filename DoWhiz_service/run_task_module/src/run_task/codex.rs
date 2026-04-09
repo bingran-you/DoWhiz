@@ -257,7 +257,7 @@ fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> P
             workspace_dir.join("reply_email_draft.html")
         }
         "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
-        | "wechat" => workspace_dir.join("reply_message.txt"),
+        | "wechat" | "wechat_mp" => workspace_dir.join("reply_message.txt"),
         "notion" => {
             // Notion agent posts directly via API and creates .notion_api_replied marker
             workspace_dir.join(".notion_api_replied")
@@ -653,11 +653,10 @@ pub(super) fn run_codex_task(
             cmd.arg("-e").arg(format!("NOTION_API_TOKEN={}", token));
             // Also write to .notion_env file for CLI tools
             let notion_env_file = host_workspace_dir.join(".notion_env");
-            if let Err(e) = std::fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
-                eprintln!(
-                    "[run_task] Warning: Failed to write Notion env file: {}",
-                    e
-                );
+            if let Err(e) =
+                std::fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))
+            {
+                eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
             }
         }
         for (key, value) in &payment_env_overrides {
@@ -822,10 +821,7 @@ pub(super) fn run_codex_task(
             // Also write to .notion_env file for CLI tools
             let notion_env_file = request.workspace_dir.join(".notion_env");
             if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
-                eprintln!(
-                    "[run_task] Warning: Failed to write Notion env file: {}",
-                    e
-                );
+                eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
             }
         }
         for (key, value) in &payment_env_overrides {
@@ -3608,13 +3604,13 @@ pub fn run_codex_warm_pool(
     // Use channel-specific reply path (same logic as ACI flow)
     let default_reply_path = match request.channel.to_lowercase().as_str() {
         "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
-        | "wechat" => workspace_dir.join("reply_message.txt"),
+        | "wechat" | "wechat_mp" => workspace_dir.join("reply_message.txt"),
         _ => workspace_dir.join("reply_email_draft.html"),
     };
     let reply_html_path = resolve_expected_reply_path(workspace_dir, default_reply_path);
     let reply_attachments_dir = match request.channel.to_lowercase().as_str() {
         "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
-        | "wechat" | "notion" => workspace_dir.join("reply_attachments"),
+        | "wechat" | "wechat_mp" | "notion" => workspace_dir.join("reply_attachments"),
         _ => workspace_dir.join("reply_email_attachments"),
     };
 

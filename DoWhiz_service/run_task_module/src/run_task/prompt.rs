@@ -125,7 +125,7 @@ fn build_prompt_internal(
             "whatsapp" => {
                 "2. After finishing the task (step one), write a plain text reply in reply_message.txt in the workspace root. Keep the reply concise and conversational. Do not use HTML. If there are files to attach, put them in reply_attachments/ and mention them in the reply. Do not pretend the job has been done without actually doing it."
             }
-            "wechat" => {
+            "wechat" | "wechat_mp" => {
                 "2. After finishing the task (step one), write a plain text reply in reply_message.txt in the workspace root. Keep the reply concise and conversational. Do not use HTML or markdown. If there are files to attach, put them in reply_attachments/ and mention them in the reply. Do not pretend the job has been done without actually doing it."
             }
             "lark" | "feishu" => {
@@ -199,6 +199,7 @@ REQUIRED STEPS:
    - Lark: {"channel": "lark", "identifier": "<open_id>"}
    - Slack: {"channel": "slack", "identifier": "<user_id>"}
    - WeChat: {"channel": "wechat", "identifier": "<user_id>"}
+   - WeChat MP: {"channel": "wechat_mp", "identifier": "<open_id>"}
    - Discord: {"channel": "discord", "identifier": "<user_id>"}
 3. Write reply_routing.json with the chosen channel
 4. Write your reply in the TARGET channel's format:
@@ -543,6 +544,7 @@ fn build_user_identities_section(identities: &UserIdentities) -> String {
         || !identities.telegram_user_ids.is_empty()
         || !identities.lark_user_ids.is_empty()
         || !identities.wechat_user_ids.is_empty()
+        || !identities.wechat_mp_open_ids.is_empty()
         || !identities.github_usernames.is_empty();
 
     if !has_any {
@@ -595,6 +597,12 @@ politely explain they need to link their accounts at dowhiz.com first.\n"
             identities.wechat_user_ids.join(", ")
         ));
     }
+    if !identities.wechat_mp_open_ids.is_empty() {
+        channels.push(format!(
+            "- WeChat MP Open IDs: {}",
+            identities.wechat_mp_open_ids.join(", ")
+        ));
+    }
     if !identities.github_usernames.is_empty() {
         channels.push(format!(
             "- GitHub: {}",
@@ -622,7 +630,7 @@ If no routing file is written, the reply goes to the original inbound channel.
 reply_routing.json schema:
 ```json
 {{
-  "channel": "email" | "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "wechat" | "lark",
+  "channel": "email" | "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "wechat" | "wechat_mp" | "lark",
   "identifier": "<target identifier for the channel>"
 }}
 ```
@@ -634,6 +642,7 @@ Identifier format per channel:
 - telegram: Telegram user ID (e.g., "123456789")
 - sms/whatsapp/bluebubbles: phone number (e.g., "+15551234567")
 - wechat: WeChat Work UserID (e.g., "zhangsan")
+- wechat_mp: WeChat Official Account open_id (e.g., "oAbCdEfGh123456789")
 - lark: Lark open_id (e.g., "ou_xxxxxxxxxxxxxxxxx")
 
 IMPORTANT: When using cross-channel routing, write the reply in the TARGET channel's format:
@@ -642,7 +651,7 @@ IMPORTANT: When using cross-channel routing, write the reply in the TARGET chann
 - discord target: reply_message.txt (Discord markdown: **bold**, *italic*, `code`)
 - telegram target: reply_message.txt (MarkdownV2)
 - lark target: reply_message.txt (Lark markdown: **bold**, *italic*, ~~strikethrough~~, `code`)
-- sms/whatsapp/bluebubbles/wechat target: reply_message.txt (plain text)
+- sms/whatsapp/bluebubbles/wechat/wechat_mp target: reply_message.txt (plain text)
 - Attachments for non-email channels go in reply_attachments/
 
 Example: Inbound is email, user says "reply to my Discord instead"
@@ -1254,6 +1263,7 @@ mod tests {
             telegram_user_ids: vec!["12345678".to_string()],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec!["oMpOpenId123".to_string()],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
@@ -1265,6 +1275,7 @@ mod tests {
         assert!(section.contains("Discord User IDs: 987654321"));
         assert!(section.contains("Phone Numbers: +15551234567"));
         assert!(section.contains("Telegram User IDs: 12345678"));
+        assert!(section.contains("WeChat MP Open IDs: oMpOpenId123"));
     }
 
     #[test]
@@ -1279,6 +1290,7 @@ mod tests {
         assert!(section.contains("IMPORTANT: When using cross-channel routing"));
         assert!(section.contains("email target: reply_email_draft.html"));
         assert!(section.contains("discord target: reply_message.txt"));
+        assert!(section.contains("\"wechat_mp\""));
     }
 
     #[test]
@@ -1506,6 +1518,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
@@ -1546,6 +1559,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![user_uuid.to_string()],
@@ -1591,6 +1605,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![
@@ -1636,6 +1651,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![], // Empty even though account exists
@@ -1772,6 +1788,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
@@ -1815,6 +1832,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             // Each channel has its own filesystem user directory
@@ -1872,6 +1890,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             // In production, identifiers_to_user_identities deduplicates
@@ -1915,6 +1934,7 @@ mod tests {
             telegram_user_ids: vec![],
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
+            wechat_mp_open_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],

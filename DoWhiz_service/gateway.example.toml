@@ -78,6 +78,13 @@ key = "*"
 employee_id = "little_bear"
 tenant_id = "default"
 
+# WeChat Official Account routing by open_id
+[[routes]]
+channel = "wechat_mp"
+key = "*"
+employee_id = "little_bear"
+tenant_id = "default"
+
 # Google Workspace wildcard routes - routes ALL documents to employee
 # Use key = "*" for wildcard matching on any document/file ID
 [[routes]]

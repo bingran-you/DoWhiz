@@ -157,6 +157,7 @@ fn parse_channel(channel_str: &str) -> Option<Channel> {
         "whatsapp" => Some(Channel::WhatsApp),
         "bluebubbles" => Some(Channel::BlueBubbles),
         "wechat" => Some(Channel::WeChat),
+        "wechat_mp" | "wechatmp" => Some(Channel::WeChatMp),
         "zoom" => Some(Channel::Zoom),
         _ => {
             warn!("Unknown channel in reply_routing.json: {}", channel_str);
@@ -603,6 +604,7 @@ fn is_internal_sender(task: &RunTaskTask) -> bool {
         | Channel::WhatsApp
         | Channel::BlueBubbles
         | Channel::WeChat
+        | Channel::WeChatMp
         | Channel::Lark => {
             let sender = match task.reply_to.first() {
                 Some(value) => normalize_identity_token(value),
@@ -614,9 +616,11 @@ fn is_internal_sender(task: &RunTaskTask) -> bool {
             let allowlist = load_internal_sender_id_whitelist(task.channel);
             !allowlist.is_empty() && allowlist.contains(&sender)
         }
-        Channel::GoogleDocs | Channel::GoogleSheets | Channel::GoogleSlides | Channel::Notion | Channel::Zoom => {
-            false
-        }
+        Channel::GoogleDocs
+        | Channel::GoogleSheets
+        | Channel::GoogleSlides
+        | Channel::Notion
+        | Channel::Zoom => false,
     }
 }
 
@@ -919,6 +923,7 @@ pub(crate) fn schedule_auto_reply<E: TaskExecutor>(
         | Channel::Sms
         | Channel::Notion
         | Channel::WeChat
+        | Channel::WeChatMp
         | Channel::Lark
         | Channel::Zoom => ("reply_message.txt", "reply_attachments"),
         Channel::Email | Channel::GoogleDocs | Channel::GoogleSheets | Channel::GoogleSlides => {
@@ -990,6 +995,7 @@ pub(crate) fn schedule_auto_reply<E: TaskExecutor>(
             | Channel::Sms
             | Channel::Notion
             | Channel::WeChat
+            | Channel::WeChatMp
             | Channel::Lark
             | Channel::Zoom => ("cross_channel_ack.txt", "reply_attachments"),
             Channel::Email
@@ -1082,6 +1088,7 @@ fn format_channel_name(channel: &Channel) -> &'static str {
         Channel::WhatsApp => "WhatsApp",
         Channel::BlueBubbles => "iMessage",
         Channel::WeChat => "WeChat",
+        Channel::WeChatMp => "WeChat MP",
         Channel::Lark => "Lark",
         Channel::GoogleDocs => "Google Docs",
         Channel::GoogleSheets => "Google Sheets",
@@ -1590,6 +1597,7 @@ mod tests {
         assert_eq!(parse_channel("whatsapp"), Some(Channel::WhatsApp));
         assert_eq!(parse_channel("bluebubbles"), Some(Channel::BlueBubbles));
         assert_eq!(parse_channel("wechat"), Some(Channel::WeChat));
+        assert_eq!(parse_channel("wechat_mp"), Some(Channel::WeChatMp));
         assert_eq!(parse_channel("zoom"), Some(Channel::Zoom));
     }
 
@@ -1598,6 +1606,7 @@ mod tests {
         assert_eq!(parse_channel("EMAIL"), Some(Channel::Email));
         assert_eq!(parse_channel("Slack"), Some(Channel::Slack));
         assert_eq!(parse_channel("DISCORD"), Some(Channel::Discord));
+        assert_eq!(parse_channel("WECHAT_MP"), Some(Channel::WeChatMp));
         assert_eq!(parse_channel("ZOOM"), Some(Channel::Zoom));
         assert_eq!(parse_channel("Zoom"), Some(Channel::Zoom));
     }
@@ -1663,6 +1672,7 @@ mod tests {
         assert_eq!(format_channel_name(&Channel::WhatsApp), "WhatsApp");
         assert_eq!(format_channel_name(&Channel::BlueBubbles), "iMessage");
         assert_eq!(format_channel_name(&Channel::WeChat), "WeChat");
+        assert_eq!(format_channel_name(&Channel::WeChatMp), "WeChat MP");
         assert_eq!(format_channel_name(&Channel::GoogleDocs), "Google Docs");
         assert_eq!(format_channel_name(&Channel::GoogleSheets), "Google Sheets");
         assert_eq!(format_channel_name(&Channel::GoogleSlides), "Google Slides");
@@ -1681,6 +1691,7 @@ mod tests {
             | Channel::Sms
             | Channel::Notion
             | Channel::WeChat
+            | Channel::WeChatMp
             | Channel::Lark
             | Channel::Zoom => ("cross_channel_ack.txt", "reply_attachments"),
             Channel::Email
@@ -1704,6 +1715,7 @@ mod tests {
             | Channel::Sms
             | Channel::Notion
             | Channel::WeChat
+            | Channel::WeChatMp
             | Channel::Lark
             | Channel::Zoom => ("cross_channel_ack.txt", "reply_attachments"),
             Channel::Email
@@ -2145,6 +2157,7 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
             | Channel::WhatsApp
             | Channel::Sms
             | Channel::WeChat
+            | Channel::WeChatMp
             | Channel::Lark
             | Channel::Zoom => ("cross_channel_ack.txt", "reply_attachments"),
             Channel::Email
@@ -2163,6 +2176,8 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
         assert_eq!(parse_channel("wechat"), Some(Channel::WeChat));
         assert_eq!(parse_channel("WeChat"), Some(Channel::WeChat));
         assert_eq!(parse_channel("WECHAT"), Some(Channel::WeChat));
+        assert_eq!(parse_channel("wechat_mp"), Some(Channel::WeChatMp));
+        assert_eq!(parse_channel("WeChatMp"), Some(Channel::WeChatMp));
     }
 
     #[test]
@@ -2208,6 +2223,7 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
             | Channel::WhatsApp
             | Channel::Sms
             | Channel::WeChat
+            | Channel::WeChatMp
             | Channel::Lark
             | Channel::Zoom => ("reply_message.txt", "reply_attachments"),
             Channel::Email
