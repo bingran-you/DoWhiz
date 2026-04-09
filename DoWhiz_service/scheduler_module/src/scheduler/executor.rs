@@ -456,6 +456,9 @@ fn identifiers_to_user_identities(
             "wechat_mp" | "wechat_mp_open_id" => result
                 .wechat_mp_open_ids
                 .push(identifier.identifier.clone()),
+            "wechat_mp_account_id" | "wechat_mp_app_id" => result
+                .wechat_mp_account_ids
+                .push(identifier.identifier.clone()),
             "zoom" | "zoom_user_id" => result.zoom_user_ids.push(identifier.identifier.clone()),
             "github" => result.github_usernames.push(identifier.identifier.clone()),
             _ => {
@@ -2143,5 +2146,19 @@ mod tests {
         )];
         let result = identifiers_to_user_identities(account_id, &identifiers);
         assert_eq!(result.zoom_user_ids, vec!["zoom_U456"]);
+    }
+
+    #[test]
+    fn identifiers_to_user_identities_maps_wechat_mp_account_id_aliases() {
+        let account_id = Uuid::new_v4();
+        let identifiers = vec![
+            make_identifier(account_id, "wechat_mp_account_id", "gh_account_123", true),
+            make_identifier(account_id, "wechat_mp_app_id", "wx_app_456", true),
+        ];
+        let result = identifiers_to_user_identities(account_id, &identifiers);
+        assert_eq!(
+            result.wechat_mp_account_ids,
+            vec!["gh_account_123", "wx_app_456"]
+        );
     }
 }

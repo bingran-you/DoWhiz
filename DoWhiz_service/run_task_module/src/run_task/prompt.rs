@@ -545,6 +545,7 @@ fn build_user_identities_section(identities: &UserIdentities) -> String {
         || !identities.lark_user_ids.is_empty()
         || !identities.wechat_user_ids.is_empty()
         || !identities.wechat_mp_open_ids.is_empty()
+        || !identities.wechat_mp_account_ids.is_empty()
         || !identities.github_usernames.is_empty();
 
     if !has_any {
@@ -601,6 +602,12 @@ politely explain they need to link their accounts at dowhiz.com first.\n"
         channels.push(format!(
             "- WeChat MP Open IDs: {}",
             identities.wechat_mp_open_ids.join(", ")
+        ));
+    }
+    if !identities.wechat_mp_account_ids.is_empty() {
+        channels.push(format!(
+            "- WeChat MP Account IDs: {}",
+            identities.wechat_mp_account_ids.join(", ")
         ));
     }
     if !identities.github_usernames.is_empty() {
@@ -1253,6 +1260,16 @@ mod tests {
     }
 
     #[test]
+    fn build_user_identities_section_includes_wechat_mp_account_ids() {
+        let identities = UserIdentities {
+            wechat_mp_account_ids: vec!["gh_mp_account_123".to_string()],
+            ..Default::default()
+        };
+        let section = build_user_identities_section(&identities);
+        assert!(section.contains("WeChat MP Account IDs: gh_mp_account_123"));
+    }
+
+    #[test]
     fn build_user_identities_section_includes_all_channels() {
         let identities = UserIdentities {
             account_id: Some("acct-123".to_string()),
@@ -1264,6 +1281,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec!["oMpOpenId123".to_string()],
+            wechat_mp_account_ids: vec!["gh_mp_account_789".to_string()],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
@@ -1276,6 +1294,7 @@ mod tests {
         assert!(section.contains("Phone Numbers: +15551234567"));
         assert!(section.contains("Telegram User IDs: 12345678"));
         assert!(section.contains("WeChat MP Open IDs: oMpOpenId123"));
+        assert!(section.contains("WeChat MP Account IDs: gh_mp_account_789"));
     }
 
     #[test]
@@ -1519,6 +1538,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
@@ -1560,6 +1580,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![user_uuid.to_string()],
@@ -1606,6 +1627,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![
@@ -1652,6 +1674,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![], // Empty even though account exists
@@ -1789,6 +1812,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
@@ -1833,6 +1857,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             // Each channel has its own filesystem user directory
@@ -1891,6 +1916,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             // In production, identifiers_to_user_identities deduplicates
@@ -1935,6 +1961,7 @@ mod tests {
             lark_user_ids: vec![],
             wechat_user_ids: vec![],
             wechat_mp_open_ids: vec![],
+            wechat_mp_account_ids: vec![],
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],

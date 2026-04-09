@@ -1826,6 +1826,13 @@ pub fn lookup_account_by_channel(
     channel: &crate::channel::Channel,
     identifier: &str,
 ) -> Option<Uuid> {
+    use crate::channel::Channel;
+    if *channel == Channel::WeChatMp {
+        // Backward compatibility: some environments store official-account open_id
+        // as `wechat_mp_open_id` instead of `wechat_mp`.
+        return lookup_account_by_identifier("wechat_mp", identifier)
+            .or_else(|| lookup_account_by_identifier("wechat_mp_open_id", identifier));
+    }
     let identifier_type = channel_to_identifier_type(channel);
     lookup_account_by_identifier(identifier_type, identifier)
 }
