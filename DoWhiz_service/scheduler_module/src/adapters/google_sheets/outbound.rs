@@ -266,7 +266,10 @@ impl GoogleSheetsOutboundAdapter {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().unwrap_or_default();
-            error!("Failed to create spreadsheet '{}': {} - {}", title, status, body);
+            error!(
+                "Failed to create spreadsheet '{}': {} - {}",
+                title, status, body
+            );
             return Err(AdapterError::SendError(format!(
                 "HTTP {}: {}",
                 status, body
@@ -280,10 +283,15 @@ impl GoogleSheetsOutboundAdapter {
         let spreadsheet_id = json
             .get("spreadsheetId")
             .and_then(|id| id.as_str())
-            .ok_or_else(|| AdapterError::ParseError("Missing spreadsheetId in response".to_string()))?
+            .ok_or_else(|| {
+                AdapterError::ParseError("Missing spreadsheetId in response".to_string())
+            })?
             .to_string();
 
-        info!("Created new spreadsheet '{}' with ID {}", title, spreadsheet_id);
+        info!(
+            "Created new spreadsheet '{}' with ID {}",
+            title, spreadsheet_id
+        );
 
         Ok(spreadsheet_id)
     }

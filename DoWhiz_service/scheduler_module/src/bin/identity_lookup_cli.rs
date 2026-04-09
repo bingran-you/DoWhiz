@@ -163,7 +163,10 @@ fn cmd_guild_identities(args: &[String]) -> ExitCode {
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--type" && i + 1 < args.len() {
-            types = args[i + 1].split(',').map(|s| s.trim().to_string()).collect();
+            types = args[i + 1]
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
             i += 2;
         } else {
             i += 1;
@@ -207,8 +210,8 @@ fn lookup_identity_by_discord(
     discord_user_id: &str,
     identity_type: &str,
 ) -> Result<Option<String>, String> {
-    let db_url = env::var("SUPABASE_DB_URL")
-        .map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
+    let db_url =
+        env::var("SUPABASE_DB_URL").map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
 
     let mut client = postgres::Client::connect(&db_url, postgres::NoTls)
         .map_err(|e| format!("Failed to connect to database: {}", e))?;
@@ -242,8 +245,8 @@ fn lookup_identity_by_discord(
 
 /// Look up all identities for a Discord user
 fn lookup_all_identities_by_discord(discord_user_id: &str) -> Result<IdentityResult, String> {
-    let db_url = env::var("SUPABASE_DB_URL")
-        .map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
+    let db_url =
+        env::var("SUPABASE_DB_URL").map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
 
     let mut client = postgres::Client::connect(&db_url, postgres::NoTls)
         .map_err(|e| format!("Failed to connect to database: {}", e))?;
@@ -315,16 +318,16 @@ fn lookup_guild_identities(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let members: serde_json::Value =
-        serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse guild members: {}", e))?;
+    let members: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse guild members: {}", e))?;
 
     let members_array = members
         .as_array()
         .ok_or("Expected array of guild members")?;
 
     // Connect to database
-    let db_url = env::var("SUPABASE_DB_URL")
-        .map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
+    let db_url =
+        env::var("SUPABASE_DB_URL").map_err(|_| "SUPABASE_DB_URL environment variable not set")?;
 
     let mut client = postgres::Client::connect(&db_url, postgres::NoTls)
         .map_err(|e| format!("Failed to connect to database: {}", e))?;

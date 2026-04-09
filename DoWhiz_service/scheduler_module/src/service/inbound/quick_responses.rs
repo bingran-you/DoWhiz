@@ -36,6 +36,12 @@ const DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD: usize = 256;
 const SLACK_QUICK_RESPONSE_DEDUPE_FILE: &str = "slack_quick_response_dedupe.json";
 const SLACK_QUICK_RESPONSE_MAX_THREADS: usize = 512;
 const SLACK_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD: usize = 256;
+const WECHAT_MP_QUICK_RESPONSE_MAX_BYTES: usize = 1800;
+const WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX: &str = "\n\n[truncated]";
+const WECHAT_MP_QUICK_FALLBACK_RESPONSE: &str =
+    "我是 DoWhiz 助手，可以帮你做问答、任务拆解和执行规划。你可以直接告诉我你现在最想解决的问题。";
+const WECHAT_MP_PROFILE_QUICK_RESPONSE: &str =
+    "我是 DoWhiz 助手，可以帮你快速解答问题、梳理任务、制定执行计划，并持续跟进你的进展。你可以直接告诉我你现在想解决什么。";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct SlackQuickResponseDedupeStore {
@@ -1140,6 +1146,25 @@ pub(crate) fn try_quick_response_wechat_mp(
     };
 
     let open_id = &message.sender;
+    if let Some(canned_response) = wechat_mp_profile_quick_response(text) {
+        let normalized_response = normalize_wechat_mp_quick_response(canned_response);
+        match send_quick_wechat_mp_response(open_id, &normalized_response) {
+            Ok(()) => {
+                info!(
+                    "wechat_mp canned quick response sent: open_id={} bytes={}",
+                    open_id,
+                    normalized_response.len()
+                );
+                return Ok(true);
+            }
+            Err(err) => {
+                warn!(
+                    "wechat_mp canned quick response failed: open_id={}, error={}",
+                    open_id, err
+                );
+            }
+        }
+    }
 
     let account_id = lookup_account_by_channel(&Channel::WeChatMp, open_id);
     let user = user_store.get_or_create_user("wechat_mp", open_id)?;
@@ -1163,14 +1188,98 @@ pub(crate) fn try_quick_response_wechat_mp(
                 }
             }
 
-            if send_quick_wechat_mp_response(open_id, &response).is_ok() {
-                info!("wechat_mp quick response sent: open_id={}", open_id);
-                return Ok(true);
+            let normalized_response = normalize_wechat_mp_quick_response(&response);
+            match send_quick_wechat_mp_response(open_id, &normalized_response) {
+                Ok(()) => {
+                    info!(
+                        "wechat_mp quick response sent: open_id={} bytes={}",
+                        open_id,
+                        normalized_response.len()
+                    );
+                    return Ok(true);
+                }
+                Err(err) => {
+                    warn!(
+                        "wechat_mp quick response failed, falling back to canned response: open_id={}, error={}",
+                        open_id, err
+                    );
+                }
             }
+
+            if normalized_response != WECHAT_MP_QUICK_FALLBACK_RESPONSE {
+                match send_quick_wechat_mp_response(open_id, WECHAT_MP_QUICK_FALLBACK_RESPONSE) {
+                    Ok(()) => {
+                        info!(
+                            "wechat_mp fallback quick response sent: open_id={}",
+                            open_id
+                        );
+                        return Ok(true);
+                    }
+                    Err(err) => {
+                        warn!(
+                            "wechat_mp fallback quick response failed: open_id={}, error={}",
+                            open_id, err
+                        );
+                    }
+                }
+            }
+
             Ok(false)
         }
         RouterDecision::Complex | RouterDecision::Passthrough => Ok(false),
     }
+}
+
+fn wechat_mp_profile_quick_response(text: &str) -> Option<&'static str> {
+    let normalized = text
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && !matches!(*ch, '，' | ',' | '。' | '.' | '?' | '？'))
+        .collect::<String>();
+    if normalized.contains("你是谁")
+        || normalized.contains("你能做什么")
+        || normalized.contains("你会做什么")
+        || normalized.contains("你有什么功能")
+    {
+        return Some(WECHAT_MP_PROFILE_QUICK_RESPONSE);
+    }
+    None
+}
+
+fn normalize_wechat_mp_quick_response(response: &str) -> String {
+    let sanitized = response
+        .chars()
+        .filter(|ch| !ch.is_control() || matches!(*ch, '\n' | '\r' | '\t'))
+        .collect::<String>();
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        return WECHAT_MP_QUICK_FALLBACK_RESPONSE.to_string();
+    }
+
+    if trimmed.len() <= WECHAT_MP_QUICK_RESPONSE_MAX_BYTES {
+        return trimmed.to_string();
+    }
+
+    if WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX.len() >= WECHAT_MP_QUICK_RESPONSE_MAX_BYTES {
+        return truncate_wechat_mp_utf8(trimmed, WECHAT_MP_QUICK_RESPONSE_MAX_BYTES);
+    }
+
+    let mut end =
+        WECHAT_MP_QUICK_RESPONSE_MAX_BYTES - WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX.len();
+    while end > 0 && !trimmed.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut output = trimmed[..end].to_string();
+    output.push_str(WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX);
+    output
+}
+
+fn truncate_wechat_mp_utf8(input: &str, max_bytes: usize) -> String {
+    let mut end = input.len().min(max_bytes);
+    while end > 0 && !input.is_char_boundary(end) {
+        end -= 1;
+    }
+    input[..end].to_string()
 }
 
 /// Send a quick response to a WeChat Official Account user.
@@ -1457,6 +1566,38 @@ mod tests {
 
         let message_id = slack_inbound_message_id(&message).expect("message id");
         assert_eq!(message_id, "1712345678.000100");
+    }
+
+    #[test]
+    fn normalize_wechat_mp_quick_response_falls_back_on_empty() {
+        let response = normalize_wechat_mp_quick_response(" \n\t ");
+        assert_eq!(response, WECHAT_MP_QUICK_FALLBACK_RESPONSE);
+    }
+
+    #[test]
+    fn normalize_wechat_mp_quick_response_removes_control_chars() {
+        let response = normalize_wechat_mp_quick_response("abc\u{0}def\u{1f}ghi");
+        assert_eq!(response, "abcdefghi");
+    }
+
+    #[test]
+    fn normalize_wechat_mp_quick_response_truncates_long_output() {
+        let long = "x".repeat(WECHAT_MP_QUICK_RESPONSE_MAX_BYTES + 128);
+        let response = normalize_wechat_mp_quick_response(&long);
+        assert!(response.len() <= WECHAT_MP_QUICK_RESPONSE_MAX_BYTES);
+        assert!(response.ends_with(WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX));
+    }
+
+    #[test]
+    fn wechat_mp_profile_quick_response_matches_intro_question() {
+        let response = wechat_mp_profile_quick_response("你是谁？你能做什么？");
+        assert_eq!(response, Some(WECHAT_MP_PROFILE_QUICK_RESPONSE));
+    }
+
+    #[test]
+    fn wechat_mp_profile_quick_response_ignores_unrelated_text() {
+        let response = wechat_mp_profile_quick_response("今天上海天气怎么样");
+        assert_eq!(response, None);
     }
 
     fn build_google_docs_message(

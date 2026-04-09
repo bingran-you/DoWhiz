@@ -163,8 +163,8 @@ pub struct GroceryStore_ {
 
 impl GroceryStore_ {
     pub fn new() -> Result<Self, GroceryStoreError> {
-        let client =
-            create_client_from_env().map_err(|err| GroceryStoreError::MongoConfig(err.to_string()))?;
+        let client = create_client_from_env()
+            .map_err(|err| GroceryStoreError::MongoConfig(err.to_string()))?;
         let db = database_from_env(&client);
 
         let products = db.collection::<Document>("grocery_products");
@@ -199,21 +199,15 @@ impl GroceryStore_ {
         )?;
         ensure_index_compatible(
             products,
-            IndexModel::builder()
-                .keys(doc! { "name_en": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "name_en": 1 }).build(),
         )?;
         ensure_index_compatible(
             products,
-            IndexModel::builder()
-                .keys(doc! { "name_zh": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "name_zh": 1 }).build(),
         )?;
         ensure_index_compatible(
             products,
-            IndexModel::builder()
-                .keys(doc! { "category": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "category": 1 }).build(),
         )?;
 
         // Prices indexes
@@ -240,9 +234,7 @@ impl GroceryStore_ {
         )?;
         ensure_index_compatible(
             stores,
-            IndexModel::builder()
-                .keys(doc! { "zip_code": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "zip_code": 1 }).build(),
         )?;
 
         // Preferences indexes
@@ -302,7 +294,11 @@ impl GroceryStore_ {
     }
 
     /// Search products by name (English or Chinese).
-    pub fn search_products(&self, query: &str, limit: i64) -> Result<Vec<GroceryProduct>, GroceryStoreError> {
+    pub fn search_products(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<GroceryProduct>, GroceryStoreError> {
         let normalized = normalize_product_name(query);
         let filter = doc! {
             "$or": [
@@ -369,7 +365,10 @@ impl GroceryStore_ {
     }
 
     /// Get latest prices for a product across all stores.
-    pub fn get_latest_prices(&self, product_id: &str) -> Result<Vec<PriceEntry>, GroceryStoreError> {
+    pub fn get_latest_prices(
+        &self,
+        product_id: &str,
+    ) -> Result<Vec<PriceEntry>, GroceryStoreError> {
         // Aggregate to get latest price per store
         let pipeline = vec![
             doc! { "$match": { "product_id": product_id } },
@@ -499,7 +498,10 @@ impl GroceryStore_ {
     // ========================================================================
 
     /// Get user preferences.
-    pub fn get_preferences(&self, user_id: &str) -> Result<Option<GroceryPreferences>, GroceryStoreError> {
+    pub fn get_preferences(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<GroceryPreferences>, GroceryStoreError> {
         let filter = doc! { "user_id": user_id };
         match self.preferences.find_one(filter, None)? {
             Some(doc) => Ok(Some(document_to_preferences(doc)?)),
@@ -570,10 +572,7 @@ fn document_to_product(doc: Document) -> Result<GroceryProduct, GroceryStoreErro
         .map_err(|e| GroceryStoreError::InvalidData(format!("missing name_en: {e}")))?
         .to_string();
     let name_zh = doc.get_str("name_zh").ok().map(String::from);
-    let category = doc
-        .get_str("category")
-        .unwrap_or("unknown")
-        .to_string();
+    let category = doc.get_str("category").unwrap_or("unknown").to_string();
     let brand = doc.get_str("brand").ok().map(String::from);
     let aliases = doc
         .get_array("aliases")
@@ -694,29 +693,49 @@ fn document_to_preferences(doc: Document) -> Result<GroceryPreferences, GroceryS
     let taste_avoid = doc
         .get_array("taste_avoid")
         .ok()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let taste_prefer = doc
         .get_array("taste_prefer")
         .ok()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let dietary = doc
         .get_array("dietary")
         .ok()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let has_car = doc.get_bool("has_car").unwrap_or(true);
     let max_drive_minutes = doc.get_i32("max_drive_minutes").ok();
     let preferred_stores = doc
         .get_array("preferred_stores")
         .ok()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let memberships = doc
         .get_array("memberships")
         .ok()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let created_at = bson_datetime_to_utc(&doc, "created_at")?;
     let updated_at = bson_datetime_to_utc(&doc, "updated_at")?;
@@ -744,7 +763,9 @@ fn bson_datetime_to_utc(doc: &Document, key: &str) -> Result<DateTime<Utc>, Groc
         Some(Bson::DateTime(value)) => Ok(value.to_chrono()),
         Some(Bson::String(value)) => DateTime::parse_from_rfc3339(value)
             .map(|dt| dt.with_timezone(&Utc))
-            .map_err(|e| GroceryStoreError::InvalidData(format!("invalid datetime {}: {}", key, e))),
+            .map_err(|e| {
+                GroceryStoreError::InvalidData(format!("invalid datetime {}: {}", key, e))
+            }),
         _ => Ok(Utc::now()), // Default to now if missing
     }
 }
@@ -778,14 +799,62 @@ pub fn get_global_grocery_store() -> Option<Arc<GroceryStore_>> {
 /// Seed common stores for the Ann Arbor area.
 pub fn seed_ann_arbor_stores(store: &GroceryStore_) -> Result<(), GroceryStoreError> {
     let stores = vec![
-        ("168 Asian Mart", "asian_market", false, Some("32393 John R Rd"), Some("Madison Heights"), Some("MI"), Some("48071")),
-        ("H Mart Troy", "asian_market", false, Some("2850 W Maple Rd"), Some("Troy"), Some("MI"), Some("48084")),
+        (
+            "168 Asian Mart",
+            "asian_market",
+            false,
+            Some("32393 John R Rd"),
+            Some("Madison Heights"),
+            Some("MI"),
+            Some("48071"),
+        ),
+        (
+            "H Mart Troy",
+            "asian_market",
+            false,
+            Some("2850 W Maple Rd"),
+            Some("Troy"),
+            Some("MI"),
+            Some("48084"),
+        ),
         ("Weee", "online", true, None, None, None, None),
         ("Yami", "online", true, None, None, None, None),
-        ("Costco Ann Arbor", "wholesale", false, Some("2800 S State St"), Some("Ann Arbor"), Some("MI"), Some("48104")),
-        ("Sam's Club Ypsilanti", "wholesale", false, Some("3737 Carpenter Rd"), Some("Ypsilanti"), Some("MI"), Some("48197")),
-        ("Kroger", "mainstream", false, None, Some("Ann Arbor"), Some("MI"), None),
-        ("Aldi", "mainstream", false, None, Some("Ann Arbor"), Some("MI"), None),
+        (
+            "Costco Ann Arbor",
+            "wholesale",
+            false,
+            Some("2800 S State St"),
+            Some("Ann Arbor"),
+            Some("MI"),
+            Some("48104"),
+        ),
+        (
+            "Sam's Club Ypsilanti",
+            "wholesale",
+            false,
+            Some("3737 Carpenter Rd"),
+            Some("Ypsilanti"),
+            Some("MI"),
+            Some("48197"),
+        ),
+        (
+            "Kroger",
+            "mainstream",
+            false,
+            None,
+            Some("Ann Arbor"),
+            Some("MI"),
+            None,
+        ),
+        (
+            "Aldi",
+            "mainstream",
+            false,
+            None,
+            Some("Ann Arbor"),
+            Some("MI"),
+            None,
+        ),
     ];
 
     for (name, store_type, is_online, _address, _city, _state, _zip) in stores {

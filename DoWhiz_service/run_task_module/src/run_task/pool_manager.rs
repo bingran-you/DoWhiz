@@ -78,6 +78,10 @@ impl PoolManager {
         ensure_queue_exists(&self.config, &self.config.task_queue_name)?;
         ensure_queue_exists(&self.config, &self.config.completion_queue_name)?;
 
+        // Cleanup: delete orphaned Succeeded warm containers from previous runs
+        // This handles the case where worker restarted and missed completion signals
+        cleanup_succeeded_containers(&self.config.resource_group)?;
+
         // Count existing warm containers and initialize the counter
         let existing_count = count_existing_containers(&self.config.resource_group)?;
         self.active_count.store(existing_count, Ordering::SeqCst);
@@ -115,7 +119,8 @@ impl PoolManager {
 
         eprintln!(
             "[pool_manager] Pool ready with {} containers (target: {})",
-            self.active_count(), self.target_size
+            self.active_count(),
+            self.target_size
         );
         Ok(())
     }
@@ -168,9 +173,11 @@ impl PoolManager {
     /// Decrement the active container count. Call this after deleting a container.
     pub fn decrement_count(&self) {
         // Use saturating sub to avoid underflow
-        self.active_count.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
-            Some(x.saturating_sub(1))
-        }).ok();
+        self.active_count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
+                Some(x.saturating_sub(1))
+            })
+            .ok();
     }
 
     /// Get target pool size.
@@ -406,6 +413,98 @@ async fn provision_warm_container(config: &PoolConfig) -> Result<String, String>
     Ok(container_name)
 }
 
+/// Cleanup Succeeded warm containers from previous runs.
+/// Called on startup to handle containers that completed while worker was down.
+fn cleanup_succeeded_containers(resource_group: &str) -> Result<(), String> {
+    eprintln!("[pool_manager] Cleaning up Succeeded warm containers...");
+
+    // Get all warm container names
+    let output = Command::new("az")
+        .arg("container")
+        .arg("list")
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--query")
+        .arg(format!("[?starts_with(name, '{}')].name", CONTAINER_PREFIX))
+        .arg("-o")
+        .arg("tsv")
+        .output()
+        .map_err(|e| format!("az command failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "az container list failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let container_names: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+
+    if container_names.is_empty() {
+        eprintln!("[pool_manager] No warm containers found to cleanup");
+        return Ok(());
+    }
+
+    let mut deleted_count = 0;
+    for name in &container_names {
+        // Check container state with az show (list doesn't include instanceView.state)
+        let show_output = Command::new("az")
+            .arg("container")
+            .arg("show")
+            .arg("--resource-group")
+            .arg(resource_group)
+            .arg("--name")
+            .arg(name)
+            .arg("--query")
+            .arg("instanceView.state")
+            .arg("-o")
+            .arg("tsv")
+            .output();
+
+        if let Ok(out) = show_output {
+            let state = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if state == "Terminated" || state == "Succeeded" {
+                // Delete this container
+                eprintln!("[pool_manager] Deleting {} container: {}", state, name);
+                let del_output = Command::new("az")
+                    .arg("container")
+                    .arg("delete")
+                    .arg("--resource-group")
+                    .arg(resource_group)
+                    .arg("--name")
+                    .arg(name)
+                    .arg("--yes")
+                    .arg("-o")
+                    .arg("none")
+                    .output();
+
+                match del_output {
+                    Ok(o) if o.status.success() => {
+                        deleted_count += 1;
+                    }
+                    Ok(o) => {
+                        eprintln!(
+                            "[pool_manager] Failed to delete {}: {}",
+                            name,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("[pool_manager] Failed to delete {}: {}", name, e);
+                    }
+                }
+            }
+        }
+    }
+
+    eprintln!(
+        "[pool_manager] Cleanup complete: deleted {} Succeeded/Terminated containers",
+        deleted_count
+    );
+    Ok(())
+}
+
 /// Count existing RUNNING warm containers in the resource group.
 /// Used only on init to seed the manual counter. Sequential to avoid Azure rate limits.
 fn count_existing_containers(resource_group: &str) -> Result<usize, String> {
@@ -619,7 +718,9 @@ mod tests {
         let env_vars = collect_warm_container_env_vars(&config);
 
         assert!(env_vars.contains(&"OPENAI_API_KEY=test-openai-key".to_string()));
-        assert!(env_vars.contains(&"AZURE_OPENAI_ENDPOINT=https://test.openai.azure.com".to_string()));
+        assert!(
+            env_vars.contains(&"AZURE_OPENAI_ENDPOINT=https://test.openai.azure.com".to_string())
+        );
 
         // Cleanup
         std::env::remove_var("OPENAI_API_KEY");
@@ -681,5 +782,4 @@ mod tests {
         // Ensure prefix is what we expect for az queries
         assert_eq!(CONTAINER_PREFIX, "dwz-warm-");
     }
-
 }

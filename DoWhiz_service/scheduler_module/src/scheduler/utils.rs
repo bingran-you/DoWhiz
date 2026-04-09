@@ -120,10 +120,7 @@ pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<
     let store = match NotionStore::new() {
         Ok(store) => store,
         Err(e) => {
-            tracing::debug!(
-                "NotionStore unavailable for loading access token: {}",
-                e
-            );
+            tracing::debug!("NotionStore unavailable for loading access token: {}", e);
             return None;
         }
     };
@@ -138,10 +135,7 @@ pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<
                 );
                 Some(cred.access_token.clone())
             } else {
-                tracing::debug!(
-                    "No Notion credentials found for account {}",
-                    account_id
-                );
+                tracing::debug!("No Notion credentials found for account {}", account_id);
                 None
             }
         }

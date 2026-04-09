@@ -287,7 +287,8 @@ mod tests {
         let temp = TempDir::new().expect("tempdir");
         let workspace = temp.path();
 
-        let mut message = make_zoom_message("zoom_user:U123", "", Some("U123"), Some("meeting_abc"));
+        let mut message =
+            make_zoom_message("zoom_user:U123", "", Some("U123"), Some("meeting_abc"));
         message.text_body = None;
 
         append_zoom_message(workspace, &message, 1).expect("should succeed");

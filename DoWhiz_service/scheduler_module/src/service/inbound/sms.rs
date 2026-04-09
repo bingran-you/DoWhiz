@@ -316,7 +316,7 @@ mod tests {
 
         let user_store = UserStore::new(&config.users_db_path)?;
         let index_store = IndexStore::new(&config.task_index_path)?;
-        let account_store = AccountStore::new(&ingestion_db_url)?;
+        let account_store = AccountStore::new(&config.ingestion_db_url)?;
 
         let sender = "+1 (555) 123-4567".to_string();
         let recipient = "+1 555-999-0000".to_string();
@@ -341,7 +341,14 @@ mod tests {
             },
         };
 
-        process_sms_message(&config, &user_store, &index_store, &account_store, &message, &raw_payload)?;
+        process_sms_message(
+            &config,
+            &user_store,
+            &index_store,
+            &account_store,
+            &message,
+            &raw_payload,
+        )?;
 
         let user = user_store.get_or_create_user("phone", &sender)?;
         let user_paths = user_store.user_paths(&config.users_root, &user.user_id);

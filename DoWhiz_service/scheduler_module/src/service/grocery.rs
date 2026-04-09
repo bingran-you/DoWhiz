@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::grocery_store::{GroceryPreferences, GroceryStore_, GroceryStoreError};
+use crate::grocery_store::{GroceryPreferences, GroceryStoreError, GroceryStore_};
 
 /// State for grocery routes
 #[derive(Clone)]
@@ -140,11 +140,19 @@ async fn get_preferences(
     match state.grocery_store.get_preferences(&user_id) {
         Ok(Some(prefs)) => {
             let data = grocery_prefs_to_data(&prefs);
-            (StatusCode::OK, Json(GetPreferencesResponse { preferences: Some(data) })).into_response()
+            (
+                StatusCode::OK,
+                Json(GetPreferencesResponse {
+                    preferences: Some(data),
+                }),
+            )
+                .into_response()
         }
-        Ok(None) => {
-            (StatusCode::OK, Json(GetPreferencesResponse { preferences: None })).into_response()
-        }
+        Ok(None) => (
+            StatusCode::OK,
+            Json(GetPreferencesResponse { preferences: None }),
+        )
+            .into_response(),
         Err(e) => {
             error!("Failed to get preferences for {}: {}", user_id, e);
             (
@@ -251,17 +259,17 @@ fn grocery_prefs_to_data(prefs: &GroceryPreferences) -> PreferencesData {
 fn data_to_grocery_prefs(user_id: &str, data: &PreferencesData) -> GroceryPreferences {
     let now = Utc::now();
 
-    let has_car = data.transport.as_ref()
+    let has_car = data
+        .transport
+        .as_ref()
         .map(|t| t.starts_with("car_"))
         .unwrap_or(false);
 
-    let max_drive_minutes = data.transport.as_ref().and_then(|t| {
-        match t.as_str() {
-            "car_15min" => Some(15),
-            "car_30min" => Some(30),
-            "car_60min" => Some(60),
-            _ => None,
-        }
+    let max_drive_minutes = data.transport.as_ref().and_then(|t| match t.as_str() {
+        "car_15min" => Some(15),
+        "car_30min" => Some(30),
+        "car_60min" => Some(60),
+        _ => None,
     });
 
     let mut taste_avoid = Vec::new();
@@ -283,7 +291,9 @@ fn data_to_grocery_prefs(user_id: &str, data: &PreferencesData) -> GroceryPrefer
         }
     }
 
-    let dietary = data.dietary_restrictions.clone()
+    let dietary = data
+        .dietary_restrictions
+        .clone()
         .unwrap_or_default()
         .into_iter()
         .filter(|d| d != "none")
@@ -310,6 +320,9 @@ fn data_to_grocery_prefs(user_id: &str, data: &PreferencesData) -> GroceryPrefer
 /// Create the grocery router
 pub fn grocery_router(state: GroceryState) -> Router {
     Router::new()
-        .route("/api/grocery/preferences", get(get_preferences).post(save_preferences))
+        .route(
+            "/api/grocery/preferences",
+            get(get_preferences).post(save_preferences),
+        )
         .with_state(state)
 }

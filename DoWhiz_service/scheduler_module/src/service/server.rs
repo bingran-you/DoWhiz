@@ -130,7 +130,10 @@ pub async fn run_server(
     // Initialize warm container pool in background (don't block server startup)
     tokio::spawn(async {
         if let Err(err) = crate::warm_pool::initialize_global_pool_manager().await {
-            warn!("Failed to initialize warm pool: {} (falling back to direct ACI)", err);
+            warn!(
+                "Failed to initialize warm pool: {} (falling back to direct ACI)",
+                err
+            );
         }
     });
 

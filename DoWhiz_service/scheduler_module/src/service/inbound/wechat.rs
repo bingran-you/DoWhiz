@@ -143,7 +143,8 @@ pub(crate) fn process_wechat_event(
     // If the WeChat user has linked their account, also write to account-level tasks.db
     // Identifier format: {corp_id}_{user_id} to match OAuth linking
     let wechat_identifier = format!("{}_{}", corp_id, message.sender);
-    if let Ok(Some(account)) = account_store.get_account_by_identifier("wechat", &wechat_identifier) {
+    if let Ok(Some(account)) = account_store.get_account_by_identifier("wechat", &wechat_identifier)
+    {
         let account_tasks_dir = config.users_root.join(account.id.to_string()).join("state");
         if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
             warn!(

@@ -306,7 +306,14 @@ async fn media_stream_loop(
                     }
 
                     // Queue task
-                    if let Err(e) = enqueue_zoom_task(&handler, meeting_uuid, &task_text, last_speaker_id.as_deref()).await {
+                    if let Err(e) = enqueue_zoom_task(
+                        &handler,
+                        meeting_uuid,
+                        &task_text,
+                        last_speaker_id.as_deref(),
+                    )
+                    .await
+                    {
                         error!("Failed to enqueue Zoom task: {}", e);
                     }
 
@@ -351,17 +358,13 @@ fn contains_wake_word(text: &str) -> bool {
     // Single-word wake words (exact match on any token)
     const SINGLE_WAKE_WORDS: &[&str] = &[
         // Proto and variations
-        "proto",
-        "prodo",   // mishearing
-        "protto",  // mishearing
-        "prado",   // mishearing
-        "@proto",
-        // Oliver and variations
-        "oliver",
-        "olliver", // mishearing
+        "proto", "prodo",  // mishearing
+        "protto", // mishearing
+        "prado",  // mishearing
+        "@proto", // Oliver and variations
+        "oliver", "olliver", // mishearing
         "ollie",   // nickname
-        "@oliver",
-        // DoWhiz brand
+        "@oliver", // DoWhiz brand
         "dowhiz",
     ];
 
@@ -457,7 +460,8 @@ async fn transcribe_audio(
     let endpoint = std::env::var("AZURE_OPENAI_ENDPOINT")?;
 
     // Whisper deployment name - create this in Azure portal
-    let deployment = std::env::var("AZURE_WHISPER_DEPLOYMENT").unwrap_or_else(|_| "whisper".to_string());
+    let deployment =
+        std::env::var("AZURE_WHISPER_DEPLOYMENT").unwrap_or_else(|_| "whisper".to_string());
 
     let client = reqwest::Client::new();
 
@@ -548,10 +552,7 @@ async fn send_zoom_chat(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // TODO: Implement Zoom Chat API
     // POST https://api.zoom.us/v2/chat/users/me/messages
-    info!(
-        "Would send to Zoom chat [{}]: {}",
-        meeting_uuid, message
-    );
+    info!("Would send to Zoom chat [{}]: {}", meeting_uuid, message);
     Ok(())
 }
 
@@ -697,7 +698,10 @@ mod tests {
         assert_eq!(resp.status, "STATUS_OK");
         assert!(resp.media_urls.is_some());
         let media_urls = resp.media_urls.unwrap();
-        assert_eq!(media_urls.audio, Some("wss://media.zoom.us/audio/123".to_string()));
+        assert_eq!(
+            media_urls.audio,
+            Some("wss://media.zoom.us/audio/123".to_string())
+        );
     }
 
     #[test]

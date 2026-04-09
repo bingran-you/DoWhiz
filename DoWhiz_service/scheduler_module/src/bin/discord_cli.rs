@@ -178,7 +178,10 @@ struct DiscordUser {
 
 fn create_dm_channel(token: &str, user_id: &str) -> Result<String, String> {
     let client = Client::new();
-    let url = format!("{}/users/@me/channels", get_api_base().trim_end_matches('/'));
+    let url = format!(
+        "{}/users/@me/channels",
+        get_api_base().trim_end_matches('/')
+    );
 
     let request = CreateDmRequest {
         recipient_id: user_id.to_string(),
@@ -202,7 +205,10 @@ fn create_dm_channel(token: &str, user_id: &str) -> Result<String, String> {
         let error_text = response
             .text()
             .unwrap_or_else(|_| "unknown error".to_string());
-        Err(format!("DM channel creation failed ({}): {}", status, error_text))
+        Err(format!(
+            "DM channel creation failed ({}): {}",
+            status, error_text
+        ))
     }
 }
 
@@ -449,7 +455,11 @@ fn cmd_send_channel(args: &[String]) -> ExitCode {
     }
 }
 
-fn list_guild_members(token: &str, guild_id: &str, exclude_bots: bool) -> Result<Vec<DiscordUser>, String> {
+fn list_guild_members(
+    token: &str,
+    guild_id: &str,
+    exclude_bots: bool,
+) -> Result<Vec<DiscordUser>, String> {
     let client = Client::new();
     let mut all_members = Vec::new();
     let mut after: Option<String> = None;
@@ -475,8 +485,13 @@ fn list_guild_members(token: &str, guild_id: &str, exclude_bots: bool) -> Result
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().unwrap_or_else(|_| "unknown error".to_string());
-            return Err(format!("Failed to list guild members ({}): {}", status, error_text));
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "unknown error".to_string());
+            return Err(format!(
+                "Failed to list guild members ({}): {}",
+                status, error_text
+            ));
         }
 
         let members: Vec<GuildMember> = response
@@ -487,7 +502,10 @@ fn list_guild_members(token: &str, guild_id: &str, exclude_bots: bool) -> Result
             break;
         }
 
-        let last_id = members.last().and_then(|m| m.user.as_ref()).map(|u| u.id.clone());
+        let last_id = members
+            .last()
+            .and_then(|m| m.user.as_ref())
+            .map(|u| u.id.clone());
 
         for member in members {
             if let Some(user) = member.user {

@@ -332,10 +332,12 @@ pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
     type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
     // Extract the encrypted content from <Encrypt> tag
-    let encrypt_start = xml.find("<Encrypt><![CDATA[")
+    let encrypt_start = xml
+        .find("<Encrypt><![CDATA[")
         .ok_or_else(|| AdapterError::ParseError("missing Encrypt tag".to_string()))?;
     let content_start = encrypt_start + "<Encrypt><![CDATA[".len();
-    let content_end = xml[content_start..].find("]]></Encrypt>")
+    let content_end = xml[content_start..]
+        .find("]]></Encrypt>")
         .ok_or_else(|| AdapterError::ParseError("malformed Encrypt tag".to_string()))?;
     let encrypted_base64 = &xml[content_start..content_start + content_end];
 
@@ -353,7 +355,8 @@ pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
             .with_decode_padding_mode(DecodePaddingMode::Indifferent)
             .with_decode_allow_trailing_bits(true),
     );
-    let aes_key = lenient_engine.decode(&aes_key_b64)
+    let aes_key = lenient_engine
+        .decode(&aes_key_b64)
         .map_err(|e| AdapterError::ParseError(format!("invalid encoding_aes_key: {}", e)))?;
 
     if aes_key.len() != 32 {
@@ -369,9 +372,11 @@ pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
         .map_err(|e| AdapterError::ParseError(format!("invalid base64: {}", e)))?;
 
     // IV is first 16 bytes of AESKey
-    let iv: [u8; 16] = aes_key[..16].try_into()
+    let iv: [u8; 16] = aes_key[..16]
+        .try_into()
         .map_err(|_| AdapterError::ParseError("iv error".to_string()))?;
-    let key: [u8; 32] = aes_key.try_into()
+    let key: [u8; 32] = aes_key
+        .try_into()
         .map_err(|_| AdapterError::ParseError("key error".to_string()))?;
 
     // Decrypt using AES-256-CBC
@@ -387,7 +392,9 @@ pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
 
     // Message format: random(16B) + msg_len(4B big-endian) + msg + receiveid
     if decrypted.len() < 20 {
-        return Err(AdapterError::ParseError("decrypted content too short".to_string()));
+        return Err(AdapterError::ParseError(
+            "decrypted content too short".to_string(),
+        ));
     }
 
     // Skip 16 random bytes
@@ -395,8 +402,9 @@ pub fn decrypt_wechat_message(xml: &str) -> Result<String, AdapterError> {
 
     // Read msg_len (4 bytes, big endian)
     let msg_len = u32::from_be_bytes(
-        content[0..4].try_into()
-            .map_err(|_| AdapterError::ParseError("msg_len parse error".to_string()))?
+        content[0..4]
+            .try_into()
+            .map_err(|_| AdapterError::ParseError("msg_len parse error".to_string()))?,
     ) as usize;
 
     if content.len() < 4 + msg_len {
@@ -910,7 +918,10 @@ Line 3]]></Content>
 
     #[test]
     fn decrypt_wechat_message_fails_without_encrypt_tag() {
-        std::env::set_var("WECHAT_ENCODING_AES_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        std::env::set_var(
+            "WECHAT_ENCODING_AES_KEY",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        );
 
         let plaintext_xml = r#"<xml><ToUserName><![CDATA[corp]]></ToUserName></xml>"#;
         let result = decrypt_wechat_message(plaintext_xml);
@@ -918,7 +929,10 @@ Line 3]]></Content>
         std::env::remove_var("WECHAT_ENCODING_AES_KEY");
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing Encrypt tag"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing Encrypt tag"));
     }
 
     #[test]
@@ -929,7 +943,10 @@ Line 3]]></Content>
         let result = decrypt_wechat_message(encrypted_xml);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("WECHAT_ENCODING_AES_KEY not set"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("WECHAT_ENCODING_AES_KEY not set"));
     }
 
     #[test]
@@ -982,9 +999,18 @@ Line 3]]></Content>
 
         assert_eq!(message.sender, "TestUser");
         assert_eq!(message.text_body, Some("Hello Proto!".to_string()));
-        assert_eq!(message.metadata.wechat_corp_id, Some("ww33c299595bee0107".to_string()));
-        assert_eq!(message.metadata.wechat_user_id, Some("TestUser".to_string()));
-        assert_eq!(message.metadata.wechat_agent_id, Some("1000002".to_string()));
+        assert_eq!(
+            message.metadata.wechat_corp_id,
+            Some("ww33c299595bee0107".to_string())
+        );
+        assert_eq!(
+            message.metadata.wechat_user_id,
+            Some("TestUser".to_string())
+        );
+        assert_eq!(
+            message.metadata.wechat_agent_id,
+            Some("1000002".to_string())
+        );
     }
 
     // ==================== PKCS7 Padding Tests ====================

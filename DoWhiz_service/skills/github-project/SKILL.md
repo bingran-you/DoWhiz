@@ -1,3 +1,8 @@
+---
+name: "github-project"
+description: "Set up and coordinate GitHub repositories for team projects. Always search for existing repos first before creating new ones. Supports creating repos, inviting collaborators, branch protection, issues/PRs, and CI/CD monitoring."
+---
+
 # GitHub Project Coordination Skill
 
 This skill enables you to set up and coordinate GitHub repositories for team projects, including creating repos, inviting collaborators, setting up branch protection, and managing issues/PRs.
@@ -21,6 +26,48 @@ The following environment variables must be set:
 The `gh` CLI is used for all GitHub operations.
 
 ## Capabilities
+
+### 0. Search for Existing Repositories (Always Do First)
+
+Before creating new repos, **always search for existing repositories** to gather context and reference. This helps you understand what's already out there—naming conventions, similar projects, related work.
+
+**Important:** Even if you find existing repos, you should still **create a new repo** for the user's request. You (Oliver) may not have contributor access to repos owned by others, so don't assume you can push to or modify found repos.
+
+```bash
+# List all repos for the authenticated user
+gh repo list --limit 50
+
+# Search repos by keyword (searches name, description, README)
+gh search repos "project-name" --owner @me
+
+# Search repos across GitHub (for reference/context)
+gh search repos "keyword" --limit 10
+
+# Search within a specific organization
+gh repo list ORG_NAME --limit 50
+
+# Get detailed info about a specific repo (for reference)
+gh repo view OWNER/REPO
+
+# Search by topic/language
+gh search repos "topic:react language:typescript" --limit 10
+
+# Search user's repos matching a pattern
+gh repo list --json name,description,url --jq '.[] | select(.name | contains("keyword"))'
+```
+
+**Purpose of searching:**
+- Gather context on similar projects, naming patterns, and related work
+- Reference existing repos when explaining or setting up new ones
+- Avoid naming conflicts with existing repos you own
+- Understand the landscape before creating something new
+
+**Do NOT:**
+- Assume you can contribute to repos you don't own
+- Skip creating a new repo just because a similar one exists elsewhere
+- Try to push to repos without confirmed access
+
+> **Search Limits:** Perform at most **5 search queries** before proceeding. Balance efficiency with accuracy—use targeted searches with specific keywords rather than broad sweeps. After gathering context, proceed to create the new repo based on your findings and reasoning.
 
 ### 1. Create a Repository
 
@@ -127,6 +174,14 @@ gh run watch RUN_ID --repo OWNER/REPO
 ### Setting Up a New Project Repository
 
 When a user says: "Create a GitHub repo for our CS 101 project and add Alice, Bob, and Carol"
+
+0. **Search for context first:**
+```bash
+# Check for similar CS 101 repos to understand naming/structure
+gh repo list --limit 50 | grep -i "cs101\|cs-101"
+gh search repos "cs101 final project" --limit 5
+```
+Use findings to inform naming and avoid conflicts, but still create a new repo.
 
 1. **Create the repository:**
 ```bash

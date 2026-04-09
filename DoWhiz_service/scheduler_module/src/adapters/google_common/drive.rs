@@ -344,11 +344,7 @@ impl GoogleDriveClient {
     ///
     /// # Returns
     /// The new parent folder ID.
-    pub fn move_to_folder(
-        &self,
-        file_id: &str,
-        folder_id: &str,
-    ) -> Result<String, AdapterError> {
+    pub fn move_to_folder(&self, file_id: &str, folder_id: &str) -> Result<String, AdapterError> {
         let access_token = self
             .auth
             .get_access_token()
@@ -371,8 +367,14 @@ impl GoogleDriveClient {
         if !get_response.status().is_success() {
             let status = get_response.status();
             let body = get_response.text().unwrap_or_default();
-            error!("Failed to get file {} parents: {} - {}", file_id, status, body);
-            return Err(AdapterError::SendError(format!("HTTP {}: {}", status, body)));
+            error!(
+                "Failed to get file {} parents: {} - {}",
+                file_id, status, body
+            );
+            return Err(AdapterError::SendError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let json: serde_json::Value = get_response
@@ -411,7 +413,10 @@ impl GoogleDriveClient {
                 "Failed to move file {} to folder {}: {} - {}",
                 file_id, folder_id, status, body
             );
-            return Err(AdapterError::SendError(format!("HTTP {}: {}", status, body)));
+            return Err(AdapterError::SendError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         info!("Moved file {} to folder {}", file_id, folder_id);
@@ -462,7 +467,10 @@ impl GoogleDriveClient {
             let status = response.status();
             let body = response.text().unwrap_or_default();
             error!("Failed to create folder '{}': {} - {}", name, status, body);
-            return Err(AdapterError::SendError(format!("HTTP {}: {}", status, body)));
+            return Err(AdapterError::SendError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let json: serde_json::Value = response
@@ -526,7 +534,10 @@ impl GoogleDriveClient {
             let status = response.status();
             let body = response.text().unwrap_or_default();
             error!("Failed to list folders: {} - {}", status, body);
-            return Err(AdapterError::SendError(format!("HTTP {}: {}", status, body)));
+            return Err(AdapterError::SendError(format!(
+                "HTTP {}: {}",
+                status, body
+            )));
         }
 
         let json: serde_json::Value = response
