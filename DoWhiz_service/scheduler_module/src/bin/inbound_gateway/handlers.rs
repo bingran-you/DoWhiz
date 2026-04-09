@@ -6,7 +6,7 @@ use std::time::{Duration as StdDuration, Instant};
 use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -43,6 +43,7 @@ use super::verify::{
 };
 
 const SLACK_ENGAGED_THREAD_TTL: StdDuration = StdDuration::from_secs(12 * 60 * 60);
+const WECHAT_MP_PASSIVE_ACK_BODY: &str = "success";
 
 /// Request payload for creating a workspace brief document
 #[derive(Debug, Deserialize)]
@@ -814,7 +815,7 @@ pub(super) async fn ingest_wechat_mp(
     State(state): State<Arc<GatewayState>>,
     Query(params): Query<WeChatMpWebhookParams>,
     body: Bytes,
-) -> impl IntoResponse {
+) -> Response {
     if let Err(reason) = verify_wechat_mp_message(
         params.signature.as_deref(),
         params.msg_signature.as_deref(),
@@ -823,7 +824,7 @@ pub(super) async fn ingest_wechat_mp(
         &body,
     ) {
         warn!("wechat_mp POST signature verification failed: {}", reason);
-        return (StatusCode::UNAUTHORIZED, Json(json!({"status": reason})));
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
 
     let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
@@ -838,7 +839,7 @@ pub(super) async fn ingest_wechat_mp(
         Ok(message) => message,
         Err(err) => {
             info!("gateway ignoring wechat_mp event: {}", err);
-            return (StatusCode::OK, Json(json!({"status": "ignored"})));
+            return (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response();
         }
     };
 
@@ -862,7 +863,7 @@ pub(super) async fn ingest_wechat_mp(
 
     let Some(route) = resolve_route(Channel::WeChatMp, &open_id, &state) else {
         info!("gateway no route for wechat_mp open_id={}", open_id);
-        return (StatusCode::OK, Json(json!({"status": "no_route"})));
+        return (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response();
     };
 
     info!(
@@ -870,27 +871,54 @@ pub(super) async fn ingest_wechat_mp(
         route.tenant_id, route.employee_id
     );
 
+    let queue = state.queue.clone();
     let external_message_id = message.message_id.clone();
+    let raw_payload = body.clone();
+    tokio::spawn(async move {
+        process_wechat_mp_async(queue, route, external_message_id, message, raw_payload).await;
+    });
+    (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response()
+}
+
+async fn process_wechat_mp_async(
+    queue: Arc<dyn IngestionQueue>,
+    route: RouteDecision,
+    external_message_id: Option<String>,
+    message: InboundMessage,
+    raw_payload: Bytes,
+) {
     let envelope = match build_envelope(
         route,
         Channel::WeChatMp,
         external_message_id,
         &message,
-        &body,
+        &raw_payload,
     )
     .await
     {
         Ok(envelope) => envelope,
         Err(err) => {
-            error!("gateway failed to store raw payload: {}", err);
-            return (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({"status": "payload_store_failed"})),
-            );
+            error!("wechat_mp async build_envelope failed: {}", err);
+            return;
         }
     };
-    info!("wechat_mp message enqueuing");
-    enqueue_envelope(state.queue.clone(), envelope).await
+
+    info!("wechat_mp async message enqueuing");
+    let dedupe_key = envelope.dedupe_key.clone();
+    match tokio::task::spawn_blocking(move || queue.enqueue(&envelope)).await {
+        Ok(Ok(result)) => {
+            info!(
+                "wechat_mp async enqueue finished: inserted={} dedupe_key={}",
+                result.inserted, dedupe_key
+            );
+        }
+        Ok(Err(err)) => {
+            error!("wechat_mp async enqueue failed: {}", err);
+        }
+        Err(err) => {
+            error!("wechat_mp async enqueue join error: {}", err);
+        }
+    }
 }
 
 /// Handle Lark inbound messages (POST request)
@@ -1700,8 +1728,209 @@ Use the google-docs skill to create and share the document."#,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use axum::body::to_bytes;
+    use sha1::{Digest, Sha1};
     use scheduler_module::adapters::slack::{SlackEventWrapper, SlackMessageEvent};
     use scheduler_module::channel::Attachment;
+    use scheduler_module::employee_config::EmployeeDirectory;
+    use scheduler_module::ingestion_queue::{
+        EnqueueResult, IngestionQueue, IngestionQueueError, QueuedEnvelope,
+    };
+
+    #[derive(Default)]
+    struct RecordingQueue {
+        envelopes: Mutex<Vec<IngestionEnvelope>>,
+    }
+
+    impl RecordingQueue {
+        fn len(&self) -> usize {
+            self.envelopes
+                .lock()
+                .expect("recording queue mutex poisoned")
+                .len()
+        }
+    }
+
+    impl IngestionQueue for RecordingQueue {
+        fn enqueue(&self, envelope: &IngestionEnvelope) -> Result<EnqueueResult, IngestionQueueError> {
+            self.envelopes
+                .lock()
+                .expect("recording queue mutex poisoned")
+                .push(envelope.clone());
+            Ok(EnqueueResult { inserted: true })
+        }
+
+        fn claim_next(
+            &self,
+            _employee_id: &str,
+        ) -> Result<Option<QueuedEnvelope>, IngestionQueueError> {
+            Ok(None)
+        }
+
+        fn mark_done(&self, _id: &Uuid) -> Result<(), IngestionQueueError> {
+            Ok(())
+        }
+
+        fn mark_failed(&self, _id: &Uuid, _error: &str) -> Result<(), IngestionQueueError> {
+            Ok(())
+        }
+    }
+
+    fn make_gateway_state(queue: Arc<dyn IngestionQueue>, default_employee_id: Option<&str>) -> Arc<GatewayState> {
+        Arc::new(GatewayState {
+            config: super::super::state::GatewayConfig {
+                defaults: super::super::config::GatewayDefaultsConfig {
+                    tenant_id: Some("tenant-test".to_string()),
+                    employee_id: default_employee_id.map(str::to_string),
+                },
+                routes: HashMap::new(),
+                channel_defaults: HashMap::new(),
+            },
+            employee_directory: EmployeeDirectory {
+                employees: Vec::new(),
+                employee_by_id: HashMap::new(),
+                default_employee_id: None,
+                service_addresses: HashSet::new(),
+            },
+            address_to_employee: HashMap::new(),
+            queue,
+            drive_changes_manager: None,
+            drive_change_notifier: None,
+        })
+    }
+
+    fn make_wechat_mp_text_xml(open_id: &str, app_id: &str, content: &str, msg_id: &str) -> String {
+        format!(
+            r#"<xml>
+<ToUserName><![CDATA[{app_id}]]></ToUserName>
+<FromUserName><![CDATA[{open_id}]]></FromUserName>
+<CreateTime>1712540000</CreateTime>
+<MsgType><![CDATA[text]]></MsgType>
+<Content><![CDATA[{content}]]></Content>
+<MsgId>{msg_id}</MsgId>
+</xml>"#
+        )
+    }
+
+    fn sha1_sorted_parts(parts: &[&str]) -> String {
+        let mut sorted = parts.to_vec();
+        sorted.sort();
+        let data = sorted.join("");
+        let mut hasher = Sha1::new();
+        hasher.update(data.as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
+    fn make_wechat_mp_signed_params(body: &[u8]) -> WeChatMpWebhookParams {
+        let timestamp = "1712540000".to_string();
+        let nonce = "nonce-123".to_string();
+        let signature = std::env::var("WECHAT_MP_TOKEN")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .map(|token| sha1_sorted_parts(&[token.as_str(), timestamp.as_str(), nonce.as_str()]));
+        let msg_signature = std::str::from_utf8(body)
+            .ok()
+            .and_then(|raw| {
+                let cdata_start = "<Encrypt><![CDATA[";
+                let cdata_end = "]]></Encrypt>";
+                raw.find(cdata_start).and_then(|start| {
+                    let begin = start + cdata_start.len();
+                    raw[begin..]
+                        .find(cdata_end)
+                        .map(|len| raw[begin..begin + len].to_string())
+                })
+            })
+            .and_then(|encrypt| {
+                std::env::var("WECHAT_MP_TOKEN")
+                    .ok()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                    .map(|token| {
+                        sha1_sorted_parts(&[
+                            token.as_str(),
+                            timestamp.as_str(),
+                            nonce.as_str(),
+                            encrypt.as_str(),
+                        ])
+                    })
+            });
+
+        WeChatMpWebhookParams {
+            signature,
+            msg_signature,
+            timestamp: Some(timestamp),
+            nonce: Some(nonce),
+            echostr: None,
+        }
+    }
+
+    async fn response_body_text(response: Response) -> String {
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        String::from_utf8(body.to_vec()).expect("response body utf8")
+    }
+
+    #[tokio::test]
+    async fn ingest_wechat_mp_returns_success_when_parse_fails() {
+        let queue = Arc::new(RecordingQueue::default());
+        let state = make_gateway_state(queue, None);
+        let body = Bytes::from_static(b"<xml><MsgType><![CDATA[text]]></MsgType></xml>");
+        let params = make_wechat_mp_signed_params(&body);
+
+        let response = ingest_wechat_mp(State(state), Query(params), body).await;
+        let status = response.status();
+        let response_body = response_body_text(response).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(response_body, WECHAT_MP_PASSIVE_ACK_BODY);
+    }
+
+    #[tokio::test]
+    async fn ingest_wechat_mp_returns_success_when_no_route_found() {
+        let queue = Arc::new(RecordingQueue::default());
+        let state = make_gateway_state(queue, None);
+        let xml = make_wechat_mp_text_xml("openid-no-route", "gh_app_1", "hello", "1001");
+        let body = Bytes::from(xml);
+        let params = make_wechat_mp_signed_params(&body);
+
+        let response = ingest_wechat_mp(State(state), Query(params), body).await;
+        let status = response.status();
+        let response_body = response_body_text(response).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(response_body, WECHAT_MP_PASSIVE_ACK_BODY);
+    }
+
+    #[tokio::test]
+    async fn ingest_wechat_mp_acknowledges_immediately_and_enqueues_async() {
+        let queue = Arc::new(RecordingQueue::default());
+        let queue_for_assert = queue.clone();
+        let state = make_gateway_state(queue, Some("employee-1"));
+        let xml = make_wechat_mp_text_xml("openid-async", "gh_app_1", "你是谁？你能做什么？", "1002");
+        let body = Bytes::from(xml);
+        let params = make_wechat_mp_signed_params(&body);
+
+        let response = ingest_wechat_mp(State(state), Query(params), body).await;
+        let status = response.status();
+        let response_body = response_body_text(response).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(response_body, WECHAT_MP_PASSIVE_ACK_BODY);
+
+        for _ in 0..50 {
+            if queue_for_assert.len() > 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(queue_for_assert.len(), 1);
+    }
 
     #[test]
     fn payload_contains_no_reply_marker_detects_from() {
