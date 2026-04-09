@@ -630,7 +630,9 @@ fn wait_for_tasks_complete(
 }
 
 fn workspace_matches_subject(workspace: &Path, subject: &str) -> bool {
-    let payload_path = workspace.join("incoming_email").join("postmark_payload.json");
+    let payload_path = workspace
+        .join("incoming_email")
+        .join("postmark_payload.json");
     let payload_bytes = match fs::read(payload_path) {
         Ok(bytes) => bytes,
         Err(_) => return false,
@@ -760,8 +762,9 @@ fn rust_service_real_email_end_to_end() -> Result<(), BoxError> {
         inbound_address
     );
     let (mut employee_profile, mut employee_directory, employee_config_path) =
-        load_employee_for_address(&service_address)
-            .map_err(|err| format!("failed to load employee for address {service_address}: {err}"))?;
+        load_employee_for_address(&service_address).map_err(|err| {
+            format!("failed to load employee for address {service_address}: {err}")
+        })?;
     attach_inbound_alias(
         &mut employee_profile,
         &mut employee_directory,
@@ -940,20 +943,25 @@ fn rust_service_real_email_end_to_end() -> Result<(), BoxError> {
 
         let workspace_discovery_timeout = live_timeout_from_env(
             "RUST_SERVICE_LIVE_DISCOVERY_TIMEOUT_SECS",
-            if env_enabled("RUN_CODEX_E2E") { 180 } else { 60 },
+            if env_enabled("RUN_CODEX_E2E") {
+                180
+            } else {
+                60
+            },
         );
         let reply_timeout = live_timeout_from_env(
             "RUST_SERVICE_LIVE_REPLY_TIMEOUT_SECS",
-            if env_enabled("RUN_CODEX_E2E") { 600 } else { 120 },
+            if env_enabled("RUN_CODEX_E2E") {
+                600
+            } else {
+                120
+            },
         );
 
         println!("Waiting for workspace for subject: {}", subject);
-        let workspace = wait_for_workspace_by_subject(
-            &users_root,
-            &subject,
-            workspace_discovery_timeout,
-        )
-        .ok_or("timed out waiting for workspace discovery")?;
+        let workspace =
+            wait_for_workspace_by_subject(&users_root, &subject, workspace_discovery_timeout)
+                .ok_or("timed out waiting for workspace discovery")?;
         let user_id = workspace_user_id(&workspace).ok_or("failed to resolve workspace user id")?;
         println!("Workspace resolved at {}", workspace.display());
         println!("User id resolved: {}", user_id);
@@ -1022,7 +1030,11 @@ fn rust_service_real_email_end_to_end() -> Result<(), BoxError> {
         let reply_subject = format!("Re: {}", subject);
         let outbound_timeout = live_timeout_from_env(
             "RUST_SERVICE_LIVE_OUTBOUND_TIMEOUT_SECS",
-            if env_enabled("RUN_CODEX_E2E") { 300 } else { 120 },
+            if env_enabled("RUN_CODEX_E2E") {
+                300
+            } else {
+                120
+            },
         );
         println!("Polling outbound for subject hint: {}", reply_subject);
         let outbound = poll_outbound(&token, &from_addr, &reply_subject, outbound_timeout)?
@@ -1038,7 +1050,11 @@ fn rust_service_real_email_end_to_end() -> Result<(), BoxError> {
         let tasks_path = users_root.join(&user_id).join("state").join("tasks.db");
         let tasks_timeout = live_timeout_from_env(
             "RUST_SERVICE_LIVE_TASKS_TIMEOUT_SECS",
-            if env_enabled("RUN_CODEX_E2E") { 480 } else { 120 },
+            if env_enabled("RUN_CODEX_E2E") {
+                480
+            } else {
+                120
+            },
         );
         println!("Waiting for tasks to complete...");
         let tasks = wait_for_tasks_complete(&tasks_path, tasks_timeout)?;

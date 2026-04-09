@@ -44,11 +44,11 @@ fn load_pool_config_from_env() -> Result<PoolConfig, String> {
         .or_else(|_| env::var("RUN_TASK_AZURE_ACI_STORAGE_KEY"))
         .map_err(|_| "WARM_POOL_STORAGE_KEY not set")?;
 
-    let task_queue_name = env::var("WARM_POOL_TASK_QUEUE")
-        .unwrap_or_else(|_| "dowhiz-tasks".to_string());
+    let task_queue_name =
+        env::var("WARM_POOL_TASK_QUEUE").unwrap_or_else(|_| "dowhiz-tasks".to_string());
 
-    let completion_queue_name = env::var("WARM_POOL_COMPLETION_QUEUE")
-        .unwrap_or_else(|_| "dowhiz-completions".to_string());
+    let completion_queue_name =
+        env::var("WARM_POOL_COMPLETION_QUEUE").unwrap_or_else(|_| "dowhiz-completions".to_string());
 
     let registry_server = env::var("WARM_POOL_REGISTRY_SERVER")
         .or_else(|_| env::var("RUN_TASK_AZURE_ACI_REGISTRY_SERVER"))
@@ -56,11 +56,15 @@ fn load_pool_config_from_env() -> Result<PoolConfig, String> {
 
     let registry_username = env::var("WARM_POOL_REGISTRY_USERNAME")
         .or_else(|_| env::var("RUN_TASK_AZURE_ACI_REGISTRY_USERNAME"))
-        .map_err(|_| "WARM_POOL_REGISTRY_USERNAME or RUN_TASK_AZURE_ACI_REGISTRY_USERNAME not set")?;
+        .map_err(|_| {
+            "WARM_POOL_REGISTRY_USERNAME or RUN_TASK_AZURE_ACI_REGISTRY_USERNAME not set"
+        })?;
 
     let registry_password = env::var("WARM_POOL_REGISTRY_PASSWORD")
         .or_else(|_| env::var("RUN_TASK_AZURE_ACI_REGISTRY_PASSWORD"))
-        .map_err(|_| "WARM_POOL_REGISTRY_PASSWORD or RUN_TASK_AZURE_ACI_REGISTRY_PASSWORD not set")?;
+        .map_err(|_| {
+            "WARM_POOL_REGISTRY_PASSWORD or RUN_TASK_AZURE_ACI_REGISTRY_PASSWORD not set"
+        })?;
 
     let location = env::var("WARM_POOL_LOCATION")
         .or_else(|_| env::var("RUN_TASK_AZURE_ACI_LOCATION"))
@@ -202,7 +206,10 @@ mod tests {
         std::env::set_var("RUN_TASK_AZURE_ACI_IMAGE", "test-image");
         std::env::set_var("RUN_TASK_AZURE_ACI_STORAGE_ACCOUNT", "teststorage");
         std::env::set_var("RUN_TASK_AZURE_ACI_STORAGE_KEY", "testkey");
-        std::env::set_var("RUN_TASK_AZURE_ACI_REGISTRY_SERVER", "testregistry.azurecr.io");
+        std::env::set_var(
+            "RUN_TASK_AZURE_ACI_REGISTRY_SERVER",
+            "testregistry.azurecr.io",
+        );
         std::env::set_var("RUN_TASK_AZURE_ACI_REGISTRY_USERNAME", "testuser");
         std::env::set_var("RUN_TASK_AZURE_ACI_REGISTRY_PASSWORD", "testpass");
         std::env::set_var("RUN_TASK_AZURE_ACI_LOCATION", "westus2");
@@ -259,7 +266,10 @@ mod tests {
         std::env::set_var("WARM_POOL_TASK_QUEUE", "custom-tasks");
         std::env::set_var("WARM_POOL_COMPLETION_QUEUE", "custom-completions");
         std::env::set_var("WARM_POOL_REGISTRY_SERVER", "warmregistry.azurecr.io");
-        std::env::set_var("RUN_TASK_AZURE_ACI_REGISTRY_SERVER", "fallbackregistry.azurecr.io");
+        std::env::set_var(
+            "RUN_TASK_AZURE_ACI_REGISTRY_SERVER",
+            "fallbackregistry.azurecr.io",
+        );
         std::env::set_var("WARM_POOL_REGISTRY_USERNAME", "warmuser");
         std::env::set_var("RUN_TASK_AZURE_ACI_REGISTRY_USERNAME", "fallbackuser");
         std::env::set_var("WARM_POOL_REGISTRY_PASSWORD", "warmpass");

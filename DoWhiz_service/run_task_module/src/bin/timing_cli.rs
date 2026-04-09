@@ -66,12 +66,13 @@ fn main() {
                     std::path::PathBuf::from("scripts/analyze_timings.py")
                 });
 
-            println!("Running: python {} {}", script_path.display(), path.display());
+            println!(
+                "Running: python {} {}",
+                script_path.display(),
+                path.display()
+            );
 
-            let status = Command::new("python")
-                .arg(&script_path)
-                .arg(&path)
-                .status();
+            let status = Command::new("python").arg(&script_path).arg(&path).status();
 
             match status {
                 Ok(s) if s.success() => {}

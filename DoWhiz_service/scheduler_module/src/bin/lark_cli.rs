@@ -134,11 +134,19 @@ enum Commands {
         token: String,
         #[arg(long, help = "File type: docx, sheet, bitable, file, folder")]
         file_type: String,
-        #[arg(long, default_value = "openid", help = "Member type: openid, email, userid")]
+        #[arg(
+            long,
+            default_value = "openid",
+            help = "Member type: openid, email, userid"
+        )]
         member_type: String,
         #[arg(long, help = "Member ID (open_id like ou_xxx, email, or user_id)")]
         member_id: String,
-        #[arg(long, default_value = "edit", help = "Permission: view, edit, full_access")]
+        #[arg(
+            long,
+            default_value = "edit",
+            help = "Permission: view, edit, full_access"
+        )]
         perm: String,
     },
 }
@@ -498,9 +506,10 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::GetDoc { document_id } => get_doc(&token, document_id).await?,
         Commands::ReadDoc { document_id } => read_doc(&token, document_id).await?,
-        Commands::CreateDoc { title, folder_token } => {
-            create_doc(&token, title, folder_token.as_deref()).await?
-        }
+        Commands::CreateDoc {
+            title,
+            folder_token,
+        } => create_doc(&token, title, folder_token.as_deref()).await?,
 
         Commands::GetSheet { spreadsheet_id } => get_sheet(&token, spreadsheet_id).await?,
         Commands::ReadRange {
@@ -521,9 +530,10 @@ async fn main() -> Result<()> {
         } => append_rows(&token, spreadsheet_id, sheet_id, values).await?,
 
         Commands::ListTables { app_token } => list_tables(&token, app_token).await?,
-        Commands::GetTable { app_token, table_id } => {
-            get_table(&token, app_token, table_id).await?
-        }
+        Commands::GetTable {
+            app_token,
+            table_id,
+        } => get_table(&token, app_token, table_id).await?,
         Commands::QueryRecords {
             app_token,
             table_id,

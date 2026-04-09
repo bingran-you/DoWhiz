@@ -119,7 +119,8 @@ impl PoolManager {
 
         eprintln!(
             "[pool_manager] Pool ready with {} containers (target: {})",
-            self.active_count(), self.target_size
+            self.active_count(),
+            self.target_size
         );
         Ok(())
     }
@@ -172,9 +173,11 @@ impl PoolManager {
     /// Decrement the active container count. Call this after deleting a container.
     pub fn decrement_count(&self) {
         // Use saturating sub to avoid underflow
-        self.active_count.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
-            Some(x.saturating_sub(1))
-        }).ok();
+        self.active_count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| {
+                Some(x.saturating_sub(1))
+            })
+            .ok();
     }
 
     /// Get target pool size.
@@ -715,7 +718,9 @@ mod tests {
         let env_vars = collect_warm_container_env_vars(&config);
 
         assert!(env_vars.contains(&"OPENAI_API_KEY=test-openai-key".to_string()));
-        assert!(env_vars.contains(&"AZURE_OPENAI_ENDPOINT=https://test.openai.azure.com".to_string()));
+        assert!(
+            env_vars.contains(&"AZURE_OPENAI_ENDPOINT=https://test.openai.azure.com".to_string())
+        );
 
         // Cleanup
         std::env::remove_var("OPENAI_API_KEY");
@@ -777,5 +782,4 @@ mod tests {
         // Ensure prefix is what we expect for az queries
         assert_eq!(CONTAINER_PREFIX, "dwz-warm-");
     }
-
 }

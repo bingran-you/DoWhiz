@@ -53,11 +53,7 @@ pub fn append_timing_to_file(timing: &TaskTiming) {
     }
 
     if let Ok(json) = serde_json::to_string(&record) {
-        if let Ok(mut file) = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-        {
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
             //Write via JSONL format
             let _ = writeln!(file, "{}", json);
         }

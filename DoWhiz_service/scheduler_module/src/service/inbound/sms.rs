@@ -341,7 +341,14 @@ mod tests {
             },
         };
 
-        process_sms_message(&config, &user_store, &index_store, &account_store, &message, &raw_payload)?;
+        process_sms_message(
+            &config,
+            &user_store,
+            &index_store,
+            &account_store,
+            &message,
+            &raw_payload,
+        )?;
 
         let user = user_store.get_or_create_user("phone", &sender)?;
         let user_paths = user_store.user_paths(&config.users_root, &user.user_id);

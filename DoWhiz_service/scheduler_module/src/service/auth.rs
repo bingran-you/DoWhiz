@@ -5287,10 +5287,17 @@ fn store_wecom_oauth_state(token: &str) -> String {
 
     // Prune expired entries
     let now = Instant::now();
-    store.retain(|_, (_, created)| now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS);
+    store.retain(|_, (_, created)| {
+        now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS
+    });
 
     store.insert(key.clone(), (token.to_string(), now));
-    info!("WeCom OAuth: stored state key={} (token_len={}, store_size={})", key, token.len(), store.len());
+    info!(
+        "WeCom OAuth: stored state key={} (token_len={}, store_size={})",
+        key,
+        token.len(),
+        store.len()
+    );
     key
 }
 
@@ -5300,12 +5307,23 @@ fn take_wecom_oauth_state(key: &str) -> Option<String> {
 
     // Prune expired entries
     let now = Instant::now();
-    store.retain(|_, (_, created)| now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS);
+    store.retain(|_, (_, created)| {
+        now.duration_since(*created).as_secs() < WECOM_OAUTH_STATE_TTL_SECS
+    });
 
     let result = store.remove(key);
     match &result {
-        Some((token, _)) => info!("WeCom OAuth: retrieved state key={} (token_len={}, remaining_store_size={})", key, token.len(), store.len()),
-        None => info!("WeCom OAuth: state key={} not found (store_size={})", key, store.len()),
+        Some((token, _)) => info!(
+            "WeCom OAuth: retrieved state key={} (token_len={}, remaining_store_size={})",
+            key,
+            token.len(),
+            store.len()
+        ),
+        None => info!(
+            "WeCom OAuth: state key={} not found (store_size={})",
+            key,
+            store.len()
+        ),
     }
     result.map(|(token, _)| token)
 }
@@ -5494,7 +5512,10 @@ pub async fn wecom_oauth_callback(
                         (Some(uid), _) => (uid.clone(), uid),
                         (None, Some(oid)) => (oid.clone(), format!("external:{}", oid)),
                         (None, None) => {
-                            error!("WeCom user info response missing both UserId and OpenId: {:?}", r.user_ticket);
+                            error!(
+                                "WeCom user info response missing both UserId and OpenId: {:?}",
+                                r.user_ticket
+                            );
                             return redirect_to(
                                 "/auth/index.html?wechat=error&reason=user_info_missing",
                             );
@@ -5555,9 +5576,10 @@ pub async fn wecom_oauth_callback(
     let wecom_identifier = format!("{}_{}", corp_id, wecom_user_id);
     let store = state.account_store.clone();
     let identifier_for_link = wecom_identifier.clone();
-    let link_result =
-        task::spawn_blocking(move || store.create_identifier(account.id, "wechat", &identifier_for_link))
-            .await;
+    let link_result = task::spawn_blocking(move || {
+        store.create_identifier(account.id, "wechat", &identifier_for_link)
+    })
+    .await;
 
     match link_result {
         Ok(Ok(_identifier)) => {
@@ -6958,7 +6980,8 @@ mod tests {
 
     #[test]
     fn wecom_access_token_response_deserializes_correctly() {
-        let json = r#"{"errcode":0,"errmsg":"ok","access_token":"accesstoken123","expires_in":7200}"#;
+        let json =
+            r#"{"errcode":0,"errmsg":"ok","access_token":"accesstoken123","expires_in":7200}"#;
         let parsed: WeComAccessTokenResponse = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.errcode, Some(0));
         assert_eq!(parsed.access_token, Some("accesstoken123".to_string()));
@@ -7017,7 +7040,9 @@ mod tests {
         );
 
         assert!(url.contains("appid=ww1234567890abcdef"));
-        assert!(url.contains("redirect_uri=https%3A%2F%2Fapi.dowhiz.com%2Fauth%2Fwechat%2Fcallback"));
+        assert!(
+            url.contains("redirect_uri=https%3A%2F%2Fapi.dowhiz.com%2Fauth%2Fwechat%2Fcallback")
+        );
         assert!(url.contains("scope=snsapi_privateinfo"));
         assert!(url.contains("agentid=1000002"));
         assert!(url.contains("state=encoded_state"));

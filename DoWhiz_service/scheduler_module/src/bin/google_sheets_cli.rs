@@ -535,7 +535,8 @@ fn cmd_get_link(file_id: &str) -> Result<String, String> {
 
     if links.web_view_link.is_none() && links.web_content_link.is_none() {
         output.push_str("No links available. The spreadsheet may not be shared yet.\n");
-        output.push_str("Use 'google-sheets share <id> --email=\"...\"' to share the file first.\n");
+        output
+            .push_str("Use 'google-sheets share <id> --email=\"...\"' to share the file first.\n");
     }
 
     Ok(output)
@@ -611,10 +612,7 @@ fn cmd_move_to_folder(file_id: &str, folder_id: &str) -> Result<String, String> 
         .move_to_folder(file_id, folder_id)
         .map_err(|e| format!("Failed to move file: {}", e))?;
 
-    Ok(format!(
-        "Moved file {} to folder {}\n",
-        file_id, folder_id
-    ))
+    Ok(format!("Moved file {} to folder {}\n", file_id, folder_id))
 }
 
 fn cmd_create_folder(name: &str, parent_id: Option<&str>) -> Result<String, String> {

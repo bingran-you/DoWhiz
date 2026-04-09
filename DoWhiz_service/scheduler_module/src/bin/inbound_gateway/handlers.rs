@@ -1733,13 +1733,13 @@ mod tests {
     use std::time::Duration;
 
     use axum::body::to_bytes;
-    use sha1::{Digest, Sha1};
     use scheduler_module::adapters::slack::{SlackEventWrapper, SlackMessageEvent};
     use scheduler_module::channel::Attachment;
     use scheduler_module::employee_config::EmployeeDirectory;
     use scheduler_module::ingestion_queue::{
         EnqueueResult, IngestionQueue, IngestionQueueError, QueuedEnvelope,
     };
+    use sha1::{Digest, Sha1};
 
     #[derive(Default)]
     struct RecordingQueue {
@@ -1756,7 +1756,10 @@ mod tests {
     }
 
     impl IngestionQueue for RecordingQueue {
-        fn enqueue(&self, envelope: &IngestionEnvelope) -> Result<EnqueueResult, IngestionQueueError> {
+        fn enqueue(
+            &self,
+            envelope: &IngestionEnvelope,
+        ) -> Result<EnqueueResult, IngestionQueueError> {
             self.envelopes
                 .lock()
                 .expect("recording queue mutex poisoned")
@@ -1780,7 +1783,10 @@ mod tests {
         }
     }
 
-    fn make_gateway_state(queue: Arc<dyn IngestionQueue>, default_employee_id: Option<&str>) -> Arc<GatewayState> {
+    fn make_gateway_state(
+        queue: Arc<dyn IngestionQueue>,
+        default_employee_id: Option<&str>,
+    ) -> Arc<GatewayState> {
         Arc::new(GatewayState {
             config: super::super::state::GatewayConfig {
                 defaults: super::super::config::GatewayDefaultsConfig {
@@ -1912,7 +1918,8 @@ mod tests {
         let queue = Arc::new(RecordingQueue::default());
         let queue_for_assert = queue.clone();
         let state = make_gateway_state(queue, Some("employee-1"));
-        let xml = make_wechat_mp_text_xml("openid-async", "gh_app_1", "你是谁？你能做什么？", "1002");
+        let xml =
+            make_wechat_mp_text_xml("openid-async", "gh_app_1", "你是谁？你能做什么？", "1002");
         let body = Bytes::from(xml);
         let params = make_wechat_mp_signed_params(&body);
 

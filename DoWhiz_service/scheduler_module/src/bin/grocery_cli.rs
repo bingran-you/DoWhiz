@@ -133,7 +133,10 @@ fn get_preferences(user_id: &str) {
             }
             Ok(None) => {
                 println!("No preferences found for user: {}", user_id);
-                println!("User can set preferences at: /grocery/onboarding?user_id={}", user_id);
+                println!(
+                    "User can set preferences at: /grocery/onboarding?user_id={}",
+                    user_id
+                );
             }
             Err(e) => {
                 eprintln!("Error loading preferences: {}", e);
@@ -156,11 +159,17 @@ async fn search_kroger(term: &str, location: Option<&str>, limit: u32) {
             // It's a zip code, find nearest store
             match client.find_stores(loc, Some(10), Some(1)).await {
                 Ok(stores) if !stores.is_empty() => {
-                    println!("Using store: {} ({})", stores[0].name, stores[0].location_id);
+                    println!(
+                        "Using store: {} ({})",
+                        stores[0].name, stores[0].location_id
+                    );
                     Some(stores[0].location_id.clone())
                 }
                 _ => {
-                    eprintln!("Warning: No stores found near ZIP {}. Prices may not be available.", loc);
+                    eprintln!(
+                        "Warning: No stores found near ZIP {}. Prices may not be available.",
+                        loc
+                    );
                     None
                 }
             }
@@ -215,10 +224,16 @@ async fn search_kroger(term: &str, location: Option<&str>, limit: u32) {
 async fn find_kroger_stores(zip_code: &str, radius: u32, limit: u32) {
     let client = get_kroger_client();
 
-    match client.find_stores(zip_code, Some(radius), Some(limit)).await {
+    match client
+        .find_stores(zip_code, Some(radius), Some(limit))
+        .await
+    {
         Ok(stores) => {
             if stores.is_empty() {
-                println!("No Kroger stores found within {} miles of {}", radius, zip_code);
+                println!(
+                    "No Kroger stores found within {} miles of {}",
+                    radius, zip_code
+                );
                 return;
             }
             println!("Kroger Stores near {}:\n", zip_code);

@@ -213,7 +213,9 @@ fn open_dm_channel(token: &str, user_id: &str) -> Result<String, String> {
             .map(|c| c.id)
             .ok_or_else(|| "No channel in response".to_string())
     } else {
-        Err(dm_response.error.unwrap_or_else(|| "Unknown error".to_string()))
+        Err(dm_response
+            .error
+            .unwrap_or_else(|| "Unknown error".to_string()))
     }
 }
 
