@@ -5,7 +5,7 @@ use std::time::{Duration as StdDuration, Instant};
 
 use axum::body::Bytes;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header::CONTENT_TYPE, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -44,6 +44,7 @@ use super::verify::{
 
 const SLACK_ENGAGED_THREAD_TTL: StdDuration = StdDuration::from_secs(12 * 60 * 60);
 const WECHAT_MP_PASSIVE_ACK_BODY: &str = "success";
+const WECHAT_MP_PASSIVE_REPLY_TEXT_ENV: &str = "WECHAT_MP_PASSIVE_REPLY_TEXT";
 
 /// Request payload for creating a workspace brief document
 #[derive(Debug, Deserialize)]
@@ -863,7 +864,7 @@ pub(super) async fn ingest_wechat_mp(
 
     let Some(route) = resolve_route(Channel::WeChatMp, &open_id, &state) else {
         info!("gateway no route for wechat_mp open_id={}", open_id);
-        return (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response();
+        return wechat_mp_passive_ack_response(Some(&message));
     };
 
     info!(
@@ -871,13 +872,14 @@ pub(super) async fn ingest_wechat_mp(
         route.tenant_id, route.employee_id
     );
 
+    let ack_response = wechat_mp_passive_ack_response(Some(&message));
     let queue = state.queue.clone();
     let external_message_id = message.message_id.clone();
     let raw_payload = body.clone();
     tokio::spawn(async move {
         process_wechat_mp_async(queue, route, external_message_id, message, raw_payload).await;
     });
-    (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response()
+    ack_response
 }
 
 async fn process_wechat_mp_async(
@@ -905,20 +907,76 @@ async fn process_wechat_mp_async(
 
     info!("wechat_mp async message enqueuing");
     let dedupe_key = envelope.dedupe_key.clone();
-    match tokio::task::spawn_blocking(move || queue.enqueue(&envelope)).await {
-        Ok(Ok(result)) => {
-            info!(
-                "wechat_mp async enqueue finished: inserted={} dedupe_key={}",
-                result.inserted, dedupe_key
-            );
-        }
-        Ok(Err(err)) => {
-            error!("wechat_mp async enqueue failed: {}", err);
-        }
-        Err(err) => {
-            error!("wechat_mp async enqueue join error: {}", err);
+    let (status_code, body) = enqueue_envelope(queue, envelope).await;
+    let enqueue_status = body
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+
+    if status_code == StatusCode::OK {
+        info!(
+            "wechat_mp async enqueue finished: status={} dedupe_key={}",
+            enqueue_status, dedupe_key
+        );
+    } else {
+        error!(
+            "wechat_mp async enqueue failed: http_status={} status={} dedupe_key={}",
+            status_code.as_u16(),
+            enqueue_status,
+            dedupe_key
+        );
+    }
+}
+
+fn wechat_mp_passive_ack_response(message: Option<&InboundMessage>) -> Response {
+    if let (Some(reply_text), Some(message)) = (resolve_wechat_mp_passive_reply_text(), message) {
+        if let Some(response) = build_wechat_mp_passive_text_response(message, &reply_text) {
+            return response;
         }
     }
+    (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response()
+}
+
+fn resolve_wechat_mp_passive_reply_text() -> Option<String> {
+    std::env::var(WECHAT_MP_PASSIVE_REPLY_TEXT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn build_wechat_mp_passive_text_response(message: &InboundMessage, reply_text: &str) -> Option<Response> {
+    let to_user = message
+        .metadata
+        .wechat_mp_open_id
+        .as_deref()
+        .unwrap_or(message.sender.as_str())
+        .trim();
+    let from_user = message
+        .metadata
+        .wechat_mp_app_id
+        .as_deref()
+        .unwrap_or(message.recipient.as_str())
+        .trim();
+
+    if to_user.is_empty() || from_user.is_empty() {
+        return None;
+    }
+
+    let cdata_safe = |value: &str| value.replace("]]>", "]]]]><![CDATA[>");
+    let xml = format!(
+        "<xml><ToUserName><![CDATA[{to_user}]]></ToUserName><FromUserName><![CDATA[{from_user}]]></FromUserName><CreateTime>{create_time}</CreateTime><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[{content}]]></Content></xml>",
+        to_user = cdata_safe(to_user),
+        from_user = cdata_safe(from_user),
+        create_time = Utc::now().timestamp(),
+        content = cdata_safe(reply_text),
+    );
+
+    Some((
+        StatusCode::OK,
+        [(CONTENT_TYPE, "application/xml; charset=utf-8")],
+        xml,
+    )
+        .into_response())
 }
 
 /// Handle Lark inbound messages (POST request)
@@ -1742,11 +1800,11 @@ mod tests {
     use sha1::{Digest, Sha1};
 
     #[derive(Default)]
-    struct RecordingQueue {
+    struct MockIngestionQueue {
         envelopes: Mutex<Vec<IngestionEnvelope>>,
     }
 
-    impl RecordingQueue {
+    impl MockIngestionQueue {
         fn len(&self) -> usize {
             self.envelopes
                 .lock()
@@ -1755,7 +1813,7 @@ mod tests {
         }
     }
 
-    impl IngestionQueue for RecordingQueue {
+    impl IngestionQueue for MockIngestionQueue {
         fn enqueue(
             &self,
             envelope: &IngestionEnvelope,
@@ -1884,7 +1942,7 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_wechat_mp_returns_success_when_parse_fails() {
-        let queue = Arc::new(RecordingQueue::default());
+        let queue = Arc::new(MockIngestionQueue::default());
         let state = make_gateway_state(queue, None);
         let body = Bytes::from_static(b"<xml><MsgType><![CDATA[text]]></MsgType></xml>");
         let params = make_wechat_mp_signed_params(&body);
@@ -1899,7 +1957,7 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_wechat_mp_returns_success_when_no_route_found() {
-        let queue = Arc::new(RecordingQueue::default());
+        let queue = Arc::new(MockIngestionQueue::default());
         let state = make_gateway_state(queue, None);
         let xml = make_wechat_mp_text_xml("openid-no-route", "gh_app_1", "hello", "1001");
         let body = Bytes::from(xml);
@@ -1915,7 +1973,7 @@ mod tests {
 
     #[tokio::test]
     async fn ingest_wechat_mp_acknowledges_immediately_and_enqueues_async() {
-        let queue = Arc::new(RecordingQueue::default());
+        let queue = Arc::new(MockIngestionQueue::default());
         let queue_for_assert = queue.clone();
         let state = make_gateway_state(queue, Some("employee-1"));
         let xml =
@@ -1937,6 +1995,40 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         assert_eq!(queue_for_assert.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn build_wechat_mp_passive_text_response_returns_xml() {
+        let message = InboundMessage {
+            channel: Channel::WeChatMp,
+            sender: "openid_123".to_string(),
+            sender_name: None,
+            recipient: "gh_app_456".to_string(),
+            subject: None,
+            text_body: Some("hello".to_string()),
+            html_body: None,
+            thread_id: "wechat_mp:gh_app_456:openid_123".to_string(),
+            message_id: Some("msg_1".to_string()),
+            attachments: Vec::new(),
+            reply_to: vec!["openid_123".to_string()],
+            raw_payload: Vec::new(),
+            metadata: ChannelMetadata {
+                wechat_mp_app_id: Some("gh_app_456".to_string()),
+                wechat_mp_open_id: Some("openid_123".to_string()),
+                ..Default::default()
+            },
+        };
+
+        let response = build_wechat_mp_passive_text_response(&message, "已收到，处理中")
+            .expect("xml response");
+        let status = response.status();
+        let body = response_body_text(response).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("<MsgType><![CDATA[text]]></MsgType>"));
+        assert!(body.contains("<ToUserName><![CDATA[openid_123]]></ToUserName>"));
+        assert!(body.contains("<FromUserName><![CDATA[gh_app_456]]></FromUserName>"));
+        assert!(body.contains("<Content><![CDATA[已收到，处理中]]></Content>"));
     }
 
     #[test]
