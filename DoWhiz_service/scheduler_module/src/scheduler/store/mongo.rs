@@ -1008,12 +1008,51 @@ fn derive_google_workspace_summary(
 
 fn derive_discord_summary(incoming_dir: &Path, thread_epoch: Option<u64>) -> Option<String> {
     let raw = read_text_by_epoch_or_latest(incoming_dir, "_discord_message.txt", thread_epoch)?;
-    if let Some((_, user_section)) = raw.split_once("User message:\n") {
-        if let Some(summary) = normalize_summary_text(user_section) {
-            return Some(summary);
+    let content = if let Some((_, user_section)) = raw.split_once("User message:\n") {
+        user_section
+    } else {
+        &raw
+    };
+    // Find first line with actual content after stripping Discord mentions
+    normalize_discord_summary_text(content)
+}
+
+/// Strip Discord mentions (<@123>, <@!123>) and find first line with actual content.
+fn normalize_discord_summary_text(raw: &str) -> Option<String> {
+    for line in raw.lines() {
+        let stripped = strip_discord_mentions(line.trim());
+        if !stripped.is_empty() {
+            return clean_summary_line(&stripped);
         }
     }
-    normalize_summary_text(&raw)
+    None
+}
+
+/// Remove Discord user mentions (<@123456>) and nickname mentions (<@!123456>).
+fn strip_discord_mentions(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '<' && chars.peek() == Some(&'@') {
+            // Consume until '>' or end
+            chars.next(); // consume '@'
+            if chars.peek() == Some(&'!') {
+                chars.next(); // consume '!' for nickname mentions
+            }
+            // Skip digits until '>'
+            while let Some(&c) = chars.peek() {
+                chars.next();
+                if c == '>' {
+                    break;
+                }
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn derive_text_file_summary(
@@ -1195,7 +1234,10 @@ mod tests {
     use mongodb::bson::doc;
     use tempfile::TempDir;
 
-    use super::{derive_request_summary, resolve_owner_scope};
+    use super::{
+        derive_request_summary, normalize_discord_summary_text, resolve_owner_scope,
+        strip_discord_mentions,
+    };
 
     #[test]
     fn resolve_owner_scope_extracts_user_id() {
@@ -1374,5 +1416,66 @@ mod tests {
             summary_no_epoch.as_deref(),
             Some("Third message about deployment.")
         );
+    }
+
+    #[test]
+    fn strip_discord_mentions_removes_user_mentions() {
+        assert_eq!(
+            strip_discord_mentions("<@1475574666830680175> hello world"),
+            "hello world"
+        );
+        assert_eq!(
+            strip_discord_mentions("hello <@123456789> world"),
+            "hello world"
+        );
+        assert_eq!(
+            strip_discord_mentions("<@111> <@222> <@333> actual content"),
+            "actual content"
+        );
+    }
+
+    #[test]
+    fn strip_discord_mentions_removes_nickname_mentions() {
+        assert_eq!(
+            strip_discord_mentions("<@!1475574666830680175> hello"),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn strip_discord_mentions_returns_empty_for_only_mentions() {
+        assert_eq!(strip_discord_mentions("<@1475574666830680175>"), "");
+        assert_eq!(strip_discord_mentions("<@123> <@456>"), "");
+    }
+
+    #[test]
+    fn strip_discord_mentions_preserves_non_mention_content() {
+        assert_eq!(strip_discord_mentions("no mentions here"), "no mentions here");
+        assert_eq!(strip_discord_mentions("email@example.com"), "email@example.com");
+        assert_eq!(strip_discord_mentions("<not a mention>"), "<not a mention>");
+    }
+
+    #[test]
+    fn normalize_discord_summary_text_skips_mention_only_lines() {
+        let input = "<@1475574666830680175>\nmy actual message";
+        assert_eq!(
+            normalize_discord_summary_text(input),
+            Some("my actual message".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_discord_summary_text_strips_mention_from_same_line() {
+        let input = "<@1475574666830680175> hi how are you";
+        assert_eq!(
+            normalize_discord_summary_text(input),
+            Some("hi how are you".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_discord_summary_text_returns_none_for_only_mentions() {
+        let input = "<@1475574666830680175>\n<@9876543210>";
+        assert_eq!(normalize_discord_summary_text(input), None);
     }
 }
