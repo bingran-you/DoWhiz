@@ -80,6 +80,13 @@ RUN arch="$(dpkg --print-architecture)" \
 # Install Azure CLI for warm pool queue operations
 RUN curl -fsSL https://aka.ms/InstallAzureCLIDeb | bash
 
+# Install Rust toolchain (cargo, rustc, etc.)
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
+  && chmod -R a+r /usr/local/rustup /usr/local/cargo
+
 # Install Python packages required by skills
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
     browser-use \
