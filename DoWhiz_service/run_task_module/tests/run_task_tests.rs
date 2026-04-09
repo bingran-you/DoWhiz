@@ -1027,6 +1027,7 @@ fn run_task_rejects_absolute_input_dir() {
         codex_disabled: false,
         channel: "email".to_string(),
         google_access_token: std::env::var("GOOGLE_ACCESS_TOKEN").ok(),
+        notion_access_token: std::env::var("NOTION_API_TOKEN").ok(),
         has_unified_account: true,
         user_identities: Default::default(),
         thread_epoch: None,

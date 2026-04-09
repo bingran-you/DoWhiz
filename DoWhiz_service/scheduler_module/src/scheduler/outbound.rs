@@ -663,6 +663,57 @@ pub(crate) fn execute_wechat_send(task: &SendReplyTask) -> Result<(), SchedulerE
     Ok(())
 }
 
+/// Execute a SendReplyTask via WeChat Official Account (微信公众号).
+pub(crate) fn execute_wechat_mp_send(task: &SendReplyTask) -> Result<(), SchedulerError> {
+    use crate::adapters::wechat_mp::WeChatMpOutboundAdapter;
+    use crate::channel::{ChannelMetadata, OutboundAdapter, OutboundMessage};
+
+    dotenvy::dotenv().ok();
+    let adapter = WeChatMpOutboundAdapter::from_env()
+        .map_err(|err| SchedulerError::TaskFailed(format!("WeChat MP config error: {}", err)))?;
+
+    let text_body = if task.html_path.exists() {
+        fs::read_to_string(&task.html_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let message = OutboundMessage {
+        channel: Channel::WeChatMp,
+        from: task.from.clone(),
+        to: task.to.clone(),
+        cc: vec![],
+        bcc: vec![],
+        subject: task.subject.clone(),
+        text_body,
+        html_body: String::new(),
+        html_path: Some(task.html_path.clone()),
+        attachments_dir: Some(task.attachments_dir.clone()),
+        thread_id: task.in_reply_to.clone(),
+        metadata: ChannelMetadata {
+            wechat_mp_open_id: task.to.first().cloned(),
+            ..Default::default()
+        },
+    };
+
+    let result = adapter
+        .send(&message)
+        .map_err(|err| SchedulerError::TaskFailed(format!("WeChat MP send failed: {}", err)))?;
+
+    if !result.success {
+        return Err(SchedulerError::TaskFailed(format!(
+            "WeChat MP API error: {}",
+            result.error.unwrap_or_default()
+        )));
+    }
+
+    info!(
+        "sent WeChat MP message to {:?}, message_id={}",
+        task.to, result.message_id
+    );
+    Ok(())
+}
+
 /// Execute a SendReplyTask via Lark (飞书).
 pub(crate) fn execute_lark_send(task: &SendReplyTask) -> Result<(), SchedulerError> {
     use crate::adapters::lark::LarkOutboundAdapter;

@@ -116,7 +116,7 @@ pub(super) fn prepare_workspace(
     // Email and GoogleDocs use HTML reply_email_draft.html
     let (reply_path, reply_attachments_dir) = match request.channel.to_lowercase().as_str() {
         "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
-        | "wechat" => (
+        | "wechat" | "wechat_mp" => (
             request.workspace_dir.join("reply_message.txt"),
             request.workspace_dir.join("reply_attachments"),
         ),

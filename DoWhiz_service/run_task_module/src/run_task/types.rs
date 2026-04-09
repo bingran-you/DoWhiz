@@ -37,6 +37,9 @@ pub struct UserIdentities {
     /// WeChat Work user IDs
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wechat_user_ids: Vec<String>,
+    /// WeChat Official Account open_ids
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wechat_mp_open_ids: Vec<String>,
     /// Zoom user IDs
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zoom_user_ids: Vec<String>,

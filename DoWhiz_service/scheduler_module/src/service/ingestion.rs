@@ -19,10 +19,11 @@ use super::email::{process_inbound_payload, record_human_approval_gate_reply, Po
 use super::inbound::{
     process_bluebubbles_event, process_discord_inbound_message, process_google_workspace_message,
     process_lark_event, process_notion_message, process_slack_event, process_sms_message,
-    process_telegram_event, process_wechat_event, process_whatsapp_event, process_zoom_message,
-    try_quick_response_bluebubbles, try_quick_response_discord,
+    process_telegram_event, process_wechat_event, process_wechat_mp_event, process_whatsapp_event,
+    process_zoom_message, try_quick_response_bluebubbles, try_quick_response_discord,
     try_quick_response_google_workspace, try_quick_response_lark, try_quick_response_slack,
-    try_quick_response_telegram, try_quick_response_wechat, try_quick_response_whatsapp,
+    try_quick_response_telegram, try_quick_response_wechat, try_quick_response_wechat_mp,
+    try_quick_response_whatsapp,
 };
 use super::BoxError;
 
@@ -300,7 +301,30 @@ fn process_ingestion_envelope(
                 return Ok(());
             }
             let raw_payload = envelope.raw_payload_bytes();
-            process_wechat_event(config, user_store, index_store, account_store, &message, &raw_payload)
+            process_wechat_event(
+                config,
+                user_store,
+                index_store,
+                account_store,
+                &message,
+                &raw_payload,
+            )
+        }
+        Channel::WeChatMp => {
+            let message = envelope.to_inbound_message();
+            if try_quick_response_wechat_mp(config, user_store, message_router, runtime, &message)?
+            {
+                return Ok(());
+            }
+            let raw_payload = envelope.raw_payload_bytes();
+            process_wechat_mp_event(
+                config,
+                user_store,
+                index_store,
+                account_store,
+                &message,
+                &raw_payload,
+            )
         }
         Channel::Lark => {
             let message = envelope.to_inbound_message();
@@ -309,7 +333,14 @@ fn process_ingestion_envelope(
                 return Ok(());
             }
             let raw_payload = envelope.raw_payload_bytes();
-            process_lark_event(config, user_store, index_store, account_store, &message, &raw_payload)
+            process_lark_event(
+                config,
+                user_store,
+                index_store,
+                account_store,
+                &message,
+                &raw_payload,
+            )
         }
         Channel::Zoom => {
             let message = envelope.to_inbound_message();

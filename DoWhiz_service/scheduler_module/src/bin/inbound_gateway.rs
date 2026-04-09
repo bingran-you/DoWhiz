@@ -48,15 +48,15 @@ use config::{
 use discord::spawn_discord_gateway;
 use google_drive_webhook::handle_google_drive_webhook;
 use google_workspace::spawn_google_workspace_poller;
-use zoom_rtms::handle_zoom_rtms_webhook;
 use handlers::{
     create_90_day_plan, create_workspace_brief, health, ingest_bluebubbles, ingest_lark,
-    ingest_postmark, ingest_slack, ingest_sms, ingest_telegram, ingest_wechat, ingest_whatsapp,
-    verify_wechat_webhook, verify_whatsapp_webhook,
+    ingest_postmark, ingest_slack, ingest_sms, ingest_telegram, ingest_wechat, ingest_wechat_mp,
+    ingest_whatsapp, verify_wechat_mp_webhook, verify_wechat_webhook, verify_whatsapp_webhook,
 };
 use notion_webhook::ingest_notion_webhook;
 use routes::normalize_routes;
 use state::{build_address_map, GatewayConfig, GatewayState};
+use zoom_rtms::handle_zoom_rtms_webhook;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -248,6 +248,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/whatsapp/webhook", post(ingest_whatsapp))
         .route("/wechat/webhook", get(verify_wechat_webhook))
         .route("/wechat/webhook", post(ingest_wechat))
+        .route("/wechat_mp/webhook", get(verify_wechat_mp_webhook))
+        .route("/wechat_mp/webhook", post(ingest_wechat_mp))
         .route("/lark/webhook", post(ingest_lark))
         .route("/webhook/notion", post(ingest_notion_webhook))
         .route(

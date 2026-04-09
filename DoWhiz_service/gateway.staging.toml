@@ -47,6 +47,13 @@ key = "*"
 employee_id = "boiled_egg"
 tenant_id = "staging"
 
+# WeChat Official Account routing
+[[routes]]
+channel = "wechat_mp"
+key = "*"
+employee_id = "boiled_egg"
+tenant_id = "staging"
+
 # WhatsApp routing
 [[routes]]
 channel = "whatsapp"

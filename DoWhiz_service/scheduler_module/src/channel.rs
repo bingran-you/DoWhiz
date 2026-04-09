@@ -34,6 +34,8 @@ pub enum Channel {
     Notion,
     /// WeChat Work (企业微信) via qyapi
     WeChat,
+    /// WeChat Official Account (微信公众号) via MP webhook/API
+    WeChatMp,
     /// Lark (飞书) via Open Platform API
     Lark,
     /// Zoom RTMS audio stream
@@ -61,6 +63,7 @@ impl std::fmt::Display for Channel {
             Channel::BlueBubbles => write!(f, "bluebubbles"),
             Channel::Notion => write!(f, "notion"),
             Channel::WeChat => write!(f, "wechat"),
+            Channel::WeChatMp => write!(f, "wechat_mp"),
             Channel::Lark => write!(f, "lark"),
             Channel::Zoom => write!(f, "zoom"),
         }
@@ -84,6 +87,7 @@ impl std::str::FromStr for Channel {
             "bluebubbles" | "imessage" => Ok(Channel::BlueBubbles),
             "notion" => Ok(Channel::Notion),
             "wechat" | "weixin" => Ok(Channel::WeChat),
+            "wechat_mp" | "wechatmp" => Ok(Channel::WeChatMp),
             "lark" | "feishu" => Ok(Channel::Lark),
             "zoom" => Ok(Channel::Zoom),
             _ => Err(format!("unknown channel: {}", s)),
@@ -215,6 +219,12 @@ pub struct ChannelMetadata {
     pub wechat_user_id: Option<String>,
     /// WeChat Work-specific: Agent ID (应用ID)
     pub wechat_agent_id: Option<String>,
+    /// WeChat Official Account-specific: App ID
+    pub wechat_mp_app_id: Option<String>,
+    /// WeChat Official Account-specific: OpenID
+    pub wechat_mp_open_id: Option<String>,
+    /// WeChat Official Account-specific: inbound message type
+    pub wechat_mp_msg_type: Option<String>,
     /// Lark-specific: App ID
     pub lark_app_id: Option<String>,
     /// Lark-specific: Tenant key (workspace identifier)
@@ -359,6 +369,7 @@ mod tests {
         assert_eq!(Channel::GoogleSlides.to_string(), "google_slides");
         assert_eq!(Channel::BlueBubbles.to_string(), "bluebubbles");
         assert_eq!(Channel::WeChat.to_string(), "wechat");
+        assert_eq!(Channel::WeChatMp.to_string(), "wechat_mp");
     }
 
     #[test]
@@ -368,6 +379,13 @@ mod tests {
         assert_eq!("WECHAT".parse::<Channel>().unwrap(), Channel::WeChat);
         assert_eq!("weixin".parse::<Channel>().unwrap(), Channel::WeChat);
         assert_eq!("Weixin".parse::<Channel>().unwrap(), Channel::WeChat);
+    }
+
+    #[test]
+    fn channel_from_str_wechat_mp() {
+        assert_eq!("wechat_mp".parse::<Channel>().unwrap(), Channel::WeChatMp);
+        assert_eq!("WECHAT_MP".parse::<Channel>().unwrap(), Channel::WeChatMp);
+        assert_eq!("wechatmp".parse::<Channel>().unwrap(), Channel::WeChatMp);
     }
 
     #[test]
@@ -431,6 +449,7 @@ mod tests {
             Channel::GoogleSlides,
             Channel::BlueBubbles,
             Channel::WeChat,
+            Channel::WeChatMp,
         ];
         for channel in channels {
             let json = serde_json::to_string(&channel).unwrap();

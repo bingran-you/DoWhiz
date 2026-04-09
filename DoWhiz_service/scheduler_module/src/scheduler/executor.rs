@@ -85,10 +85,12 @@ fn sync_blob_memo_to_workspace(account_id: Uuid, workspace_memory_dir: &Path) ->
 use super::outbound::{
     execute_bluebubbles_send, execute_discord_send, execute_email_send, execute_google_docs_send,
     execute_lark_send, execute_notion_send, execute_slack_send, execute_sms_send,
-    execute_telegram_send, execute_wechat_send, execute_whatsapp_send,
+    execute_telegram_send, execute_wechat_mp_send, execute_wechat_send, execute_whatsapp_send,
 };
 use super::types::{SchedulerError, SendReplyTask, TaskExecution, TaskKind};
-use super::utils::{load_google_access_token_from_service_env, load_notion_access_token_for_account};
+use super::utils::{
+    load_google_access_token_from_service_env, load_notion_access_token_for_account,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GitHubInboundContext {
@@ -451,12 +453,11 @@ fn identifiers_to_user_identities(
             "wechat" | "wechat_user_id" => {
                 result.wechat_user_ids.push(identifier.identifier.clone())
             }
-            "zoom" | "zoom_user_id" => {
-                result.zoom_user_ids.push(identifier.identifier.clone())
-            }
-            "github" => {
-                result.github_usernames.push(identifier.identifier.clone())
-            }
+            "wechat_mp" | "wechat_mp_open_id" => result
+                .wechat_mp_open_ids
+                .push(identifier.identifier.clone()),
+            "zoom" | "zoom_user_id" => result.zoom_user_ids.push(identifier.identifier.clone()),
+            "github" => result.github_usernames.push(identifier.identifier.clone()),
             _ => {
                 // Unknown identifier type, skip
             }
@@ -635,6 +636,9 @@ fn dispatch_send_reply_task(task: &SendReplyTask) -> Result<(), SchedulerError> 
         }
         Channel::WeChat => {
             execute_wechat_send(task)?;
+        }
+        Channel::WeChatMp => {
+            execute_wechat_mp_send(task)?;
         }
         Channel::Lark => {
             execute_lark_send(task)?;
