@@ -38,6 +38,7 @@ RUN if [ -f /etc/apt/sources.list ]; then \
     tesseract-ocr \
     libmagic1 \
     fonts-dejavu \
+    build-essential \
   && rm -rf /var/lib/apt/lists/* /tmp/apt-cache
 
 # Install Node.js 20.x (LTS)
@@ -85,6 +86,7 @@ ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
+  && /usr/local/cargo/bin/rustup component add rustfmt clippy \
   && chmod -R a+r /usr/local/rustup /usr/local/cargo
 
 # Install Python packages required by skills
