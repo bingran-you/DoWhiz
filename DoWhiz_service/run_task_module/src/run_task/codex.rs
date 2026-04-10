@@ -1908,7 +1908,7 @@ fn run_azure_aci_execution(
 
     let script = format!(
         "set -euo pipefail\n\
-export PATH=/app/bin:$PATH\n\
+export PATH=/app/bin:/usr/local/cargo/bin:$PATH\n\
 export PLAYWRIGHT_BROWSERS_PATH=\"${{PLAYWRIGHT_BROWSERS_PATH:-/app/.cache/ms-playwright}}\"\n\
 export XDG_CACHE_HOME=\"${{XDG_CACHE_HOME:-/tmp/.cache}}\"\n\
 export NPM_CONFIG_CACHE=\"${{NPM_CONFIG_CACHE:-/tmp/.npm}}\"\n\
