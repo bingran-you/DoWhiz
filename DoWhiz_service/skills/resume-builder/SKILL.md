@@ -83,7 +83,30 @@ section_header.paragraph_format.space_before = Pt(8)
 
 ### Section Headers
 - ALL CAPS, bold
-- Horizontal line underneath (optional)
+- **Horizontal line underneath (required)** - Add a thin border/rule directly below each section header
+
+In `python-docx`, add a bottom border to the section header paragraph:
+```python
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+def add_bottom_border(paragraph):
+    """Add a thin horizontal line under a paragraph."""
+    pPr = paragraph._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), '6')  # Border thickness (1/8 pt units, so 6 = 0.75pt)
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), '000000')
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+# Usage:
+section_header = doc.add_paragraph("PROFESSIONAL EXPERIENCE")
+section_header.runs[0].bold = True
+add_bottom_border(section_header)
+```
 
 ### Company/School Lines
 - **Name** bold, left-aligned
