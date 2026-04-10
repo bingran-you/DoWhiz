@@ -422,7 +422,8 @@ See `.agents/skills/google-*/SKILL.md` for detailed command references.
 Build Tools & Compilers (available in this environment):
 - `python3` - Python 3 interpreter (pip packages available)
 - `node` / `npm` / `pnpm` - Node.js runtime and package managers
-- `cargo` / `rustc` - Rust toolchain (installed at /usr/local/cargo/bin)
+- `cargo` / `rustc` / `rustfmt` / `clippy` - Rust toolchain (at /usr/local/cargo/bin)
+- `gcc` / `g++` / `make` - C/C++ compiler and build tools
 - `git` - Version control
 - `pandoc` - Document conversion
 - `tesseract` - OCR
