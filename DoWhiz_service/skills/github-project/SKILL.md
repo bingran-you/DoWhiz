@@ -169,6 +169,38 @@ gh run view RUN_ID --repo OWNER/REPO
 gh run watch RUN_ID --repo OWNER/REPO
 ```
 
+### 7. Build and Test Code
+
+After writing code, **always compile/build and run tests** before committing. Use the appropriate toolchain based on the project language:
+
+**Rust:**
+```bash
+cargo build
+cargo test
+```
+
+**Python:**
+```bash
+python3 -m py_compile main.py  # Syntax check
+python3 -m pytest              # If pytest is available
+python3 -m unittest discover   # Standard library tests
+```
+
+**Node.js/TypeScript:**
+```bash
+npm install
+npm run build   # If build script exists
+npm test        # If test script exists
+```
+
+**Go:**
+```bash
+go build ./...
+go test ./...
+```
+
+If compilation or tests fail, **fix the errors** before committing. Iterate until the build passes and tests succeed. If you cannot resolve an error after multiple attempts, report the issue to the user with the error details.
+
 ## Example Workflows
 
 ### Setting Up a New Project Repository
