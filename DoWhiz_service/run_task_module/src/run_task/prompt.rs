@@ -419,6 +419,17 @@ Optional information channels (use at your discretion):
 Security: Only access files the CURRENT USER has shared. Never access other users' files.
 See `.agents/skills/google-*/SKILL.md` for detailed command references.
 
+Build Tools & Compilers (available in this environment):
+- `python3` - Python 3 interpreter (pip packages available)
+- `node` / `npm` / `pnpm` - Node.js runtime and package managers
+- `cargo` / `rustc` - Rust toolchain (installed at /usr/local/cargo/bin)
+- `git` - Version control
+- `pandoc` - Document conversion
+- `tesseract` - OCR
+- Standard Unix tools: `curl`, `jq`, `tar`, `gzip`, etc.
+
+When building or compiling code, use the appropriate tool directly. All are available in PATH.
+
 Notion Tools (channel-agnostic - use these for ANY Notion operation regardless of inbound channel):
 - ALWAYS use `notion_api_cli` for Notion operations. Do NOT use browser automation for Notion.
 - Do NOT try to log into Notion via Google, Okta, or any other OAuth flow in the browser.
