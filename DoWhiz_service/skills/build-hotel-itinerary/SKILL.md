@@ -63,7 +63,7 @@ If the user attaches an itinerary (PDF, image, document, or text), **treat it as
 
 The user's itinerary represents their confirmed travel plans. Your job is to find hotel options that fit their plan, not to improve or modify the plan.
 
-**Language:** Match the language of the output document to the language of the attachment. If the user sends an itinerary in Chinese, produce the Word document in Chinese. If in English, use English. This applies to all text: headers, table content, notes, and labels.
+**IMPORTANT - Language:** Match the language of the output document to the language of the attachment. If the user sends an itinerary in Chinese, produce the Word document in Chinese. If in English, use English. This applies to all text: headers, table content, notes, and labels.
 
 ## Workflow
 
