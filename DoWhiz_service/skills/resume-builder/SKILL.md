@@ -64,22 +64,47 @@ Interests: [Personal interests, activities]
 - Margins: 0.5-0.75 inches all sides
 
 ### Spacing (Critical)
-- **Between experiences/entries:** 5pt space (equivalent to ~5px newline)
-- **Between sections:** 8-10pt space
-- **After section header:** 3pt space
-- **Between bullet points:** 0pt (single-spaced)
-- **Line spacing within paragraphs:** Single (1.0)
+
+**Within a single experience block (company name → title → bullets):** NO extra spacing. These elements should be tight with 0pt space between them.
+
+**Between separate experiences:** 5pt space ONLY. Add this after the last bullet of one experience, before the next company name.
+
+**Between sections:** 8-10pt space before each section header.
+
+```
+[Company A]                    ← 0pt after
+[Title A]                      ← 0pt after  
+• Bullet 1                     ← 0pt after
+• Bullet 2                     ← 5pt after (end of experience block)
+
+[Company B]                    ← starts here, 5pt gap above
+[Title B]                      ← 0pt after
+• Bullet 1                     ← 0pt after
+```
 
 In `python-docx`:
 ```python
 from docx.shared import Pt
 
-# Add 5pt space after a paragraph (between experiences)
-paragraph.paragraph_format.space_after = Pt(5)
+# Within an experience: no extra spacing
+company_para.paragraph_format.space_after = Pt(0)
+title_para.paragraph_format.space_after = Pt(0)
+bullet_para.paragraph_format.space_after = Pt(0)
 
-# Add 8pt space before a section header
+# ONLY the last bullet of an experience gets 5pt after
+last_bullet.paragraph_format.space_after = Pt(5)
+
+# Section headers get space before
 section_header.paragraph_format.space_before = Pt(8)
 ```
+
+### Line Length (Important)
+
+**Maximize line usage.** Avoid dangling text where a few words wrap onto the next line. If a bullet point has 2-3 words orphaned on a new line:
+- Rephrase to fit on one line, OR
+- Expand the content to better fill the second line
+
+Short orphaned lines waste vertical space and look unpolished.
 
 ### Section Headers
 - ALL CAPS, bold
@@ -120,7 +145,7 @@ add_bottom_border(section_header)
 - Use solid bullet (•)
 - Start with strong action verbs
 - Include quantifiable metrics when possible
-- 2-4 bullets per position
+- Include as many bullets as needed to showcase the role — the only constraint is the one-page limit
 
 ## Workflow
 
@@ -206,16 +231,18 @@ Do NOT leave sections empty — always include placeholder text so the user know
 
 **Improvement:** Automated, Enhanced, Improved, Reduced, Streamlined
 
-## One-Page Tips
+## One-Page Constraint
 
-If content exceeds one page:
+**Fill the page.** Include all relevant experience, projects, and skills. Do not artificially limit content — use the full page.
+
+**If content exceeds one page**, trim in this order:
 1. Remove oldest/least relevant experience first
-2. Reduce bullets per position (aim for 2-3)
-3. Combine similar skills
-4. Remove coursework if space-constrained
-5. Trim project descriptions
-6. Reduce margins slightly (min 0.5 inches)
-7. Use 10pt font for body (never smaller)
+2. Trim verbose bullet points (tighten wording, not remove)
+3. Remove less relevant coursework
+4. Condense project descriptions
+5. Reduce margins slightly (min 0.5 inches)
+
+**Do NOT** pre-emptively limit bullets or content. The goal is a full, dense one-page resume.
 
 ## Output
 
