@@ -5,6 +5,12 @@ use crate::google_auth::GoogleAuth;
 
 use super::models::{CommentReply, DocumentStyles, TextStyleInfo};
 
+/// Calculate the UTF-16 code unit length of a string.
+/// Google Docs API uses UTF-16 indices, not Unicode scalar values.
+fn utf16_len(s: &str) -> i64 {
+    s.encode_utf16().count() as i64
+}
+
 /// Adapter for posting replies to Google Docs comments.
 #[derive(Debug, Clone)]
 pub struct GoogleDocsOutboundAdapter {
@@ -245,13 +251,23 @@ impl GoogleDocsOutboundAdapter {
         // Find the search text in full_text
         if let Some(string_pos) = full_text.find(search_text) {
             // Convert string position to document index
+            // We need to calculate UTF-16 offset from the last known position
             let mut doc_start_idx = 0i64;
+            let mut last_str_pos = 0usize;
+            let mut last_doc_idx = 0i64;
+
             for (str_pos, doc_idx) in &text_positions {
                 if *str_pos <= string_pos {
-                    doc_start_idx = *doc_idx + (string_pos - str_pos) as i64;
+                    last_str_pos = *str_pos;
+                    last_doc_idx = *doc_idx;
                 }
             }
-            let doc_end_idx = doc_start_idx + search_text.len() as i64;
+
+            // Calculate the UTF-16 offset from last_str_pos to string_pos
+            let text_between = &full_text[last_str_pos..string_pos];
+            doc_start_idx = last_doc_idx + utf16_len(text_between);
+
+            let doc_end_idx = doc_start_idx + utf16_len(search_text);
             return Ok(Some((doc_start_idx, doc_end_idx)));
         }
 
@@ -326,7 +342,7 @@ impl GoogleDocsOutboundAdapter {
                 "updateTextStyle": {
                     "range": {
                         "startIndex": end_idx,
-                        "endIndex": end_idx + new_text.chars().count() as i64
+                        "endIndex": end_idx + utf16_len(new_text)
                     },
                     "textStyle": {
                         "foregroundColor": {
@@ -403,7 +419,7 @@ impl GoogleDocsOutboundAdapter {
                 "updateTextStyle": {
                     "range": {
                         "startIndex": end_idx,
-                        "endIndex": end_idx + new_text.chars().count() as i64
+                        "endIndex": end_idx + utf16_len(new_text)
                     },
                     "textStyle": {
                         "foregroundColor": {
@@ -425,6 +441,114 @@ impl GoogleDocsOutboundAdapter {
         self.apply_document_edit(document_id, requests)?;
         info!("Suggested replacement: '{}' -> '{}'", old_text, new_text);
         Ok(())
+    }
+
+    /// Batch replace multiple text segments with revision marks (suggesting mode).
+    /// This is more efficient than calling suggest_replace multiple times as it
+    /// makes fewer API calls and handles index adjustments correctly.
+    ///
+    /// # Arguments
+    /// * `document_id` - The Google Docs document ID
+    /// * `replacements` - List of (old_text, new_text) pairs to replace
+    ///
+    /// # Returns
+    /// Number of successful replacements
+    pub fn batch_suggest_replace(
+        &self,
+        document_id: &str,
+        replacements: &[(&str, &str)],
+    ) -> Result<usize, AdapterError> {
+        if replacements.is_empty() {
+            return Ok(0);
+        }
+
+        // First, find all text positions
+        // We need to process replacements from end to start to avoid index shifting issues
+        let mut positioned_replacements: Vec<(i64, i64, &str, &str)> = Vec::new();
+
+        for (old_text, new_text) in replacements {
+            if let Some((start_idx, end_idx)) = self.find_text_position(document_id, old_text)? {
+                positioned_replacements.push((start_idx, end_idx, old_text, new_text));
+            } else {
+                info!("Text not found for batch replacement: '{}'", old_text);
+            }
+        }
+
+        if positioned_replacements.is_empty() {
+            return Ok(0);
+        }
+
+        // Sort by start index in descending order (process from end to start)
+        positioned_replacements.sort_by(|a, b| b.0.cmp(&a.0));
+
+        // Build all requests in one batch
+        let mut requests: Vec<serde_json::Value> = Vec::new();
+
+        for (start_idx, end_idx, _old_text, new_text) in &positioned_replacements {
+            // Mark old text as deleted (red + strikethrough)
+            requests.push(serde_json::json!({
+                "updateTextStyle": {
+                    "range": {
+                        "startIndex": start_idx,
+                        "endIndex": end_idx
+                    },
+                    "textStyle": {
+                        "foregroundColor": {
+                            "color": {
+                                "rgbColor": {
+                                    "red": 1.0,
+                                    "green": 0.0,
+                                    "blue": 0.0
+                                }
+                            }
+                        },
+                        "strikethrough": true
+                    },
+                    "fields": "foregroundColor,strikethrough"
+                }
+            }));
+
+            // Insert new text right after old text
+            requests.push(serde_json::json!({
+                "insertText": {
+                    "location": {
+                        "index": end_idx
+                    },
+                    "text": new_text
+                }
+            }));
+
+            // Make new text blue
+            requests.push(serde_json::json!({
+                "updateTextStyle": {
+                    "range": {
+                        "startIndex": end_idx,
+                        "endIndex": end_idx + utf16_len(new_text)
+                    },
+                    "textStyle": {
+                        "foregroundColor": {
+                            "color": {
+                                "rgbColor": {
+                                    "red": 0.0,
+                                    "green": 0.0,
+                                    "blue": 1.0
+                                }
+                            }
+                        },
+                        "strikethrough": false
+                    },
+                    "fields": "foregroundColor,strikethrough"
+                }
+            }));
+        }
+
+        self.apply_document_edit(document_id, requests)?;
+        let count = positioned_replacements.len();
+        info!(
+            "Batch suggested {} replacements in document {}",
+            count, document_id
+        );
+        Ok(count)
     }
 
     /// Apply all suggestions in the document.
@@ -515,11 +639,11 @@ impl GoogleDocsOutboundAdapter {
         // Build requests: delete red text (in reverse order) then normalize blue text
         let mut requests: Vec<serde_json::Value> = Vec::new();
 
-        // Sort ranges_to_delete in reverse order (to avoid index shifting issues)
+        // Sort ranges_to_delete in reverse order (to avoid index shifting issues during batch execution)
         let mut sorted_delete = ranges_to_delete.clone();
         sorted_delete.sort_by(|a, b| b.0.cmp(&a.0));
 
-        for (start_idx, end_idx) in sorted_delete {
+        for (start_idx, end_idx) in &sorted_delete {
             requests.push(serde_json::json!({
                 "deleteContentRange": {
                     "range": {
@@ -531,17 +655,36 @@ impl GoogleDocsOutboundAdapter {
         }
 
         // Normalize blue text to black (remove color)
+        // After all deletions are executed, we need to adjust blue text indices
+        // by the total length of all deletions that occurred BEFORE each blue range.
+        //
+        // Note: In batchUpdate, requests execute sequentially. Deletions are in reverse order,
+        // so higher indices are deleted first, not affecting lower indices until their turn.
+        // After all deletions complete, the net effect is that all characters in deleted ranges
+        // are removed. For a blue range at (start, end), we subtract the total length of all
+        // deleted ranges that ended at or before the blue range's start position.
         let ranges_to_normalize_len = ranges_to_normalize.len();
         for (start_idx, end_idx) in ranges_to_normalize {
-            // Adjust indices based on deletions that occurred before this range
-            let mut adjusted_start = start_idx;
-            let mut adjusted_end = end_idx;
+            // Calculate total deletion offset: sum of all deleted ranges that end at or before start_idx
+            let mut total_deletion_offset: i64 = 0;
             for (del_start, del_end) in &ranges_to_delete {
+                // A deletion affects this blue range if it ends at or before the blue range starts
+                // (del_end <= start_idx means the deletion is entirely before this range)
                 if *del_end <= start_idx {
-                    let deleted_length = del_end - del_start;
-                    adjusted_start -= deleted_length;
-                    adjusted_end -= deleted_length;
+                    total_deletion_offset += del_end - del_start;
                 }
+            }
+
+            let adjusted_start = start_idx - total_deletion_offset;
+            let adjusted_end = end_idx - total_deletion_offset;
+
+            // Sanity check: ensure indices are valid
+            if adjusted_start < 1 || adjusted_end <= adjusted_start {
+                error!(
+                    "Invalid adjusted indices: original=({}, {}), adjusted=({}, {}), offset={}",
+                    start_idx, end_idx, adjusted_start, adjusted_end, total_deletion_offset
+                );
+                continue;
             }
 
             requests.push(serde_json::json!({
@@ -658,11 +801,11 @@ impl GoogleDocsOutboundAdapter {
         // Build requests: delete blue text (in reverse order) then restore red text
         let mut requests: Vec<serde_json::Value> = Vec::new();
 
-        // Sort ranges_to_delete in reverse order
+        // Sort ranges_to_delete in reverse order (to avoid index shifting issues during batch execution)
         let mut sorted_delete = ranges_to_delete.clone();
         sorted_delete.sort_by(|a, b| b.0.cmp(&a.0));
 
-        for (start_idx, end_idx) in sorted_delete {
+        for (start_idx, end_idx) in &sorted_delete {
             requests.push(serde_json::json!({
                 "deleteContentRange": {
                     "range": {
@@ -674,17 +817,27 @@ impl GoogleDocsOutboundAdapter {
         }
 
         // Restore red text to normal (remove color and strikethrough)
+        // Calculate index adjustments based on all deletions that occur before each range
         let ranges_to_restore_len = ranges_to_restore.len();
         for (start_idx, end_idx) in ranges_to_restore {
-            // Adjust indices based on deletions
-            let mut adjusted_start = start_idx;
-            let mut adjusted_end = end_idx;
+            // Calculate total deletion offset: sum of all deleted ranges that end at or before start_idx
+            let mut total_deletion_offset: i64 = 0;
             for (del_start, del_end) in &ranges_to_delete {
                 if *del_end <= start_idx {
-                    let deleted_length = del_end - del_start;
-                    adjusted_start -= deleted_length;
-                    adjusted_end -= deleted_length;
+                    total_deletion_offset += del_end - del_start;
                 }
+            }
+
+            let adjusted_start = start_idx - total_deletion_offset;
+            let adjusted_end = end_idx - total_deletion_offset;
+
+            // Sanity check: ensure indices are valid
+            if adjusted_start < 1 || adjusted_end <= adjusted_start {
+                error!(
+                    "Invalid adjusted indices in discard: original=({}, {}), adjusted=({}, {}), offset={}",
+                    start_idx, end_idx, adjusted_start, adjusted_end, total_deletion_offset
+                );
+                continue;
             }
 
             requests.push(serde_json::json!({
