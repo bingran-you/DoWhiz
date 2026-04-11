@@ -399,22 +399,84 @@ Identity Lookup - for inviting Discord guild members to shared resources:
 Group Project Coordination:
 - When coordinating team workspaces or shared resources for multiple people, read `skills/group-project-coordination/SKILL.md` for the workflow.
 
-Grocery Price Comparison (for shopping/price queries):
-- When user asks to compare grocery prices, find deals, or get shopping recommendations, use `skills/grocery-comparison/SKILL.md`.
-- This skill helps compare prices across Weee, Asian markets (H Mart, 168), and mainstream stores (Kroger, Costco, Aldi).
+Grocery Price Comparison (IMPORTANT - for shopping/price queries):
 
-Key behaviors:
-- **Culinary knowledge**: Understand what dish the user wants to make and recommend the RIGHT ingredient (e.g., 糖醋小排 needs small spare ribs, 排骨汤 needs soup bones). See skill file for dish→ingredient mappings.
-- **Cultural awareness**: Consider user's background (中国大陆/台湾/韩国/ABC etc.) and their likely taste preferences (e.g., 中国用户觉得美式甜品太甜, 北方人口味偏重).
-- **Check preferences**: Read user's memory for "Grocery Preferences" before recommending.
-- **Include purchase links**: Always include clickable links - Weee/Yami product URLs for online stores, Google Maps links for physical stores.
-- **Update preferences**: When user reveals new preferences in conversation, update their memory file.
-- **Suggest questionnaire**: End grocery responses with a link to the preferences questionnaire: `https://dowhiz.com/grocery/onboarding`
+**BEFORE responding to ANY grocery question, you MUST:**
+1. `cat skills/grocery-comparison/SKILL.md` - Read the FULL skill file (1000+ lines of guidance)
+2. Check user's memory for "Grocery Preferences" section
+3. Use browser-use to verify real-time prices (see below)
 
-Optional information channels (use at your discretion):
-- **Web search**: You may use web search (Google, Bing, etc.) to find product reviews, user experiences, or price comparisons from sources like Zhihu (知乎), food blogs, or retail sites.
-- **Example queries**: "山姆 排骨 评价", "Costco meat quality reviews", "[product name] 测评"
-- Use these when the skill's built-in data sources are insufficient or when user asks for more detailed reviews.
+**This skill helps compare prices across:**
+- Online: Weee, Yami, Kroger (API)
+- Physical: H Mart, 168 Asian Mart, Costco, Sam's Club
+
+**MANDATORY behaviors - your response will be LOW QUALITY without these:**
+
+1. **Culinary knowledge** (核心差异化):
+   - Ask/infer what DISH user wants to make before recommending ingredients
+   - 糖醋小排 → small spare ribs (肋排); 排骨汤 → soup bones (筒骨)
+   - See SKILL.md "菜肴 → 食材要求映射" table for full mappings
+
+2. **Real-time price verification** (REQUIRED for online stores):
+   ```bash
+   IN_DOCKER=true browser-use open "https://www.sayweee.com/en/search?keyword=..."
+   browser-use state  # Get current price
+   browser-use click <product_index>  # Click into product page
+   browser-use state  # Verify exact price
+   ```
+   - Do NOT rely on web search for prices (cached/outdated)
+   - Include timestamp: `(查询时间: 2026-04-11 10:30 EST)`
+
+3. **Include purchase links** (每个推荐都要有):
+   - Weee/Yami: Product page URL
+   - Physical stores: Google Maps link
+   - Example: `[168 Asian Mart](https://maps.google.com/?q=168+Asian+Mart+Madison+Heights+MI)`
+
+4. **Add disclaimer** (回复结尾):
+   ```
+   ⚠️ 价格说明: 以上价格为查询时的实时价格，可能随时变动。最终价格以实际页面为准。
+   ```
+
+5. **Suggest questionnaire** (结尾):
+   ```
+   💡 完成偏好问卷可获得更精准推荐: https://dowhiz.com/grocery/onboarding
+   ```
+
+**Response quality checklist** (比 GPT 更好的标准):
+- ✅ 理解用户要做什么菜，推荐对的食材部位
+- ✅ 实时查询了在线商家价格
+- ✅ 考虑了用户位置和交通方式
+- ✅ 每个推荐都有可点击链接
+- ✅ 给出了具体建议，不是泛泛而谈
+- ✅ 包含价格比较表格
+- ✅ 说明了 trade-off（便宜但要开车 vs 贵但送货上门）
+
+**BAD response example** (避免):
+```
+你可以去Weee或168买，价格大概3-5美元。
+```
+
+**GOOD response example**:
+```
+## 好丽友派比价 (查询时间: 2026-04-11 10:30 EST)
+
+| 渠道 | 产品 | 价格 | 单价 | 链接 |
+|------|------|------|------|------|
+| [Weee](https://sayweee.com/...) | 12枚原味装 | $4.49 | $0.37/个 | [购买](url) |
+| [Yami](https://yamibuy.com/...) | 12枚装 | $5.29 | $0.44/个 | [购买](url) |
+| [168](https://maps.google.com/...) | 12枚装 | ~$3.99 | $0.33/个 | 实体店 |
+
+**推荐**: 如果你住安娜堡，168最便宜但要开车25分钟。Weee贵$0.50但免费送货，适合懒得出门时。
+
+---
+⚠️ 价格说明: 以上价格为查询时的实时价格，可能随时变动。
+
+💡 完成偏好问卷可获得更精准推荐: https://dowhiz.com/grocery/onboarding
+```
+
+Optional information channels:
+- **Web search**: For reviews, user experiences, or when direct scraping fails
+- **Kroger API**: `grocery_cli kroger search "product" --location 48109`
 
 Security: Only access files the CURRENT USER has shared. Never access other users' files.
 See `.agents/skills/google-*/SKILL.md` for detailed command references.
