@@ -13,6 +13,7 @@ use crate::account_store::{
 };
 use crate::blob_store::get_blob_store;
 use crate::channel::Channel;
+use crate::grocery_store::sync_grocery_preferences_to_workspace;
 use crate::github_inbound::{
     extract_github_sender_login_from_postmark_payload, is_github_notifications_postmark_payload,
 };
@@ -1419,6 +1420,19 @@ impl TaskExecutor for ModuleExecutor {
                         task.workspace_dir.display()
                     );
                 }
+
+                // Sync grocery preferences to workspace memory
+                // Extract user_id from workspace path: users/{user_id}/workspaces/...
+                let grocery_user_id = user_memory_dir
+                    .as_ref()
+                    .and_then(|dir| dir.parent())
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_string());
+                if let Some(ref uid) = grocery_user_id {
+                    sync_grocery_preferences_to_workspace(uid, &workspace_memory_dir);
+                }
+
                 if let Some(reason) = run_task_supersede_reason(task) {
                     info!(
                         "skip superseded run_task before agent launch in {}: {}",

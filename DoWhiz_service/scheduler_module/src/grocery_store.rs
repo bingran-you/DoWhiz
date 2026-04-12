@@ -149,6 +149,90 @@ pub struct GroceryPreferences {
     pub updated_at: DateTime<Utc>,
 }
 
+impl GroceryPreferences {
+    /// Convert preferences to Markdown format for agent memory context.
+    pub fn to_markdown(&self) -> String {
+        let mut lines = Vec::new();
+        lines.push("# Grocery Preferences".to_string());
+        lines.push(format!(
+            "*Last updated: {}*\n",
+            self.updated_at.format("%Y-%m-%d %H:%M UTC")
+        ));
+
+        // Location
+        lines.push("## Location".to_string());
+        if let Some(ref zip) = self.zip_code {
+            lines.push(format!("- ZIP Code: {}", zip));
+        }
+        if let Some(ref addr) = self.address {
+            lines.push(format!("- Address: {}", addr));
+        }
+
+        // Transportation
+        lines.push("\n## Transportation".to_string());
+        lines.push(format!(
+            "- Has car: {}",
+            if self.has_car { "Yes" } else { "No" }
+        ));
+        if let Some(max_drive) = self.max_drive_minutes {
+            lines.push(format!("- Max drive time: {} minutes", max_drive));
+        }
+
+        // Store preferences
+        if !self.preferred_stores.is_empty() {
+            lines.push("\n## Preferred Stores".to_string());
+            for store in &self.preferred_stores {
+                lines.push(format!("- {}", store));
+            }
+        }
+
+        // Memberships
+        if !self.memberships.is_empty() {
+            lines.push("\n## Store Memberships".to_string());
+            for membership in &self.memberships {
+                lines.push(format!("- {}", membership));
+            }
+        }
+
+        // Taste preferences
+        if !self.taste_prefer.is_empty() {
+            lines.push("\n## Taste Preferences (Like)".to_string());
+            for pref in &self.taste_prefer {
+                lines.push(format!("- {}", pref));
+            }
+        }
+
+        if !self.taste_avoid.is_empty() {
+            lines.push("\n## Taste Preferences (Avoid)".to_string());
+            for avoid in &self.taste_avoid {
+                lines.push(format!("- {}", avoid));
+            }
+        }
+
+        // Dietary restrictions
+        if !self.dietary.is_empty() {
+            lines.push("\n## Dietary Restrictions".to_string());
+            for restriction in &self.dietary {
+                lines.push(format!("- {}", restriction));
+            }
+        }
+
+        lines.join("\n")
+    }
+
+    /// Check if preferences have meaningful data (not just defaults).
+    pub fn has_meaningful_data(&self) -> bool {
+        self.zip_code.is_some()
+            || self.address.is_some()
+            || !self.preferred_stores.is_empty()
+            || !self.memberships.is_empty()
+            || !self.taste_prefer.is_empty()
+            || !self.taste_avoid.is_empty()
+            || !self.dietary.is_empty()
+            || self.max_drive_minutes.is_some()
+    }
+}
+
 // ============================================================================
 // Store Implementation
 // ============================================================================
@@ -790,6 +874,59 @@ pub fn get_global_grocery_store() -> Option<Arc<GroceryStore_>> {
             }
         })
         .clone()
+}
+
+/// Sync user's grocery preferences to workspace memory directory.
+/// Writes grocery_preferences.md if user has saved preferences.
+/// Returns true if preferences were written, false otherwise.
+pub fn sync_grocery_preferences_to_workspace(
+    user_id: &str,
+    workspace_memory_dir: &std::path::Path,
+) -> bool {
+    let Some(store) = get_global_grocery_store() else {
+        tracing::debug!("GroceryStore not available, skipping preferences sync");
+        return false;
+    };
+
+    match store.get_preferences(user_id) {
+        Ok(Some(prefs)) => {
+            if !prefs.has_meaningful_data() {
+                tracing::debug!("User {} has no meaningful grocery preferences", user_id);
+                return false;
+            }
+
+            let markdown = prefs.to_markdown();
+            let prefs_path = workspace_memory_dir.join("grocery_preferences.md");
+
+            // Ensure directory exists
+            if let Err(e) = std::fs::create_dir_all(workspace_memory_dir) {
+                tracing::warn!("Failed to create workspace memory dir: {}", e);
+                return false;
+            }
+
+            match std::fs::write(&prefs_path, markdown) {
+                Ok(_) => {
+                    tracing::info!(
+                        "Synced grocery preferences for user {} to workspace",
+                        user_id
+                    );
+                    true
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to write grocery preferences: {}", e);
+                    false
+                }
+            }
+        }
+        Ok(None) => {
+            tracing::debug!("No grocery preferences found for user {}", user_id);
+            false
+        }
+        Err(e) => {
+            tracing::warn!("Failed to get grocery preferences for {}: {}", user_id, e);
+            false
+        }
+    }
 }
 
 // ============================================================================
