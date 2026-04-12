@@ -54,38 +54,74 @@ Pivot Oliver from a task executor to a **Technical Project Manager (TPM)** for D
 
 ### 1. Routing & Task Queue
 
-#### Routing: Single Pipeline, Different Behavior
+#### Routing: Organization-Based Resolution
 
-Reuse the existing Azure Service Bus inbound gateway. Same Oliver (employee), different behavior based on `tenant_id`:
+Reuse the existing Azure Service Bus inbound gateway. Same Oliver (employee), different behavior based on the **sender's organization**.
 
-```toml
-# gateway.toml
+* **Organizations table** (need to implement organization joining on DoWhiz integration panel)
+    - For MVP, suffices to just have one organization (DeepTutor)
+* **Organizations column in accounts table** - given an account, can identify the organization they're a part of
+* Use organization name to determine behavior and query appropriate task store (currently only DeepTutor setup with `DevTaskStore`)
 
-# DeepTutor dev channel → TPM mode
-[[routes]]
-channel = "discord"
-key = "DEEPTUTOR_DEV_GUILD_ID"
-employee_id = "little_bear"
-tenant_id = "deeptutor"
+**Schema (Supabase PostgreSQL):**
 
-# Regular Oliver
-[[routes]]
-channel = "discord"
-key = "*"
-employee_id = "little_bear"
-tenant_id = "default"
+```sql
+-- New table for organizations
+CREATE TABLE organizations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT UNIQUE NOT NULL,  -- "deeptutor", "acme-corp", etc.
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add organization reference to accounts
+ALTER TABLE accounts ADD COLUMN organization_id UUID REFERENCES organizations(id);
+
+-- Seed DeepTutor org
+INSERT INTO organizations (name) VALUES ('deeptutor');
+```
+
+**Routing Flow:**
+
+```
+1. User pings Oliver (any channel: Discord, email, Slack, etc.)
+                    ↓
+2. Gateway identifies sender (email, discord user id, etc.)
+                    ↓
+3. Look up sender's DoWhiz account in Supabase
+                    ↓
+4. Fetch account.organization_id → organizations.name
+                    ↓
+5. organization == "deeptutor" → TPM mode
+   organization == NULL/other  → Regular mode
 ```
 
 **How Oliver differentiates:**
-- `tenant_id = "deeptutor"` → TPM mode (manage tasks, assign to humans)
-- `tenant_id = "default"` → Regular mode (execute tasks via Codex)
+- `organization = "deeptutor"` → TPM mode (manage tasks, assign to humans, use `DevTaskStore`)
+- `organization = NULL` or other → Regular mode (execute tasks via Codex)
 
-The prompt builder (`prompt.rs`) or workspace setup checks `tenant_id` and injects TPM-specific instructions/skills.
+The prompt builder (`prompt.rs`) or workspace setup checks the organization and injects TPM-specific instructions/skills.
 
-**Why not a separate employee?**
-Each `employee_id` is associated with an Azure VM. Would need to create a dedicated VM for the new DeepTutor TPM
+**ACI Container Access:**
 
-**Question:** Should we create a dedicated employee? Should we still use Oliver?
+Oliver runs inside an ACI container. For TPM mode, it needs access to `DevTaskStore` (MongoDB `deeptutor_tasks` collection) to:
+- Query pending tasks
+- Update task status
+- Assign tasks to developers
+- Link tasks to Notion pages
+
+The ACI container already has `MONGODB_URI` for other operations. For TPM mode, Oliver imports `DevTaskStore` from `scheduler_module` and uses it directly using the relevant env vars:
+
+```rust
+// In TPM mode, Oliver can:
+let store = DevTaskStore::new()?;
+let backlog = store.list_tasks_by_status(TaskStatus::Backlog)?;
+store.update_status(&task_id, TaskStatus::InProgress)?;
+store.update_assignee(&task_id, Some("dev@example.com"))?;
+```
+
+**Frontend Flow (DoWhiz account settings):**
+1. User searches for organization: `SELECT * FROM organizations WHERE name ILIKE '%query%'`
+2. User clicks to join: `UPDATE accounts SET organization_id = X WHERE id = Y`
 
 #### Task Storage (MongoDB)
 
@@ -262,8 +298,14 @@ struct DeveloperProfile {
 
 ## Implementation
 
+### Organization-Based Routing
+- Add `organizations` table to Supabase
+- Add `organization_id` column to `accounts` table
+- Update gateway to fetch account's organization and route accordingly
+- Frontend: org search + join flow in DoWhiz account settings
+
 ### Core Task Queue
-- MongoDB collection + CRUD operations
+- MongoDB collection + CRUD operations ✅ (`dev_task_store.rs`)
 - Manual task creation via Oliver
 - Assignment notifications
 
@@ -311,8 +353,9 @@ struct DeveloperProfile {
 | Component | Location | Reuse |
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
+| **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
-| Account lookup | `scheduler_module/src/account_store.rs` | Developer identity |
+| Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
 | Queue trait | `scheduler_module/src/ingestion_queue.rs` | Enqueue/claim semantics |
 | Task types | `scheduler_module/src/scheduler/types.rs` | TaskKind pattern |
-| Channel routing | `gateway.toml` | Multi-channel notifications |
+| Supabase accounts | PostgreSQL `accounts` table | Add `organization_id` column |
