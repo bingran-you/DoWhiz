@@ -342,7 +342,17 @@ struct DeveloperProfile {
 
 ### TPM CLI (`tpm_cli`)
 
+* These commands will be exposed to Codex inside the ACI container
+
 Task board commands for managing DevTasks across MongoDB and Notion:
+
+**Important:**
+1. **New organization?** Must run `setup-board` first to create the Notion database
+2. **Before `list-tasks`**, run `sync-tasks` to pull any status changes developers made directly in Notion
+
+**Command purposes:**
+- `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
 
 #### `setup-board` — Create Notion database for an organization
 
@@ -366,7 +376,7 @@ Returns `database_id` to store in `organizations.notion_database_id`.
 
 [TODO] Link notion_database_id with organization in Supabase Postgres
 
-#### `create-task` — Create task in MongoDB + Notion
+#### `create-task` — Oliver autonomously creates tasks
 
 ```bash
 tpm_cli create-task \
@@ -381,10 +391,15 @@ tpm_cli create-task \
   --assignee dev@example.com
 ```
 
+Use when Oliver identifies a task from:
+- User feedback (Discord, email, in-app)
+- Meeting transcripts (notetaker)
+- Market research
+
 Flow:
 1. Insert `DevTask` into MongoDB `dev_tasks` collection
 2. Create page in Notion database with `MongoDB ID` property
-3. Link `notion_page_id` back to MongoDB document with DevTaskStore's ```link_notion_page```
+3. Link `notion_page_id` back to MongoDB document with DevTaskStore's `link_notion_page`
 
 #### `list-tasks` — List tasks from MongoDB
 
@@ -399,7 +414,7 @@ tpm_cli list-tasks --organization deeptutor --status backlog
 tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
 ```
 
-#### `sync-tasks` — Sync status from Notion to MongoDB
+#### `sync-tasks` — Pull developer updates from Notion to MongoDB
 
 ```bash
 tpm_cli sync-tasks \
@@ -408,7 +423,7 @@ tpm_cli sync-tasks \
   --workspace-id <WORKSPACE_ID>
 ```
 
-Pulls status/priority changes from Notion and updates MongoDB. Uses `MongoDB ID` property to match Notion pages to MongoDB documents.
+Run before `list-tasks` to pull any status/priority changes developers made directly in Notion. Uses `MongoDB ID` property to match Notion pages to MongoDB documents.
 
 ### Notion CLI (`notion_api_cli`)
 
