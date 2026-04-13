@@ -9,10 +9,10 @@ import { supabase } from '../app/supabaseClient';
 import oliverImg from '../assets/Oliver.jpg';
 import MouseField from '../components/landing/MouseField';
 import {
-  getNextThemeSwitch,
   getThemeForLocalTime,
   shouldEnableMouseField
 } from '../components/landing/mouseFieldUtils';
+import { LOCAL_THEME_CHANGE_EVENT, THEME_META_COLORS } from '../theme/localTheme';
 import { getLandingContent } from './landingContent';
 
 const SITE_URL = 'https://dowhiz.com';
@@ -40,6 +40,7 @@ const OAUTH_ENDPOINTS = {
   notion: '/auth/notion',
   lark: '/auth/lark'
 };
+const PRIMARY_HERO_TOOL_KEYS = new Set(['email', 'slack', 'discord']);
 
 function SlackIcon({ className }) {
   return (
@@ -1009,6 +1010,9 @@ function LandingPage({ locale }) {
   const isAuthenticated = authStatus === 'authenticated' && Boolean(user);
   const localizedHomePath = isAuthenticated ? getLocalizedLandingPagePath(pathname) : content.nav.homePath;
   const heroTools = content.hero.tools;
+  const heroToolEntries = heroTools.map((tool, index) => ({ ...tool, index }));
+  const primaryHeroTools = heroToolEntries.filter(({ key }) => PRIMARY_HERO_TOOL_KEYS.has(key));
+  const secondaryHeroTools = heroToolEntries.filter(({ key }) => !PRIMARY_HERO_TOOL_KEYS.has(key));
   const activeHeroTool = heroTools[activeShowcaseIndex] || heroTools[0];
 
   useEffect(() => {
@@ -1067,9 +1071,12 @@ function LandingPage({ locale }) {
     updateMetaContent('meta[name="twitter:title"]', content.metadata.title);
     updateMetaContent('meta[name="twitter:description"]', content.metadata.description);
     updateMetaContent('meta[name="robots"]', content.metadata.robots);
-    updateMetaContent('meta[name="theme-color"]', content.metadata.themeColor);
     updateLinkHref('link[rel="canonical"]', content.metadata.canonicalUrl);
   }, [content.metadata]);
+
+  useEffect(() => {
+    updateMetaContent('meta[name="theme-color"]', THEME_META_COLORS[theme] || content.metadata.themeColor);
+  }, [content.metadata.themeColor, theme]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1161,36 +1168,21 @@ function LandingPage({ locale }) {
   }, []);
 
   useEffect(() => {
-    let timeoutId;
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
 
-    const updateTheme = () => {
-      setTheme(getThemeForLocalTime());
+    const syncTheme = (event) => {
+      setTheme(event?.detail?.theme || getThemeForLocalTime());
     };
 
-    const scheduleNextSwitch = () => {
-      const now = new Date();
-      const nextSwitch = getNextThemeSwitch(now);
-      const delay = Math.max(nextSwitch.getTime() - now.getTime(), 0);
-
-      timeoutId = window.setTimeout(() => {
-        updateTheme();
-        scheduleNextSwitch();
-      }, delay);
-    };
-
-    updateTheme();
-    scheduleNextSwitch();
+    syncTheme();
+    window.addEventListener(LOCAL_THEME_CHANGE_EVENT, syncTheme);
 
     return () => {
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
+      window.removeEventListener(LOCAL_THEME_CHANGE_EVENT, syncTheme);
     };
   }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -1631,6 +1623,13 @@ function LandingPage({ locale }) {
               <p className="hero-eyebrow">{content.hero.eyebrow}</p>
               <h1 className="hero-title">{content.hero.title}</h1>
               <p className="hero-subtitle">{content.hero.subtitle}</p>
+              <div className="hero-value-strip" aria-label={content.hero.entryEyebrow}>
+                {content.hero.proofPills.map((item) => (
+                  <span key={item} className="hero-value-pill">
+                    {item}
+                  </span>
+                ))}
+              </div>
               <div className="hero-cta-row">
                 <a
                   className="btn btn-primary hero-primary-cta"
@@ -1659,6 +1658,7 @@ function LandingPage({ locale }) {
                   {content.hero.secondaryCta}
                 </a>
               </div>
+              <p className="hero-support-note">{content.hero.toolsFootnote}</p>
             </div>
 
             <div
@@ -1673,13 +1673,9 @@ function LandingPage({ locale }) {
               }}
             >
               <div className="hero-showcase-topbar">
-                <div className="hero-showcase-heading">
-                  <span className="hero-panel-kicker">{content.hero.toolsEyebrow}</span>
-                  <span className="hero-showcase-mode">
-                    {showcasePaused || prefersReducedMotion
-                      ? content.hero.pausedLabel
-                      : content.hero.autoplayLabel}
-                  </span>
+                <div className="hero-showcase-heading hero-showcase-heading-stacked">
+                  <span className="hero-panel-kicker">{content.hero.previewLabel}</span>
+                  <p className="hero-showcase-summary">{content.hero.showcaseSummary}</p>
                 </div>
                 <div className="hero-operator-chip">
                   <div className="hero-operator-portrait">
@@ -1692,32 +1688,74 @@ function LandingPage({ locale }) {
                 </div>
               </div>
 
-              <div className="hero-channel-dock" role="group" aria-label={content.hero.toolsEyebrow}>
-                {heroTools.map((tool, index) => (
-                  <button
-                    key={tool.key}
-                    type="button"
-                    className={`hero-channel-pill${index === activeShowcaseIndex ? ' is-active' : ''}`}
-                    style={{ '--tool-accent': tool.accent }}
-                    onMouseEnter={() => setActiveShowcaseIndex(index)}
-                    onFocus={() => setActiveShowcaseIndex(index)}
-                    onClick={() => handleHeroToolAction(tool, 'hero_channel_pill')}
-                    disabled={Boolean(loadingToolKey)}
-                  >
-                    <span className="hero-channel-pill-main">
-                      <span className="hero-tool-badge hero-tool-badge-pill" aria-hidden="true">
-                        <HeroToolIcon toolKey={tool.key} />
-                      </span>
-                      <span className="hero-channel-pill-copy">
-                        <strong>{tool.label}</strong>
-                        <span>{tool.pillLabel || tool.anonymousActionLabel}</span>
-                      </span>
+              <div className="hero-channel-rail" role="group" aria-label={content.hero.toolsEyebrow}>
+                <div className="hero-channel-group">
+                  <div className="hero-channel-group-head">
+                    <span className="hero-channel-group-label">{content.hero.primaryChannelsLabel}</span>
+                    <span className="hero-channel-group-caption">
+                      {showcasePaused || prefersReducedMotion
+                        ? content.hero.pausedLabel
+                        : content.hero.autoplayLabel}
                     </span>
-                    <span className="hero-channel-pill-progress" aria-hidden="true">
-                      <span className="hero-channel-pill-progress-fill"></span>
-                    </span>
-                  </button>
-                ))}
+                  </div>
+                  <div className="hero-channel-dock hero-channel-dock-primary">
+                    {primaryHeroTools.map((tool) => (
+                      <button
+                        key={tool.key}
+                        type="button"
+                        className={`hero-channel-pill${tool.index === activeShowcaseIndex ? ' is-active' : ''}`}
+                        style={{ '--tool-accent': tool.accent }}
+                        onMouseEnter={() => setActiveShowcaseIndex(tool.index)}
+                        onFocus={() => setActiveShowcaseIndex(tool.index)}
+                        onClick={() => handleHeroToolAction(tool, 'hero_channel_primary')}
+                        disabled={Boolean(loadingToolKey)}
+                      >
+                        <span className="hero-channel-pill-main">
+                          <span className="hero-tool-badge hero-tool-badge-pill" aria-hidden="true">
+                            <HeroToolIcon toolKey={tool.key} />
+                          </span>
+                          <span className="hero-channel-pill-copy">
+                            <strong>{tool.label}</strong>
+                            <span>{tool.pillLabel || tool.anonymousActionLabel}</span>
+                          </span>
+                        </span>
+                        <span className="hero-channel-pill-progress" aria-hidden="true">
+                          <span className="hero-channel-pill-progress-fill"></span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="hero-channel-group hero-channel-group-secondary">
+                  <div className="hero-channel-group-head">
+                    <span className="hero-channel-group-label">{content.hero.secondaryChannelsLabel}</span>
+                  </div>
+                  <div className="hero-channel-dock hero-channel-dock-secondary">
+                    {secondaryHeroTools.map((tool) => (
+                      <button
+                        key={tool.key}
+                        type="button"
+                        className={`hero-channel-pill hero-channel-pill-secondary${tool.index === activeShowcaseIndex ? ' is-active' : ''}`}
+                        style={{ '--tool-accent': tool.accent }}
+                        onMouseEnter={() => setActiveShowcaseIndex(tool.index)}
+                        onFocus={() => setActiveShowcaseIndex(tool.index)}
+                        onClick={() => handleHeroToolAction(tool, 'hero_channel_secondary')}
+                        disabled={Boolean(loadingToolKey)}
+                      >
+                        <span className="hero-channel-pill-main">
+                          <span className="hero-tool-badge hero-tool-badge-pill" aria-hidden="true">
+                            <HeroToolIcon toolKey={tool.key} />
+                          </span>
+                          <span className="hero-channel-pill-copy">
+                            <strong>{tool.label}</strong>
+                            <span>{tool.authenticatedStatus || tool.anonymousStatus}</span>
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {activeHeroTool ? (

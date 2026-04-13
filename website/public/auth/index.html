@@ -39,22 +39,28 @@
       .auth-btn {
         padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 8px;
+        border-radius: 0.9rem;
         font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
       }
       .auth-btn-primary {
-        background: linear-gradient(135deg, #38bdf8, #6366f1);
-        color: white;
+        background: var(--brand-primary, #111215);
+        color: var(--text-on-brand, #f7f6f3);
+        box-shadow: 0 18px 38px -28px var(--shadow-strong, rgba(17, 18, 21, 0.25));
       }
       .auth-btn-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        background: var(--brand-primary-hover, #050608);
+        box-shadow: 0 22px 42px -28px var(--shadow-strong, rgba(17, 18, 21, 0.32));
       }
       .auth-btn-oauth {
-        background: var(--surface, #1a1a1a);
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--surface, #1a1a1a) 96%, transparent) 0%,
+          color-mix(in srgb, var(--surface-secondary, #17191d) 88%, transparent) 100%
+        );
         border: 1px solid var(--border, #333);
         color: var(--text, #fff);
         display: flex;
@@ -63,7 +69,8 @@
         gap: 0.5rem;
       }
       .auth-btn-oauth:hover {
-        border-color: var(--accent, #38bdf8);
+        border-color: color-mix(in srgb, var(--text, #fff) 12%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
       }
       .auth-divider {
         display: flex;
@@ -122,9 +129,14 @@
       }
       .auth-panel {
         padding: 1rem;
-        border-radius: 8px;
-        border: 1px solid var(--border, #333);
-        background: var(--surface, #1a1a1a);
+        border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 72%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
         margin-top: 1rem;
       }
       .auth-panel-title {
@@ -237,19 +249,16 @@
         color: var(--text, #fff);
       }
       .settings-stat {
-        background: var(--surface, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 8px;
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 80%, transparent);
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        border-radius: 0.9rem;
         padding: 1rem 0.75rem;
         text-align: center;
       }
       .settings-stat-value {
         font-size: 1.75rem;
         font-weight: 700;
-        background: linear-gradient(135deg, #38bdf8, #6366f1);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--text, #fff);
       }
       .settings-stat-label {
         color: var(--text-muted, #888);
@@ -266,9 +275,14 @@
         justify-content: space-between;
         align-items: center;
         padding: 0.75rem 1rem;
-        background: var(--surface, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 8px;
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 76%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        border-radius: 1.05rem;
         margin-bottom: 0.5rem;
         gap: 1rem;
         min-height: 48px;
@@ -327,16 +341,21 @@
         display: flex;
         flex-direction: column;
         padding: 1rem;
-        background: var(--surface, #1a1a1a);
-        border: 1px solid var(--border, #333);
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 76%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
       }
       .task-item {
-        border-radius: 8px;
+        border-radius: 1rem;
         margin-bottom: 0.5rem;
         gap: 0.5rem;
       }
       .routine-item {
-        border-radius: 10px;
+        border-radius: 1rem;
         gap: 0.75rem;
       }
       .work-item-header,
@@ -450,7 +469,7 @@
         padding: 0.35rem;
         border: 1px solid var(--border, #333);
         border-radius: 999px;
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
       }
       .work-view-tab,
       .routine-tab {
@@ -470,9 +489,9 @@
       }
       .work-view-tab.is-active,
       .routine-tab.is-active {
-        color: var(--text, #fff);
-        border-color: color-mix(in srgb, var(--accent, #38bdf8) 45%, var(--border, #333));
-        background: color-mix(in srgb, var(--accent, #38bdf8) 12%, transparent);
+        color: var(--text-on-brand, #fff);
+        border-color: var(--brand-primary, #111215);
+        background: var(--brand-primary, #111215);
       }
       .work-view-panel + .work-view-panel {
         margin-top: 1.25rem;
@@ -586,7 +605,7 @@
         color: var(--text-muted, #888);
         border: 1px dashed var(--border, #333);
         border-radius: 10px;
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 88%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 82%, transparent);
       }
 
       .task-modal-overlay {
@@ -679,19 +698,32 @@
 
       .channel-connect-actions {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 0.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
       }
 
       .channel-connect-actions .auth-btn {
         width: 100%;
-        min-height: 52px;
-        padding: 10px 12px;
+        min-height: 82px;
+        padding: 0.85rem 0.95rem;
         box-sizing: border-box;
-        justify-content: center;
-        white-space: nowrap;
-        text-align: center;
+        justify-content: flex-start;
+        white-space: normal;
+        text-align: left;
         font-size: 0.95rem;
+        border-radius: 1.05rem;
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface, #1a1a1a) 96%, transparent) 0%,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 88%, transparent) 100%
+          );
+        box-shadow: 0 18px 34px -34px var(--shadow-color, rgba(15, 23, 42, 0.12));
+      }
+
+      .channel-connect-actions .auth-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 24px 42px -34px var(--shadow-color, rgba(15, 23, 42, 0.16));
       }
 
       .channel-connect-actions .auth-btn svg,
@@ -773,77 +805,131 @@
         }
       }
 
-      /* Light mode overrides */
-      [data-theme="light"] {
-        --bg: #f8fafc;
-        --card: rgba(255, 255, 255, 0.8);
-        --border: rgba(0, 0, 0, 0.1);
-        --text: #1e293b;
-        --muted: #64748b;
-        --surface: #ffffff;
-        --text-muted: #64748b;
+      :root,
+      [data-theme="light"],
+      [data-theme="dark"] {
+        --bg: var(--surface-primary);
+        --card: color-mix(in srgb, var(--surface-primary) 92%, var(--surface-secondary));
+        --border: var(--border-subtle);
+        --text: var(--text-primary);
+        --muted: var(--text-secondary);
+        --surface: color-mix(in srgb, var(--surface-primary) 82%, var(--surface-secondary));
+        --text-muted: var(--text-secondary);
+        --accent: var(--brand-primary);
+        --panel-bg: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+        --panel-bg-strong: color-mix(in srgb, var(--surface-floating) 92%, var(--surface-primary));
+        --panel-shadow: 0 28px 54px -42px var(--shadow-color, rgba(17, 18, 21, 0.12));
       }
 
-      [data-theme="light"] body {
+      body {
         background:
-          radial-gradient(circle at top, rgba(59, 130, 246, 0.08), transparent 55%),
-          radial-gradient(circle at 20% 70%, rgba(14, 116, 144, 0.1), transparent 60%),
-          var(--bg);
+          radial-gradient(circle at top center, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 42%),
+          radial-gradient(circle at 18% 72%, color-mix(in srgb, var(--text-secondary) 4%, transparent), transparent 54%),
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-primary) 98%, #ffffff 2%) 0%,
+            color-mix(in srgb, var(--surface-secondary) 84%, var(--surface-primary)) 100%
+          );
       }
 
-      [data-theme="light"] .auth-input {
+      [data-theme="dark"] body {
+        background:
+          radial-gradient(circle at top center, rgba(255, 255, 255, 0.06), transparent 34%),
+          radial-gradient(circle at 18% 72%, rgba(255, 255, 255, 0.04), transparent 44%),
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary) 44%, var(--surface-primary)) 0%,
+            var(--surface-primary) 55%,
+            color-mix(in srgb, var(--surface-secondary) 68%, var(--surface-primary)) 100%
+          );
+      }
+
+      .auth-input,
+      .auth-btn,
+      .auth-panel,
+      .legal-card,
+      .dashboard-sidebar,
+      .workspace-recommendation-card,
+      .workspace-summary-card,
+      .settings-panel,
+      .identifier-item,
+      .work-item,
+      .task-item,
+      .routine-item,
+      .connection-onboarding-card {
+        transition:
+          background-color 220ms ease,
+          background 220ms ease,
+          border-color 220ms ease,
+          color 220ms ease,
+          box-shadow 220ms ease,
+          transform 220ms ease;
+      }
+
+      [data-theme="light"] .auth-input,
+      [data-theme="dark"] .auth-input {
         background: var(--surface);
         border-color: var(--border);
         color: var(--text);
       }
 
-      [data-theme="light"] .auth-btn-oauth {
+      [data-theme="light"] .auth-btn-oauth,
+      [data-theme="dark"] .auth-btn-oauth {
         background: var(--surface);
         border-color: var(--border);
         color: var(--text);
       }
 
-      [data-theme="light"] .identifier-item {
+      [data-theme="light"] .identifier-item,
+      [data-theme="dark"] .identifier-item {
         background: var(--surface);
         border-color: var(--border);
       }
 
-      [data-theme="light"] .legal-card {
+      [data-theme="light"] .legal-card,
+      [data-theme="dark"] .legal-card {
         background: var(--card);
         border-color: var(--border);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 24px 48px -38px var(--shadow-color, rgba(17, 18, 21, 0.12));
       }
 
-      [data-theme="light"] #memo-content {
+      [data-theme="light"] #memo-content,
+      [data-theme="dark"] #memo-content {
         background: var(--surface) !important;
         border-color: var(--border) !important;
         color: var(--text) !important;
       }
 
-      [data-theme="light"] .brand {
+      [data-theme="light"] .brand,
+      [data-theme="dark"] .brand {
         color: var(--text);
       }
 
-      [data-theme="light"] .page-header {
+      [data-theme="light"] .page-header,
+      [data-theme="dark"] .page-header {
         border-bottom-color: var(--border);
       }
 
-      [data-theme="light"] .page-footer {
+      [data-theme="light"] .page-footer,
+      [data-theme="dark"] .page-footer {
         border-top-color: var(--border);
       }
 
-      [data-theme="light"] .back-link {
-        background: rgba(0, 0, 0, 0.04);
+      [data-theme="light"] .back-link,
+      [data-theme="dark"] .back-link {
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
         border-color: var(--border);
         color: var(--text);
       }
 
-      [data-theme="light"] .back-link:hover {
-        background: rgba(0, 0, 0, 0.08);
+      [data-theme="light"] .back-link:hover,
+      [data-theme="dark"] .back-link:hover {
+        background: color-mix(in srgb, var(--surface-secondary) 86%, transparent);
       }
 
-      [data-theme="light"] code {
-        background: rgba(0, 0, 0, 0.05);
+      [data-theme="light"] code,
+      [data-theme="dark"] code {
+        background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
         color: var(--text);
       }
 
@@ -854,7 +940,7 @@
       }
 
       .dashboard-mode .auth-container {
-        max-width: 1240px;
+        max-width: 1280px;
         padding-left: 0;
         padding-right: 0;
       }
@@ -894,7 +980,7 @@
         border: 1px solid var(--border, #333);
         border-radius: 1rem;
         background: color-mix(in srgb, var(--surface, #1a1a1a) 88%, transparent);
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 18px 34px -28px var(--shadow-color, rgba(15, 23, 42, 0.12));
         color: var(--text, #fff);
         text-align: left;
         text-decoration: none;
@@ -902,9 +988,9 @@
       }
 
       .dashboard-mode .dashboard-home-link:hover {
-        border-color: color-mix(in srgb, var(--accent, #38bdf8) 35%, var(--border, #333));
-        background: color-mix(in srgb, var(--accent, #38bdf8) 10%, var(--surface, #1a1a1a));
-        box-shadow: 0 14px 30px rgba(56, 189, 248, 0.12);
+        border-color: color-mix(in srgb, var(--text, #fff) 18%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #23252a) 82%, transparent);
+        box-shadow: 0 22px 40px -28px var(--shadow-color, rgba(15, 23, 42, 0.16));
       }
 
       .dashboard-mode .dashboard-home-link-icon {
@@ -914,14 +1000,14 @@
         align-items: center;
         justify-content: center;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--accent, #38bdf8) 15%, var(--surface, #1a1a1a));
-        color: color-mix(in srgb, var(--accent, #38bdf8) 78%, var(--text, #fff));
+        background: color-mix(in srgb, var(--surface-secondary, #23252a) 84%, transparent);
+        color: var(--text, #fff);
         transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
       }
 
       .dashboard-mode .dashboard-home-link:hover .dashboard-home-link-icon {
         transform: translateX(-2px);
-        background: color-mix(in srgb, var(--accent, #38bdf8) 22%, var(--surface, #1a1a1a));
+        background: color-mix(in srgb, var(--surface-tertiary, #2f3339) 82%, transparent);
       }
 
       .dashboard-mode .dashboard-home-link-mark {
@@ -956,19 +1042,35 @@
       .dashboard-shell {
         display: grid;
         grid-template-columns: 260px minmax(0, 1fr);
-        gap: 1rem;
+        gap: 1.25rem;
         align-items: start;
       }
 
       .dashboard-sidebar {
         position: sticky;
         top: 6.2rem;
-        padding: 1.1rem;
-        border-radius: 1rem;
-        border: 1px solid var(--border, #333);
+        padding: 1.2rem;
+        border-radius: 1.35rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 10%, var(--border, #333));
         background:
-          linear-gradient(165deg, rgba(56, 189, 248, 0.08), transparent 45%),
-          var(--card, rgba(255, 255, 255, 0.02));
+          radial-gradient(circle at top left, color-mix(in srgb, var(--brand-primary) 9%, transparent), transparent 42%),
+          linear-gradient(
+            165deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 88%, transparent),
+            color-mix(in srgb, var(--surface-primary, #0f1012) 98%, transparent)
+          );
+        box-shadow:
+          0 34px 62px -46px var(--shadow-color, rgba(15, 23, 42, 0.18)),
+          0 16px 26px -18px var(--shadow-color, rgba(15, 23, 42, 0.12));
+      }
+
+      .dashboard-section-eyebrow {
+        margin: 0 0 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-muted, #888);
       }
 
       .sidebar-eyebrow {
@@ -981,14 +1083,16 @@
 
       .sidebar-title {
         margin: 0.45rem 0 0;
-        font-size: 1.2rem;
+        font-size: 1.24rem;
         line-height: 1.2;
+        letter-spacing: -0.02em;
       }
 
       .sidebar-description {
         margin: 0.65rem 0 0;
         font-size: 0.9rem;
         color: var(--text-muted, #888);
+        line-height: 1.58;
       }
 
       .sidebar-nav {
@@ -1001,8 +1105,8 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.55rem 0.7rem;
-        border-radius: 0.65rem;
+        padding: 0.62rem 0.78rem;
+        border-radius: 0.8rem;
         border: 1px solid transparent;
         color: var(--text-muted, #888);
         font-weight: 600;
@@ -1012,21 +1116,22 @@
       .sidebar-link:hover {
         color: var(--text, #fff);
         border-color: var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 70%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
       }
 
       .sidebar-link.is-active {
-        color: var(--text, #fff);
-        border-color: color-mix(in srgb, var(--accent, #38bdf8) 35%, var(--border, #333));
-        background: color-mix(in srgb, var(--accent, #38bdf8) 13%, transparent);
+        color: var(--text-on-brand, #fff);
+        border-color: var(--brand-primary, #111215);
+        background: var(--brand-primary, #111215);
+        box-shadow: 0 18px 30px -24px var(--shadow-color, rgba(15, 23, 42, 0.18));
       }
 
       .sidebar-note {
         margin-top: 1rem;
         padding: 0.8rem;
-        border-radius: 0.75rem;
-        border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 84%, transparent);
+        border-radius: 0.9rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 74%, transparent);
       }
 
       .sidebar-note-title {
@@ -1044,13 +1149,23 @@
 
       .dashboard-main {
         display: grid;
-        gap: 1rem;
+        gap: 1.25rem;
         min-width: 0;
       }
 
       .dashboard-section {
         margin-top: 0;
         scroll-margin-top: 8.2rem;
+      }
+
+      .dashboard-home-section {
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 8%, transparent), transparent 34%),
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--card) 96%, transparent) 0%,
+            color-mix(in srgb, var(--surface) 88%, transparent) 100%
+          );
       }
 
       .dashboard-mode .dashboard-sidebar {
@@ -1065,20 +1180,55 @@
         margin-bottom: 1rem;
       }
 
+      .dashboard-home-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+        gap: 1.1rem;
+        align-items: start;
+      }
+
+      .dashboard-home-main,
+      .dashboard-home-aside {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .dashboard-home-header {
+        gap: 1rem;
+      }
+
+      .dashboard-inline-action {
+        white-space: nowrap;
+      }
+
+      .dashboard-account-panel {
+        padding: 1rem;
+        border-radius: 1.05rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 76%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
+      }
+
       .workspace-recommendation-card {
         display: grid;
         gap: 0.9rem;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        border-radius: 0.9rem;
-        border: 1px solid color-mix(in srgb, var(--accent, #38bdf8) 35%, var(--border, #333));
+        padding: 1.05rem;
+        border-radius: 1.1rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 12%, var(--border, #333));
         background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 9%, transparent), transparent 34%),
           linear-gradient(
             135deg,
-            color-mix(in srgb, var(--surface, #1a1a1a) 86%, rgba(56, 189, 248, 0.2)),
-            color-mix(in srgb, var(--surface, #1a1a1a) 96%, rgba(15, 23, 42, 0.42))
+            color-mix(in srgb, var(--surface-secondary, #17191d) 88%, transparent),
+            color-mix(in srgb, var(--surface-primary, #0f1012) 98%, transparent)
           );
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+        box-shadow:
+          0 30px 56px -38px var(--shadow-color, rgba(15, 23, 42, 0.18)),
+          0 16px 24px -18px var(--shadow-color, rgba(15, 23, 42, 0.12));
       }
 
       .workspace-recommendation-header {
@@ -1102,8 +1252,8 @@
       .workspace-recommendation-badge {
         padding: 0.28rem 0.55rem;
         border-radius: 999px;
-        border: 1px solid rgba(56, 189, 248, 0.28);
-        background: rgba(56, 189, 248, 0.12);
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 10%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
         color: var(--text, #fff);
         font-weight: 600;
       }
@@ -1128,7 +1278,7 @@
         padding: 0.85rem;
         border-radius: 0.8rem;
         border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 80%, transparent);
       }
 
       .workspace-recommendation-label {
@@ -1186,7 +1336,7 @@
 
       .workspace-recommendation-helper {
         border-style: solid;
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 78%, transparent);
       }
 
       .workspace-recommendation-helper p,
@@ -1210,7 +1360,7 @@
         padding: 0.9rem;
         border-radius: 0.8rem;
         border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 78%, transparent);
       }
 
       .workspace-recommendation-alt-item h4 {
@@ -1246,11 +1396,15 @@
         gap: 0.75rem;
       }
 
+      .dashboard-account-grid {
+        grid-template-columns: 1fr;
+      }
+
       .account-meta-item {
         padding: 0.75rem;
         border-radius: 0.7rem;
         border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 80%, transparent);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 76%, transparent);
       }
 
       .account-meta-label {
@@ -1407,15 +1561,65 @@
       }
 
       .workspace-summary-card {
-        padding: 0.75rem;
-        border-radius: 0.7rem;
-        border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+        padding: 1rem;
+        border-radius: 1.05rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 74%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
+        box-shadow: 0 20px 38px -36px var(--shadow-color, rgba(15, 23, 42, 0.12));
+      }
+
+      .workspace-summary-card-stat {
+        display: grid;
+        gap: 0.55rem;
+        align-content: start;
       }
 
       .workspace-summary-card h3 {
         margin: 0 0 0.45rem;
         font-size: 0.92rem;
+      }
+
+      .workspace-summary-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .workspace-summary-kicker {
+        margin: 0 0 0.3rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted, #888);
+      }
+
+      .workspace-summary-stat {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--text, #fff);
+      }
+
+      .workspace-summary-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.9rem;
+        padding: 0.3rem 0.65rem;
+        border-radius: 999px;
+        border: 1px solid var(--border, #333);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 80%, transparent);
+        color: var(--text-muted, #888);
+        font-size: 0.76rem;
+        font-weight: 700;
       }
 
       .workspace-summary-meta {
@@ -1455,9 +1659,14 @@
 
       .settings-panel {
         padding: 1rem;
-        border-radius: 0.8rem;
-        border: 1px solid var(--border, #333);
-        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+        border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 76%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
       }
 
       .settings-panel h3 {
@@ -1476,15 +1685,15 @@
         display: grid;
         gap: 0.85rem;
         padding: 1rem;
-        border-radius: 0.85rem;
-        border: 1px solid color-mix(in srgb, var(--accent, #38bdf8) 32%, var(--border, #333));
+        border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 12%, var(--border, #333));
         background:
           linear-gradient(
             135deg,
-            color-mix(in srgb, var(--surface, #1a1a1a) 84%, rgba(56, 189, 248, 0.18)),
-            color-mix(in srgb, var(--surface, #1a1a1a) 95%, rgba(15, 23, 42, 0.38))
+            color-mix(in srgb, var(--surface-secondary, #17191d) 82%, transparent),
+            color-mix(in srgb, var(--surface, #1a1a1a) 94%, color-mix(in srgb, var(--brand-primary) 7%, transparent))
           );
-        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+        box-shadow: 0 20px 40px -30px rgba(15, 23, 42, 0.18);
       }
 
       .connection-onboarding-kicker {
@@ -1579,6 +1788,10 @@
           grid-template-columns: 1fr;
         }
 
+        .dashboard-home-shell {
+          grid-template-columns: 1fr;
+        }
+
         .dashboard-sidebar {
           position: static;
         }
@@ -1601,6 +1814,7 @@
       }
 
       @media (max-width: 780px) {
+        .dashboard-home-header,
         .workspace-recommendation-actions,
         .next-step-item {
           flex-direction: column;
@@ -1620,6 +1834,11 @@
         .workspace-summary-grid,
         .settings-grid {
           grid-template-columns: 1fr;
+        }
+
+        .workspace-summary-card-head {
+          flex-direction: column;
+          align-items: flex-start;
         }
       }
 
@@ -1852,15 +2071,14 @@
             <div class="dashboard-shell">
               <aside class="dashboard-sidebar">
                 <p class="sidebar-eyebrow">Your Oliver</p>
-                <h2 class="sidebar-title">Setup and control</h2>
-                <p class="sidebar-description">Connect apps, review work, save memory, and tune how Oliver should work for you.</p>
+                <h2 class="sidebar-title">Personal workspace</h2>
+                <p class="sidebar-description">Keep one clear next step, your live connections, and the work Oliver is already handling for you.</p>
                 <nav class="sidebar-nav" aria-label="Dashboard Sections">
-                  <a class="sidebar-link is-active" href="#section-overview">Overview</a>
-                  <a class="sidebar-link" href="#section-channels">Connected Apps</a>
-                  <a class="sidebar-link" href="#section-workspace">Next Steps</a>
+                  <a class="sidebar-link is-active" href="#section-overview">Home</a>
+                  <a class="sidebar-link" href="#section-channels">Connections</a>
+                  <a class="sidebar-link" href="#section-workspace">Checklist</a>
                   <a class="sidebar-link" href="#section-work">Work</a>
-                  <a class="sidebar-link" href="#section-memo">Memory</a>
-                  <a class="sidebar-link" href="#section-settings">Settings</a>
+                  <a class="sidebar-link" href="#section-settings">Preferences</a>
                 </nav>
                 <div class="sidebar-note">
                   <div class="sidebar-note-title">Support</div>
@@ -1872,27 +2090,46 @@
               </aside>
 
               <div class="dashboard-main">
-                <section id="section-overview" class="legal-card dashboard-section">
-                  <div class="dashboard-header">
-                    <h2>Overview</h2>
-                    <button id="info-btn" class="auth-btn auth-btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                      Account and billing
-                    </button>
-                  </div>
-                  <p class="dashboard-overview-copy">Your account and current Oliver setup.</p>
-                  <div class="account-grid">
-                    <div class="account-meta-item">
-                      <p class="account-meta-label">Account</p>
-                      <span id="account-id">Loading...</span>
+                <section id="section-overview" class="legal-card dashboard-section dashboard-home-section">
+                  <div class="dashboard-home-shell">
+                    <div class="dashboard-home-main">
+                      <div class="dashboard-header dashboard-home-header">
+                        <div>
+                          <p class="dashboard-section-eyebrow">Home</p>
+                          <h2>Today with Oliver</h2>
+                          <p class="dashboard-overview-copy">One clear next move, your current setup, and the latest work signal.</p>
+                        </div>
+                        <button id="info-btn" class="auth-btn auth-btn-oauth dashboard-inline-action">
+                          Account and billing
+                        </button>
+                      </div>
+                      <div id="workspace-recommendation-card" class="workspace-recommendation-card">
+                        <div class="workspace-recommendation-empty">Looking at your setup for the clearest next step...</div>
+                      </div>
+                      <div id="workspace-summary-content" class="workspace-summary-grid dashboard-home-summary-grid">
+                        <div class="workspace-summary-empty">Loading your setup snapshot...</div>
+                      </div>
                     </div>
-                    <div class="account-meta-item">
-                      <p class="account-meta-label">Sign-in email</p>
-                      <span id="user-email">Loading...</span>
-                    </div>
+                    <aside class="dashboard-home-aside">
+                      <div class="dashboard-account-panel">
+                        <p class="dashboard-section-eyebrow">Account</p>
+                        <div class="account-grid dashboard-account-grid">
+                          <div class="account-meta-item">
+                            <p class="account-meta-label">Account</p>
+                            <span id="account-id">Loading...</span>
+                          </div>
+                          <div class="account-meta-item">
+                            <p class="account-meta-label">Sign-in email</p>
+                            <span id="user-email">Loading...</span>
+                          </div>
+                        </div>
+                      </div>
+                    </aside>
                   </div>
                 </section>
 
                 <section id="section-channels" class="legal-card dashboard-section">
+                  <p class="dashboard-section-eyebrow">Connections</p>
                   <h2>Connected Apps</h2>
                   <p>Connect and manage the apps Oliver can use for your account.</p>
                   <div class="settings-panel">
@@ -1949,19 +2186,15 @@
 
                 <section id="section-workspace" class="legal-card dashboard-section">
                   <div class="dashboard-header">
-                    <h2>Next Steps</h2>
+                    <div>
+                      <p class="dashboard-section-eyebrow">Setup plan</p>
+                      <h2>Checklist and next steps</h2>
+                    </div>
                     <a id="update-team-brief-btn" class="auth-btn auth-btn-oauth" href="#section-channels">Open Connected Apps</a>
                   </div>
                   <p class="dashboard-overview-copy">
-                    See the clearest next moves for your Oliver setup after you connect an app.
+                    Keep the next win small, personal, and easy to review.
                   </p>
-                  <div id="workspace-recommendation-card" class="workspace-recommendation-card">
-                    <div class="workspace-recommendation-empty">Looking at your setup for the clearest next step...</div>
-                  </div>
-                  <div id="workspace-summary-content" class="workspace-summary-grid">
-                    <div class="workspace-summary-empty">Loading your setup snapshot...</div>
-                  </div>
-
                   <div id="workspace-next-steps" class="workspace-next-steps" style="margin-top: 2rem;">
                     <div class="dashboard-header">
                       <div>
@@ -1977,7 +2210,8 @@
                 </section>
 
                 <section id="section-work" class="legal-card dashboard-section">
-                  <h2>Work</h2>
+                  <p class="dashboard-section-eyebrow">Work</p>
+                  <h2>Recent work</h2>
                   <p>Review incoming tasks and manage recurring Oliver work across your connected apps.</p>
                   <div class="work-view-tabs" role="tablist" aria-label="Work views">
                     <button
@@ -2075,7 +2309,8 @@
                 </section>
 
                 <section id="section-memo" class="legal-card dashboard-section">
-                  <h2>Memory</h2>
+                  <p class="dashboard-section-eyebrow">Memory</p>
+                  <h2>Saved memory</h2>
                   <p>Save the tone, context, and rules Oliver should remember across tasks.</p>
                   <div id="memo-container" style="margin-top: 1rem;">
                     <textarea id="memo-content" style="
@@ -2104,7 +2339,8 @@
                 </section>
 
                 <section id="section-settings" class="legal-card dashboard-section">
-                  <h2>Settings</h2>
+                  <p class="dashboard-section-eyebrow">Preferences</p>
+                  <h2>Preferences and controls</h2>
                   <p>Manage entry points and choose how proactive Oliver should be.</p>
                   <div class="settings-grid">
                     <div class="settings-panel">
@@ -2456,7 +2692,7 @@
         'section-routines': 'Open Routines',
         'section-settings': 'Open Settings',
         'section-tasks': 'Open Tasks',
-        'section-workspace': 'Open Next Steps'
+        'section-workspace': 'Open Checklist'
       };
       const WORKSPACE_RECOMMENDATION_CACHE_KEY = 'dowhiz_workspace_recommendation_cache_v2';
       const WORKSPACE_RECOMMENDATION_SUPPRESSION_KEY = 'dowhiz_workspace_recommendation_suppression_v1';
@@ -3044,20 +3280,33 @@
                 'Recurring context Oliver should remember'
               ].map((item) => `<li>${escapeHtml(item)}</li>`).join(''));
         const memoryTitle = hasMemory ? 'Memory preview' : (savedFocus.length ? 'Saved focus' : 'What to save next');
+        const memorySummary = hasMemory ? 'Ready to reuse' : 'Add first note';
+        const reviewableTaskCount = countReviewableTasks(cachedTasks);
+        const workSummary = taskCount === 0
+          ? 'No task history yet'
+          : `${successfulTaskCount} completed, ${reviewableTaskCount} reviewable`;
 
         container.innerHTML = `
-          <article class="workspace-summary-card">
-            <h3>Your setup</h3>
+          <article class="workspace-summary-card workspace-summary-card-stat">
+            <p class="workspace-summary-kicker">Connected surfaces</p>
+            <p class="workspace-summary-stat">${connectedTypes.length}</p>
             <p class="workspace-summary-meta"><strong>${escapeHtml(setupSummary)}</strong></p>
-            <p class="workspace-summary-meta">${taskCount} task${taskCount === 1 ? '' : 's'} seen so far${successfulTaskCount > 0 ? `, ${successfulTaskCount} completed successfully` : ''}.</p>
-            <p class="workspace-summary-meta">${hasMemory ? 'Memory is saved and ready to reuse.' : 'Add a short memory note so Oliver can stay consistent.'}</p>
-          </article>
-          <article class="workspace-summary-card">
-            <h3>Connected apps</h3>
             <ul class="workspace-summary-list">${connectedItems}</ul>
           </article>
+          <article class="workspace-summary-card workspace-summary-card-stat">
+            <p class="workspace-summary-kicker">Recent work</p>
+            <p class="workspace-summary-stat">${taskCount}</p>
+            <p class="workspace-summary-meta"><strong>${taskCount === 1 ? '1 task seen' : `${taskCount} tasks seen`}</strong></p>
+            <p class="workspace-summary-meta">${escapeHtml(workSummary)}</p>
+          </article>
           <article class="workspace-summary-card">
-            <h3>${memoryTitle}</h3>
+            <div class="workspace-summary-card-head">
+              <div>
+                <p class="workspace-summary-kicker">Memory</p>
+                <h3>${memoryTitle}</h3>
+              </div>
+              <span class="workspace-summary-badge">${escapeHtml(memorySummary)}</span>
+            </div>
             <ul class="workspace-summary-list">${memoryItems}</ul>
           </article>
         `;
@@ -3405,7 +3654,7 @@
           return RECOMMENDATION_SECTION_LABELS[recommendation?.action?.section] || 'Open section';
         }
         if (actionKind === 'trigger_create_brief') {
-          return 'Open Next Steps';
+          return 'Open Checklist';
         }
         if (actionKind === 'trigger_create_plan') {
           return 'Open Tasks';

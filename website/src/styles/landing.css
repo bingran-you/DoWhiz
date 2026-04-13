@@ -119,6 +119,29 @@
   color: var(--text-primary);
 }
 
+.landing-page {
+  position: relative;
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 34%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-primary) 98%, #ffffff 2%) 0%,
+      color-mix(in srgb, var(--surface-primary) 90%, var(--surface-secondary)) 52%,
+      color-mix(in srgb, var(--surface-secondary) 82%, var(--surface-primary)) 100%
+    );
+}
+
+[data-theme="dark"] .landing-page {
+  background:
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 48%, var(--surface-primary)) 0%,
+      var(--surface-primary) 55%,
+      color-mix(in srgb, var(--surface-secondary) 70%, var(--surface-primary)) 100%
+    );
+}
+
 .landing-page-cn {
   --font-cn-sans: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
 }
@@ -303,8 +326,8 @@
   border-radius: 1.2rem;
   background: linear-gradient(
     170deg,
-    color-mix(in srgb, var(--glass-bg) 96%, #ffffff 4%) 0%,
-    color-mix(in srgb, var(--glass-bg) 92%, #f6f9ff 8%) 100%
+    color-mix(in srgb, var(--surface-elevated) 94%, #ffffff 6%) 0%,
+    color-mix(in srgb, var(--surface-floating) 92%, var(--surface-primary)) 100%
   );
   box-shadow: 0 20px 44px -22px var(--shadow-color);
   padding: 1rem;
@@ -421,11 +444,11 @@
   display: grid;
   gap: 1rem;
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 18%, transparent), transparent 38%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 12%, transparent), transparent 38%),
     linear-gradient(
       165deg,
-      color-mix(in srgb, var(--surface-primary) 90%, #ffffff 10%) 0%,
-      color-mix(in srgb, var(--surface-primary) 96%, #eaf1ff 4%) 100%
+      color-mix(in srgb, var(--surface-elevated) 94%, #ffffff 6%) 0%,
+      color-mix(in srgb, var(--surface-floating) 90%, var(--surface-primary)) 100%
     );
 }
 
@@ -442,8 +465,8 @@
   border-radius: 1.3rem;
   background: linear-gradient(
     150deg,
-    color-mix(in srgb, var(--brand-primary) 55%, #ffffff 45%),
-    color-mix(in srgb, var(--brand-primary) 22%, var(--surface-primary))
+    color-mix(in srgb, var(--brand-primary) 48%, #ffffff 24%),
+    color-mix(in srgb, var(--brand-primary) 18%, var(--surface-elevated))
   );
   box-shadow: 0 18px 34px -24px var(--shadow-strong);
   flex-shrink: 0;
@@ -553,8 +576,8 @@
   background:
     linear-gradient(
       170deg,
-      color-mix(in srgb, var(--surface-primary) 94%, #ffffff 6%) 0%,
-      color-mix(in srgb, var(--surface-primary) 99%, #dfe9ff 1%) 100%
+      color-mix(in srgb, var(--surface-elevated) 96%, #ffffff 4%) 0%,
+      color-mix(in srgb, var(--surface-floating) 94%, var(--surface-primary)) 100%
     );
 }
 
@@ -2140,7 +2163,7 @@
 .hero-copy-showcase {
   margin: 0 auto;
   max-width: min(100%, 60rem);
-  gap: 0.95rem;
+  gap: 1rem;
   animation: landing-fade-up 0.7s ease both;
 }
 
@@ -2154,13 +2177,37 @@
   max-width: none;
   font-size: clamp(2.75rem, 4.85vw, 3.85rem);
   line-height: 0.98;
-  white-space: nowrap;
+  white-space: normal;
+  text-wrap: balance;
 }
 
 .hero-copy-showcase .hero-subtitle {
-  max-width: 42ch;
-  font-size: 1.08rem;
-  line-height: 1.6;
+  max-width: 44ch;
+  font-size: 1.06rem;
+  line-height: 1.62;
+}
+
+.hero-value-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.hero-value-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.1rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 84%, transparent);
+  background: color-mix(in srgb, var(--surface-primary) 84%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .hero-primary-cta {
@@ -2168,20 +2215,32 @@
   box-shadow: 0 18px 45px -32px rgba(28, 28, 30, 0.32);
 }
 
+.hero-support-note {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
 .hero-channel-showcase {
   position: relative;
   overflow: hidden;
   display: grid;
-  gap: 1.15rem;
+  gap: 1.2rem;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 1.35rem;
+  padding: 1.45rem;
   border-radius: 2.1rem;
   border: 1px solid color-mix(in srgb, var(--glass-border) 90%, transparent);
   background:
-    radial-gradient(circle at top left, rgba(63, 136, 255, 0.14), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(255, 138, 61, 0.12), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(247, 249, 255, 0.97) 100%);
+    radial-gradient(circle at top left, color-mix(in srgb, var(--text-primary) 5%, transparent), transparent 30%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--text-secondary) 6%, transparent), transparent 28%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-elevated) 96%, transparent) 0%,
+      color-mix(in srgb, var(--surface-floating) 84%, var(--surface-primary)) 100%
+    );
   box-shadow:
     0 46px 96px -58px rgba(28, 28, 30, 0.3),
     0 14px 28px -18px rgba(28, 28, 30, 0.14);
@@ -2193,8 +2252,8 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.5), transparent 30%),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.22), transparent 45%);
+    linear-gradient(120deg, color-mix(in srgb, var(--surface-primary) 32%, transparent), transparent 30%),
+    linear-gradient(0deg, color-mix(in srgb, var(--surface-primary) 12%, transparent), transparent 45%);
   pointer-events: none;
 }
 
@@ -2208,7 +2267,7 @@
 .hero-showcase-topbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
 }
 
@@ -2219,6 +2278,19 @@
   flex-wrap: wrap;
 }
 
+.hero-showcase-heading-stacked {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 36rem;
+}
+
+.hero-showcase-summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
 .hero-showcase-mode {
   display: inline-flex;
   align-items: center;
@@ -2227,7 +2299,7 @@
   padding: 0.32rem 0.68rem;
   border-radius: var(--radius-full);
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: rgba(255, 255, 255, 0.82);
+  background: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
   color: var(--text-secondary);
   font-size: 0.74rem;
   font-weight: 700;
@@ -2242,7 +2314,7 @@
   padding: 0.55rem 0.7rem 0.55rem 0.55rem;
   border-radius: var(--radius-full);
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: rgba(255, 255, 255, 0.76);
+  background: color-mix(in srgb, var(--surface-primary) 84%, transparent);
   box-shadow: 0 10px 30px -28px rgba(28, 28, 30, 0.28);
 }
 
@@ -2251,7 +2323,11 @@
   height: 48px;
   padding: 2px;
   border-radius: 1rem;
-  background: linear-gradient(140deg, rgba(63, 136, 255, 0.6), rgba(255, 138, 61, 0.55));
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--text-primary) 24%, var(--surface-primary)),
+    color-mix(in srgb, var(--text-secondary) 16%, var(--surface-primary))
+  );
   flex: 0 0 auto;
 }
 
@@ -2271,9 +2347,47 @@
   line-height: 1.3;
 }
 
+.hero-channel-rail {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.hero-channel-group {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.hero-channel-group-secondary {
+  gap: 0.5rem;
+}
+
+.hero-channel-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.hero-channel-group-label,
+.hero-channel-group-caption {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.8rem;
+  padding: 0.26rem 0.62rem;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--glass-border) 88%, transparent);
+  background: color-mix(in srgb, var(--surface-primary) 78%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .hero-channel-dock {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -2284,12 +2398,12 @@
   width: 100%;
   padding: 0.85rem 0.88rem 0.8rem;
   text-align: left;
-  border: 1px solid color-mix(in srgb, var(--tool-accent) 22%, var(--glass-border));
+  border: 1px solid color-mix(in srgb, var(--glass-border) 84%, var(--tool-accent) 16%);
   border-radius: 1.2rem;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--surface-primary) 95%, #ffffff 5%) 0%,
-    color-mix(in srgb, var(--tool-accent) 7%, #ffffff 93%) 100%
+    color-mix(in srgb, var(--surface-elevated) 96%, transparent) 0%,
+    color-mix(in srgb, var(--surface-floating) 86%, var(--tool-accent) 12%) 100%
   );
   box-shadow: 0 14px 28px -28px rgba(28, 28, 30, 0.28);
   cursor: pointer;
@@ -2301,6 +2415,18 @@
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--tool-accent) 42%, var(--glass-border));
   box-shadow: 0 22px 38px -30px rgba(28, 28, 30, 0.32);
+}
+
+.hero-channel-pill-secondary {
+  gap: 0.45rem;
+  padding: 0.78rem 0.84rem;
+  border-radius: 1rem;
+  box-shadow: none;
+}
+
+.hero-channel-pill-secondary:hover,
+.hero-channel-pill-secondary.is-active {
+  box-shadow: 0 16px 28px -28px rgba(28, 28, 30, 0.26);
 }
 
 .hero-channel-pill:disabled {
@@ -2326,10 +2452,10 @@
   justify-content: center;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--tool-accent) 28%, var(--glass-border));
-  background: color-mix(in srgb, var(--tool-accent) 10%, #ffffff);
-  color: color-mix(in srgb, var(--tool-accent) 86%, #121212);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border: 1px solid color-mix(in srgb, var(--tool-accent) 22%, var(--glass-border));
+  background: color-mix(in srgb, var(--tool-accent) 8%, var(--surface-primary));
+  color: color-mix(in srgb, var(--tool-accent) 48%, var(--text-primary));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-primary) 36%, transparent);
 }
 
 .hero-tool-badge-pill {
@@ -2403,6 +2529,123 @@
   animation-play-state: paused;
 }
 
+[data-theme="dark"] .landing-page .halo-effect {
+  opacity: 0.56;
+}
+
+[data-theme="dark"] .hero-copy-showcase .hero-eyebrow,
+[data-theme="dark"] .hero-value-pill,
+[data-theme="dark"] .hero-channel-group-label,
+[data-theme="dark"] .hero-channel-group-caption,
+[data-theme="dark"] .hero-operator-chip {
+  background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+  border-color: color-mix(in srgb, var(--glass-border) 88%, transparent);
+}
+
+[data-theme="dark"] .hero-channel-showcase {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.04), transparent 24%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 92%, transparent) 0%,
+      color-mix(in srgb, var(--surface-primary) 98%, transparent) 100%
+    );
+  box-shadow:
+    0 52px 100px -62px rgba(0, 0, 0, 0.62),
+    0 18px 32px -22px rgba(0, 0, 0, 0.38);
+}
+
+[data-theme="dark"] .hero-channel-showcase::before {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.06), transparent 30%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.03), transparent 45%);
+}
+
+[data-theme="dark"] .hero-operator-portrait {
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--text-primary) 18%, var(--surface-secondary)),
+    color-mix(in srgb, var(--text-secondary) 14%, var(--surface-primary))
+  );
+}
+
+[data-theme="dark"] .hero-channel-pill {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-secondary) 92%, transparent) 0%,
+    color-mix(in srgb, var(--surface-tertiary) 88%, var(--tool-accent) 12%) 100%
+  );
+  box-shadow: 0 20px 34px -30px rgba(0, 0, 0, 0.44);
+}
+
+[data-theme="dark"] .hero-channel-pill-progress {
+  background: color-mix(in srgb, var(--surface-tertiary) 86%, rgba(255, 255, 255, 0.1));
+}
+
+[data-theme="dark"] .hero-intake-panel,
+[data-theme="dark"] .hero-spotlight-card,
+[data-theme="dark"] .hero-onboarding-card {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  box-shadow:
+    0 34px 70px -42px rgba(0, 0, 0, 0.52),
+    0 18px 28px -22px rgba(0, 0, 0, 0.36);
+}
+
+[data-theme="dark"] .hero-intake-panel {
+  background: linear-gradient(
+    170deg,
+    color-mix(in srgb, var(--surface-secondary) 94%, transparent) 0%,
+    color-mix(in srgb, var(--surface-primary) 98%, transparent) 100%
+  );
+}
+
+[data-theme="dark"] .hero-spotlight-card,
+[data-theme="dark"] .hero-onboarding-card {
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 34%),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--surface-secondary) 92%, transparent) 0%,
+      color-mix(in srgb, var(--surface-primary) 98%, transparent) 100%
+    );
+}
+
+[data-theme="dark"] .hero-showcase-mode,
+[data-theme="dark"] .section-kicker {
+  background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+}
+
+[data-theme="dark"] .hero-flow-card,
+[data-theme="dark"] .hero-preview-card,
+[data-theme="dark"] .demo-feature-card,
+[data-theme="dark"] .demo-short-rail,
+[data-theme="dark"] .story-step-card,
+[data-theme="dark"] .example-card {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 92%, transparent) 0%,
+      color-mix(in srgb, var(--surface-primary) 97%, transparent) 100%
+    );
+  box-shadow:
+    0 30px 62px -46px rgba(0, 0, 0, 0.54),
+    0 14px 24px -18px rgba(0, 0, 0, 0.34);
+}
+
+[data-theme="dark"] .hero-flow-step,
+[data-theme="dark"] .hero-preview-request,
+[data-theme="dark"] .hero-preview-result,
+[data-theme="dark"] .demo-inline-link,
+[data-theme="dark"] .demo-short-link,
+[data-theme="dark"] .example-card-link:hover,
+[data-theme="dark"] .example-card-link:focus-visible {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+}
+
 .hero-channel-stage {
   display: grid;
   gap: 1.15rem;
@@ -2410,10 +2653,25 @@
   border-radius: 1.75rem;
   border: 1px solid color-mix(in srgb, var(--tool-accent) 18%, var(--glass-border));
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 249, 255, 0.94) 100%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-primary) 96%, transparent) 0%,
+      color-mix(in srgb, var(--surface-secondary) 90%, transparent) 100%
+    ),
     radial-gradient(circle at top left, color-mix(in srgb, var(--tool-accent) 10%, transparent), transparent 34%);
   box-shadow: 0 22px 42px -34px rgba(28, 28, 30, 0.24);
   animation: hero-stage-in 0.42s ease both;
+}
+
+[data-theme="dark"] .hero-channel-stage {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 96%, transparent) 0%,
+      color-mix(in srgb, var(--surface-primary) 98%, transparent) 100%
+    ),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--tool-accent) 10%, transparent), transparent 34%);
+  box-shadow: 0 24px 42px -30px rgba(0, 0, 0, 0.52);
 }
 
 .hero-channel-stage-head {
@@ -4433,7 +4691,7 @@
 
 .landing-page-cn .hero-copy-showcase .hero-title {
   max-width: none;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .landing-page-cn .hero-copy-showcase .hero-subtitle {
@@ -4441,6 +4699,8 @@
 }
 
 .landing-page-cn .hero-showcase-mode,
+.landing-page-cn .hero-channel-group-label,
+.landing-page-cn .hero-channel-group-caption,
 .landing-page-cn .hero-channel-pill-copy span,
 .landing-page-cn .hero-stage-micro-label {
   text-transform: none;
@@ -4477,7 +4737,7 @@
 .example-card {
   border: 1px solid color-mix(in srgb, var(--glass-border) 94%, transparent);
   border-radius: 1.45rem;
-  background: rgba(255, 255, 255, 0.82);
+  background: color-mix(in srgb, var(--surface-elevated) 90%, rgba(255, 255, 255, 0.68));
   box-shadow: 0 16px 32px -30px rgba(28, 28, 30, 0.22);
 }
 
@@ -4501,7 +4761,7 @@
   padding: 0.72rem 0.78rem;
   border-radius: 1rem;
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: color-mix(in srgb, var(--surface-primary) 92%, #ffffff 8%);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, #ffffff 8%);
 }
 
 .hero-flow-index {
@@ -4530,7 +4790,7 @@
   padding: 0.92rem 0.95rem;
   border-radius: 1.05rem;
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: color-mix(in srgb, var(--surface-primary) 94%, #ffffff 6%);
+  background: color-mix(in srgb, var(--surface-elevated) 94%, #ffffff 6%);
 }
 
 .hero-preview-label {
@@ -4590,7 +4850,7 @@
   padding: 0.36rem 0.72rem;
   border-radius: var(--radius-full);
   border: 1px solid color-mix(in srgb, var(--glass-border) 88%, transparent);
-  background: color-mix(in srgb, var(--surface-primary) 88%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
   color: var(--text-secondary);
   font-size: 0.74rem;
   font-weight: 700;
@@ -4645,7 +4905,7 @@
   padding: 0.56rem 0.88rem;
   border-radius: var(--radius-full);
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, rgba(255, 255, 255, 0.72));
   color: var(--text-primary);
   font-size: 0.84rem;
   font-weight: 600;
@@ -4727,7 +4987,7 @@
   padding: 0.56rem 0.8rem;
   border-radius: var(--radius-full);
   border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in srgb, var(--surface-elevated) 90%, rgba(255, 255, 255, 0.72));
   color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: 600;
@@ -4798,7 +5058,7 @@
 .example-card-link:focus-visible {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--brand-primary) 22%, var(--glass-border));
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface-floating) 92%, rgba(255, 255, 255, 0.72));
   box-shadow: 0 22px 42px -34px rgba(28, 28, 30, 0.36);
 }
 
