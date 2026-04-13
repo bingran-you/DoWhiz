@@ -22,11 +22,35 @@
   --radius-lg: 0.75rem;
 }
 
-[data-theme="light"] {
-  /* Keep light mode selectors, but pull from shared brand palette. */
+[data-theme="light"],
+[data-theme="dark"] {
+  /* Shared component treatment across both day and night themes. */
+  body,
+  .navbar,
+  .btn,
+  .btn-small,
+  .hero-channel-showcase,
+  .hero-channel-pill,
+  .hero-flow-card,
+  .hero-preview-card,
+  .demo-feature-card,
+  .demo-short-rail,
+  .story-step-card,
+  .example-card,
+  .faq-accordion-item,
+  .site-footer {
+    transition:
+      background-color 220ms ease,
+      background 220ms ease,
+      border-color 220ms ease,
+      color 220ms ease,
+      box-shadow 220ms ease;
+  }
+
   .btn-primary {
     background: var(--brand-primary);
     color: var(--text-on-brand);
+    box-shadow: 0 18px 34px -26px var(--shadow-strong);
   }
 
   .btn-primary:hover {
@@ -37,6 +61,7 @@
     background: var(--color-secondary);
     border-color: var(--color-border);
     color: var(--text-primary);
+    box-shadow: 0 12px 28px -28px var(--shadow-color);
   }
 
   .btn-secondary:hover {
@@ -48,6 +73,7 @@
     background: var(--color-secondary);
     border-color: var(--color-border);
     color: var(--text-primary);
+    box-shadow: 0 10px 24px -28px var(--shadow-color);
   }
 
   .btn-small:hover {
@@ -58,6 +84,7 @@
   .navbar {
     background: var(--navbar-bg);
     border-color: var(--color-border);
+    box-shadow: 0 20px 48px -40px var(--shadow-strong);
   }
 
   .logo {
@@ -175,7 +202,22 @@
 
   /* Mouse field opacity reduction for light mode */
   .mouse-field {
-    opacity: 0.25;
+    opacity: 0.18;
   }
 }
 
+[data-theme="dark"] {
+  .btn-secondary,
+  .btn-small {
+    background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+  }
+
+  .btn-secondary:hover,
+  .btn-small:hover {
+    background: color-mix(in srgb, var(--surface-tertiary) 84%, transparent);
+  }
+
+  .mouse-field {
+    opacity: 0.28;
+  }
+}
