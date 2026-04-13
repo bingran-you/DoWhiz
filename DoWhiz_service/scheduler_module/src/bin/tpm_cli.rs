@@ -10,12 +10,16 @@
 //!   tpm_cli list-contacts [--workspace-id <ws>]
 //!   tpm_cli update-contacted --contact-id <id>
 
-use mongodb::bson::oid::ObjectId;
+use chrono::Utc;
+use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime as BsonDateTime};
+use mongodb::options::UpdateOptions;
 use scheduler_module::account_store::{AccountStore, UserContact};
 use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSource, TaskStatus};
+use scheduler_module::mongo_store::{create_client_from_env, database_from_env};
 use scheduler_module::notion_browser::NotionApiClient;
 use serde_json::{json, Value};
 use std::env;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use uuid::Uuid;
 
@@ -33,11 +37,11 @@ fn main() -> ExitCode {
         "get-contact" => cmd_get_contact(&args[2..]),
         "list-contacts" => cmd_list_contacts(&args[2..]),
         "update-contacted" => cmd_update_contacted(&args[2..]),
-        // Task board commands
         "setup-board" => cmd_setup_board(&args[2..]),
         "create-task" => cmd_create_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
         "sync-tasks" => cmd_sync_tasks(&args[2..]),
+        "setup-tpm-cron" => cmd_setup_tpm_cron(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
             ExitCode::SUCCESS
@@ -94,6 +98,12 @@ Task Board Commands:
     --organization <org>     Organization name (required)
     --database-id <id>       Notion database ID
     --workspace-id <ws>      Notion workspace ID
+
+Cron Commands:
+  setup-tpm-cron    Create a cron RunTask for daily TPM sync
+    --user-id <id>           User ID (must belong to organization)
+    --organization <org>     Organization name
+    --cron <expr>            Cron expression (default: "0 0 9 * * MON-FRI")
 
 Environment:
   SUPABASE_DB_URL        Required for contact database access
@@ -941,6 +951,247 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     }
 }
 
+fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
+    let mut user_id: Option<String> = None;
+    let mut organization: Option<String> = None;
+    let mut cron_expr: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--user-id" => {
+                i += 1;
+                user_id = args.get(i).cloned();
+            }
+            "--organization" => {
+                i += 1;
+                organization = args.get(i).cloned();
+            }
+            "--cron" => {
+                i += 1;
+                cron_expr = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(user_id) = user_id else {
+        eprintln!("Error: --user-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let Some(organization) = organization else {
+        eprintln!("Error: --organization is required");
+        return ExitCode::FAILURE;
+    };
+
+    let cron_expr = cron_expr.unwrap_or_else(|| "0 0 9 * * MON-FRI".to_string());
+
+    let account_store = match AccountStore::from_env() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to connect to Supabase: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let account_uuid = match Uuid::parse_str(&user_id) {
+        Ok(u) => u,
+        Err(_) => {
+            eprintln!("Error: Invalid user-id UUID");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let account = match account_store.get_account(account_uuid) {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            eprintln!("Error: Account not found: {}", user_id);
+            return ExitCode::FAILURE;
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to fetch account: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let org = match account_store.get_organization_by_name(&organization) {
+        Ok(Some(o)) => o,
+        Ok(None) => {
+            eprintln!("Error: Organization not found: {}", organization);
+            return ExitCode::FAILURE;
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to fetch organization: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if account.organization_id != Some(org.id) {
+        eprintln!(
+            "Error: User {} is not in organization {}",
+            user_id, organization
+        );
+        return ExitCode::FAILURE;
+    }
+
+    let identifiers = match account_store.list_identifiers(account_uuid) {
+        Ok(ids) => ids,
+        Err(e) => {
+            eprintln!("Error: Failed to list identifiers: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let email = identifiers
+        .iter()
+        .find(|id| id.identifier_type == "email" && id.verified)
+        .map(|id| id.identifier.clone());
+
+    let Some(email) = email else {
+        eprintln!("Error: No verified email found for user {}", user_id);
+        return ExitCode::FAILURE;
+    };
+
+    let client = match create_client_from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Failed to connect to MongoDB: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let db = database_from_env(&client);
+    let tasks = db.collection::<mongodb::bson::Document>("tasks");
+
+    let task_id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let next_run = match compute_next_cron_run(&cron_expr, now) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Error: Invalid cron expression: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let users_root = env::var("USERS_ROOT").unwrap_or_else(|_| "/tmp/users".to_string());
+    let workspace_dir = PathBuf::from(&users_root)
+        .join(&user_id)
+        .join("workspaces")
+        .join(format!("tpm_cron_{}", task_id));
+
+    let task_kind = json!({
+        "type": "run_task",
+        "workspace_dir": workspace_dir.to_string_lossy(),
+        "input_email_dir": workspace_dir.join("incoming_email").to_string_lossy(),
+        "input_attachments_dir": workspace_dir.join("incoming_attachments").to_string_lossy(),
+        "memory_dir": PathBuf::from(&users_root).join(&user_id).join("memory").to_string_lossy(),
+        "reference_dir": workspace_dir.join("references").to_string_lossy(),
+        "model_name": "claude-sonnet-4-20250514",
+        "runner": "codex",
+        "codex_disabled": false,
+        "reply_to": [&email],
+        "reply_from": null,
+        "archive_root": null,
+        "thread_id": null,
+        "thread_epoch": null,
+        "thread_state_path": null,
+        "channel": "email",
+        "slack_team_id": null,
+        "employee_id": null,
+        "requester_identifier_type": "email",
+        "requester_identifier": &email,
+        "account_id": &user_id,
+        "channel_metadata": {}
+    });
+
+    let task = json!({
+        "id": task_id.to_string(),
+        "kind": task_kind,
+        "schedule": {
+            "type": "cron",
+            "expression": &cron_expr,
+            "next_run": next_run.to_rfc3339()
+        },
+        "enabled": true,
+        "created_at": now.to_rfc3339(),
+        "last_run": null
+    });
+
+    let task_json = serde_json::to_string(&task).expect("serialize task");
+
+    let filter = doc! {
+        "owner_scope.kind": "user",
+        "owner_scope.id": &user_id,
+        "task_id": task_id.to_string(),
+    };
+
+    let update = doc! {
+        "$set": {
+            "owner_scope": { "kind": "user", "id": &user_id },
+            "task_id": task_id.to_string(),
+            "kind": "run_task",
+            "channel": "email",
+            "enabled": true,
+            "created_at": BsonDateTime::from_chrono(now),
+            "last_run": Bson::Null,
+            "schedule": {
+                "type": "cron",
+                "cron_expression": &cron_expr,
+                "next_run": BsonDateTime::from_chrono(next_run),
+                "run_at": Bson::Null,
+            },
+            "task_json": &task_json,
+        },
+        "$setOnInsert": { "retry_count": 0i32 },
+    };
+
+    match tasks.update_one(filter, update, UpdateOptions::builder().upsert(true).build()) {
+        Ok(result) => {
+            let output = json!({
+                "success": true,
+                "task_id": task_id.to_string(),
+                "user_id": user_id,
+                "organization": organization,
+                "email": email,
+                "cron": cron_expr,
+                "next_run": next_run.to_rfc3339(),
+                "workspace_dir": workspace_dir.to_string_lossy(),
+                "upserted": result.upserted_id.is_some(),
+            });
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to insert task: {}", e);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn compute_next_cron_run(
+    expression: &str,
+    after: chrono::DateTime<Utc>,
+) -> Result<chrono::DateTime<Utc>, String> {
+    use cron::Schedule;
+    use std::str::FromStr;
+
+    let fields = expression.split_whitespace().count();
+    if fields != 6 {
+        return Err(format!("expected 6 fields, got {}", fields));
+    }
+
+    let schedule = Schedule::from_str(expression).map_err(|e| e.to_string())?;
+    for datetime in schedule.upcoming(Utc) {
+        if datetime > after {
+            return Ok(datetime);
+        }
+    }
+    Err("no next run available".to_string())
+}
+
 // =============================================================================
 // Helper functions
 // =============================================================================
@@ -1081,6 +1332,58 @@ mod tests {
             extract_rich_text_property(&props, "Description"),
             Some("First".to_string())
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit tests for compute_next_cron_run
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_next_cron_run_weekdays_9am() {
+        use chrono::{TimeZone, Timelike};
+        let after = Utc.with_ymd_and_hms(2026, 4, 13, 8, 0, 0).unwrap(); // Monday 8 AM
+        let result = compute_next_cron_run("0 0 9 * * MON-FRI", after);
+        assert!(result.is_ok());
+        let next = result.unwrap();
+        assert!(next > after);
+        assert_eq!(next.hour(), 9);
+        assert_eq!(next.minute(), 0);
+    }
+
+    #[test]
+    fn test_compute_next_cron_run_invalid_field_count() {
+        let after = Utc::now();
+        let result = compute_next_cron_run("0 0 9 * *", after); // 5 fields instead of 6
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("expected 6 fields"));
+    }
+
+    #[test]
+    fn test_compute_next_cron_run_invalid_expression() {
+        let after = Utc::now();
+        let result = compute_next_cron_run("invalid cron expr here", after);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_compute_next_cron_run_daily_midnight() {
+        use chrono::{TimeZone, Timelike};
+        let after = Utc.with_ymd_and_hms(2026, 4, 13, 23, 59, 0).unwrap();
+        let result = compute_next_cron_run("0 0 0 * * *", after);
+        assert!(result.is_ok());
+        let next = result.unwrap();
+        assert!(next > after);
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+    }
+
+    #[test]
+    fn test_compute_next_cron_run_returns_future_time() {
+        let after = Utc::now();
+        let result = compute_next_cron_run("0 * * * * *", after); // every minute
+        assert!(result.is_ok());
+        let next = result.unwrap();
+        assert!(next > after);
     }
 
     // -------------------------------------------------------------------------
