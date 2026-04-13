@@ -103,21 +103,30 @@ The prompt builder (`prompt.rs`) or workspace setup checks the organization and 
 
 **ACI Container Access:**
 
-Oliver runs inside an ACI container. For TPM mode, it needs access to `DevTaskStore` (MongoDB `deeptutor_tasks` collection) to:
+Oliver runs inside an ACI container. For TPM mode, it needs access to `DevTaskStore` (MongoDB `dev_tasks` collection) to:
 - Query pending tasks
 - Update task status
 - Assign tasks to developers
 - Link tasks to Notion pages
 
-The ACI container already has `MONGODB_URI` for other operations. For TPM mode, Oliver imports `DevTaskStore` from `scheduler_module` and uses it directly using the relevant env vars:
+The ACI container already has `MONGODB_URI` for other operations. For TPM mode, Oliver imports `DevTaskStore` from `scheduler_module` and uses it directly:
 
 ```rust
-// In TPM mode, Oliver can:
-let store = DevTaskStore::new()?;
+// In TPM mode, Oliver creates a store scoped to the user's organization:
+let store = DevTaskStore::new("deeptutor")?;
 let backlog = store.list_tasks_by_status(TaskStatus::Backlog)?;
 store.update_status(&task_id, TaskStatus::InProgress)?;
 store.update_assignee(&task_id, Some("dev@example.com"))?;
 ```
+
+**Multi-tenant design:** All organizations share the same `dev_tasks` collection. Each document has an `organization` field, and all queries filter by it. No cross-org data leakage.
+
+dev_tasks collection
+├── { organization: "deeptutor", title: "Fix PDF crash", ... }
+├── { organization: "deeptutor", title: "Add dark mode", ... }
+├── { organization: "acme-corp", title: "Update API", ... }
+└── { organization: "acme-corp", title: "Fix login", ... }
+
 
 **Frontend Flow (DoWhiz account settings):**
 1. User searches for organization: `SELECT * FROM organizations WHERE name ILIKE '%query%'`
@@ -140,6 +149,7 @@ enum TaskStatus { Backlog, InProgress, Review, Done, Blocked }
 enum TaskSource { UserFeedback, Notetaker, MarketResearch, Manual }
 
 struct DevTask {
+    organization: String,           // Multi-tenant: "deeptutor", "acme-corp", etc.
     title: String,
     description: String,
     priority: Priority,
@@ -148,6 +158,8 @@ struct DevTask {
     source: TaskSource,
     tags: Vec<String>,
     notion_page_id: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 ```
 
