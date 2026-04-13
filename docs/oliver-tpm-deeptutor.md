@@ -69,7 +69,8 @@ Reuse the existing Azure Service Bus inbound gateway. Same Oliver (employee), di
 -- New table for organizations
 CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT UNIQUE NOT NULL,  -- "deeptutor", "acme-corp", etc.
+    name TEXT UNIQUE NOT NULL,           -- "deeptutor", "acme-corp", etc.
+    notion_database_id TEXT,             -- Notion task board ID (populate from tpm_cli setup-board command)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -121,12 +122,13 @@ store.update_assignee(&task_id, Some("dev@example.com"))?;
 
 **Multi-tenant design:** All organizations share the same `dev_tasks` collection. Each document has an `organization` field, and all queries filter by it. No cross-org data leakage.
 
+```
 dev_tasks collection
 ├── { organization: "deeptutor", title: "Fix PDF crash", ... }
 ├── { organization: "deeptutor", title: "Add dark mode", ... }
 ├── { organization: "acme-corp", title: "Update API", ... }
 └── { organization: "acme-corp", title: "Fix login", ... }
-
+```
 
 **Frontend Flow (DoWhiz account settings):**
 1. User searches for organization: `SELECT * FROM organizations WHERE name ILIKE '%query%'`
@@ -320,6 +322,7 @@ struct DeveloperProfile {
 - MongoDB collection + CRUD operations ✅ (`dev_task_store.rs`)
 - Manual task creation via Oliver
 - Assignment notifications
+- Notion TPM CLI
 
 ### Notetaker Integration
 - Otter.ai transcript reader
@@ -337,19 +340,86 @@ struct DeveloperProfile {
 - Workload balancing
 - Priority-based routing
 
-### Notion CLI
+### TPM CLI (`tpm_cli`)
+
+Task board commands for managing DevTasks across MongoDB and Notion:
+
+#### `setup-board` — Create Notion database for an organization
+
+```bash
+tpm_cli setup-board \
+  --organization deeptutor \
+  --parent-page-id <NOTION_PAGE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+Creates a Notion database with TPM schema:
+- **Name** (title)
+- **Status** (select: Backlog, In Progress, Review, Done, Blocked)
+- **Priority** (select: P0, P1, P2, P3)
+- **Assignee** (people)
+- **Tags** (multi-select)
+- **Source** (select: User Feedback, Notetaker, Market Research, Manual)
+- **MongoDB ID** (rich_text — links to `dev_tasks` collection)
+
+Returns `database_id` to store in `organizations.notion_database_id`.
+
+[TODO] Link notion_database_id with organization in Supabase Postgres
+
+#### `create-task` — Create task in MongoDB + Notion
+
+```bash
+tpm_cli create-task \
+  --organization deeptutor \
+  --database-id <NOTION_DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID> \
+  --title "Fix PDF crash on large files" \
+  --description "PDFs over 100 pages cause app crash" \
+  --priority p1 \
+  --source user_feedback \
+  --tags bug,pdf,stability \
+  --assignee dev@example.com
+```
+
+Flow:
+1. Insert `DevTask` into MongoDB `dev_tasks` collection
+2. Create page in Notion database with `MongoDB ID` property
+3. Link `notion_page_id` back to MongoDB document with DevTaskStore's ```link_notion_page```
+
+#### `list-tasks` — List tasks from MongoDB
+
+```bash
+# List all tasks
+tpm_cli list-tasks --organization deeptutor
+
+# Filter by status
+tpm_cli list-tasks --organization deeptutor --status backlog
+
+# Filter by assignee
+tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
+```
+
+#### `sync-tasks` — Sync status from Notion to MongoDB
+
+```bash
+tpm_cli sync-tasks \
+  --organization deeptutor \
+  --database-id <NOTION_DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+Pulls status/priority changes from Notion and updates MongoDB. Uses `MongoDB ID` property to match Notion pages to MongoDB documents.
+
+### Notion CLI (`notion_api_cli`)
 
 **Already supported:**
 - `query-database` — Filter tasks by status, assignee, priority
 - `update-page` — Change task status, reassign, update properties
 - `create-page` — Create new task (database items are pages in Notion)
+- `create-database` — Create a new database with custom schema
 - `create-comment` / `reply` — Oliver comments on tasks
 - `search` — Find tasks by keyword
 - `get-database` — Get board schema/properties
-
-**Potential additions:**
-- `create-database-item` — Convenience wrapper for creating tasks with typed properties (priority, status, assignee)
-- `get-stale-items` — Query items with no updates in N days
 
 ---
 
@@ -366,7 +436,9 @@ struct DeveloperProfile {
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
 | **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
+| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks) |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
+| Notion API Client | `scheduler_module/src/notion_browser/api_client.rs` | `create_database`, `create_database_page`, `query_database` |
 | Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
 | Queue trait | `scheduler_module/src/ingestion_queue.rs` | Enqueue/claim semantics |
 | Task types | `scheduler_module/src/scheduler/types.rs` | TaskKind pattern |
