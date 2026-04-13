@@ -182,6 +182,18 @@ pub struct UserContact {
     pub created_at: DateTime<Utc>,
 }
 
+/// Organization for TPM multi-tenant task management.
+///
+/// Organizations group accounts and link to Notion task boards.
+#[derive(Debug, Clone)]
+pub struct Organization {
+    pub id: Uuid,
+    pub name: String,
+    /// Notion database ID for this organization's task board
+    pub notion_database_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChannelInstallOnboardingState {
     pub account_id: Uuid,
@@ -1581,6 +1593,61 @@ impl AccountStore {
             &[&contact_id],
         )?;
         Ok(())
+    }
+
+    // =========================================================================
+    // Organization methods (TPM Multi-Tenant)
+    // =========================================================================
+
+    /// Get an organization by name.
+    ///
+    /// Used by TPM to look up organization settings (e.g., Notion database ID).
+    pub fn get_organization_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "SELECT id, name, notion_database_id, created_at
+             FROM organizations
+             WHERE name = $1",
+            &[&name],
+        )?;
+
+        Ok(row.map(|r| Organization {
+            id: r.get(0),
+            name: r.get(1),
+            notion_database_id: r.get(2),
+            created_at: r.get(3),
+        }))
+    }
+
+    /// Update the Notion database ID for an organization.
+    ///
+    /// Called after `tpm_cli setup-board` creates a new Notion task board.
+    pub fn update_organization_notion_database_id(
+        &self,
+        organization_name: &str,
+        notion_database_id: &str,
+    ) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE organizations
+             SET notion_database_id = $1
+             WHERE name = $2
+             RETURNING id, name, notion_database_id, created_at",
+            &[&notion_database_id, &organization_name],
+        )?;
+
+        match row {
+            Some(r) => Ok(Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                created_at: r.get(3),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
     }
 
     /// Create an email verification token (expires in 24 hours)
