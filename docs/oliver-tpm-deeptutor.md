@@ -149,6 +149,7 @@ enum TaskStatus { Backlog, InProgress, Review, Done, Blocked }
 enum TaskSource { UserFeedback, Notetaker, MarketResearch, Manual }
 
 struct DevTask {
+    organization: String,           // Multi-tenant: "deeptutor", "acme-corp", etc.
     title: String,
     description: String,
     priority: Priority,
@@ -157,6 +158,8 @@ struct DevTask {
     source: TaskSource,
     tags: Vec<String>,
     notion_page_id: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 ```
 
