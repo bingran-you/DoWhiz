@@ -1628,6 +1628,27 @@ impl AccountStore {
         }))
     }
 
+    /// Get an organization by ID.
+    pub fn get_organization_by_id(
+        &self,
+        org_id: Uuid,
+    ) -> Result<Option<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "SELECT id, name, notion_database_id, created_at
+             FROM organizations
+             WHERE id = $1",
+            &[&org_id],
+        )?;
+
+        Ok(row.map(|r| Organization {
+            id: r.get(0),
+            name: r.get(1),
+            notion_database_id: r.get(2),
+            created_at: r.get(3),
+        }))
+    }
+
     /// Update the Notion database ID for an organization.
     ///
     /// Called after `tpm_cli setup-board` creates a new Notion task board.

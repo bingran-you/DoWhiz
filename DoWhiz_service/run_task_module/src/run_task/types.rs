@@ -52,6 +52,12 @@ pub struct UserIdentities {
     /// Filesystem user IDs (UUIDs) that this account can access
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_user_ids: Vec<String>,
+    /// Organization ID (for TPM multi-tenant)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<String>,
+    /// Organization name (for TPM prompt injection)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
