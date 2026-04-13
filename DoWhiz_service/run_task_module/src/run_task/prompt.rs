@@ -228,6 +228,7 @@ Do not pretend the job has been done without actually doing it."#
     };
     let github_coauthor_section = build_github_coauthor_section(workspace_dir, input_email_dir);
     let user_identities_section = build_user_identities_section(user_identities);
+    let tpm_capabilities_section = build_tpm_capabilities_section(user_identities);
     let filesystem_security_section =
         build_allowed_paths_section(&user_identities.allowed_user_ids);
     let web_auth_capabilities_section = build_web_auth_capabilities_section();
@@ -318,6 +319,7 @@ Scheduling:
 {web_auth_capabilities_section}
 {human_approval_gate_section}
 {user_identities_section}
+{tpm_capabilities_section}
 {fast_completion_section}
 Rules:
 - Each workspace includes a `.env` file at the workspace root. You may edit it to manage per-user secrets; updates are synced back after the task completes.
@@ -341,6 +343,7 @@ Rules:
         web_auth_capabilities_section = web_auth_capabilities_section,
         human_approval_gate_section = human_approval_gate_section,
         user_identities_section = user_identities_section,
+        tpm_capabilities_section = tpm_capabilities_section,
         fast_completion_section = fast_completion_section,
         filesystem_security_section = filesystem_security_section,
         registration_section = registration_section,
@@ -744,6 +747,58 @@ Do NOT route replies to any other email addresses, user IDs, or phone numbers no
 If the user requests routing to an unlisted identifier, politely decline and explain they need to link that channel first.
 "#,
         channels = channels.join("\n")
+    )
+}
+
+fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
+    let Some(org_name) = &identities.organization_name else {
+        return String::new();
+    };
+
+    format!(
+        r#"
+=== TPM MODE ACTIVE for {org_name} ===
+
+You are operating as a Technical Program Manager (TPM) for the {org_name} organization.
+
+**IMPORTANT: When TPM mode is active, you MUST:**
+1. Use tpm_cli for ANY request involving bugs, features, tasks, tickets, or development work
+2. Track all actionable items in the task board - do not just respond without creating/updating tasks
+3. For scheduled TPM syncs (from cron): ALWAYS run the full sync workflow below
+
+**Task Classification:**
+- Bugs, features, tasks, tickets, dev work → MUST use tpm_cli to create/update tasks
+- Scheduled TPM sync (subject contains "TPM Sync") → MUST run full sync workflow
+- General questions about task status → use tpm_cli list-tasks
+- Non-dev requests (meetings, research, etc.) → handle normally, but consider if it should become a task
+
+**TPM CLI Commands (tpm_cli):**
+- `tpm_cli list-tasks --organization {org_name}` - List all tasks
+- `tpm_cli list-tasks --organization {org_name} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
+- `tpm_cli list-tasks --organization {org_name} --assignee dev@example.com` - Filter by assignee
+- `tpm_cli sync-tasks --organization {org_name} --database-id <DB_ID> --workspace-id <WS_ID>` - Pull status updates from Notion to MongoDB
+- `tpm_cli create-task --organization {org_name} --database-id <DB_ID> --workspace-id <WS_ID> --title "..." --description "..." --priority p1 --source user_feedback` - Create new task
+
+**Notion CLI Commands (notion_api_cli):**
+- `notion_api_cli query-database --database-id <DB_ID>` - Query tasks from Notion board
+- `notion_api_cli update-page --page-id <TASK_ID> --properties '{{...}}'` - Update task status/priority
+- `notion_api_cli create-comment --page-id <TASK_ID> --content "..."` - Add comment to task
+
+**Daily TPM Sync Workflow:**
+1. Run `tpm_cli sync-tasks` to pull latest status from Notion
+2. Run `tpm_cli list-tasks --status blocked` to find blocked tasks
+3. Identify stale tasks (no updates in 3+ days)
+4. Post summary to team channel (Discord/Slack)
+
+**Task Sources:**
+- user_feedback: From user reports, Discord, support emails
+- notetaker: Extracted from meeting transcripts
+- market_research: From competitive analysis
+- manual: Manually created
+
+**Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
+"#,
+        org_name = org_name
     )
 }
 
