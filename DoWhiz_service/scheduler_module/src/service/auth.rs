@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use base64::Engine;
 use chrono::{DateTime, Utc};
@@ -1497,6 +1497,92 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
         }),
     )
         .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetOrganizationRequest {
+    pub organization_name: String,
+}
+
+/// PUT /auth/account/organization - Set the account's organization
+pub async fn set_account_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<SetOrganizationRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let store = state.account_store.clone();
+    let account_id = account.id;
+    let org_name = payload.organization_name.clone();
+
+    let result = task::spawn_blocking(move || store.set_account_organization(account_id, &org_name))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(updated_account)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "account_id": updated_account.id,
+                "organization_id": updated_account.organization_id,
+                "organization_name": payload.organization_name,
+            })),
+        )
+            .into_response(),
+        Ok(Err(crate::account_store::AccountStoreError::NotFound)) => json_error_response(
+            StatusCode::NOT_FOUND,
+            &format!("Organization '{}' not found", payload.organization_name),
+        ),
+        Ok(Err(e)) => {
+            error!("Failed to set account organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// DELETE /auth/account/organization - Remove the account from its organization
+pub async fn clear_account_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let store = state.account_store.clone();
+    let account_id = account.id;
+
+    let result = task::spawn_blocking(move || store.clear_account_organization(account_id))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(updated_account)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "account_id": updated_account.id,
+                "organization_id": null,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to clear account organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -6240,6 +6326,7 @@ pub fn auth_router(state: AuthState) -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/account", get(get_account).delete(delete_account))
+        .route("/auth/account/organization", put(set_account_organization).delete(clear_account_organization))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))

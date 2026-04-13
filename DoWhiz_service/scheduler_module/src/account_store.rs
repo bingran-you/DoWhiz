@@ -41,6 +41,7 @@ pub struct Account {
     pub created_at: DateTime<Utc>,
     pub tokens_to_hours: Option<f64>,
     pub purchased_hours: Option<f64>,
+    pub organization_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -536,7 +537,7 @@ impl AccountStore {
         let row = conn.query_one(
             "INSERT INTO accounts (id, auth_user_id, created_at, tokens_to_hours, purchased_hours)
              VALUES ($1, $2, NOW(), 0, 0)
-             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8",
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
             &[&id, &auth_user_id],
         )?;
         Ok(Account {
@@ -545,6 +546,7 @@ impl AccountStore {
             created_at: row.get(2),
             tokens_to_hours: row.get(3),
             purchased_hours: row.get(4),
+            organization_id: row.get(5),
         })
     }
 
@@ -555,7 +557,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts WHERE auth_user_id = $1",
             &[&auth_user_id],
         )?;
@@ -565,6 +567,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -572,7 +575,7 @@ impl AccountStore {
     pub fn get_account(&self, account_id: Uuid) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts WHERE id = $1",
             &[&account_id],
         )?;
@@ -582,6 +585,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -593,7 +597,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8
+            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8, a.organization_id
              FROM accounts a
              JOIN account_identifiers ai ON ai.account_id = a.id
              WHERE ai.identifier_type = $1 AND ai.identifier = $2 AND ai.verified = true",
@@ -605,6 +609,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -1048,7 +1053,7 @@ impl AccountStore {
     ) -> Result<Vec<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let rows = conn.query(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts
              WHERE created_at >= $1 AND created_at < $2
              ORDER BY created_at ASC",
@@ -1062,6 +1067,7 @@ impl AccountStore {
                 created_at: row.get(2),
                 tokens_to_hours: row.get(3),
                 purchased_hours: row.get(4),
+                organization_id: row.get(5),
             })
             .collect())
     }
@@ -1645,6 +1651,74 @@ impl AccountStore {
                 name: r.get(1),
                 notion_database_id: r.get(2),
                 created_at: r.get(3),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Set an account's organization by organization name.
+    pub fn set_account_organization(
+        &self,
+        account_id: Uuid,
+        organization_name: &str,
+    ) -> Result<Account, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        // Look up organization by name
+        let org_row = conn.query_opt(
+            "SELECT id FROM organizations WHERE name = $1",
+            &[&organization_name],
+        )?;
+
+        let org_id: Uuid = match org_row {
+            Some(r) => r.get(0),
+            None => return Err(AccountStoreError::NotFound),
+        };
+
+        // Update account's organization_id
+        let row = conn.query_opt(
+            "UPDATE accounts
+             SET organization_id = $1
+             WHERE id = $2
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+            &[&org_id, &account_id],
+        )?;
+
+        match row {
+            Some(r) => Ok(Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Remove an account from its organization.
+    pub fn clear_account_organization(
+        &self,
+        account_id: Uuid,
+    ) -> Result<Account, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE accounts
+             SET organization_id = NULL
+             WHERE id = $1
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+            &[&account_id],
+        )?;
+
+        match row {
+            Some(r) => Ok(Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
             }),
             None => Err(AccountStoreError::NotFound),
         }

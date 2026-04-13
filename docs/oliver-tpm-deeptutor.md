@@ -438,10 +438,11 @@ Run before `list-tasks` to pull any status/priority changes developers made dire
 
 ---
 
-## Open Questions
-1. **Transcript access** — How to get Otter.ai transcripts? (API, email forward, shared folder)
+## Questions
+1. **Transcript access** — How do we get Otter.ai transcripts? (API, email forward, shared folder)
 2. **Sentiment Analysis** - Other than DeepTutor discord and direct @Oliver-DoWhiz pings, how does Oliver get a good idea of user sentiment? What apps does Oliver look at?
 3. **Go-to-Market** - How does Oliver structure responses? What apps should Oliver post on? Which additional channels to integrate?
+4. **Regular Task vs. Organization Task** - Given that an account belongs to an organization, how do we classify tasks (populate into Notion + MongoDB) and regular tasks?
 
 ---
 
