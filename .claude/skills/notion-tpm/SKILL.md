@@ -20,7 +20,11 @@ This skill enables you to:
 
 **Important:**
 1. **New organization?** Must run `setup-board` first to create the Notion database
-2. **Before `list-tasks` or `create-task`**, run `sync-tasks` to ensure MongoDB is in sync with Notion (developers may have updated status directly in Notion)
+2. **Before `list-tasks`**, run `sync-tasks` to ensure MongoDB reflects any status changes developers made directly in Notion
+
+**Command purposes:**
+- `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
 
 ### Setup a new task board for an organization
 
@@ -33,7 +37,7 @@ tpm_cli setup-board \
 
 Returns `database_id` to use in subsequent commands. Store this in `organizations.notion_database_id`.
 
-### Create a task (dual write to MongoDB + Notion)
+### Create a task (Oliver autonomously creates from feedback/notetaker/research)
 
 ```bash
 tpm_cli create-task \
@@ -46,6 +50,11 @@ tpm_cli create-task \
   --source user_feedback \
   --tags bug,pdf
 ```
+
+Use when Oliver identifies a task from:
+- User feedback (Discord, email, in-app)
+- Meeting transcripts (notetaker)
+- Market research
 
 ### List tasks from MongoDB
 
@@ -60,7 +69,7 @@ tpm_cli list-tasks --organization deeptutor --status backlog
 tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
 ```
 
-### Sync status changes from Notion to MongoDB
+### Sync status changes from Notion to MongoDB (pull developer updates)
 
 ```bash
 tpm_cli sync-tasks \
@@ -68,6 +77,8 @@ tpm_cli sync-tasks \
   --database-id <DATABASE_ID> \
   --workspace-id <WORKSPACE_ID>
 ```
+
+Run this before `list-tasks` to pull any status/priority changes developers made directly in Notion.
 
 ## Workflow
 
