@@ -1,10 +1,4 @@
-export const getThemeForLocalTime = () => 'light';
-
-export const getNextThemeSwitch = (date = new Date()) => {
-  const next = new Date(date.getTime());
-  next.setHours(next.getHours() + 24, 0, 0, 0);
-  return next;
-};
+export { getNextThemeSwitch, getThemeForLocalTime } from '../../theme/localTheme';
 
 export const shouldEnableMouseField = () => {
   if (typeof window === 'undefined') {

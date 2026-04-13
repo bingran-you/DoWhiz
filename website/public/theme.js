@@ -5,6 +5,12 @@
   const CN_ORIGIN = EN_ORIGIN + CN_PATH_PREFIX;
   const CN_ORIGIN_ALT = EN_ORIGIN_ALT + CN_PATH_PREFIX;
   const LOCALE_OVERRIDE_VALUES = new Set(['zh', 'zh-cn', 'cn']);
+  const DAY_THEME_START_HOUR = 7;
+  const NIGHT_THEME_START_HOUR = 19;
+  const THEME_META_COLORS = {
+    light: '#eef1f5',
+    dark: '#0b0d10'
+  };
   const NAV_LABELS = {
     en: {
       home: 'DoWhiz homepage',
@@ -133,17 +139,33 @@
   }
 
   function getThemeForLocalTime() {
-    return 'light';
+    const now = new Date();
+    const hour = now.getHours();
+    return hour >= DAY_THEME_START_HOUR && hour < NIGHT_THEME_START_HOUR ? 'light' : 'dark';
   }
 
   function applyTheme() {
-    document.documentElement.setAttribute('data-theme', getThemeForLocalTime());
+    const theme = getThemeForLocalTime();
+    document.documentElement.setAttribute('data-theme', theme);
+
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute('content', THEME_META_COLORS[theme] || THEME_META_COLORS.light);
+    }
   }
 
   function scheduleNextThemeSwitch() {
     const now = new Date();
     const next = new Date(now);
-    next.setHours(next.getHours() + 24, 0, 0, 0);
+
+    if (now.getHours() < DAY_THEME_START_HOUR) {
+      next.setHours(DAY_THEME_START_HOUR, 0, 0, 0);
+    } else if (now.getHours() < NIGHT_THEME_START_HOUR) {
+      next.setHours(NIGHT_THEME_START_HOUR, 0, 0, 0);
+    } else {
+      next.setDate(next.getDate() + 1);
+      next.setHours(DAY_THEME_START_HOUR, 0, 0, 0);
+    }
 
     const delay = Math.max(next.getTime() - now.getTime(), 0);
     setTimeout(function () {

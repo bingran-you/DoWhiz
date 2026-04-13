@@ -1,39 +1,78 @@
 :root,
-[data-theme='light'],
-[data-theme='dark'] {
+[data-theme='light'] {
   /* Brand primitives */
-  --dw-brand-primary: #2c2c2e;
-  --dw-brand-primary-hover: #1c1c1e;
-  --dw-brand-secondary: #3a3a3c;
+  --dw-brand-primary: #101216;
+  --dw-brand-primary-hover: #050608;
+  --dw-brand-secondary: #4b515c;
 
   /* Text */
-  --dw-text-primary: #1c1c1e;
-  --dw-text-secondary: #636366;
-  --dw-text-tertiary: #8e8e93;
-  --dw-text-on-brand: #ffffff;
+  --dw-text-primary: #101216;
+  --dw-text-secondary: #5b616d;
+  --dw-text-tertiary: #838a96;
+  --dw-text-on-brand: #f6f8fb;
 
   /* Surfaces */
-  --dw-surface-primary: #ffffff;
-  --dw-surface-secondary: #f2f2f7;
-  --dw-surface-tertiary: #e5e5ea;
-  --dw-surface-overlay: rgba(255, 255, 255, 0.92);
+  --dw-surface-primary: #eef1f5;
+  --dw-surface-secondary: #e4e8ee;
+  --dw-surface-tertiary: #d7dde6;
+  --dw-surface-overlay: rgba(244, 247, 251, 0.82);
 
   /* Borders */
-  --dw-border-subtle: #e5e5ea;
-  --dw-border-default: #d1d1d6;
+  --dw-border-subtle: rgba(16, 18, 22, 0.1);
+  --dw-border-default: rgba(16, 18, 22, 0.18);
 
   /* States */
-  --dw-focus-ring: rgba(44, 44, 46, 0.28);
-  --dw-shadow-color: rgba(28, 28, 30, 0.08);
-  --dw-shadow-strong: rgba(28, 28, 30, 0.16);
-  --dw-success-color: #237a44;
-  --dw-warning-color: #8a650f;
-  --dw-danger-color: #b4232c;
+  --dw-focus-ring: rgba(16, 18, 22, 0.18);
+  --dw-shadow-color: rgba(16, 18, 22, 0.08);
+  --dw-shadow-strong: rgba(16, 18, 22, 0.18);
+  --dw-success-color: #1b6a45;
+  --dw-warning-color: #8e6200;
+  --dw-danger-color: #b9382e;
 
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  /* Brand primitives */
+  --dw-brand-primary: #f3f5f7;
+  --dw-brand-primary-hover: #ffffff;
+  --dw-brand-secondary: #c5cbd4;
+
+  /* Text */
+  --dw-text-primary: #f3f5f7;
+  --dw-text-secondary: #a8afb9;
+  --dw-text-tertiary: #7f8894;
+  --dw-text-on-brand: #0b0d10;
+
+  /* Surfaces */
+  --dw-surface-primary: #0b0d10;
+  --dw-surface-secondary: #14181d;
+  --dw-surface-tertiary: #1d232b;
+  --dw-surface-overlay: rgba(11, 13, 16, 0.76);
+
+  /* Borders */
+  --dw-border-subtle: rgba(243, 245, 247, 0.1);
+  --dw-border-default: rgba(243, 245, 247, 0.18);
+
+  /* States */
+  --dw-focus-ring: rgba(243, 245, 247, 0.18);
+  --dw-shadow-color: rgba(0, 0, 0, 0.34);
+  --dw-shadow-strong: rgba(0, 0, 0, 0.56);
+  --dw-success-color: #6bc18f;
+  --dw-warning-color: #d8b050;
+  --dw-danger-color: #f38b84;
+
+  color-scheme: dark;
+}
+
+:root,
+[data-theme='light'],
+[data-theme='dark'] {
   /* Semantic aliases */
   --brand-primary: var(--dw-brand-primary);
   --brand-primary-hover: var(--dw-brand-primary-hover);
   --brand-secondary: var(--dw-brand-secondary);
+  --brand-primary-soft: color-mix(in srgb, var(--dw-brand-primary) 10%, var(--dw-surface-primary));
 
   --text-primary: var(--dw-text-primary);
   --text-secondary: var(--dw-text-secondary);
@@ -43,11 +82,16 @@
   --surface-primary: var(--dw-surface-primary);
   --surface-secondary: var(--dw-surface-secondary);
   --surface-tertiary: var(--dw-surface-tertiary);
+  --surface-overlay: var(--dw-surface-overlay);
+  --surface-elevated: color-mix(in srgb, var(--dw-surface-primary) 88%, var(--dw-surface-secondary));
+  --surface-floating: color-mix(in srgb, var(--dw-surface-primary) 78%, var(--dw-surface-tertiary));
+  --page-glow: color-mix(in srgb, var(--dw-brand-primary) 12%, transparent);
 
   --border-subtle: var(--dw-border-subtle);
   --border-default: var(--dw-border-default);
   --focus-ring: var(--dw-focus-ring);
   --shadow-color: var(--dw-shadow-color);
+  --shadow-strong: var(--dw-shadow-strong);
 
   /* Legacy compatibility aliases used by existing pages */
   --bg-color: var(--dw-surface-primary);
@@ -68,19 +112,17 @@
   --warning-color: var(--dw-warning-color);
   --danger-color: var(--dw-danger-color);
 
-  --glass-bg: var(--dw-surface-primary);
+  --glass-bg: color-mix(in srgb, var(--dw-surface-primary) 88%, var(--dw-surface-secondary));
   --glass-border: var(--dw-border-subtle);
   --card-hover-border: var(--dw-border-default);
   --navbar-bg: var(--dw-surface-overlay);
 
   --bg: var(--dw-surface-primary);
-  --card: var(--dw-surface-primary);
+  --card: color-mix(in srgb, var(--dw-surface-primary) 92%, var(--dw-surface-secondary));
   --border: var(--dw-border-subtle);
   --border-hover: var(--dw-border-default);
   --text: var(--dw-text-primary);
   --muted: var(--dw-text-secondary);
   --muted-bg: var(--dw-surface-secondary);
   --accent: var(--dw-brand-primary);
-
-  color-scheme: light;
 }
