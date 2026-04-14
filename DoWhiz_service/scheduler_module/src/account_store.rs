@@ -228,6 +228,8 @@ pub enum AccountStoreError {
     MissingDbUrl,
     #[error("account not found")]
     NotFound,
+    #[error("already exists: {0}")]
+    AlreadyExists(String),
     #[error("identifier already linked to another account")]
     IdentifierTaken,
     #[error("verification token expired or invalid")]
@@ -1675,6 +1677,80 @@ impl AccountStore {
             }),
             None => Err(AccountStoreError::NotFound),
         }
+    }
+
+    /// Create a new organization.
+    ///
+    /// Returns error if an organization with the same name already exists.
+    pub fn create_organization(&self, name: &str) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        // Check if organization already exists
+        let existing = conn.query_opt(
+            "SELECT id FROM organizations WHERE name = $1",
+            &[&name],
+        )?;
+
+        if existing.is_some() {
+            return Err(AccountStoreError::AlreadyExists(format!(
+                "Organization '{}' already exists",
+                name
+            )));
+        }
+
+        let row = conn.query_one(
+            "INSERT INTO organizations (name) VALUES ($1)
+             RETURNING id, name, notion_database_id, created_at",
+            &[&name],
+        )?;
+
+        Ok(Organization {
+            id: row.get(0),
+            name: row.get(1),
+            notion_database_id: row.get(2),
+            created_at: row.get(3),
+        })
+    }
+
+    /// List organizations, optionally filtering by search term.
+    ///
+    /// Search is case-insensitive and matches partial names.
+    pub fn list_organizations(
+        &self,
+        search: Option<&str>,
+    ) -> Result<Vec<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        let rows = match search {
+            Some(term) => {
+                let pattern = format!("%{}%", term.to_lowercase());
+                conn.query(
+                    "SELECT id, name, notion_database_id, created_at
+                     FROM organizations
+                     WHERE LOWER(name) LIKE $1
+                     ORDER BY name
+                     LIMIT 50",
+                    &[&pattern],
+                )?
+            }
+            None => conn.query(
+                "SELECT id, name, notion_database_id, created_at
+                 FROM organizations
+                 ORDER BY name
+                 LIMIT 50",
+                &[],
+            )?,
+        };
+
+        Ok(rows
+            .iter()
+            .map(|r| Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                created_at: r.get(3),
+            })
+            .collect())
     }
 
     /// Set an account's organization by organization name.

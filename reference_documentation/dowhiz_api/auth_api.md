@@ -67,6 +67,63 @@ Delete the current account and all associated data.
 
 ## Organization Management
 
+### POST /auth/organization
+Create a new organization.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "name": "deeptutor"
+}
+```
+
+**Response 201:**
+```json
+{
+  "id": "uuid",
+  "name": "deeptutor",
+  "notion_database_id": null,
+  "created_at": "2026-04-14T00:00:00Z"
+}
+```
+
+**Response 409 (Conflict):**
+```json
+{
+  "error": "Organization 'deeptutor' already exists"
+}
+```
+
+---
+
+### GET /auth/organizations
+List organizations, optionally filtered by search term.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Query Parameters:**
+- `search` (optional) - Case-insensitive partial match on organization name
+
+**Example:** `GET /auth/organizations?search=deep`
+
+**Response 200:**
+```json
+{
+  "organizations": [
+    {
+      "id": "uuid",
+      "name": "deeptutor",
+      "notion_database_id": "notion-db-id",
+      "created_at": "2026-04-14T00:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
 ### PUT /auth/account/organization
 Join an organization by name.
 
