@@ -1082,17 +1082,37 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
         .join("workspaces")
         .join(format!("tpm_cron_{}", task_id));
 
+    // Create workspace and input_email_dir with synthetic trigger file
+    let input_email_dir = workspace_dir.join("incoming_email");
+    if let Err(e) = std::fs::create_dir_all(&input_email_dir) {
+        eprintln!("Error: Failed to create workspace directory: {}", e);
+        return ExitCode::FAILURE;
+    }
+
+    // Write synthetic postmark_payload.json so Codex detects this as a scheduled TPM sync
+    let synthetic_payload = json!({
+        "From": format!("TPM Cron <cron@dowhiz.com>"),
+        "Subject": "TPM Sync",
+        "TextBody": "This is a scheduled TPM sync. Run the daily TPM sync workflow.",
+        "Date": now.to_rfc3339()
+    });
+    let payload_path = input_email_dir.join("postmark_payload.json");
+    if let Err(e) = std::fs::write(&payload_path, synthetic_payload.to_string()) {
+        eprintln!("Error: Failed to write synthetic trigger file: {}", e);
+        return ExitCode::FAILURE;
+    }
+
     let task_kind = json!({
         "type": "run_task",
         "workspace_dir": workspace_dir.to_string_lossy(),
-        "input_email_dir": workspace_dir.join("incoming_email").to_string_lossy(),
+        "input_email_dir": input_email_dir.to_string_lossy(),
         "input_attachments_dir": workspace_dir.join("incoming_attachments").to_string_lossy(),
         "memory_dir": PathBuf::from(&users_root).join(&user_id).join("memory").to_string_lossy(),
         "reference_dir": workspace_dir.join("references").to_string_lossy(),
         "model_name": "claude-sonnet-4-20250514",
         "runner": "codex",
         "codex_disabled": false,
-        "reply_to": [&email],
+        "reply_to": [],
         "reply_from": null,
         "archive_root": null,
         "thread_id": null,

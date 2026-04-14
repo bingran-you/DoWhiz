@@ -445,8 +445,11 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 **Flow:**
 1. Validate user belongs to organization via `AccountStore`
 2. Derive user email from verified identifiers in their account
-3. Build `RunTask` with workspace pointing to TPM mode
-4. Upsert into MongoDB `tasks` collection with cron schedule
+3. Create workspace with synthetic `postmark_payload.json` (subject: "TPM Sync")
+4. Build `RunTask` with workspace pointing to TPM mode
+5. Upsert into MongoDB `tasks` collection with cron schedule
+
+**Why synthetic trigger?** When cron fires, Codex reads `postmark_payload.json` and sees subject "TPM Sync", triggering the daily sync workflow per the TPM prompt instructions.
 
 **Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job, no inbound webhook.
 
