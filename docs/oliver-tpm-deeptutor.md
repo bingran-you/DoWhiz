@@ -172,7 +172,7 @@ struct DevTask {
 - `assign_task(task_id, assignee)` — Assign to developer
 - `update_checkpoint(task_id, checkpoint_id, completed)` — Track progress
 
-### 2. Sentiment Analyzer (User Feedback Pipeline) - Likely Most Difficult
+### 2. Passive User Feedback Collection (User Feedback Pipeline) - Likely Most Difficult
 
 Oliver monitors DeepTutor user sentiment to discover tasks:
 
@@ -196,6 +196,8 @@ Text: "Love the AI summaries but it crashes when I open large PDFs over 100 page
    Priority: P1
    Tags: [bug, pdf-reader, stability]
 ```
+
+* Review the feature to make sure its aligned with roadmap (bugs, feature requests)
 
 ### 3. Notetaker Integration
 
