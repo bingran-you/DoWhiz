@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose, Engine as _};
 use mockito::{Matcher, Server};
-use send_emails_module::{send_email, SendEmailParams};
+use send_emails_module::{normalize_email_html, send_email, SendEmailParams};
 use serde_json::json;
 use std::env;
 use std::ffi::OsString;
@@ -164,7 +164,7 @@ fn send_payload_includes_recipients_and_attachments() -> Result<(), Box<dyn std:
         "Bcc": "bcc@example.com, sender@example.com",
         "Subject": "Test subject",
         "TextBody": "Hello",
-        "HtmlBody": "<p>Hello</p>",
+        "HtmlBody": normalize_email_html("Test subject", "<p>Hello</p>"),
         "Attachments": expected_attachments,
     });
 
@@ -266,7 +266,7 @@ fn send_payload_sanitizes_attachment_names_to_ascii() -> Result<(), Box<dyn std:
         "Bcc": "sender@example.com",
         "Subject": "Unicode attachment test",
         "TextBody": "Hello",
-        "HtmlBody": "<p>Hello</p>",
+        "HtmlBody": normalize_email_html("Unicode attachment test", "<p>Hello</p>"),
         "Attachments": expected_attachments,
     });
 

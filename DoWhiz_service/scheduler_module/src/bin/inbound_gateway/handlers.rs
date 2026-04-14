@@ -944,7 +944,10 @@ fn resolve_wechat_mp_passive_reply_text() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn build_wechat_mp_passive_text_response(message: &InboundMessage, reply_text: &str) -> Option<Response> {
+fn build_wechat_mp_passive_text_response(
+    message: &InboundMessage,
+    reply_text: &str,
+) -> Option<Response> {
     let to_user = message
         .metadata
         .wechat_mp_open_id
@@ -971,12 +974,14 @@ fn build_wechat_mp_passive_text_response(message: &InboundMessage, reply_text: &
         content = cdata_safe(reply_text),
     );
 
-    Some((
-        StatusCode::OK,
-        [(CONTENT_TYPE, "application/xml; charset=utf-8")],
-        xml,
+    Some(
+        (
+            StatusCode::OK,
+            [(CONTENT_TYPE, "application/xml; charset=utf-8")],
+            xml,
+        )
+            .into_response(),
     )
-        .into_response())
 }
 
 /// Handle Lark inbound messages (POST request)

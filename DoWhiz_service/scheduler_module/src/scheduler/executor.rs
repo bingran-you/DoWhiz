@@ -13,10 +13,10 @@ use crate::account_store::{
 };
 use crate::blob_store::get_blob_store;
 use crate::channel::Channel;
-use crate::grocery_store::sync_grocery_preferences_to_workspace;
 use crate::github_inbound::{
     extract_github_sender_login_from_postmark_payload, is_github_notifications_postmark_payload,
 };
+use crate::grocery_store::sync_grocery_preferences_to_workspace;
 use crate::memory_diff::compute_memory_diff;
 use crate::memory_queue::{global_memory_queue, MemoryWriteRequest};
 use crate::memory_store::{

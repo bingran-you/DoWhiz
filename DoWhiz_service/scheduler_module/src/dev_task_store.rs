@@ -147,7 +147,12 @@ pub struct DevTask {
 }
 
 impl DevTask {
-    pub fn new(organization: String, title: String, description: String, source: TaskSource) -> Self {
+    pub fn new(
+        organization: String,
+        title: String,
+        description: String,
+        source: TaskSource,
+    ) -> Self {
         let now = Utc::now();
         Self {
             id: None,
@@ -257,7 +262,9 @@ impl DevTaskStore {
         let result = self.tasks.insert_one(doc, None)?;
         match result.inserted_id {
             Bson::ObjectId(id) => Ok(id),
-            _ => Err(DevTaskStoreError::NotFound("failed to get inserted id".into())),
+            _ => Err(DevTaskStoreError::NotFound(
+                "failed to get inserted id".into(),
+            )),
         }
     }
 
@@ -299,9 +306,7 @@ impl DevTaskStore {
             "organization": &self.organization,
             "status": status.as_str(),
         };
-        let options = FindOptions::builder()
-            .sort(doc! { "priority": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "priority": 1 }).build();
         let cursor = self.tasks.find(filter, options)?;
         let mut tasks = Vec::new();
         for doc in cursor {
@@ -319,9 +324,7 @@ impl DevTaskStore {
             "organization": &self.organization,
             "assignee": assignee,
         };
-        let options = FindOptions::builder()
-            .sort(doc! { "priority": 1 })
-            .build();
+        let options = FindOptions::builder().sort(doc! { "priority": 1 }).build();
         let cursor = self.tasks.find(filter, options)?;
         let mut tasks = Vec::new();
         for doc in cursor {

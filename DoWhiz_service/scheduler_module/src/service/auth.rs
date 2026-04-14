@@ -1616,12 +1616,13 @@ pub async fn set_account_organization(
     let account_id = account.id;
     let org_name = payload.organization_name.clone();
 
-    let result = task::spawn_blocking(move || store.set_account_organization(account_id, &org_name))
-        .await
-        .map_err(|e| {
-            error!("spawn_blocking panicked: {}", e);
-            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
-        });
+    let result =
+        task::spawn_blocking(move || store.set_account_organization(account_id, &org_name))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
 
     match result {
         Ok(Ok(updated_account)) => (
@@ -6423,7 +6424,10 @@ pub fn auth_router(state: AuthState) -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/account", get(get_account).delete(delete_account))
-        .route("/auth/account/organization", put(set_account_organization).delete(clear_account_organization))
+        .route(
+            "/auth/account/organization",
+            put(set_account_organization).delete(clear_account_organization),
+        )
         .route("/auth/organization", post(create_organization))
         .route("/auth/organizations", get(list_organizations))
         .route("/auth/link", post(link_identifier))
