@@ -1504,6 +1504,103 @@ pub struct SetOrganizationRequest {
     pub organization_name: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateOrganizationRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListOrganizationsQuery {
+    pub search: Option<String>,
+}
+
+/// POST /auth/organization - Create a new organization
+pub async fn create_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateOrganizationRequest>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let name = payload.name.clone();
+
+    let result = task::spawn_blocking(move || store.create_organization(&name))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(org)) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "id": org.id,
+                "name": org.name,
+                "notion_database_id": org.notion_database_id,
+                "created_at": org.created_at,
+            })),
+        )
+            .into_response(),
+        Ok(Err(crate::account_store::AccountStoreError::AlreadyExists(msg))) => {
+            json_error_response(StatusCode::CONFLICT, &msg)
+        }
+        Ok(Err(e)) => {
+            error!("Failed to create organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// GET /auth/organizations - List organizations, optionally filtered by search term
+pub async fn list_organizations(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Query(query): Query<ListOrganizationsQuery>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let search = query.search.clone();
+
+    let result = task::spawn_blocking(move || store.list_organizations(search.as_deref()))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(orgs)) => {
+            let items: Vec<serde_json::Value> = orgs
+                .iter()
+                .map(|org| {
+                    serde_json::json!({
+                        "id": org.id,
+                        "name": org.name,
+                        "notion_database_id": org.notion_database_id,
+                        "created_at": org.created_at,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(serde_json::json!({ "organizations": items }))).into_response()
+        }
+        Ok(Err(e)) => {
+            error!("Failed to list organizations: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
 /// PUT /auth/account/organization - Set the account's organization
 pub async fn set_account_organization(
     State(state): State<AuthState>,
@@ -6327,6 +6424,8 @@ pub fn auth_router(state: AuthState) -> Router {
         .route("/auth/signup", post(signup))
         .route("/auth/account", get(get_account).delete(delete_account))
         .route("/auth/account/organization", put(set_account_organization).delete(clear_account_organization))
+        .route("/auth/organization", post(create_organization))
+        .route("/auth/organizations", get(list_organizations))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))
@@ -7150,5 +7249,51 @@ mod tests {
         let open_id = "oU1234567890";
         let identifier = format!("{}_{}", corp_id, open_id);
         assert_eq!(identifier, "ww1234567890abcdef_oU1234567890");
+    }
+
+    // =========================================================================
+    // Organization endpoint tests
+    // =========================================================================
+
+    #[test]
+    fn create_organization_request_deserializes_correctly() {
+        let json = r#"{"name":"deeptutor"}"#;
+        let parsed: CreateOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.name, "deeptutor");
+    }
+
+    #[test]
+    fn create_organization_request_handles_special_chars() {
+        let json = r#"{"name":"Acme Corp (Test)"}"#;
+        let parsed: CreateOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.name, "Acme Corp (Test)");
+    }
+
+    #[test]
+    fn list_organizations_query_deserializes_with_search() {
+        let query = "search=deep";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, Some("deep".to_string()));
+    }
+
+    #[test]
+    fn list_organizations_query_deserializes_without_search() {
+        let query = "";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, None);
+    }
+
+    #[test]
+    fn list_organizations_query_handles_empty_search() {
+        let query = "search=";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, Some("".to_string()));
+    }
+
+    #[test]
+    fn set_organization_request_deserializes_correctly() {
+        let json = r#"{"organization_name":"deeptutor"}"#;
+        let parsed: SetOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.organization_name, "deeptutor");
     }
 }
