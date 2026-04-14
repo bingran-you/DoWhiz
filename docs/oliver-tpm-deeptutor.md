@@ -315,16 +315,17 @@ struct DeveloperProfile {
 ## Implementation
 
 ### Organization-Based Routing
-- Add `organizations` table to Supabase
-- Add `organization_id` column to `accounts` table
-- Update gateway to fetch account's organization and route accordingly
+- ✅ Add `organizations` table to Supabase
+- ✅ Add `organization_id` column to `accounts` table
+- ✅ Update gateway to fetch account's organization and route accordingly
 - Frontend: org search + join flow in DoWhiz account settings
 
 ### Core Task Queue
-- MongoDB collection + CRUD operations ✅ (`dev_task_store.rs`)
+- ✅ MongoDB collection + CRUD operations (`dev_task_store.rs`)
+- ✅ TPM CLI commands (`tpm_cli.rs`): setup-board, create-task, list-tasks, sync-tasks
+- ✅ Cron job initialization (`setup-tpm-cron` with synthetic trigger)
 - Manual task creation via Oliver
 - Assignment notifications
-- Notion TPM CLI
 
 ### Notetaker Integration
 - Otter.ai transcript reader
@@ -353,9 +354,11 @@ Task board commands for managing DevTasks across MongoDB and Notion:
 2. **Before `list-tasks`**, run `sync-tasks` to pull any status changes developers made directly in Notion
 
 **Command purposes:**
-- `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
-- `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
-- `setup-tpm-cron` — Set up daily TPM sync cron job for a user (direct MongoDB upsert)
+- ✅ `setup-board` — Create Notion database for an organization
+- ✅ `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- ✅ `list-tasks` — List tasks from MongoDB with filters
+- ✅ `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
+- ✅ `setup-tpm-cron` — Set up daily TPM sync cron job for a user (direct MongoDB upsert)
 
 #### `setup-board` — Create Notion database for an organization
 
@@ -492,3 +495,50 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 | Queue trait | `scheduler_module/src/ingestion_queue.rs` | Enqueue/claim semantics |
 | Task types | `scheduler_module/src/scheduler/types.rs` | TaskKind pattern |
 | Supabase accounts | PostgreSQL `accounts` table | Add `organization_id` column |
+
+---
+
+## Progress Log
+
+### 4/14/26
+**Completed:**
+- ✅ Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
+- ✅ DevTaskStore (`dev_task_store.rs`) — MongoDB CRUD for DevTask with multi-tenant organization scoping
+- ✅ TPM CLI (`tpm_cli.rs`) — All task board commands implemented:
+  - `setup-board` — Create Notion database with TPM schema
+  - `create-task` — Create task in MongoDB + Notion
+  - `list-tasks` — Query tasks with status/assignee filters
+  - `sync-tasks` — Pull Notion updates back to MongoDB
+  - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
+- ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
+- ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger
+
+**Remaining:**
+- Frontend integration and organization-linking, creation
+- Transcript parsing and initial ingestion
+- Calling the cron-job CLI command (automatic API request when user clicks on "create organization"?)
+- Proactive search for user feedback
+
+---
+
+## Notion Token Flow
+
+### Interactive Requests (setup-board, create-task)
+User sends first TPM request after connecting organization → uses **user's Notion OAuth token** → database created in **user's workspace** → user owns it.
+
+1. User sends task to Oliver
+2. `executor.rs` calls `load_notion_access_token_for_account(account_id)` 
+3. `codex.rs` passes token to ACI via `NOTION_API_TOKEN` env var
+4. `tpm_cli` reads env var, creates database in user's Notion
+5. User shares database with team + Oliver (manual step via Notion UI)
+
+### Cron Job (setup-tpm-cron)
+Cron stores **setup user's account_id** → uses **their Notion token** for scheduled syncs.
+
+1. User runs `setup-tpm-cron --user-id <UUID>` 
+2. Task stored with `account_id: <UUID>` (the setup user)
+3. Cron fires → `resolve_account_for_run_task` returns stored `account_id`
+4. `load_notion_access_token_for_account(account_id)` loads setup user's token
+5. User's token has access to their own database → sync works
+
+**Note:** No separate "Oliver Notion token" needed for cron. The setup user's token is used since they own the database.
