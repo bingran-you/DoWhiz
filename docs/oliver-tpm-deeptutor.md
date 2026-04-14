@@ -446,7 +446,7 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 3. Build `RunTask` with workspace pointing to TPM mode
 4. Upsert into MongoDB `tasks` collection with cron schedule
 
-**Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job.
+**Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job, no inbound webhook.
 
 **Cron format:** 6-field expression (second minute hour day-of-month month day-of-week)
 - `"0 0 9 * * MON-FRI"` — 9:00 AM UTC, Monday through Friday
