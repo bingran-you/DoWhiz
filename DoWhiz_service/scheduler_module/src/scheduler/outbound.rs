@@ -12,6 +12,9 @@ use super::types::{SchedulerError, SendReplyTask};
 
 /// Execute a SendReplyTask via email (Postmark).
 pub(crate) fn execute_email_send(task: &SendReplyTask) -> Result<(), SchedulerError> {
+    send_emails_module::normalize_email_html_file(&task.subject, &task.html_path)
+        .map_err(|err| SchedulerError::TaskFailed(err.to_string()))?;
+
     let params = send_emails_module::SendEmailParams {
         subject: task.subject.clone(),
         html_path: task.html_path.clone(),
@@ -1032,9 +1035,44 @@ pub(crate) fn execute_notion_send(task: &SendReplyTask) -> Result<(), SchedulerE
 #[cfg(test)]
 mod tests {
     use super::{
-        is_discord_unknown_message_reference, split_discord_message_chunks,
+        execute_email_send, is_discord_unknown_message_reference, split_discord_message_chunks,
         DISCORD_MAX_CONTENT_CHARS,
     };
+    use crate::channel::Channel;
+    use crate::scheduler::types::SendReplyTask;
+    use mockito::{Matcher, Server};
+    use send_emails_module::normalize_email_html;
+    use serde_json::json;
+    use std::env;
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::TempDir;
+
+    struct EnvGuard {
+        saved: Vec<(String, Option<OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn set(vars: &[(&str, &str)]) -> Self {
+            let mut saved = Vec::with_capacity(vars.len());
+            for (key, value) in vars {
+                saved.push((key.to_string(), env::var_os(key)));
+                env::set_var(key, value);
+            }
+            Self { saved }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                match value {
+                    Some(prev) => env::set_var(&key, prev),
+                    None => env::remove_var(&key),
+                }
+            }
+        }
+    }
 
     #[test]
     fn split_discord_message_keeps_short_text() {
@@ -1075,8 +1113,7 @@ mod tests {
 
     #[test]
     fn notion_send_skips_when_api_replied_marker_exists() {
-        use super::{execute_notion_send, SendReplyTask};
-        use crate::channel::Channel;
+        use super::execute_notion_send;
         use std::fs;
 
         // Create a temp workspace directory
@@ -1116,5 +1153,78 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn execute_email_send_normalizes_html_before_postmark_send(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut server = Server::new();
+        let raw_html = r#"<div style="max-width: 520px; margin: 0 auto;"><p>你好，这里有一个超长字符串用于检查自动换行：LONGTOKENLONGTOKENLONGTOKENLONGTOKENLONGTOKEN</p></div>"#;
+        let expected_html = normalize_email_html("Project update", raw_html);
+        let expected_payload = json!({
+            "From": "sender@example.com",
+            "To": "user@example.com",
+            "Bcc": "sender@example.com",
+            "Subject": "Project update",
+            "TextBody": "你好，这里有一个超长字符串用于检查自动换行：LONGTOKENLONGTOKENLONGTOKENLONGTOKENLONGTOKEN",
+            "HtmlBody": expected_html,
+        });
+
+        let email_mock = server
+            .mock("POST", "/email")
+            .match_header("x-postmark-server-token", "test-token")
+            .match_header("accept", "application/json")
+            .match_header("content-type", "application/json")
+            .match_body(Matcher::Json(expected_payload))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "To": "user@example.com",
+                    "SubmittedAt": "2024-01-01T00:00:00Z",
+                    "MessageID": "test-message-id",
+                    "ErrorCode": 0,
+                    "Message": "OK",
+                })
+                .to_string(),
+            )
+            .expect(1)
+            .create();
+
+        let _env = EnvGuard::set(&[
+            ("POSTMARK_SERVER_TOKEN", "test-token"),
+            ("POSTMARK_API_BASE_URL", server.url().as_str()),
+        ]);
+
+        let temp = TempDir::new()?;
+        let html_path = temp.path().join("reply_email_draft.html");
+        fs::write(&html_path, raw_html)?;
+        let attachments_dir = temp.path().join("reply_email_attachments");
+        fs::create_dir_all(&attachments_dir)?;
+
+        let task = SendReplyTask {
+            channel: Channel::Email,
+            subject: "Project update".to_string(),
+            html_path: html_path.clone(),
+            attachments_dir,
+            from: Some("sender@example.com".to_string()),
+            to: vec!["user@example.com".to_string()],
+            cc: vec![],
+            bcc: vec![],
+            in_reply_to: None,
+            references: None,
+            archive_root: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            employee_id: None,
+            channel_metadata: Default::default(),
+        };
+
+        execute_email_send(&task)?;
+
+        let normalized_file = fs::read_to_string(&html_path)?;
+        assert_eq!(normalized_file, expected_html);
+        email_mock.assert();
+        Ok(())
     }
 }
