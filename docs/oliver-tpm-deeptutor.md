@@ -353,6 +353,7 @@ Task board commands for managing DevTasks across MongoDB and Notion:
 **Command purposes:**
 - `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
 - `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
+- `setup-tpm-cron` — Set up daily TPM sync cron job for a user (direct MongoDB upsert)
 
 #### `setup-board` — Create Notion database for an organization
 
@@ -423,7 +424,34 @@ tpm_cli sync-tasks \
   --workspace-id <WORKSPACE_ID>
 ```
 
-Run before `list-tasks` to pull any status/priority changes developers made directly in Notion. Uses `MongoDB ID` property to match Notion pages to MongoDB documents.
+#### `setup-tpm-cron` — Set up daily TPM sync cron job for a user
+
+```bash
+tpm_cli setup-tpm-cron \
+  --user-id <USER_ID> \
+  --organization deeptutor \
+  --cron "0 0 9 * * MON-FRI"
+```
+
+Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This directly upserts a `RunTask` into MongoDB, bypassing the email pipeline.
+
+**Arguments:**
+- `--user-id` (required) — User ID (must belong to the organization)
+- `--organization` (required) — Organization name
+- `--cron` (optional) — Cron expression (default: `"0 0 9 * * MON-FRI"` = 9 AM UTC weekdays)
+
+**Flow:**
+1. Validate user belongs to organization via `AccountStore`
+2. Derive user email from verified identifiers in their account
+3. Build `RunTask` with workspace pointing to TPM mode
+4. Upsert into MongoDB `tasks` collection with cron schedule
+
+**Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job, no inbound webhook.
+
+**Cron format:** 6-field expression (second minute hour day-of-month month day-of-week)
+- `"0 0 9 * * MON-FRI"` — 9:00 AM UTC, Monday through Friday
+- `"0 30 14 * * *"` — 2:30 PM UTC daily
+- `"0 0 8 1 * *"` — 8:00 AM UTC on the 1st of each month
 
 ### Notion CLI (`notion_api_cli`)
 
@@ -452,7 +480,7 @@ Run before `list-tasks` to pull any status/priority changes developers made dire
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
 | **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
-| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks) |
+| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks, setup-tpm-cron) |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
 | Notion API Client | `scheduler_module/src/notion_browser/api_client.rs` | `create_database`, `create_database_page`, `query_database` |
 | Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
