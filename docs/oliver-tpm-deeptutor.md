@@ -512,11 +512,12 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
   - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
 - ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
 - ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger
+- ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
+- ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search)
 
 **Remaining:**
 - Frontend integration and organization-linking, creation
 - Transcript parsing and initial ingestion
-- Calling the cron-job CLI command (automatic API request when user clicks on "create organization"?)
 - Proactive search for user feedback
 
 ---
