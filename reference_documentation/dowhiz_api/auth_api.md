@@ -124,6 +124,33 @@ List organizations, optionally filtered by search term.
 
 ---
 
+### GET /auth/organization/:name/member-count
+Get the number of members in an organization.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+
+**Example:** `GET /auth/organization/deeptutor/member-count`
+
+**Response 200:**
+```json
+{
+  "organization_name": "deeptutor",
+  "member_count": 3
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": "Organization 'xyz' not found"
+}
+```
+
+---
+
 ### PUT /auth/account/organization
 Join an organization by name.
 

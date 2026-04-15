@@ -1821,6 +1821,26 @@ impl AccountStore {
         }
     }
 
+    /// Get the number of members in an organization by name.
+    pub fn get_organization_member_count(
+        &self,
+        organization_name: &str,
+    ) -> Result<i64, AccountStoreError> {
+        // Use existing method to look up organization
+        let org = self
+            .get_organization_by_name(organization_name)?
+            .ok_or(AccountStoreError::NotFound)?;
+
+        // Count accounts with this organization_id
+        let mut conn = self.conn()?;
+        let count_row = conn.query_one(
+            "SELECT COUNT(*) FROM accounts WHERE organization_id = $1",
+            &[&org.id],
+        )?;
+
+        Ok(count_row.get(0))
+    }
+
     /// Create an email verification token (expires in 24 hours)
     pub fn create_email_verification_token(
         &self,
