@@ -1384,6 +1384,8 @@ pub struct AccountResponse {
     pub auth_user_id: Uuid,
     pub identifiers: Vec<IdentifierResponse>,
     pub tokens_to_hours: Option<f64>,
+    pub organization_id: Option<Uuid>,
+    pub organization_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1480,6 +1482,17 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
         Err(resp) => return resp.into_response(),
     };
 
+    // Fetch organization name if account has one
+    let organization_name = if let Some(org_id) = account.organization_id {
+        let store = state.account_store.clone();
+        match task::spawn_blocking(move || store.get_organization_by_id(org_id)).await {
+            Ok(Ok(Some(org))) => Some(org.name),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
     (
         StatusCode::OK,
         Json(AccountResponse {
@@ -1494,6 +1507,8 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
                 })
                 .collect(),
             tokens_to_hours: account.tokens_to_hours,
+            organization_id: account.organization_id,
+            organization_name,
         }),
     )
         .into_response()

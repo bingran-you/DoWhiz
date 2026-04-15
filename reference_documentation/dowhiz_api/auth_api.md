@@ -45,7 +45,9 @@ Get current account details and linked identifiers.
       "verified": true
     }
   ],
-  "tokens_to_hours": 0.5
+  "tokens_to_hours": 0.5,
+  "organization_id": "uuid or null",
+  "organization_name": "deeptutor or null"
 }
 ```
 
