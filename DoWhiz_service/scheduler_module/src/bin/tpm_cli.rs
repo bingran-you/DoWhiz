@@ -11,12 +11,12 @@
 //!   tpm_cli update-contacted --contact-id <id>
 
 use chrono::Utc;
-use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime as BsonDateTime};
-use mongodb::options::UpdateOptions;
+use mongodb::bson::oid::ObjectId;
 use scheduler_module::account_store::{AccountStore, UserContact};
+use scheduler_module::channel::{Channel, ChannelMetadata};
 use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSource, TaskStatus};
-use scheduler_module::mongo_store::{create_client_from_env, database_from_env};
 use scheduler_module::notion_browser::NotionApiClient;
+use scheduler_module::{ModuleExecutor, RunTaskTask, Scheduler, TaskKind};
 use serde_json::{json, Value};
 use std::env;
 use std::path::PathBuf;
@@ -1054,44 +1054,26 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let client = match create_client_from_env() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error: Failed to connect to MongoDB: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let db = database_from_env(&client);
-    let tasks = db.collection::<mongodb::bson::Document>("tasks");
-
-    let task_id = Uuid::new_v4();
-    let now = Utc::now();
-
-    let next_run = match compute_next_cron_run(&cron_expr, now) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Error: Invalid cron expression: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
     let users_root = env::var("USERS_ROOT").unwrap_or_else(|_| "/tmp/users".to_string());
-    let workspace_dir = PathBuf::from(&users_root)
+    let users_root_path = PathBuf::from(&users_root);
+
+    // Use a persistent workspace dir - the same workspace is reused each cron run
+    // (the scheduler stores the workspace_dir path in the task and reuses it)
+    let workspace_dir = users_root_path
         .join(&user_id)
         .join("workspaces")
-        .join(format!("tpm_cron_{}", task_id));
-
-    // Create workspace and input_email_dir with synthetic trigger file
+        .join("tpm_cron_placeholder");
     let input_email_dir = workspace_dir.join("incoming_email");
+
+    // Create workspace and write synthetic trigger file
     if let Err(e) = std::fs::create_dir_all(&input_email_dir) {
         eprintln!("Error: Failed to create workspace directory: {}", e);
         return ExitCode::FAILURE;
     }
 
-    // Write synthetic postmark_payload.json so Codex detects this as a scheduled TPM sync
+    let now = Utc::now();
     let synthetic_payload = json!({
-        "From": format!("TPM Cron <cron@dowhiz.com>"),
+        "From": "TPM Cron <cron@dowhiz.com>",
         "Subject": "TPM Sync",
         "TextBody": "This is a scheduled TPM sync. Run the daily TPM sync workflow.",
         "Date": now.to_rfc3339()
@@ -1102,118 +1084,66 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let task_kind = json!({
-        "type": "run_task",
-        "workspace_dir": workspace_dir.to_string_lossy(),
-        "input_email_dir": input_email_dir.to_string_lossy(),
-        "input_attachments_dir": workspace_dir.join("incoming_attachments").to_string_lossy(),
-        "memory_dir": PathBuf::from(&users_root).join(&user_id).join("memory").to_string_lossy(),
-        "reference_dir": workspace_dir.join("references").to_string_lossy(),
-        "model_name": "claude-sonnet-4-20250514",
-        "runner": "codex",
-        "codex_disabled": false,
-        "reply_to": [],
-        "reply_from": null,
-        "archive_root": null,
-        "thread_id": null,
-        "thread_epoch": null,
-        "thread_state_path": null,
-        "channel": "email",
-        "slack_team_id": null,
-        "employee_id": null,
-        "requester_identifier_type": "email",
-        "requester_identifier": &email,
-        "account_id": &user_id,
-        "channel_metadata": {}
-    });
-
-    let task = json!({
-        "id": task_id.to_string(),
-        "kind": task_kind,
-        "schedule": {
-            "type": "cron",
-            "expression": &cron_expr,
-            "next_run": next_run.to_rfc3339()
-        },
-        "enabled": true,
-        "created_at": now.to_rfc3339(),
-        "last_run": null
-    });
-
-    let task_json = serde_json::to_string(&task).expect("serialize task");
-
-    let filter = doc! {
-        "owner_scope.kind": "user",
-        "owner_scope.id": &user_id,
-        "task_id": task_id.to_string(),
+    // Build the RunTaskTask struct
+    let run_task = RunTaskTask {
+        workspace_dir: workspace_dir.clone(),
+        input_email_dir: input_email_dir.clone(),
+        input_attachments_dir: workspace_dir.join("incoming_attachments"),
+        memory_dir: users_root_path.join(&user_id).join("memory"),
+        reference_dir: workspace_dir.join("references"),
+        model_name: "claude-sonnet-4-20250514".to_string(),
+        runner: "codex".to_string(),
+        codex_disabled: false,
+        reply_to: vec![],
+        reply_from: None,
+        archive_root: None,
+        thread_id: None,
+        thread_epoch: None,
+        thread_state_path: None,
+        channel: Channel::Email,
+        slack_team_id: None,
+        employee_id: None,
+        requester_identifier_type: Some("email".to_string()),
+        requester_identifier: Some(email.clone()),
+        account_id: Some(account_uuid),
+        channel_metadata: ChannelMetadata::default(),
     };
 
-    let update = doc! {
-        "$set": {
-            "owner_scope": { "kind": "user", "id": &user_id },
-            "task_id": task_id.to_string(),
-            "kind": "run_task",
-            "channel": "email",
-            "enabled": true,
-            "created_at": BsonDateTime::from_chrono(now),
-            "last_run": Bson::Null,
-            "schedule": {
-                "type": "cron",
-                "cron_expression": &cron_expr,
-                "next_run": BsonDateTime::from_chrono(next_run),
-                "run_at": Bson::Null,
-            },
-            "task_json": &task_json,
-        },
-        "$setOnInsert": { "retry_count": 0i32 },
-    };
+    // Load scheduler for account-level tasks (writes to MongoDB with owner_scope: user)
+    let account_tasks_path = users_root_path.join(&user_id).join("state").join("tasks.db");
+    if let Err(e) = std::fs::create_dir_all(account_tasks_path.parent().unwrap()) {
+        eprintln!("Error: Failed to create account state directory: {}", e);
+        return ExitCode::FAILURE;
+    }
 
-    match tasks.update_one(
-        filter,
-        update,
-        UpdateOptions::builder().upsert(true).build(),
-    ) {
-        Ok(result) => {
-            let output = json!({
-                "success": true,
-                "task_id": task_id.to_string(),
-                "user_id": user_id,
-                "organization": organization,
-                "email": email,
-                "cron": cron_expr,
-                "next_run": next_run.to_rfc3339(),
-                "workspace_dir": workspace_dir.to_string_lossy(),
-                "upserted": result.upserted_id.is_some(),
-            });
-            println!("{}", serde_json::to_string_pretty(&output).unwrap());
-            ExitCode::SUCCESS
-        }
+    let mut scheduler = match Scheduler::load(&account_tasks_path, ModuleExecutor::default()) {
+        Ok(s) => s,
         Err(e) => {
-            eprintln!("Error: Failed to insert task: {}", e);
-            ExitCode::FAILURE
+            eprintln!("Error: Failed to load scheduler: {}", e);
+            return ExitCode::FAILURE;
         }
-    }
-}
+    };
 
-fn compute_next_cron_run(
-    expression: &str,
-    after: chrono::DateTime<Utc>,
-) -> Result<chrono::DateTime<Utc>, String> {
-    use cron::Schedule;
-    use std::str::FromStr;
-
-    let fields = expression.split_whitespace().count();
-    if fields != 6 {
-        return Err(format!("expected 6 fields, got {}", fields));
-    }
-
-    let schedule = Schedule::from_str(expression).map_err(|e| e.to_string())?;
-    for datetime in schedule.upcoming(Utc) {
-        if datetime > after {
-            return Ok(datetime);
+    // Add the cron task
+    let task_id = match scheduler.add_cron_task(&cron_expr, TaskKind::RunTask(run_task)) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("Error: Failed to add cron task: {}", e);
+            return ExitCode::FAILURE;
         }
-    }
-    Err("no next run available".to_string())
+    };
+
+    let output = json!({
+        "success": true,
+        "task_id": task_id.to_string(),
+        "user_id": user_id,
+        "organization": organization,
+        "email": email,
+        "cron": cron_expr,
+        "workspace_dir": workspace_dir.to_string_lossy(),
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
 }
 
 // =============================================================================
@@ -1359,55 +1289,288 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Unit tests for compute_next_cron_run
+    // Unit tests for RunTaskTask and Scheduler API
     // -------------------------------------------------------------------------
 
-    #[test]
-    fn test_compute_next_cron_run_weekdays_9am() {
-        use chrono::{TimeZone, Timelike};
-        let after = Utc.with_ymd_and_hms(2026, 4, 13, 8, 0, 0).unwrap(); // Monday 8 AM
-        let result = compute_next_cron_run("0 0 9 * * MON-FRI", after);
-        assert!(result.is_ok());
-        let next = result.unwrap();
-        assert!(next > after);
-        assert_eq!(next.hour(), 9);
-        assert_eq!(next.minute(), 0);
+    use scheduler_module::{SchedulerError, TaskExecution, TaskExecutor};
+    use tempfile::TempDir;
+
+    /// A no-op executor for testing scheduler operations without side effects.
+    #[derive(Debug, Default, Clone)]
+    struct NoopExecutor;
+
+    impl TaskExecutor for NoopExecutor {
+        fn execute(&self, _task: &TaskKind) -> Result<TaskExecution, SchedulerError> {
+            Ok(TaskExecution::default())
+        }
     }
 
     #[test]
-    fn test_compute_next_cron_run_invalid_field_count() {
-        let after = Utc::now();
-        let result = compute_next_cron_run("0 0 9 * *", after); // 5 fields instead of 6
+    fn test_run_task_task_construction() {
+        let account_id = Uuid::new_v4();
+        let workspace_dir = PathBuf::from("/tmp/users/test-user/workspaces/tpm_cron_placeholder");
+        let input_email_dir = workspace_dir.join("incoming_email");
+
+        let run_task = RunTaskTask {
+            workspace_dir: workspace_dir.clone(),
+            input_email_dir: input_email_dir.clone(),
+            input_attachments_dir: workspace_dir.join("incoming_attachments"),
+            memory_dir: PathBuf::from("/tmp/users/test-user/memory"),
+            reference_dir: workspace_dir.join("references"),
+            model_name: "claude-sonnet-4-20250514".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec![],
+            reply_from: None,
+            archive_root: None,
+            thread_id: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            channel: Channel::Email,
+            slack_team_id: None,
+            employee_id: None,
+            requester_identifier_type: Some("email".to_string()),
+            requester_identifier: Some("test@example.com".to_string()),
+            account_id: Some(account_id),
+            channel_metadata: ChannelMetadata::default(),
+        };
+
+        // Verify key fields
+        assert_eq!(run_task.channel, Channel::Email);
+        assert_eq!(run_task.account_id, Some(account_id));
+        assert_eq!(run_task.requester_identifier_type, Some("email".to_string()));
+        assert_eq!(
+            run_task.requester_identifier,
+            Some("test@example.com".to_string())
+        );
+        assert_eq!(run_task.model_name, "claude-sonnet-4-20250514");
+        assert_eq!(run_task.runner, "codex");
+        assert!(!run_task.codex_disabled);
+        assert!(run_task.reply_to.is_empty());
+    }
+
+    #[test]
+    fn test_scheduler_add_cron_task() {
+        if !require_mongodb_uri("test_scheduler_add_cron_task") {
+            return;
+        }
+
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let tasks_db = temp.path().join("state").join("tasks.db");
+        std::fs::create_dir_all(tasks_db.parent().unwrap()).expect("create state dir");
+
+        let mut scheduler =
+            Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load scheduler");
+
+        // Build a minimal RunTaskTask
+        let run_task = RunTaskTask {
+            workspace_dir: temp.path().join("workspace"),
+            input_email_dir: temp.path().join("workspace").join("incoming_email"),
+            input_attachments_dir: temp.path().join("workspace").join("incoming_attachments"),
+            memory_dir: temp.path().join("memory"),
+            reference_dir: temp.path().join("workspace").join("references"),
+            model_name: "test-model".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec![],
+            reply_from: None,
+            archive_root: None,
+            thread_id: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            channel: Channel::Email,
+            slack_team_id: None,
+            employee_id: None,
+            requester_identifier_type: Some("email".to_string()),
+            requester_identifier: Some("test@example.com".to_string()),
+            account_id: Some(Uuid::new_v4()),
+            channel_metadata: ChannelMetadata::default(),
+        };
+
+        // Add cron task
+        let cron_expr = "0 0 9 * * MON-FRI"; // 9 AM weekdays
+        let task_id = scheduler
+            .add_cron_task(cron_expr, TaskKind::RunTask(run_task))
+            .expect("add cron task");
+
+        // Verify task was added
+        assert_eq!(scheduler.tasks().len(), 1);
+        let task = &scheduler.tasks()[0];
+        assert_eq!(task.id, task_id);
+        assert!(task.enabled);
+
+        // Verify schedule is cron
+        match &task.schedule {
+            scheduler_module::Schedule::Cron { expression, next_run } => {
+                assert_eq!(expression, cron_expr);
+                assert!(*next_run > Utc::now());
+            }
+            _ => panic!("expected cron schedule"),
+        }
+
+        // Verify task kind is RunTask
+        match &task.kind {
+            TaskKind::RunTask(rt) => {
+                assert_eq!(rt.channel, Channel::Email);
+                assert_eq!(rt.model_name, "test-model");
+            }
+            _ => panic!("expected RunTask kind"),
+        }
+    }
+
+    #[test]
+    fn test_scheduler_rejects_invalid_cron() {
+        if !require_mongodb_uri("test_scheduler_rejects_invalid_cron") {
+            return;
+        }
+
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let tasks_db = temp.path().join("tasks.db");
+
+        let mut scheduler =
+            Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load scheduler");
+
+        let run_task = RunTaskTask {
+            workspace_dir: temp.path().to_path_buf(),
+            input_email_dir: temp.path().join("incoming_email"),
+            input_attachments_dir: temp.path().join("incoming_attachments"),
+            memory_dir: temp.path().join("memory"),
+            reference_dir: temp.path().join("references"),
+            model_name: "test".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec![],
+            reply_from: None,
+            archive_root: None,
+            thread_id: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            channel: Channel::Email,
+            slack_team_id: None,
+            employee_id: None,
+            requester_identifier_type: None,
+            requester_identifier: None,
+            account_id: None,
+            channel_metadata: ChannelMetadata::default(),
+        };
+
+        // 5 fields instead of 6 should fail
+        let result = scheduler.add_cron_task("0 0 9 * *", TaskKind::RunTask(run_task));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("expected 6 fields"));
     }
 
     #[test]
-    fn test_compute_next_cron_run_invalid_expression() {
-        let after = Utc::now();
-        let result = compute_next_cron_run("invalid cron expr here", after);
-        assert!(result.is_err());
+    fn test_synthetic_payload_structure() {
+        let now = Utc::now();
+        let payload = json!({
+            "From": "TPM Cron <cron@dowhiz.com>",
+            "Subject": "TPM Sync",
+            "TextBody": "This is a scheduled TPM sync. Run the daily TPM sync workflow.",
+            "Date": now.to_rfc3339()
+        });
+
+        // Verify required fields
+        assert_eq!(payload["From"], "TPM Cron <cron@dowhiz.com>");
+        assert_eq!(payload["Subject"], "TPM Sync");
+        assert!(payload["TextBody"].as_str().unwrap().contains("TPM sync"));
+        assert!(payload["Date"].as_str().is_some());
     }
 
     #[test]
-    fn test_compute_next_cron_run_daily_midnight() {
-        use chrono::{TimeZone, Timelike};
-        let after = Utc.with_ymd_and_hms(2026, 4, 13, 23, 59, 0).unwrap();
-        let result = compute_next_cron_run("0 0 0 * * *", after);
-        assert!(result.is_ok());
-        let next = result.unwrap();
-        assert!(next > after);
-        assert_eq!(next.hour(), 0);
-        assert_eq!(next.minute(), 0);
+    fn test_workspace_paths_are_consistent() {
+        let users_root = PathBuf::from("/tmp/users");
+        let user_id = "abc123";
+
+        let workspace_dir = users_root
+            .join(user_id)
+            .join("workspaces")
+            .join("tpm_cron_placeholder");
+        let input_email_dir = workspace_dir.join("incoming_email");
+        let memory_dir = users_root.join(user_id).join("memory");
+        let account_tasks_path = users_root.join(user_id).join("state").join("tasks.db");
+
+        // Verify path structure
+        assert_eq!(
+            workspace_dir.to_string_lossy(),
+            "/tmp/users/abc123/workspaces/tpm_cron_placeholder"
+        );
+        assert_eq!(
+            input_email_dir.to_string_lossy(),
+            "/tmp/users/abc123/workspaces/tpm_cron_placeholder/incoming_email"
+        );
+        assert_eq!(memory_dir.to_string_lossy(), "/tmp/users/abc123/memory");
+        assert_eq!(
+            account_tasks_path.to_string_lossy(),
+            "/tmp/users/abc123/state/tasks.db"
+        );
     }
 
     #[test]
-    fn test_compute_next_cron_run_returns_future_time() {
-        let after = Utc::now();
-        let result = compute_next_cron_run("0 * * * * *", after); // every minute
-        assert!(result.is_ok());
-        let next = result.unwrap();
-        assert!(next > after);
+    fn test_scheduler_persists_task_to_storage() {
+        if !require_mongodb_uri("test_scheduler_persists_task_to_storage") {
+            return;
+        }
+
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let tasks_db = temp.path().join("tasks.db");
+
+        let account_id = Uuid::new_v4();
+        let task_id;
+
+        // Create scheduler, add task, drop scheduler
+        {
+            let mut scheduler =
+                Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load scheduler");
+
+            let run_task = RunTaskTask {
+                workspace_dir: temp.path().join("workspace"),
+                input_email_dir: temp.path().join("workspace").join("incoming_email"),
+                input_attachments_dir: temp.path().join("workspace").join("incoming_attachments"),
+                memory_dir: temp.path().join("memory"),
+                reference_dir: temp.path().join("workspace").join("references"),
+                model_name: "persisted-model".to_string(),
+                runner: "codex".to_string(),
+                codex_disabled: false,
+                reply_to: vec![],
+                reply_from: None,
+                archive_root: None,
+                thread_id: None,
+                thread_epoch: None,
+                thread_state_path: None,
+                channel: Channel::Email,
+                slack_team_id: None,
+                employee_id: None,
+                requester_identifier_type: Some("email".to_string()),
+                requester_identifier: Some("persist@example.com".to_string()),
+                account_id: Some(account_id),
+                channel_metadata: ChannelMetadata::default(),
+            };
+
+            task_id = scheduler
+                .add_cron_task("0 0 10 * * *", TaskKind::RunTask(run_task))
+                .expect("add cron task");
+        }
+
+        // Reload scheduler from storage
+        let scheduler =
+            Scheduler::load(&tasks_db, NoopExecutor::default()).expect("reload scheduler");
+
+        // Verify task was persisted
+        assert_eq!(scheduler.tasks().len(), 1);
+        let task = &scheduler.tasks()[0];
+        assert_eq!(task.id, task_id);
+
+        match &task.kind {
+            TaskKind::RunTask(rt) => {
+                assert_eq!(rt.model_name, "persisted-model");
+                assert_eq!(rt.account_id, Some(account_id));
+                assert_eq!(
+                    rt.requester_identifier,
+                    Some("persist@example.com".to_string())
+                );
+            }
+            _ => panic!("expected RunTask kind"),
+        }
     }
 
     // -------------------------------------------------------------------------
