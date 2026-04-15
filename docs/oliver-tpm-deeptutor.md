@@ -511,7 +511,7 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
   - `sync-tasks` — Pull Notion updates back to MongoDB
   - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
 - ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
-- ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger when Notion DB is not inited
+- ✅ Cron job infrastructure — Uses proper Scheduler API (`add_cron_task`) with account-level `tasks.db` storage; synthetic `postmark_payload.json` persists across cron runs (workspace is reused, not recreated)
 - ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
 - ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
 - ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
@@ -588,8 +588,8 @@ User sends first TPM request after connecting organization → uses **user's Not
 Cron stores **setup user's account_id** → uses **their Notion token** for scheduled syncs.
 
 1. User runs `setup-tpm-cron --user-id <UUID>` 
-2. Task stored with `account_id: <UUID>` (the setup user)
-3. Cron fires → `resolve_account_for_run_task` returns stored `account_id`
+2. Task stored in account-level `tasks.db` with `account_id: <UUID>` (the setup user)
+3. Cron fires → `resolve_account_for_run_task` returns stored `account_id` via `scheduler.add_cron_task(&cron_expr, RunTaskTask)`
 4. `load_notion_access_token_for_account(account_id)` loads setup user's token
 5. User's token has access to their own database → sync works
 
