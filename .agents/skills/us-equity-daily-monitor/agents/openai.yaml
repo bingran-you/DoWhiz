@@ -1,0 +1,4 @@
+interface:
+  display_name: "US Equity Daily Monitor"
+  short_description: "Track U.S. stocks with daily ratings"
+  default_prompt: "Use $us-equity-daily-monitor to prepare today's email-ready note for a U.S. stock."

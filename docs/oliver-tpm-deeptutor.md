@@ -69,7 +69,8 @@ Reuse the existing Azure Service Bus inbound gateway. Same Oliver (employee), di
 -- New table for organizations
 CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT UNIQUE NOT NULL,  -- "deeptutor", "acme-corp", etc.
+    name TEXT UNIQUE NOT NULL,           -- "deeptutor", "acme-corp", etc.
+    notion_database_id TEXT,             -- Notion task board ID (populate from tpm_cli setup-board command)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -103,20 +104,30 @@ The prompt builder (`prompt.rs`) or workspace setup checks the organization and 
 
 **ACI Container Access:**
 
-Oliver runs inside an ACI container. For TPM mode, it needs access to `DevTaskStore` (MongoDB `deeptutor_tasks` collection) to:
+Oliver runs inside an ACI container. For TPM mode, it needs access to `DevTaskStore` (MongoDB `dev_tasks` collection) to:
 - Query pending tasks
 - Update task status
 - Assign tasks to developers
 - Link tasks to Notion pages
 
-The ACI container already has `MONGODB_URI` for other operations. For TPM mode, Oliver imports `DevTaskStore` from `scheduler_module` and uses it directly using the relevant env vars:
+The ACI container already has `MONGODB_URI` for other operations. For TPM mode, Oliver imports `DevTaskStore` from `scheduler_module` and uses it directly:
 
 ```rust
-// In TPM mode, Oliver can:
-let store = DevTaskStore::new()?;
+// In TPM mode, Oliver creates a store scoped to the user's organization:
+let store = DevTaskStore::new("deeptutor")?;
 let backlog = store.list_tasks_by_status(TaskStatus::Backlog)?;
 store.update_status(&task_id, TaskStatus::InProgress)?;
 store.update_assignee(&task_id, Some("dev@example.com"))?;
+```
+
+**Multi-tenant design:** All organizations share the same `dev_tasks` collection. Each document has an `organization` field, and all queries filter by it. No cross-org data leakage.
+
+```
+dev_tasks collection
+├── { organization: "deeptutor", title: "Fix PDF crash", ... }
+├── { organization: "deeptutor", title: "Add dark mode", ... }
+├── { organization: "acme-corp", title: "Update API", ... }
+└── { organization: "acme-corp", title: "Fix login", ... }
 ```
 
 **Frontend Flow (DoWhiz account settings):**
@@ -140,6 +151,7 @@ enum TaskStatus { Backlog, InProgress, Review, Done, Blocked }
 enum TaskSource { UserFeedback, Notetaker, MarketResearch, Manual }
 
 struct DevTask {
+    organization: String,           // Multi-tenant: "deeptutor", "acme-corp", etc.
     title: String,
     description: String,
     priority: Priority,
@@ -148,6 +160,8 @@ struct DevTask {
     source: TaskSource,
     tags: Vec<String>,
     notion_page_id: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 ```
 
@@ -158,7 +172,7 @@ struct DevTask {
 - `assign_task(task_id, assignee)` — Assign to developer
 - `update_checkpoint(task_id, checkpoint_id, completed)` — Track progress
 
-### 2. Sentiment Analyzer (User Feedback Pipeline) - Likely Most Difficult
+### 2. Passive User Feedback Collection (User Feedback Pipeline) - Likely Most Difficult
 
 Oliver monitors DeepTutor user sentiment to discover tasks:
 
@@ -182,6 +196,8 @@ Text: "Love the AI summaries but it crashes when I open large PDFs over 100 page
    Priority: P1
    Tags: [bug, pdf-reader, stability]
 ```
+
+* Review the feature to make sure its aligned with roadmap (bugs, feature requests)
 
 ### 3. Notetaker Integration
 
@@ -299,13 +315,15 @@ struct DeveloperProfile {
 ## Implementation
 
 ### Organization-Based Routing
-- Add `organizations` table to Supabase
-- Add `organization_id` column to `accounts` table
-- Update gateway to fetch account's organization and route accordingly
+- ✅ Add `organizations` table to Supabase
+- ✅ Add `organization_id` column to `accounts` table
+- ✅ Update gateway to fetch account's organization and route accordingly
 - Frontend: org search + join flow in DoWhiz account settings
 
 ### Core Task Queue
-- MongoDB collection + CRUD operations ✅ (`dev_task_store.rs`)
+- ✅ MongoDB collection + CRUD operations (`dev_task_store.rs`)
+- ✅ TPM CLI commands (`tpm_cli.rs`): setup-board, create-task, list-tasks, sync-tasks
+- ✅ Cron job initialization (`setup-tpm-cron` with synthetic trigger)
 - Manual task creation via Oliver
 - Assignment notifications
 
@@ -325,26 +343,142 @@ struct DeveloperProfile {
 - Workload balancing
 - Priority-based routing
 
-### Notion CLI
+### TPM CLI (`tpm_cli`)
+
+* These commands will be exposed to Codex inside the ACI container
+
+Task board commands for managing DevTasks across MongoDB and Notion:
+
+**Important:**
+1. **New organization?** Must run `setup-board` first to create the Notion database
+2. **Before `list-tasks`**, run `sync-tasks` to pull any status changes developers made directly in Notion
+
+**Command purposes:**
+- ✅ `setup-board` — Create Notion database for an organization
+- ✅ `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- ✅ `list-tasks` — List tasks from MongoDB with filters
+- ✅ `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
+- ✅ `setup-tpm-cron` — Set up daily TPM sync cron job for a user (direct MongoDB upsert)
+
+#### `setup-board` — Create Notion database for an organization
+
+```bash
+tpm_cli setup-board \
+  --organization deeptutor \
+  --parent-page-id <NOTION_PAGE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+Creates a Notion database with TPM schema:
+- **Name** (title)
+- **Status** (select: Backlog, In Progress, Review, Done, Blocked)
+- **Priority** (select: P0, P1, P2, P3)
+- **Assignee** (people)
+- **Tags** (multi-select)
+- **Source** (select: User Feedback, Notetaker, Market Research, Manual)
+- **MongoDB ID** (rich_text — links to `dev_tasks` collection)
+
+Returns `database_id` to store in `organizations.notion_database_id`.
+
+[TODO] Link notion_database_id with organization in Supabase Postgres
+
+#### `create-task` — Oliver autonomously creates tasks
+
+```bash
+tpm_cli create-task \
+  --organization deeptutor \
+  --database-id <NOTION_DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID> \
+  --title "Fix PDF crash on large files" \
+  --description "PDFs over 100 pages cause app crash" \
+  --priority p1 \
+  --source user_feedback \
+  --tags bug,pdf,stability \
+  --assignee dev@example.com
+```
+
+Use when Oliver identifies a task from:
+- User feedback (Discord, email, in-app)
+- Meeting transcripts (notetaker)
+- Market research
+
+Flow:
+1. Insert `DevTask` into MongoDB `dev_tasks` collection
+2. Create page in Notion database with `MongoDB ID` property
+3. Link `notion_page_id` back to MongoDB document with DevTaskStore's `link_notion_page`
+
+#### `list-tasks` — List tasks from MongoDB
+
+```bash
+# List all tasks
+tpm_cli list-tasks --organization deeptutor
+
+# Filter by status
+tpm_cli list-tasks --organization deeptutor --status backlog
+
+# Filter by assignee
+tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
+```
+
+#### `sync-tasks` — Pull developer updates from Notion to MongoDB
+
+```bash
+tpm_cli sync-tasks \
+  --organization deeptutor \
+  --database-id <NOTION_DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+#### `setup-tpm-cron` — Set up daily TPM sync cron job for a user
+
+```bash
+tpm_cli setup-tpm-cron \
+  --user-id <USER_ID> \
+  --organization deeptutor \
+  --cron "0 0 9 * * MON-FRI"
+```
+
+Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This directly upserts a `RunTask` into MongoDB, bypassing the email pipeline.
+
+**Arguments:**
+- `--user-id` (required) — User ID (must belong to the organization)
+- `--organization` (required) — Organization name
+- `--cron` (optional) — Cron expression (default: `"0 0 9 * * MON-FRI"` = 9 AM UTC weekdays)
+
+**Flow:**
+1. Validate user belongs to organization via `AccountStore`
+2. Derive user email from verified identifiers in their account
+3. Create workspace with synthetic `postmark_payload.json` (subject: "TPM Sync")
+4. Build `RunTask` with workspace pointing to TPM mode
+5. Upsert into MongoDB `tasks` collection with cron schedule
+
+**Why synthetic trigger?** When cron fires, Codex reads `postmark_payload.json` and sees subject "TPM Sync", triggering the daily sync workflow per the TPM prompt instructions.
+
+**Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job, no inbound webhook.
+
+**Cron format:** 6-field expression (second minute hour day-of-month month day-of-week)
+- `"0 0 9 * * MON-FRI"` — 9:00 AM UTC, Monday through Friday
+- `"0 30 14 * * *"` — 2:30 PM UTC daily
+- `"0 0 8 1 * *"` — 8:00 AM UTC on the 1st of each month
+
+### Notion CLI (`notion_api_cli`)
 
 **Already supported:**
 - `query-database` — Filter tasks by status, assignee, priority
 - `update-page` — Change task status, reassign, update properties
 - `create-page` — Create new task (database items are pages in Notion)
+- `create-database` — Create a new database with custom schema
 - `create-comment` / `reply` — Oliver comments on tasks
 - `search` — Find tasks by keyword
 - `get-database` — Get board schema/properties
 
-**Potential additions:**
-- `create-database-item` — Convenience wrapper for creating tasks with typed properties (priority, status, assignee)
-- `get-stale-items` — Query items with no updates in N days
-
 ---
 
-## Open Questions
-1. **Transcript access** — How to get Otter.ai transcripts? (API, email forward, shared folder)
+## Questions
+1. **Transcript access** — How do we get Otter.ai transcripts? (API, email forward, shared folder)
 2. **Sentiment Analysis** - Other than DeepTutor discord and direct @Oliver-DoWhiz pings, how does Oliver get a good idea of user sentiment? What apps does Oliver look at?
 3. **Go-to-Market** - How does Oliver structure responses? What apps should Oliver post on? Which additional channels to integrate?
+4. **Regular Task vs. Organization Task** - Given that an account belongs to an organization, how do we classify tasks (populate into Notion + MongoDB) and regular tasks?
 
 ---
 
@@ -354,8 +488,109 @@ struct DeveloperProfile {
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
 | **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
+| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks, setup-tpm-cron) |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
+| Notion API Client | `scheduler_module/src/notion_browser/api_client.rs` | `create_database`, `create_database_page`, `query_database` |
 | Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
 | Queue trait | `scheduler_module/src/ingestion_queue.rs` | Enqueue/claim semantics |
 | Task types | `scheduler_module/src/scheduler/types.rs` | TaskKind pattern |
 | Supabase accounts | PostgreSQL `accounts` table | Add `organization_id` column |
+
+---
+
+## Progress Log
+
+### 4/14/26
+**Completed:**
+- ✅ Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
+- ✅ DevTaskStore (`dev_task_store.rs`) — MongoDB CRUD for DevTask with multi-tenant organization scoping
+- ✅ TPM CLI (`tpm_cli.rs`) — All task board commands implemented:
+  - `setup-board` — Create Notion database with TPM schema
+  - `create-task` — Create task in MongoDB + Notion
+  - `list-tasks` — Query tasks with status/assignee filters
+  - `sync-tasks` — Pull Notion updates back to MongoDB
+  - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
+- ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
+- ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger when Notion DB is not inited
+- ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
+- ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
+- ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
+- ✅ Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
+
+**Remaining:**
+- TPM cron trigger endpoint — API to call `tpm_cli setup-tpm-cron` from frontend when user is first org member
+- Organization creation UI (frontend)
+- Transcript parsing and initial ingestion
+- Proactive search for user feedback
+
+---
+
+## Frontend Organization Flow
+
+User joins an organization via the DoWhiz dashboard (`website/public/auth/index.html`).
+
+**UI Components:**
+- Current organization display (when joined) with Leave button
+- Search input with debounced API calls
+- Dropdown showing matching organizations
+- Join button (disabled until selection)
+
+**Join Flow:**
+```
+1. User types in search box
+                ↓
+2. Debounced (300ms) GET /auth/organizations?search=query
+                ↓
+3. Dropdown shows results, user clicks one
+                ↓
+4. Selection highlighted, Join button enabled
+                ↓
+5. User clicks Join → PUT /auth/account/organization
+                ↓
+6. GET /auth/organization/:name/member-count
+                ↓
+7. If member_count === 1:
+   → [TODO] POST /api/tpm/setup-cron to trigger tpm_cli setup-tpm-cron
+   → Show "TPM mode will be set up" message
+                ↓
+8. UI updates to show current organization
+```
+
+**Leave Flow:**
+```
+1. User clicks Leave → confirmation prompt
+                ↓
+2. DELETE /auth/account/organization
+                ↓
+3. UI resets to search mode
+```
+
+**TODO:** Add `POST /api/tpm/setup-cron` endpoint that:
+- Accepts `{ organization_name: string }`
+- Validates user belongs to organization
+- Calls `tpm_cli setup-tpm-cron --user-id <account_id> --organization <org_name>`
+- Returns success/failure
+
+---
+
+## Notion Token Flow
+
+### Interactive Requests (setup-board, create-task)
+User sends first TPM request after connecting organization → uses **user's Notion OAuth token** → database created in **user's workspace** → user owns it.
+
+1. User sends task to Oliver
+2. `executor.rs` calls `load_notion_access_token_for_account(account_id)` 
+3. `codex.rs` passes token to ACI via `NOTION_API_TOKEN` env var
+4. `tpm_cli` reads env var, creates database in user's Notion
+5. User shares database with team + Oliver (manual step via Notion UI)
+
+### Cron Job (setup-tpm-cron)
+Cron stores **setup user's account_id** → uses **their Notion token** for scheduled syncs.
+
+1. User runs `setup-tpm-cron --user-id <UUID>` 
+2. Task stored with `account_id: <UUID>` (the setup user)
+3. Cron fires → `resolve_account_for_run_task` returns stored `account_id`
+4. `load_notion_access_token_for_account(account_id)` loads setup user's token
+5. User's token has access to their own database → sync works
+
+**Note:** No separate "Oliver Notion token" needed for cron. The setup user's token is used since they own the database.

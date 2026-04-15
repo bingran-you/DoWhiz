@@ -13,10 +13,10 @@ use crate::account_store::{
 };
 use crate::blob_store::get_blob_store;
 use crate::channel::Channel;
-use crate::grocery_store::sync_grocery_preferences_to_workspace;
 use crate::github_inbound::{
     extract_github_sender_login_from_postmark_payload, is_github_notifications_postmark_payload,
 };
+use crate::grocery_store::sync_grocery_preferences_to_workspace;
 use crate::memory_diff::compute_memory_diff;
 use crate::memory_queue::{global_memory_queue, MemoryWriteRequest};
 use crate::memory_store::{
@@ -411,7 +411,19 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
         }
     };
 
-    identifiers_to_user_identities(account_id, &identifiers)
+    let mut result = identifiers_to_user_identities(account_id, &identifiers);
+
+    // Fetch organization info if account has one
+    if let Ok(Some(account)) = store.get_account(account_id) {
+        if let Some(org_id) = account.organization_id {
+            result.organization_id = Some(org_id.to_string());
+            if let Ok(Some(org)) = store.get_organization_by_id(org_id) {
+                result.organization_name = Some(org.name);
+            }
+        }
+    }
+
+    result
 }
 
 /// Convert account identifiers to UserIdentities struct for cross-channel routing.

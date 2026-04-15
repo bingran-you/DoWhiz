@@ -164,6 +164,104 @@
       .hidden {
         display: none !important;
       }
+      /* Organization search styles */
+      .current-org-display {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: var(--surface-secondary, #17191d);
+        border: 1px solid var(--border, #333);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+      }
+      .current-org-label {
+        color: var(--text-muted, #888);
+        font-size: 0.9rem;
+      }
+      .current-org-name {
+        font-weight: 600;
+        color: var(--text, #fff);
+      }
+      .org-search-container {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+      .org-search-input-wrap {
+        flex: 1;
+        position: relative;
+      }
+      .org-search-input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: var(--surface, #1a1a1a);
+        border: 1px solid var(--border, #333);
+        border-radius: 8px;
+        color: var(--text, #fff);
+        font-size: 1rem;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+      .org-search-input:focus {
+        border-color: var(--accent, #38bdf8);
+      }
+      .org-search-input::placeholder {
+        color: var(--text-muted, #888);
+      }
+      .org-search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 4px;
+        background: var(--surface-secondary, #17191d);
+        border: 1px solid var(--border, #333);
+        border-radius: 8px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 100;
+      }
+      .org-search-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        border-bottom: 1px solid var(--border, #333);
+      }
+      .org-search-item:last-child {
+        border-bottom: none;
+      }
+      .org-search-item:hover {
+        background: color-mix(in srgb, var(--accent, #38bdf8) 10%, var(--surface-secondary, #17191d));
+      }
+      .org-search-item.selected {
+        background: color-mix(in srgb, var(--accent, #38bdf8) 20%, var(--surface-secondary, #17191d));
+        border-left: 3px solid var(--accent, #38bdf8);
+      }
+      .org-search-item-name {
+        font-weight: 500;
+        color: var(--text, #fff);
+      }
+      .org-search-empty {
+        padding: 0.75rem 1rem;
+        color: var(--text-muted, #888);
+        font-style: italic;
+      }
+      #join-org-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .org-status {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+      }
+      .org-status.success {
+        color: #22c55e;
+      }
+      .org-status.error {
+        color: #ef4444;
+      }
       .dashboard-title-wrap {
         display: block;
       }
@@ -2182,6 +2280,30 @@
                   <ul id="identifier-list" class="identifier-list">
                     <li class="identifier-item">Loading...</li>
                   </ul>
+
+                  <div class="settings-panel" style="margin-top: 1.5rem;">
+                    <h3>Organization</h3>
+                    <p>Join an organization to enable TPM mode and team task management.</p>
+                    <div id="current-org-display" class="current-org-display hidden">
+                      <span class="current-org-label">Current organization:</span>
+                      <span id="current-org-name" class="current-org-name"></span>
+                      <button id="leave-org-btn" class="auth-btn auth-btn-oauth" style="margin-left: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;">Leave</button>
+                    </div>
+                    <div id="org-search-container" class="org-search-container">
+                      <div class="org-search-input-wrap">
+                        <input
+                          type="text"
+                          id="org-search-input"
+                          class="org-search-input"
+                          placeholder="Search organizations..."
+                          autocomplete="off"
+                        />
+                        <div id="org-search-results" class="org-search-results hidden"></div>
+                      </div>
+                      <button id="join-org-btn" class="auth-btn auth-btn-primary" disabled>Join</button>
+                    </div>
+                    <span id="org-status" class="org-status"></span>
+                  </div>
                 </section>
 
                 <section id="section-workspace" class="legal-card dashboard-section">
@@ -5476,6 +5598,8 @@
 
         document.getElementById('account-id').textContent = accountData.account_id;
         document.getElementById('user-email').textContent = session.user.email;
+        initOrganizationUI(accountData);
+        setupOrganizationListeners();
         loadWorkspaceSummaryFromStorage();
         workspaceRecommendationStatus = 'loading';
         workspaceRecommendationErrorMessage = '';
@@ -5604,6 +5728,236 @@
         } catch (err) {
           showMessage(normalizeApiFetchError(err));
         }
+      }
+
+      // Organization state
+      let selectedOrganization = null;
+      let currentOrganizationName = null;
+
+      // Initialize organization UI from account data
+      function initOrganizationUI(accountData) {
+        const currentOrgDisplay = document.getElementById('current-org-display');
+        const currentOrgName = document.getElementById('current-org-name');
+        const orgSearchContainer = document.getElementById('org-search-container');
+        const orgStatus = document.getElementById('org-status');
+
+        currentOrganizationName = accountData.organization_name || null;
+
+        if (currentOrganizationName) {
+          currentOrgName.textContent = currentOrganizationName;
+          currentOrgDisplay.classList.remove('hidden');
+          orgSearchContainer.classList.add('hidden');
+          orgStatus.textContent = '';
+        } else {
+          currentOrgDisplay.classList.add('hidden');
+          orgSearchContainer.classList.remove('hidden');
+        }
+      }
+
+      // Search organizations
+      async function searchOrganizations(query) {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return [];
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/organizations?search=${encodeURIComponent(query)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (!res.ok) return [];
+          const data = await res.json();
+          return data.organizations || [];
+        } catch (err) {
+          console.error('Failed to search organizations:', err);
+          return [];
+        }
+      }
+
+      // Render organization search results
+      function renderOrgSearchResults(orgs) {
+        const resultsEl = document.getElementById('org-search-results');
+        if (orgs.length === 0) {
+          resultsEl.innerHTML = '<div class="org-search-empty">No organizations found</div>';
+        } else {
+          resultsEl.innerHTML = orgs.map(org => `
+            <div class="org-search-item" data-org-name="${escapeHtml(org.name)}">
+              <span class="org-search-item-name">${escapeHtml(org.name)}</span>
+            </div>
+          `).join('');
+
+          resultsEl.querySelectorAll('.org-search-item').forEach(item => {
+            item.addEventListener('click', () => selectOrganization(item.dataset.orgName));
+          });
+        }
+        resultsEl.classList.remove('hidden');
+      }
+
+      // Select an organization
+      function selectOrganization(orgName) {
+        const resultsEl = document.getElementById('org-search-results');
+        const searchInput = document.getElementById('org-search-input');
+        const joinBtn = document.getElementById('join-org-btn');
+
+        selectedOrganization = orgName;
+        searchInput.value = orgName;
+
+        // Highlight selected
+        resultsEl.querySelectorAll('.org-search-item').forEach(item => {
+          item.classList.toggle('selected', item.dataset.orgName === orgName);
+        });
+
+        // Enable join button
+        joinBtn.disabled = false;
+        resultsEl.classList.add('hidden');
+      }
+
+      // Join organization
+      async function joinOrganization() {
+        if (!selectedOrganization) return;
+
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        const joinBtn = document.getElementById('join-org-btn');
+        const orgStatus = document.getElementById('org-status');
+
+        joinBtn.disabled = true;
+        orgStatus.textContent = 'Joining...';
+        orgStatus.className = 'org-status';
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/account/organization`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ organization_name: selectedOrganization })
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to join organization');
+          }
+
+          const data = await res.json();
+          orgStatus.textContent = `Joined ${selectedOrganization}!`;
+          orgStatus.className = 'org-status success';
+
+          // Check if user is only member - if so, set up TPM cron
+          const memberCountRes = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(selectedOrganization)}/member-count`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (memberCountRes.ok) {
+            const memberData = await memberCountRes.json();
+            if (memberData.member_count === 1) {
+              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - TPM mode will be set up.`;
+              // TODO: Trigger TPM cron setup via API when endpoint is available
+              console.log('User is only member, should set up TPM cron for account:', data.account_id);
+            }
+          }
+
+          // Refresh UI
+          currentOrganizationName = selectedOrganization;
+          selectedOrganization = null;
+          document.getElementById('org-search-input').value = '';
+          document.getElementById('current-org-name').textContent = currentOrganizationName;
+          document.getElementById('current-org-display').classList.remove('hidden');
+          document.getElementById('org-search-container').classList.add('hidden');
+
+        } catch (err) {
+          orgStatus.textContent = normalizeApiFetchError(err);
+          orgStatus.className = 'org-status error';
+          joinBtn.disabled = false;
+        }
+      }
+
+      // Leave organization
+      async function leaveOrganization() {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        if (!confirm(`Leave organization "${currentOrganizationName}"?`)) return;
+
+        const leaveBtn = document.getElementById('leave-org-btn');
+        const orgStatus = document.getElementById('org-status');
+
+        leaveBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/account/organization`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to leave organization');
+          }
+
+          orgStatus.textContent = 'Left organization';
+          orgStatus.className = 'org-status success';
+
+          // Reset UI
+          currentOrganizationName = null;
+          document.getElementById('current-org-display').classList.add('hidden');
+          document.getElementById('org-search-container').classList.remove('hidden');
+          document.getElementById('join-org-btn').disabled = true;
+
+        } catch (err) {
+          orgStatus.textContent = normalizeApiFetchError(err);
+          orgStatus.className = 'org-status error';
+        } finally {
+          leaveBtn.disabled = false;
+        }
+      }
+
+      // Setup organization event listeners
+      function setupOrganizationListeners() {
+        const searchInput = document.getElementById('org-search-input');
+        const resultsEl = document.getElementById('org-search-results');
+        const joinBtn = document.getElementById('join-org-btn');
+        const leaveBtn = document.getElementById('leave-org-btn');
+
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+          const query = e.target.value.trim();
+          selectedOrganization = null;
+          joinBtn.disabled = true;
+
+          clearTimeout(searchTimeout);
+          if (query.length < 1) {
+            resultsEl.classList.add('hidden');
+            return;
+          }
+
+          searchTimeout = setTimeout(async () => {
+            const orgs = await searchOrganizations(query);
+            renderOrgSearchResults(orgs);
+          }, 300);
+        });
+
+        // Hide results when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.org-search-input-wrap')) {
+            resultsEl.classList.add('hidden');
+          }
+        });
+
+        // Show results on focus if there's input
+        searchInput.addEventListener('focus', async () => {
+          const query = searchInput.value.trim();
+          if (query.length >= 1) {
+            const orgs = await searchOrganizations(query);
+            renderOrgSearchResults(orgs);
+          }
+        });
+
+        joinBtn.addEventListener('click', joinOrganization);
+        leaveBtn.addEventListener('click', leaveOrganization);
       }
 
       // Load memo content

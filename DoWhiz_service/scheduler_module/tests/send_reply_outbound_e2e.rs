@@ -5,8 +5,11 @@ use scheduler_module::{
     channel::{Channel, ChannelMetadata},
     ModuleExecutor, Scheduler, SendReplyTask, TaskKind,
 };
+use send_emails_module::normalize_email_html;
+use serde_json::json;
 use std::env;
 use std::fs;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -34,6 +37,46 @@ impl Drop for EnvGuard {
             None => env::remove_var(self.key),
         }
     }
+}
+
+fn require_mongodb_uri(test_name: &str) -> Option<String> {
+    dotenvy::dotenv().ok();
+    match env::var("MONGODB_URI") {
+        Ok(value) if !value.trim().is_empty() => {
+            if let Some(address) = extract_mongodb_socket_addr(&value) {
+                if TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_err() {
+                    eprintln!("Skipping {test_name}; MongoDB at {address} is not reachable.");
+                    return None;
+                }
+            }
+            Some(value)
+        }
+        _ => {
+            eprintln!("Skipping {test_name}; MONGODB_URI not set.");
+            None
+        }
+    }
+}
+
+fn extract_mongodb_socket_addr(uri: &str) -> Option<std::net::SocketAddr> {
+    let remainder = uri.trim().strip_prefix("mongodb://")?;
+    let authority = remainder.split('/').next()?.split('?').next()?.trim();
+    if authority.is_empty() {
+        return None;
+    }
+
+    let host_port = authority.rsplit('@').next()?.split(',').next()?.trim();
+    if host_port.is_empty() {
+        return None;
+    }
+
+    let normalized = if host_port.contains(':') {
+        host_port.to_string()
+    } else {
+        format!("{host_port}:27017")
+    };
+
+    normalized.to_socket_addrs().ok()?.next()
 }
 
 fn write_text_file(
@@ -75,6 +118,9 @@ fn base_send_task(channel: Channel, html_path: PathBuf, attachments_dir: PathBuf
 #[test]
 fn send_reply_slack_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) = require_mongodb_uri("send_reply_slack_uses_mock") else {
+        return Ok(());
+    };
     let Some(mut server) = test_support::start_mockito_server("send_reply_slack_uses_mock") else {
         return Ok(());
     };
@@ -113,6 +159,10 @@ fn send_reply_slack_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn send_reply_slack_includes_thread_ts_when_present() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) = require_mongodb_uri("send_reply_slack_includes_thread_ts_when_present")
+    else {
+        return Ok(());
+    };
     let Some(mut server) =
         test_support::start_mockito_server("send_reply_slack_includes_thread_ts_when_present")
     else {
@@ -157,6 +207,11 @@ fn send_reply_slack_includes_thread_ts_when_present() -> Result<(), Box<dyn std:
 fn send_reply_slack_team_scoped_prefers_employee_token_over_global(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) =
+        require_mongodb_uri("send_reply_slack_team_scoped_prefers_employee_token_over_global")
+    else {
+        return Ok(());
+    };
     let Some(mut server) = test_support::start_mockito_server(
         "send_reply_slack_team_scoped_prefers_employee_token_over_global",
     ) else {
@@ -207,6 +262,9 @@ fn send_reply_slack_team_scoped_prefers_employee_token_over_global(
 #[test]
 fn send_reply_discord_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) = require_mongodb_uri("send_reply_discord_uses_mock") else {
+        return Ok(());
+    };
     let Some(mut server) = test_support::start_mockito_server("send_reply_discord_uses_mock")
     else {
         return Ok(());
@@ -246,6 +304,11 @@ fn send_reply_discord_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
 fn send_reply_discord_uploads_attachments_and_includes_blob_links(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) =
+        require_mongodb_uri("send_reply_discord_uploads_attachments_and_includes_blob_links")
+    else {
+        return Ok(());
+    };
     let Some(mut server) = test_support::start_mockito_server(
         "send_reply_discord_uploads_attachments_and_includes_blob_links",
     ) else {
@@ -317,6 +380,9 @@ fn send_reply_discord_uploads_attachments_and_includes_blob_links(
 #[test]
 fn send_reply_sms_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) = require_mongodb_uri("send_reply_sms_uses_mock") else {
+        return Ok(());
+    };
     let Some(mut server) = test_support::start_mockito_server("send_reply_sms_uses_mock") else {
         return Ok(());
     };
@@ -353,5 +419,75 @@ fn send_reply_sms_uses_mock() -> Result<(), Box<dyn std::error::Error>> {
     scheduler.tick()?;
 
     sms_mock.assert();
+    Ok(())
+}
+
+#[test]
+fn send_reply_email_applies_branded_shell_before_send() -> Result<(), Box<dyn std::error::Error>> {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(_mongo_uri) =
+        require_mongodb_uri("send_reply_email_applies_branded_shell_before_send")
+    else {
+        return Ok(());
+    };
+    let Some(mut server) =
+        test_support::start_mockito_server("send_reply_email_applies_branded_shell_before_send")
+    else {
+        return Ok(());
+    };
+
+    let raw_html = r#"<div style="max-width: 520px; margin: 0 auto;"><p>你好，这里有一个超长字符串用于检查自动换行：LONGTOKENLONGTOKENLONGTOKENLONGTOKENLONGTOKEN</p></div>"#;
+    let expected_html = normalize_email_html("Project update", raw_html);
+    let expected_payload = json!({
+        "From": "sender@example.com",
+        "To": "user@example.com",
+        "Bcc": "sender@example.com",
+        "Subject": "Project update",
+        "TextBody": "你好，这里有一个超长字符串用于检查自动换行：LONGTOKENLONGTOKENLONGTOKENLONGTOKENLONGTOKEN",
+        "HtmlBody": expected_html,
+    });
+
+    let email_mock = server
+        .mock("POST", "/email")
+        .match_header("x-postmark-server-token", "test-token")
+        .match_header("accept", "application/json")
+        .match_header("content-type", "application/json")
+        .match_body(Matcher::Json(expected_payload))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "To": "user@example.com",
+                "SubmittedAt": "2024-01-01T00:00:00Z",
+                "MessageID": "test-message-id",
+                "ErrorCode": 0,
+                "Message": "OK",
+            })
+            .to_string(),
+        )
+        .expect(1)
+        .create();
+
+    let _guard_token = EnvGuard::set("POSTMARK_SERVER_TOKEN", "test-token");
+    let _guard_api = EnvGuard::set("POSTMARK_API_BASE_URL", server.url());
+
+    let temp = TempDir::new()?;
+    let html_path = write_text_file(&temp, "reply_email_draft.html", raw_html)?;
+    let attachments_dir = create_attachments_dir(&temp)?;
+
+    let mut task = base_send_task(Channel::Email, html_path.clone(), attachments_dir);
+    task.subject = "Project update".to_string();
+    task.from = Some("sender@example.com".to_string());
+    task.to = vec!["user@example.com".to_string()];
+
+    let db_path = temp.path().join("tasks.db");
+    let mut scheduler = Scheduler::load(&db_path, ModuleExecutor::default())?;
+    scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::SendReply(task))?;
+    scheduler.tick()?;
+
+    let normalized_file = fs::read_to_string(&html_path)?;
+    assert_eq!(normalized_file, expected_html);
+
+    email_mock.assert();
     Ok(())
 }

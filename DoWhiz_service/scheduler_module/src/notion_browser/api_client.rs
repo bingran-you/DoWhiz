@@ -689,6 +689,64 @@ impl NotionApiClient {
         })
     }
 
+    /// Create a new database under a parent page.
+    ///
+    /// # Arguments
+    /// * `workspace_id` - The workspace ID for OAuth lookup
+    /// * `parent_page_id` - The parent page ID (database will be nested under this)
+    /// * `title` - The database title
+    /// * `properties` - Database property schema (Notion format)
+    pub fn create_database(
+        &self,
+        workspace_id: &str,
+        parent_page_id: &str,
+        title: &str,
+        properties: Value,
+    ) -> Result<NotionDatabase, NotionApiError> {
+        let body = serde_json::json!({
+            "parent": {
+                "page_id": parent_page_id
+            },
+            "title": [{
+                "type": "text",
+                "text": {
+                    "content": title
+                }
+            }],
+            "properties": properties
+        });
+
+        let data = self.api_post(workspace_id, "/databases", &body)?;
+
+        let db_title = if let Some(title_arr) = data["title"].as_array() {
+            title_arr
+                .iter()
+                .filter_map(|t| t["plain_text"].as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        } else {
+            title.to_string()
+        };
+
+        let mut props = Vec::new();
+        if let Some(prop_obj) = data["properties"].as_object() {
+            for (name, prop) in prop_obj {
+                props.push(DatabaseProperty {
+                    name: name.clone(),
+                    property_type: prop["type"].as_str().unwrap_or("unknown").to_string(),
+                    id: prop["id"].as_str().unwrap_or("").to_string(),
+                });
+            }
+        }
+
+        Ok(NotionDatabase {
+            id: data["id"].as_str().unwrap_or("").to_string(),
+            title: db_title,
+            url: data["url"].as_str().unwrap_or("").to_string(),
+            properties: props,
+        })
+    }
+
     /// Create a new page in a database.
     ///
     /// # Arguments

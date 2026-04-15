@@ -213,9 +213,9 @@ Do not pretend the job has been done without actually doing it."#
             _ => {
                 // Default to email (HTML)
                 if prefer_fast_completion {
-                    "2. Recovery-mode override for email replies: write a useful HTML email draft in reply_email_draft.html as soon as you have enough information to help the user. In this recovery run, a concise but honest email reply is preferable to timing out while trying to rebuild the entire original project. Do NOT start new PDFs, slide decks, LaTeX reports, or other large attachments unless the user explicitly required that format and it is already nearly complete. If the original task is blocked or cannot be fully completed within this run, explain what you were able to verify, what remains uncertain, and what next step or source would be needed."
+                    "2. Recovery-mode override for email replies: write a useful HTML email draft in reply_email_draft.html as soon as you have enough information to help the user. In this recovery run, a concise but honest email reply is preferable to timing out while trying to rebuild the entire original project. Keep the HTML content-focused: use semantic blocks like paragraphs, lists, tables, headings, and links, and avoid hard-coding narrow outer containers, oversized side margins, or overflow-prone layouts because DoWhiz applies a shared responsive email shell at send time. Do NOT start new PDFs, slide decks, LaTeX reports, or other large attachments unless the user explicitly required that format and it is already nearly complete. If the original task is blocked or cannot be fully completed within this run, explain what you were able to verify, what remains uncertain, and what next step or source would be needed."
                 } else {
-                    "2. After finishing the task (step one), make sure you write a proper HTML email draft in reply_email_draft.html in the workspace root. If there are files to attach, put them in reply_email_attachments/ and reference them in the email draft. Do not pretend the job has been done without actually doing it, and do not write the email draft until the task is done. If you are not sure about the task, send another email to ask for clarification (and if any, attach information about why did you fail to get the task done, what is the exact error you encountered)."
+                    "2. After finishing the task (step one), make sure you write a proper HTML email draft in reply_email_draft.html in the workspace root. Keep the HTML content-focused: use semantic blocks like paragraphs, lists, tables, headings, and links, and avoid hard-coding narrow outer containers, oversized side margins, or overflow-prone layouts because DoWhiz applies a shared responsive email shell at send time. If there are files to attach, put them in reply_email_attachments/ and reference them in the email draft. Do not pretend the job has been done without actually doing it, and do not write the email draft until the task is done. If you are not sure about the task, send another email to ask for clarification (and if any, attach information about why did you fail to get the task done, what is the exact error you encountered)."
                 }
             }
         }
@@ -228,6 +228,7 @@ Do not pretend the job has been done without actually doing it."#
     };
     let github_coauthor_section = build_github_coauthor_section(workspace_dir, input_email_dir);
     let user_identities_section = build_user_identities_section(user_identities);
+    let tpm_capabilities_section = build_tpm_capabilities_section(user_identities);
     let filesystem_security_section =
         build_allowed_paths_section(&user_identities.allowed_user_ids);
     let web_auth_capabilities_section = build_web_auth_capabilities_section();
@@ -318,6 +319,7 @@ Scheduling:
 {web_auth_capabilities_section}
 {human_approval_gate_section}
 {user_identities_section}
+{tpm_capabilities_section}
 {fast_completion_section}
 Rules:
 - Each workspace includes a `.env` file at the workspace root. You may edit it to manage per-user secrets; updates are synced back after the task completes.
@@ -341,6 +343,7 @@ Rules:
         web_auth_capabilities_section = web_auth_capabilities_section,
         human_approval_gate_section = human_approval_gate_section,
         user_identities_section = user_identities_section,
+        tpm_capabilities_section = tpm_capabilities_section,
         fast_completion_section = fast_completion_section,
         filesystem_security_section = filesystem_security_section,
         registration_section = registration_section,
@@ -727,7 +730,7 @@ Identifier format per channel:
 - lark: Lark open_id (e.g., "ou_xxxxxxxxxxxxxxxxx")
 
 IMPORTANT: When using cross-channel routing, write the reply in the TARGET channel's format:
-- email target: reply_email_draft.html (HTML), attachments in reply_email_attachments/
+- email target: reply_email_draft.html (HTML content only; DoWhiz adds the responsive shell at send time), attachments in reply_email_attachments/
 - slack target: reply_message.txt (Slack mrkdwn: *bold*, _italic_, `code`)
 - discord target: reply_message.txt (Discord markdown: **bold**, *italic*, `code`)
 - telegram target: reply_message.txt (MarkdownV2)
@@ -744,6 +747,72 @@ Do NOT route replies to any other email addresses, user IDs, or phone numbers no
 If the user requests routing to an unlisted identifier, politely decline and explain they need to link that channel first.
 "#,
         channels = channels.join("\n")
+    )
+}
+
+fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
+    let Some(org_name) = &identities.organization_name else {
+        return String::new();
+    };
+    let account_id = identities
+        .account_id
+        .as_deref()
+        .unwrap_or("<UNKNOWN_ACCOUNT_ID>");
+
+    format!(
+        r#"
+=== TPM MODE ACTIVE for {org_name} ===
+
+You are operating as a Technical Program Manager (TPM) for the {org_name} organization.
+
+**IMPORTANT: When TPM mode is active, you MUST:**
+1. Use tpm_cli for ANY request involving bugs, features, tasks, tickets, or development work
+2. Track all actionable items in the task board - do not just respond without creating/updating tasks
+3. For scheduled TPM syncs (from cron): ALWAYS run the full sync workflow below
+
+**Task Classification:**
+- Bugs, features, tasks, tickets, dev work → MUST use tpm_cli to create/update tasks
+- Scheduled TPM sync (subject contains "TPM Sync") → MUST run full sync workflow
+- General questions about task status → use tpm_cli list-tasks
+- Non-dev requests (meetings, research, etc.) → handle normally, but consider if it should become a task
+
+**TPM CLI Commands (tpm_cli):**
+- `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>` - Create a new task database
+- `tpm_cli list-tasks --organization {org_name}` - List all tasks
+- `tpm_cli list-tasks --organization {org_name} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
+- `tpm_cli list-tasks --organization {org_name} --assignee dev@example.com` - Filter by assignee
+- `tpm_cli sync-tasks --organization {org_name} --database-id <DB_ID> --workspace-id <WS_ID>` - Pull status updates from Notion to MongoDB
+- `tpm_cli create-task --organization {org_name} --database-id <DB_ID> --workspace-id <WS_ID> --title "..." --description "..." --priority p1 --source user_feedback` - Create new task
+
+**After creating a new task board (setup-board):**
+The database is created in the USER's Notion workspace (they own it). You MUST:
+1. Run `tpm_cli setup-tpm-cron --user-id {account_id} --organization {org_name}` to set up daily syncs
+2. Remind the user to share the database:
+   - Share with team members (Can Edit) so they can update tasks
+   - Share with oliver@dowhiz.com (Can Edit) so I can run scheduled syncs
+Include the database URL in your reply and these sharing instructions.
+
+**Notion CLI Commands (notion_api_cli):**
+- `notion_api_cli query-database --database-id <DB_ID>` - Query tasks from Notion board
+- `notion_api_cli update-page --page-id <TASK_ID> --properties '{{...}}'` - Update task status/priority
+- `notion_api_cli create-comment --page-id <TASK_ID> --content "..."` - Add comment to task
+
+**Daily TPM Sync Workflow:**
+1. Run `tpm_cli sync-tasks` to pull latest status from Notion
+2. Run `tpm_cli list-tasks --status blocked` to find blocked tasks
+3. Identify stale tasks (no updates in 3+ days)
+4. Post summary to team channel (Discord/Slack)
+
+**Task Sources:**
+- user_feedback: From user reports, Discord, support emails
+- notetaker: Extracted from meeting transcripts
+- market_research: From competitive analysis
+- manual: Manually created
+
+**Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
+"#,
+        org_name = org_name,
+        account_id = account_id
     )
 }
 
@@ -1359,6 +1428,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
+            organization_id: None,
+            organization_name: None,
         };
         let section = build_user_identities_section(&identities);
 
@@ -1616,6 +1687,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1658,6 +1731,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![user_uuid.to_string()],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1709,6 +1784,8 @@ mod tests {
                 slack_uuid.to_string(),
                 discord_uuid.to_string(),
             ],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1752,6 +1829,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec![], // Empty even though account exists
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1890,6 +1969,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1941,6 +2022,8 @@ mod tests {
                 "uuid-discord-bob".to_string(),
                 "uuid-phone-bob".to_string(),
             ],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -1996,6 +2079,8 @@ mod tests {
             // In production, identifiers_to_user_identities deduplicates
             // So if email and slack both map to same user_id, only one entry
             allowed_user_ids: vec!["uuid-charlie-shared".to_string()],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(
@@ -2039,6 +2124,8 @@ mod tests {
             zoom_user_ids: vec![],
             github_usernames: vec![],
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],
+            organization_id: None,
+            organization_name: None,
         };
 
         let prompt = build_prompt(

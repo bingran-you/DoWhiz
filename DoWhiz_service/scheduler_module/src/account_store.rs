@@ -41,6 +41,7 @@ pub struct Account {
     pub created_at: DateTime<Utc>,
     pub tokens_to_hours: Option<f64>,
     pub purchased_hours: Option<f64>,
+    pub organization_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +183,18 @@ pub struct UserContact {
     pub created_at: DateTime<Utc>,
 }
 
+/// Organization for TPM multi-tenant task management.
+///
+/// Organizations group accounts and link to Notion task boards.
+#[derive(Debug, Clone)]
+pub struct Organization {
+    pub id: Uuid,
+    pub name: String,
+    /// Notion database ID for this organization's task board
+    pub notion_database_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChannelInstallOnboardingState {
     pub account_id: Uuid,
@@ -215,6 +228,8 @@ pub enum AccountStoreError {
     MissingDbUrl,
     #[error("account not found")]
     NotFound,
+    #[error("already exists: {0}")]
+    AlreadyExists(String),
     #[error("identifier already linked to another account")]
     IdentifierTaken,
     #[error("verification token expired or invalid")]
@@ -524,7 +539,7 @@ impl AccountStore {
         let row = conn.query_one(
             "INSERT INTO accounts (id, auth_user_id, created_at, tokens_to_hours, purchased_hours)
              VALUES ($1, $2, NOW(), 0, 0)
-             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8",
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
             &[&id, &auth_user_id],
         )?;
         Ok(Account {
@@ -533,6 +548,7 @@ impl AccountStore {
             created_at: row.get(2),
             tokens_to_hours: row.get(3),
             purchased_hours: row.get(4),
+            organization_id: row.get(5),
         })
     }
 
@@ -543,7 +559,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts WHERE auth_user_id = $1",
             &[&auth_user_id],
         )?;
@@ -553,6 +569,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -560,7 +577,7 @@ impl AccountStore {
     pub fn get_account(&self, account_id: Uuid) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts WHERE id = $1",
             &[&account_id],
         )?;
@@ -570,6 +587,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -581,7 +599,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8
+            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8, a.organization_id
              FROM accounts a
              JOIN account_identifiers ai ON ai.account_id = a.id
              WHERE ai.identifier_type = $1 AND ai.identifier = $2 AND ai.verified = true",
@@ -593,6 +611,7 @@ impl AccountStore {
             created_at: r.get(2),
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
+            organization_id: r.get(5),
         }))
     }
 
@@ -1036,7 +1055,7 @@ impl AccountStore {
     ) -> Result<Vec<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let rows = conn.query(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
              FROM accounts
              WHERE created_at >= $1 AND created_at < $2
              ORDER BY created_at ASC",
@@ -1050,6 +1069,7 @@ impl AccountStore {
                 created_at: row.get(2),
                 tokens_to_hours: row.get(3),
                 purchased_hours: row.get(4),
+                organization_id: row.get(5),
             })
             .collect())
     }
@@ -1581,6 +1601,244 @@ impl AccountStore {
             &[&contact_id],
         )?;
         Ok(())
+    }
+
+    // =========================================================================
+    // Organization methods (TPM Multi-Tenant)
+    // =========================================================================
+
+    /// Get an organization by name.
+    ///
+    /// Used by TPM to look up organization settings (e.g., Notion database ID).
+    pub fn get_organization_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "SELECT id, name, notion_database_id, created_at
+             FROM organizations
+             WHERE name = $1",
+            &[&name],
+        )?;
+
+        Ok(row.map(|r| Organization {
+            id: r.get(0),
+            name: r.get(1),
+            notion_database_id: r.get(2),
+            created_at: r.get(3),
+        }))
+    }
+
+    /// Get an organization by ID.
+    pub fn get_organization_by_id(
+        &self,
+        org_id: Uuid,
+    ) -> Result<Option<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "SELECT id, name, notion_database_id, created_at
+             FROM organizations
+             WHERE id = $1",
+            &[&org_id],
+        )?;
+
+        Ok(row.map(|r| Organization {
+            id: r.get(0),
+            name: r.get(1),
+            notion_database_id: r.get(2),
+            created_at: r.get(3),
+        }))
+    }
+
+    /// Update the Notion database ID for an organization.
+    ///
+    /// Called after `tpm_cli setup-board` creates a new Notion task board.
+    pub fn update_organization_notion_database_id(
+        &self,
+        organization_name: &str,
+        notion_database_id: &str,
+    ) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE organizations
+             SET notion_database_id = $1
+             WHERE name = $2
+             RETURNING id, name, notion_database_id, created_at",
+            &[&notion_database_id, &organization_name],
+        )?;
+
+        match row {
+            Some(r) => Ok(Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                created_at: r.get(3),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Create a new organization.
+    ///
+    /// Returns error if an organization with the same name already exists.
+    pub fn create_organization(&self, name: &str) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        // Check if organization already exists
+        let existing = conn.query_opt(
+            "SELECT id FROM organizations WHERE name = $1",
+            &[&name],
+        )?;
+
+        if existing.is_some() {
+            return Err(AccountStoreError::AlreadyExists(format!(
+                "Organization '{}' already exists",
+                name
+            )));
+        }
+
+        let row = conn.query_one(
+            "INSERT INTO organizations (name) VALUES ($1)
+             RETURNING id, name, notion_database_id, created_at",
+            &[&name],
+        )?;
+
+        Ok(Organization {
+            id: row.get(0),
+            name: row.get(1),
+            notion_database_id: row.get(2),
+            created_at: row.get(3),
+        })
+    }
+
+    /// List organizations, optionally filtering by search term.
+    ///
+    /// Search is case-insensitive and matches partial names.
+    pub fn list_organizations(
+        &self,
+        search: Option<&str>,
+    ) -> Result<Vec<Organization>, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        let rows = match search {
+            Some(term) => {
+                let pattern = format!("%{}%", term.to_lowercase());
+                conn.query(
+                    "SELECT id, name, notion_database_id, created_at
+                     FROM organizations
+                     WHERE LOWER(name) LIKE $1
+                     ORDER BY name
+                     LIMIT 50",
+                    &[&pattern],
+                )?
+            }
+            None => conn.query(
+                "SELECT id, name, notion_database_id, created_at
+                 FROM organizations
+                 ORDER BY name
+                 LIMIT 50",
+                &[],
+            )?,
+        };
+
+        Ok(rows
+            .iter()
+            .map(|r| Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                created_at: r.get(3),
+            })
+            .collect())
+    }
+
+    /// Set an account's organization by organization name.
+    pub fn set_account_organization(
+        &self,
+        account_id: Uuid,
+        organization_name: &str,
+    ) -> Result<Account, AccountStoreError> {
+        let mut conn = self.conn()?;
+
+        // Look up organization by name
+        let org_row = conn.query_opt(
+            "SELECT id FROM organizations WHERE name = $1",
+            &[&organization_name],
+        )?;
+
+        let org_id: Uuid = match org_row {
+            Some(r) => r.get(0),
+            None => return Err(AccountStoreError::NotFound),
+        };
+
+        // Update account's organization_id
+        let row = conn.query_opt(
+            "UPDATE accounts
+             SET organization_id = $1
+             WHERE id = $2
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+            &[&org_id, &account_id],
+        )?;
+
+        match row {
+            Some(r) => Ok(Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Remove an account from its organization.
+    pub fn clear_account_organization(
+        &self,
+        account_id: Uuid,
+    ) -> Result<Account, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE accounts
+             SET organization_id = NULL
+             WHERE id = $1
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+            &[&account_id],
+        )?;
+
+        match row {
+            Some(r) => Ok(Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Get the number of members in an organization by name.
+    pub fn get_organization_member_count(
+        &self,
+        organization_name: &str,
+    ) -> Result<i64, AccountStoreError> {
+        // Use existing method to look up organization
+        let org = self
+            .get_organization_by_name(organization_name)?
+            .ok_or(AccountStoreError::NotFound)?;
+
+        // Count accounts with this organization_id
+        let mut conn = self.conn()?;
+        let count_row = conn.query_one(
+            "SELECT COUNT(*) FROM accounts WHERE organization_id = $1",
+            &[&org.id],
+        )?;
+
+        Ok(count_row.get(0))
     }
 
     /// Create an email verification token (expires in 24 hours)

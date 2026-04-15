@@ -1,7 +1,6 @@
 ---
 name: notion-tpm
 description: Manage Notion task boards as a Technical Program Manager - track tasks, contact assignees, update status, and generate reports
-allowed-tools: Bash(notion_api_cli:*), Bash(tpm_cli:*), Bash(slack_cli:*), Bash(discord_cli:*)
 ---
 
 # Notion TPM Skill
@@ -11,10 +10,75 @@ Act as a Technical Program Manager (TPM) to manage Notion task boards, track pro
 ## Overview
 
 This skill enables you to:
-1. **Read task boards** - Query Notion databases to see all tasks and their status
-2. **Contact assignees** - Look up owner contact info and send follow-ups via Slack/Discord
-3. **Update status** - Record progress updates as comments on tasks
-4. **Generate reports** - Aggregate task data and send summaries to channels
+1. **Manage task boards** - Create and sync tasks between MongoDB and Notion
+2. **Read task boards** - Query Notion databases to see all tasks and their status
+3. **Contact assignees** - Look up owner contact info and send follow-ups via Slack/Discord
+4. **Update status** - Record progress updates as comments on tasks
+5. **Generate reports** - Aggregate task data and send summaries to channels
+
+## Task Board Setup & Management
+
+**Important:**
+1. **New organization?** Must run `setup-board` first to create the Notion database
+2. **Before `list-tasks`**, run `sync-tasks` to ensure MongoDB reflects any status changes developers made directly in Notion
+
+**Command purposes:**
+- `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
+
+### Setup a new task board for an organization
+
+```bash
+tpm_cli setup-board \
+  --organization deeptutor \
+  --parent-page-id <NOTION_PAGE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+Returns `database_id` to use in subsequent commands. Store this in `organizations.notion_database_id`.
+
+### Create a task (Oliver autonomously creates from feedback/notetaker/research)
+
+```bash
+tpm_cli create-task \
+  --organization deeptutor \
+  --database-id <DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID> \
+  --title "Fix PDF crash on large files" \
+  --description "PDFs over 100 pages cause crash" \
+  --priority p1 \
+  --source user_feedback \
+  --tags bug,pdf
+```
+
+Use when Oliver identifies a task from:
+- User feedback (Discord, email, in-app)
+- Meeting transcripts (notetaker)
+- Market research
+
+### List tasks from MongoDB
+
+```bash
+# All tasks
+tpm_cli list-tasks --organization deeptutor
+
+# Filter by status
+tpm_cli list-tasks --organization deeptutor --status backlog
+
+# Filter by assignee
+tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
+```
+
+### Sync status changes from Notion to MongoDB (pull developer updates)
+
+```bash
+tpm_cli sync-tasks \
+  --organization deeptutor \
+  --database-id <DATABASE_ID> \
+  --workspace-id <WORKSPACE_ID>
+```
+
+Run this before `list-tasks` to pull any status/priority changes developers made directly in Notion.
 
 ## Workflow
 
@@ -181,6 +245,14 @@ slack_cli send-channel --channel-id C12345ABC --message "$report"
 | `create-comment` | Add progress comment |
 | `search` | Find pages by keyword |
 
+### tpm_cli (Task Board Management)
+| Command | Purpose |
+|---------|---------|
+| `setup-board` | Create Notion database for an organization |
+| `create-task` | Create task in MongoDB + Notion |
+| `list-tasks` | List tasks from MongoDB |
+| `sync-tasks` | Sync status from Notion to MongoDB |
+
 ### tpm_cli (Contact Directory)
 | Command | Purpose |
 |---------|---------|
@@ -223,6 +295,8 @@ slack_cli send-channel --channel-id C12345ABC --message "$report"
 |----------|---------|
 | `EMPLOYEE_ID` | For OAuth token lookup |
 | `ACCOUNT_ID` | For contact directory lookup |
+| `MONGODB_URI` | Task storage (dev_tasks collection) |
+| `MONGODB_DATABASE` | Database name for tasks |
 | `SLACK_BOT_TOKEN` | Slack messaging |
 | `DISCORD_BOT_TOKEN` | Discord messaging |
 | `SUPABASE_DB_URL` | Contact directory database |

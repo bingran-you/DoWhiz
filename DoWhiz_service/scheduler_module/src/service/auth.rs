@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use base64::Engine;
 use chrono::{DateTime, Utc};
@@ -1384,6 +1384,8 @@ pub struct AccountResponse {
     pub auth_user_id: Uuid,
     pub identifiers: Vec<IdentifierResponse>,
     pub tokens_to_hours: Option<f64>,
+    pub organization_id: Option<Uuid>,
+    pub organization_name: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1480,6 +1482,17 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
         Err(resp) => return resp.into_response(),
     };
 
+    // Fetch organization name if account has one
+    let organization_name = if let Some(org_id) = account.organization_id {
+        let store = state.account_store.clone();
+        match task::spawn_blocking(move || store.get_organization_by_id(org_id)).await {
+            Ok(Ok(Some(org))) => Some(org.name),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
     (
         StatusCode::OK,
         Json(AccountResponse {
@@ -1494,9 +1507,236 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
                 })
                 .collect(),
             tokens_to_hours: account.tokens_to_hours,
+            organization_id: account.organization_id,
+            organization_name,
         }),
     )
         .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetOrganizationRequest {
+    pub organization_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateOrganizationRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListOrganizationsQuery {
+    pub search: Option<String>,
+}
+
+/// POST /auth/organization - Create a new organization
+pub async fn create_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateOrganizationRequest>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let name = payload.name.clone();
+
+    let result = task::spawn_blocking(move || store.create_organization(&name))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(org)) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "id": org.id,
+                "name": org.name,
+                "notion_database_id": org.notion_database_id,
+                "created_at": org.created_at,
+            })),
+        )
+            .into_response(),
+        Ok(Err(crate::account_store::AccountStoreError::AlreadyExists(msg))) => {
+            json_error_response(StatusCode::CONFLICT, &msg)
+        }
+        Ok(Err(e)) => {
+            error!("Failed to create organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// GET /auth/organizations - List organizations, optionally filtered by search term
+pub async fn list_organizations(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Query(query): Query<ListOrganizationsQuery>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let search = query.search.clone();
+
+    let result = task::spawn_blocking(move || store.list_organizations(search.as_deref()))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(orgs)) => {
+            let items: Vec<serde_json::Value> = orgs
+                .iter()
+                .map(|org| {
+                    serde_json::json!({
+                        "id": org.id,
+                        "name": org.name,
+                        "notion_database_id": org.notion_database_id,
+                        "created_at": org.created_at,
+                    })
+                })
+                .collect();
+            (StatusCode::OK, Json(serde_json::json!({ "organizations": items }))).into_response()
+        }
+        Ok(Err(e)) => {
+            error!("Failed to list organizations: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// GET /auth/organization/:name/member-count - Get the number of members in an organization
+pub async fn get_organization_member_count(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let name = org_name.clone();
+
+    let result = task::spawn_blocking(move || store.get_organization_member_count(&name))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(count)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "organization_name": org_name,
+                "member_count": count,
+            })),
+        )
+            .into_response(),
+        Ok(Err(AccountStoreError::NotFound)) => {
+            json_error_response(StatusCode::NOT_FOUND, &format!("Organization '{}' not found", org_name))
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization member count: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// PUT /auth/account/organization - Set the account's organization
+pub async fn set_account_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<SetOrganizationRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let store = state.account_store.clone();
+    let account_id = account.id;
+    let org_name = payload.organization_name.clone();
+
+    let result =
+        task::spawn_blocking(move || store.set_account_organization(account_id, &org_name))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
+
+    match result {
+        Ok(Ok(updated_account)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "account_id": updated_account.id,
+                "organization_id": updated_account.organization_id,
+                "organization_name": payload.organization_name,
+            })),
+        )
+            .into_response(),
+        Ok(Err(crate::account_store::AccountStoreError::NotFound)) => json_error_response(
+            StatusCode::NOT_FOUND,
+            &format!("Organization '{}' not found", payload.organization_name),
+        ),
+        Ok(Err(e)) => {
+            error!("Failed to set account organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// DELETE /auth/account/organization - Remove the account from its organization
+pub async fn clear_account_organization(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let store = state.account_store.clone();
+    let account_id = account.id;
+
+    let result = task::spawn_blocking(move || store.clear_account_organization(account_id))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(updated_account)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "account_id": updated_account.id,
+                "organization_id": null,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to clear account organization: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -6240,6 +6480,13 @@ pub fn auth_router(state: AuthState) -> Router {
     Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/account", get(get_account).delete(delete_account))
+        .route(
+            "/auth/account/organization",
+            put(set_account_organization).delete(clear_account_organization),
+        )
+        .route("/auth/organization", post(create_organization))
+        .route("/auth/organizations", get(list_organizations))
+        .route("/auth/organization/:name/member-count", get(get_organization_member_count))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))
@@ -7063,5 +7310,51 @@ mod tests {
         let open_id = "oU1234567890";
         let identifier = format!("{}_{}", corp_id, open_id);
         assert_eq!(identifier, "ww1234567890abcdef_oU1234567890");
+    }
+
+    // =========================================================================
+    // Organization endpoint tests
+    // =========================================================================
+
+    #[test]
+    fn create_organization_request_deserializes_correctly() {
+        let json = r#"{"name":"deeptutor"}"#;
+        let parsed: CreateOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.name, "deeptutor");
+    }
+
+    #[test]
+    fn create_organization_request_handles_special_chars() {
+        let json = r#"{"name":"Acme Corp (Test)"}"#;
+        let parsed: CreateOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.name, "Acme Corp (Test)");
+    }
+
+    #[test]
+    fn list_organizations_query_deserializes_with_search() {
+        let query = "search=deep";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, Some("deep".to_string()));
+    }
+
+    #[test]
+    fn list_organizations_query_deserializes_without_search() {
+        let query = "";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, None);
+    }
+
+    #[test]
+    fn list_organizations_query_handles_empty_search() {
+        let query = "search=";
+        let parsed: ListOrganizationsQuery = serde_urlencoded::from_str(query).unwrap();
+        assert_eq!(parsed.search, Some("".to_string()));
+    }
+
+    #[test]
+    fn set_organization_request_deserializes_correctly() {
+        let json = r#"{"organization_name":"deeptutor"}"#;
+        let parsed: SetOrganizationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.organization_name, "deeptutor");
     }
 }

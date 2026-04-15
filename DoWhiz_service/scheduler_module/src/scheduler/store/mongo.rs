@@ -1450,8 +1450,14 @@ mod tests {
 
     #[test]
     fn strip_discord_mentions_preserves_non_mention_content() {
-        assert_eq!(strip_discord_mentions("no mentions here"), "no mentions here");
-        assert_eq!(strip_discord_mentions("email@example.com"), "email@example.com");
+        assert_eq!(
+            strip_discord_mentions("no mentions here"),
+            "no mentions here"
+        );
+        assert_eq!(
+            strip_discord_mentions("email@example.com"),
+            "email@example.com"
+        );
         assert_eq!(strip_discord_mentions("<not a mention>"), "<not a mention>");
     }
 

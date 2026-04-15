@@ -1,0 +1,68 @@
+{
+  "skill_name": "us-equity-daily-monitor",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Track BE - Bloom Energy. It is 9:00 AM America/Los_Angeles on a normal U.S. trading day. Use public web sources to prepare today's email-ready trading note. Include Rating, Confidence, one-sentence reason, top 3 bullish factors, top 3 bearish factors, key price levels, what changed vs yesterday, risks, and final action. If the market is already open at that time, treat this as an intraday update rather than a pre-market note.",
+      "expected_output": "A concise, evidence-based BE note that uses current public information, correctly handles 9:00 AM PT market status, and avoids inventing missing prior-day context.",
+      "files": [],
+      "expectations": [
+        "The note explicitly handles market timing correctly and does not call a 9:00 AM PT note a pre-market report if the regular session is already open.",
+        "The note separates factual developments from interpretation or judgment.",
+        "The note includes both bullish and bearish factors instead of presenting a one-sided thesis.",
+        "The note includes concrete price levels and explains why they matter.",
+        "The note cites or clearly names the public sources behind the main claims.",
+        "If no prior report is available, the note says the yesterday comparison baseline is missing instead of inventing a change."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Track INTC - Intel and write a daily rating note for email delivery. Focus on current public news, sector and macro context, recent price action, support or resistance, volume, moving averages, momentum, sentiment, and event impact. Be rigorous but explain the result for a non-expert. If signals are mixed, say so clearly.",
+      "expected_output": "A balanced INTC note that weighs technical and event-driven evidence, communicates uncertainty clearly, and avoids overconfident language.",
+      "files": [],
+      "expectations": [
+        "The note includes a rating, a confidence label, and a final action.",
+        "The note explicitly acknowledges mixed signals when the evidence does not point in one direction.",
+        "The note includes trend, price action, and event context rather than relying only on news headlines.",
+        "The explanation is plain-language enough for a non-expert reader without dropping the analytical substance.",
+        "The conclusion does not exaggerate certainty or imply guaranteed upside or downside."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Prepare a daily note for a U.S. equity where the user asks you to monitor major shareholder, insider, and institutional buying or selling. Use public filings if relevant. Explain what each filing means in plain English and say which signals are timely versus lagged.",
+      "expected_output": "A note that correctly distinguishes insider activity, large-holder disclosures, and lagged institutional holdings, instead of blending them into one generic ownership signal.",
+      "files": [],
+      "expectations": [
+        "The note distinguishes Form 4 insider activity from Schedule 13D or 13G large-holder filings and from Form 13F institutional holdings.",
+        "The note explains that some ownership disclosures can be materially lagged and should not be presented as today's live positioning.",
+        "The note avoids turning any single filing into a directional conclusion without context.",
+        "The note translates the filing categories into plain language for a non-expert reader."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "It is a U.S. market holiday. The user still wants today's daily rating email for one stock. Produce the note without pretending the market is open. Include what the user should watch next and what remains unchanged from the last active session.",
+      "expected_output": "A market-closed note that is still useful, avoids fabricating live price action, and carries forward a clear watchlist view.",
+      "files": [],
+      "expectations": [
+        "The note explicitly states that the market is closed or not in a live regular session.",
+        "The note does not fabricate intraday movement, a live candlestick, or new session volume.",
+        "The note still provides actionable next-watch items such as levels, upcoming catalysts, or risks.",
+        "The note clearly separates unchanged background context from genuinely new information."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "A stock has strong recent momentum and bullish price action, but the latest public headlines are negative and event risk is elevated. Produce the daily rating email and decide whether the right action is Buy, Wait, Trim, Sell, or No action.",
+      "expected_output": "A note that handles conflicting signals honestly, ties the final action to risk management, and does not force a strong directional call when the setup is mixed.",
+      "files": [],
+      "expectations": [
+        "The note identifies the conflict between technical strength and event-driven risk.",
+        "The final action is tied to the mixed-signal setup rather than defaulting to a bullish call.",
+        "The note includes a risks section that explains what could break the thesis.",
+        "The note uses uncertainty-aware language and avoids hype."
+      ]
+    }
+  ]
+}

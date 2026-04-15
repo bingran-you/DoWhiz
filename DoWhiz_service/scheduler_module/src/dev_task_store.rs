@@ -1,10 +1,10 @@
-//! DeepTutor Task Store for TPM workflows.
+//! Dev Task Store for TPM workflows.
 //!
-//! Provides MongoDB-backed storage for DeepTutor development tasks that Oliver
+//! Provides MongoDB-backed storage for development tasks that Oliver
 //! manages as a TPM (assign to humans, track status, sync with Notion).
 //!
-//! This store is exclusively for DeepTutor — the collection name `deeptutor_tasks`
-//! itself implies the tenant scope. No tenant_id field is needed.
+//! Organization-agnostic: each store instance is scoped to an organization,
+//! and all tasks are tagged with that organization for multi-tenant support.
 
 use chrono::{DateTime, Utc};
 use mongodb::bson::{doc, oid::ObjectId, Bson, DateTime as BsonDateTime, Document};
@@ -124,11 +124,13 @@ impl TaskSource {
     }
 }
 
-/// A DeepTutor development task managed by Oliver TPM.
+/// A development task managed by Oliver TPM.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevTask {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
+    /// Organization this task belongs to (e.g., "deeptutor")
+    pub organization: String,
     pub title: String,
     pub description: String,
     pub priority: Priority,
@@ -145,10 +147,16 @@ pub struct DevTask {
 }
 
 impl DevTask {
-    pub fn new(title: String, description: String, source: TaskSource) -> Self {
+    pub fn new(
+        organization: String,
+        title: String,
+        description: String,
+        source: TaskSource,
+    ) -> Self {
         let now = Utc::now();
         Self {
             id: None,
+            organization,
             title,
             description,
             priority: Priority::P2,
@@ -200,47 +208,52 @@ pub enum DevTaskStoreError {
 // Store
 // -----------------------------------------------------------------------------
 
-/// Collection name for DeepTutor tasks.
-const COLLECTION_NAME: &str = "deeptutor_tasks";
+/// Collection name for dev tasks (shared across all organizations).
+const COLLECTION_NAME: &str = "dev_tasks";
 
 pub struct DevTaskStore {
     tasks: Collection<Document>,
+    organization: String,
 }
 
 impl DevTaskStore {
-    /// Create a new DevTaskStore for DeepTutor tasks.
-    pub fn new() -> Result<Self, DevTaskStoreError> {
+    /// Create a new DevTaskStore scoped to an organization.
+    pub fn new(organization: &str) -> Result<Self, DevTaskStoreError> {
         let client = create_client_from_env()?;
         let db = database_from_env(&client);
         let tasks = db.collection::<Document>(COLLECTION_NAME);
 
-        // Ensure indexes
+        // Ensure indexes (organization is the primary filter for all queries)
+        // Note: Cosmos DB requires the sort field to be included in the index
         ensure_index_compatible(
             &tasks,
             IndexModel::builder()
-                .keys(doc! { "status": 1, "priority": 1 })
+                .keys(doc! { "organization": 1, "status": 1, "priority": 1 })
                 .build(),
         )?;
         ensure_index_compatible(
             &tasks,
             IndexModel::builder()
-                .keys(doc! { "assignee": 1, "status": 1 })
+                .keys(doc! { "organization": 1, "assignee": 1, "priority": 1 })
                 .build(),
         )?;
         ensure_index_compatible(
             &tasks,
             IndexModel::builder()
-                .keys(doc! { "notion_page_id": 1 })
+                .keys(doc! { "organization": 1, "notion_page_id": 1 })
                 .build(),
         )?;
         ensure_index_compatible(
             &tasks,
             IndexModel::builder()
-                .keys(doc! { "created_at": -1 })
+                .keys(doc! { "organization": 1, "created_at": -1 })
                 .build(),
         )?;
 
-        Ok(Self { tasks })
+        Ok(Self {
+            tasks,
+            organization: organization.to_string(),
+        })
     }
 
     /// Insert a new task.
@@ -249,13 +262,18 @@ impl DevTaskStore {
         let result = self.tasks.insert_one(doc, None)?;
         match result.inserted_id {
             Bson::ObjectId(id) => Ok(id),
-            _ => Err(DevTaskStoreError::NotFound("failed to get inserted id".into())),
+            _ => Err(DevTaskStoreError::NotFound(
+                "failed to get inserted id".into(),
+            )),
         }
     }
 
-    /// Get a task by ID.
+    /// Get a task by ID (scoped to this organization).
     pub fn get_task(&self, task_id: &ObjectId) -> Result<Option<DevTask>, DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let doc = self.tasks.find_one(filter, None)?;
         match doc {
             Some(d) => Ok(Some(document_to_task(d)?)),
@@ -263,12 +281,15 @@ impl DevTaskStore {
         }
     }
 
-    /// Get a task by Notion page ID.
+    /// Get a task by Notion page ID (scoped to this organization).
     pub fn get_task_by_notion_page(
         &self,
         notion_page_id: &str,
     ) -> Result<Option<DevTask>, DevTaskStoreError> {
-        let filter = doc! { "notion_page_id": notion_page_id };
+        let filter = doc! {
+            "organization": &self.organization,
+            "notion_page_id": notion_page_id,
+        };
         let doc = self.tasks.find_one(filter, None)?;
         match doc {
             Some(d) => Ok(Some(document_to_task(d)?)),
@@ -276,15 +297,16 @@ impl DevTaskStore {
         }
     }
 
-    /// List tasks by status (sorted by priority, no secondary sort for Cosmos DB compatibility).
+    /// List tasks by status (sorted by priority).
     pub fn list_tasks_by_status(
         &self,
         status: TaskStatus,
     ) -> Result<Vec<DevTask>, DevTaskStoreError> {
-        let filter = doc! { "status": status.as_str() };
-        let options = FindOptions::builder()
-            .sort(doc! { "priority": 1 })
-            .build();
+        let filter = doc! {
+            "organization": &self.organization,
+            "status": status.as_str(),
+        };
+        let options = FindOptions::builder().sort(doc! { "priority": 1 }).build();
         let cursor = self.tasks.find(filter, options)?;
         let mut tasks = Vec::new();
         for doc in cursor {
@@ -298,10 +320,11 @@ impl DevTaskStore {
         &self,
         assignee: &str,
     ) -> Result<Vec<DevTask>, DevTaskStoreError> {
-        let filter = doc! { "assignee": assignee };
-        let options = FindOptions::builder()
-            .sort(doc! { "priority": 1 })
-            .build();
+        let filter = doc! {
+            "organization": &self.organization,
+            "assignee": assignee,
+        };
+        let options = FindOptions::builder().sort(doc! { "priority": 1 }).build();
         let cursor = self.tasks.find(filter, options)?;
         let mut tasks = Vec::new();
         for doc in cursor {
@@ -310,9 +333,9 @@ impl DevTaskStore {
         Ok(tasks)
     }
 
-    /// List all tasks (sorted by created_at descending).
+    /// List all tasks for this organization (sorted by created_at descending).
     pub fn list_all_tasks(&self) -> Result<Vec<DevTask>, DevTaskStoreError> {
-        let filter = doc! {};
+        let filter = doc! { "organization": &self.organization };
         let options = FindOptions::builder()
             .sort(doc! { "created_at": -1 })
             .build();
@@ -330,7 +353,10 @@ impl DevTaskStore {
         task_id: &ObjectId,
         status: TaskStatus,
     ) -> Result<(), DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let update = doc! {
             "$set": {
                 "status": status.as_str(),
@@ -350,7 +376,10 @@ impl DevTaskStore {
         task_id: &ObjectId,
         assignee: Option<&str>,
     ) -> Result<(), DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let update = doc! {
             "$set": {
                 "assignee": assignee,
@@ -370,7 +399,10 @@ impl DevTaskStore {
         task_id: &ObjectId,
         priority: Priority,
     ) -> Result<(), DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let update = doc! {
             "$set": {
                 "priority": priority.as_str(),
@@ -390,7 +422,10 @@ impl DevTaskStore {
         task_id: &ObjectId,
         notion_page_id: &str,
     ) -> Result<(), DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let update = doc! {
             "$set": {
                 "notion_page_id": notion_page_id,
@@ -406,7 +441,10 @@ impl DevTaskStore {
 
     /// Delete a task.
     pub fn delete_task(&self, task_id: &ObjectId) -> Result<(), DevTaskStoreError> {
-        let filter = doc! { "_id": task_id };
+        let filter = doc! {
+            "_id": task_id,
+            "organization": &self.organization,
+        };
         let result = self.tasks.delete_one(filter, None)?;
         if result.deleted_count == 0 {
             return Err(DevTaskStoreError::NotFound(task_id.to_string()));
@@ -421,6 +459,7 @@ impl DevTaskStore {
 
 fn task_to_document(task: &DevTask) -> Document {
     let mut doc = doc! {
+        "organization": &task.organization,
         "title": &task.title,
         "description": &task.description,
         "priority": task.priority.as_str(),
@@ -441,6 +480,11 @@ fn task_to_document(task: &DevTask) -> Document {
 
 fn document_to_task(doc: Document) -> Result<DevTask, DevTaskStoreError> {
     let id = doc.get_object_id("_id").ok().map(|id| id.to_owned());
+
+    let organization = doc
+        .get_str("organization")
+        .map_err(|e| DevTaskStoreError::NotFound(format!("missing organization: {e}")))?
+        .to_string();
 
     let title = doc
         .get_str("title")
@@ -493,6 +537,7 @@ fn document_to_task(doc: Document) -> Result<DevTask, DevTaskStoreError> {
 
     Ok(DevTask {
         id,
+        organization,
         title,
         description,
         priority,
@@ -549,6 +594,7 @@ mod tests {
     #[test]
     fn dev_task_builder() {
         let task = DevTask::new(
+            "deeptutor".to_string(),
             "Test task".to_string(),
             "Description".to_string(),
             TaskSource::Manual,
@@ -557,6 +603,7 @@ mod tests {
         .with_tags(vec!["bug".to_string(), "ui".to_string()])
         .with_assignee("dev@example.com".to_string());
 
+        assert_eq!(task.organization, "deeptutor");
         assert_eq!(task.title, "Test task");
         assert_eq!(task.priority, Priority::P1);
         assert_eq!(task.tags, vec!["bug", "ui"]);
@@ -568,16 +615,19 @@ mod tests {
     // Integration tests (require MONGODB_URI)
     // -------------------------------------------------------------------------
 
+    const TEST_ORG: &str = "test_org";
+
     #[test]
     fn integration_create_and_get_task() {
         if !require_mongodb_uri("integration_create_and_get_task") {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         // Create a task
         let task = DevTask::new(
+            TEST_ORG.to_string(),
             "Integration test task".to_string(),
             "This is a test task created by integration tests".to_string(),
             TaskSource::Manual,
@@ -608,9 +658,10 @@ mod tests {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         let task = DevTask::new(
+            TEST_ORG.to_string(),
             "Status update test".to_string(),
             "Testing status transitions".to_string(),
             TaskSource::UserFeedback,
@@ -652,9 +703,10 @@ mod tests {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         let task = DevTask::new(
+            TEST_ORG.to_string(),
             "Assignment test".to_string(),
             "Testing task assignment".to_string(),
             TaskSource::Notetaker,
@@ -696,9 +748,10 @@ mod tests {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         let task = DevTask::new(
+            TEST_ORG.to_string(),
             "Notion link test".to_string(),
             "Testing Notion page linking".to_string(),
             TaskSource::Manual,
@@ -731,15 +784,17 @@ mod tests {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         // Create tasks with different statuses
         let task1 = DevTask::new(
+            TEST_ORG.to_string(),
             "List test 1".to_string(),
             "Backlog task".to_string(),
             TaskSource::Manual,
         );
         let task2 = DevTask::new(
+            TEST_ORG.to_string(),
             "List test 2".to_string(),
             "Another backlog task".to_string(),
             TaskSource::Manual,
@@ -780,9 +835,10 @@ mod tests {
             return;
         }
 
-        let store = DevTaskStore::new().expect("failed to create store");
+        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
 
         let task1 = DevTask::new(
+            TEST_ORG.to_string(),
             "Assignee test 1".to_string(),
             "Task for Dylan".to_string(),
             TaskSource::Manual,
@@ -790,6 +846,7 @@ mod tests {
         .with_assignee("dylan@deeptutor.dev".to_string());
 
         let task2 = DevTask::new(
+            TEST_ORG.to_string(),
             "Assignee test 2".to_string(),
             "Task for Oliver".to_string(),
             TaskSource::Manual,
