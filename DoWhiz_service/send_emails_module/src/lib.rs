@@ -87,6 +87,299 @@ struct PostmarkHeader {
     value: String,
 }
 
+const DOWHIZ_EMAIL_SHELL_MARKER: &str = r#"data-dowhiz-email-shell="true""#;
+const DOWHIZ_EMAIL_CONTENT_START: &str = "<!-- dowhiz-email-content:start -->";
+const DOWHIZ_EMAIL_CONTENT_END: &str = "<!-- dowhiz-email-content:end -->";
+const DEFAULT_EMAIL_SUBJECT: &str = "DoWhiz update";
+const EMAIL_PREHEADER_MAX_CHARS: usize = 140;
+
+pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
+    if is_already_normalized_email(raw_html) {
+        return raw_html.to_string();
+    }
+
+    let normalized_subject = normalized_email_subject(subject);
+    let escaped_subject = html_escape(&normalized_subject);
+    let extra_styles = extract_style_blocks(raw_html);
+    let body_source = extract_html_body(raw_html).trim();
+    let content_html = if body_source.is_empty() {
+        "<p>(no content)</p>".to_string()
+    } else if looks_like_html_fragment(body_source) {
+        body_source.to_string()
+    } else {
+        wrap_plain_text_body(body_source)
+    };
+    let preheader = html_escape(&build_preheader(&normalized_subject, &content_html));
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{escaped_subject}</title>
+    <style>
+      body,
+      table,
+      td,
+      a {{
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }}
+
+      table,
+      td {{
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }}
+
+      img {{
+        border: 0;
+        outline: none;
+        text-decoration: none;
+        -ms-interpolation-mode: bicubic;
+      }}
+
+      body {{
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        background-color: #f6f8fb;
+        color: #1f1f22;
+      }}
+
+      a {{
+        color: #8d3b16;
+      }}
+
+      a[x-apple-data-detectors] {{
+        color: inherit !important;
+        text-decoration: none !important;
+      }}
+
+      .dw-preheader {{
+        display: none !important;
+        visibility: hidden;
+        opacity: 0;
+        color: transparent;
+        height: 0;
+        width: 0;
+        overflow: hidden;
+        mso-hide: all;
+        font-size: 1px;
+        line-height: 1px;
+      }}
+
+      .dw-card {{
+        width: 100%;
+        max-width: 780px;
+      }}
+
+      .dw-card-shell {{
+        width: 100%;
+        background-color: #ffffff;
+        border: 1px solid rgba(16, 18, 22, 0.10);
+        border-radius: 16px;
+        overflow: hidden;
+      }}
+
+      .dw-content,
+      .dw-content p,
+      .dw-content li,
+      .dw-content div,
+      .dw-content span,
+      .dw-content td,
+      .dw-content th,
+      .dw-content blockquote,
+      .dw-content a,
+      .dw-content code,
+      .dw-content pre {{
+        word-break: break-word;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+      }}
+
+      .dw-content > div,
+      .dw-content > section,
+      .dw-content > article,
+      .dw-content > table {{
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }}
+
+      .dw-content p {{
+        margin: 0 0 1.15em;
+      }}
+
+      .dw-content ul,
+      .dw-content ol {{
+        margin: 0 0 1.25em 1.25em;
+        padding: 0;
+      }}
+
+      .dw-content li {{
+        margin: 0 0 0.65em;
+      }}
+
+      .dw-content h1,
+      .dw-content h2,
+      .dw-content h3,
+      .dw-content h4,
+      .dw-content h5,
+      .dw-content h6 {{
+        margin: 0 0 0.7em;
+        color: #1f1f22;
+        line-height: 1.22;
+      }}
+
+      .dw-content blockquote {{
+        margin: 0 0 1.25em;
+        padding: 0 0 0 16px;
+        border-left: 3px solid #d7dde6;
+        color: #5b616d;
+      }}
+
+      .dw-content pre {{
+        margin: 0 0 1.25em;
+        padding: 16px;
+        border: 1px solid #e4e8ee;
+        border-radius: 12px;
+        background-color: #f8fafc;
+        color: #1f1f22;
+        white-space: pre-wrap !important;
+        font-size: 14px;
+        line-height: 1.6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }}
+
+      .dw-content code {{
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }}
+
+      .dw-content img {{
+        display: block;
+        max-width: 100% !important;
+        height: auto !important;
+        border-radius: 12px;
+      }}
+
+      .dw-content table {{
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse;
+      }}
+
+      .dw-content th,
+      .dw-content td {{
+        border: 1px solid #e4e8ee;
+        padding: 10px 12px;
+        vertical-align: top;
+      }}
+
+      .dw-content hr {{
+        margin: 1.5em 0;
+        border: 0;
+        border-top: 1px solid #e4e8ee;
+      }}
+
+      @media screen and (max-width: 640px) {{
+        .dw-shell-pad {{
+          padding: 10px !important;
+        }}
+
+        .dw-card-hero {{
+          padding: 20px 18px 16px !important;
+        }}
+
+        .dw-card-body {{
+          padding: 24px 18px 20px !important;
+          font-size: 15px !important;
+          line-height: 1.72 !important;
+        }}
+
+        .dw-card-footer {{
+          padding: 0 18px 18px !important;
+        }}
+
+        .dw-subject {{
+          font-size: 28px !important;
+        }}
+      }}
+    </style>
+{extra_styles}
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f6f8fb;">
+    <div class="dw-preheader">{preheader}</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; background-color: #f6f8fb;">
+      <tr>
+        <td align="center" class="dw-shell-pad" style="padding: 20px 12px 36px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="dw-card" {marker} style="width: 100%; max-width: 780px;">
+            <tr>
+              <td style="padding: 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="dw-card-shell" style="width: 100%; background-color: #ffffff; border: 1px solid rgba(16, 18, 22, 0.10); border-radius: 16px; overflow: hidden;">
+                  <tr>
+                    <td class="dw-card-hero" style="padding: 24px 32px 18px; background-color: #ffffff; border-bottom: 1px solid #e4e8ee;">
+                      <p style="margin: 0 0 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;">
+                        <span style="display: inline-block; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(141, 59, 22, 0.12); background-color: #fff7ee; font-size: 13px; line-height: 1; font-weight: 600; color: #8d3b16;">
+                          DoWhiz digital employee
+                        </span>
+                      </p>
+                      <h1 class="dw-subject" style="margin: 0 0 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 34px; line-height: 1.12; font-weight: 700; letter-spacing: -0.01em; color: #1f1f22;">
+                        {escaped_subject}
+                      </h1>
+                      <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.6; color: #5b616d;">
+                        Reply directly to continue this thread with DoWhiz.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="dw-card-body" style="padding: 28px 32px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 16px; line-height: 1.76; color: #1f1f22;">
+                      <div class="dw-content" style="font-size: 16px; line-height: 1.76; color: #1f1f22;">
+                        {content_start}{content_html}{content_end}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="dw-card-footer" style="padding: 0 32px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 13px; line-height: 1.6; color: #838a96;">
+                      Sent by DoWhiz. If you reply, the same task thread will continue.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"#,
+        escaped_subject = escaped_subject,
+        preheader = preheader,
+        extra_styles = if extra_styles.trim().is_empty() {
+            String::new()
+        } else {
+            format!("    {}\n", extra_styles.trim())
+        },
+        marker = DOWHIZ_EMAIL_SHELL_MARKER,
+        content_start = DOWHIZ_EMAIL_CONTENT_START,
+        content_html = content_html,
+        content_end = DOWHIZ_EMAIL_CONTENT_END,
+    )
+}
+
+pub fn normalize_email_html_file(subject: &str, html_path: &Path) -> Result<(), std::io::Error> {
+    let raw_html = fs::read_to_string(html_path)?;
+    let normalized = normalize_email_html(subject, &raw_html);
+    if normalized != raw_html {
+        fs::write(html_path, normalized)?;
+    }
+    Ok(())
+}
+
 pub fn send_email(params: &SendEmailParams) -> Result<PostmarkSendResponse, SendEmailError> {
     dotenvy::dotenv().ok();
 
@@ -114,8 +407,9 @@ pub fn send_email(params: &SendEmailParams) -> Result<PostmarkSendResponse, Send
     }
     let bcc = join_recipients(&bcc_list);
 
-    let html_body = fs::read_to_string(&params.html_path)?;
-    let mut text_body = strip_html_tags(&html_body);
+    let raw_html_body = fs::read_to_string(&params.html_path)?;
+    let html_body = normalize_email_html(&params.subject, &raw_html_body);
+    let mut text_body = plain_text_body_from_html(&html_body);
     if text_body.trim().is_empty() {
         text_body = "(no content)".to_string();
     }
@@ -251,6 +545,169 @@ fn clean_header_value(value: &Option<String>) -> Option<String> {
         .map(|trimmed| trimmed.to_string())
 }
 
+fn plain_text_body_from_html(html: &str) -> String {
+    let source = extract_shell_content_html(html).unwrap_or(html);
+    let text = decode_basic_html_entities(&strip_html_tags(source));
+    if text.trim().is_empty() {
+        "(no content)".to_string()
+    } else {
+        text
+    }
+}
+
+fn build_preheader(subject: &str, content_html: &str) -> String {
+    let preview_body = decode_basic_html_entities(&strip_html_tags(content_html));
+    let compact_body = compact_whitespace(&preview_body);
+    let combined = if compact_body.is_empty() {
+        subject.trim().to_string()
+    } else if subject.trim().is_empty() {
+        compact_body
+    } else {
+        format!("{} | {}", subject.trim(), compact_body)
+    };
+    truncate_chars(&combined, EMAIL_PREHEADER_MAX_CHARS)
+}
+
+fn normalized_email_subject(subject: &str) -> String {
+    let trimmed = subject.trim();
+    if trimmed.is_empty() {
+        DEFAULT_EMAIL_SUBJECT.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn is_already_normalized_email(html: &str) -> bool {
+    html.contains(DOWHIZ_EMAIL_SHELL_MARKER)
+}
+
+fn extract_shell_content_html(html: &str) -> Option<&str> {
+    let start = html.find(DOWHIZ_EMAIL_CONTENT_START)?;
+    let content_start = start + DOWHIZ_EMAIL_CONTENT_START.len();
+    let end_rel = html[content_start..].find(DOWHIZ_EMAIL_CONTENT_END)?;
+    Some(&html[content_start..content_start + end_rel])
+}
+
+fn extract_html_body(raw_html: &str) -> &str {
+    let lower = raw_html.to_ascii_lowercase();
+    let Some(body_start) = lower.find("<body") else {
+        return raw_html;
+    };
+    let Some(open_end_rel) = lower[body_start..].find('>') else {
+        return raw_html;
+    };
+    let content_start = body_start + open_end_rel + 1;
+    let Some(close_rel) = lower[content_start..].rfind("</body>") else {
+        return &raw_html[content_start..];
+    };
+    &raw_html[content_start..content_start + close_rel]
+}
+
+fn extract_style_blocks(raw_html: &str) -> String {
+    let lower = raw_html.to_ascii_lowercase();
+    let mut search_start = 0;
+    let mut styles = Vec::new();
+
+    while let Some(open_rel) = lower[search_start..].find("<style") {
+        let open = search_start + open_rel;
+        let Some(tag_end_rel) = lower[open..].find('>') else {
+            break;
+        };
+        let content_start = open + tag_end_rel + 1;
+        let Some(close_rel) = lower[content_start..].find("</style>") else {
+            break;
+        };
+        let close = content_start + close_rel + "</style>".len();
+        styles.push(raw_html[open..close].to_string());
+        search_start = close;
+    }
+
+    styles.join("\n")
+}
+
+fn looks_like_html_fragment(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.contains("<p")
+        || lower.contains("<div")
+        || lower.contains("<span")
+        || lower.contains("<table")
+        || lower.contains("<tbody")
+        || lower.contains("<tr")
+        || lower.contains("<td")
+        || lower.contains("<th")
+        || lower.contains("<br")
+        || lower.contains("<ul")
+        || lower.contains("<ol")
+        || lower.contains("<li")
+        || lower.contains("<a ")
+        || lower.contains("<img")
+        || lower.contains("<h1")
+        || lower.contains("<h2")
+        || lower.contains("<h3")
+        || lower.contains("<blockquote")
+        || lower.contains("</")
+}
+
+fn wrap_plain_text_body(raw: &str) -> String {
+    let normalized = raw.replace("\r\n", "\n").replace('\r', "\n");
+    let paragraphs = normalized
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let lines = segment
+                .lines()
+                .map(|line| html_escape(line.trim_end()))
+                .collect::<Vec<_>>()
+                .join("<br />");
+            format!("<p>{}</p>", lines)
+        })
+        .collect::<Vec<_>>();
+
+    if paragraphs.is_empty() {
+        "<p>(no content)</p>".to_string()
+    } else {
+        paragraphs.join("\n")
+    }
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn decode_basic_html_entities(value: &str) -> String {
+    value
+        .replace("&nbsp;", " ")
+        .replace("&#39;", "'")
+        .replace("&quot;", "\"")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
+        .replace("&amp;", "&")
+}
+
+fn compact_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let total_chars = value.chars().count();
+    if total_chars <= max_chars {
+        return value.to_string();
+    }
+
+    let mut out = value
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
+    out.push('…');
+    out
+}
+
 fn strip_html_tags(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut in_tag = false;
@@ -374,4 +831,49 @@ fn load_attachments(dir: &Path) -> Result<Vec<PostmarkAttachment>, std::io::Erro
     }
 
     Ok(attachments)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_email_html_wraps_fragment_with_branded_responsive_shell() {
+        let normalized = normalize_email_html(
+            "Status update",
+            r#"<div style="max-width: 520px; margin: 0 auto;"><p>Hello team</p></div>"#,
+        );
+
+        assert!(normalized.contains(DOWHIZ_EMAIL_SHELL_MARKER));
+        assert!(normalized.contains("max-width: 780px"));
+        assert!(normalized.contains("overflow-wrap: anywhere"));
+        assert!(normalized.contains("DoWhiz digital employee"));
+        assert!(normalized.contains("Status update"));
+        assert!(normalized
+            .contains(r#"<div style="max-width: 520px; margin: 0 auto;"><p>Hello team</p></div>"#));
+    }
+
+    #[test]
+    fn normalize_email_html_is_idempotent() {
+        let once = normalize_email_html("Status update", "<p>Hello team</p>");
+        let twice = normalize_email_html("Status update", &once);
+
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn normalize_email_html_wraps_plain_text_into_paragraphs() {
+        let normalized = normalize_email_html("Plain text", "First line\n\nSecond line");
+
+        assert!(normalized.contains("<p>First line</p>"));
+        assert!(normalized.contains("<p>Second line</p>"));
+    }
+
+    #[test]
+    fn plain_text_body_from_html_uses_shell_content_only() {
+        let normalized =
+            normalize_email_html("Status update", "<p>Hello <strong>team</strong></p>");
+
+        assert_eq!(plain_text_body_from_html(&normalized), "Hello team");
+    }
 }

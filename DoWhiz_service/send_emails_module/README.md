@@ -5,6 +5,7 @@ Postmark outbound email sender used by scheduler `SendReply` tasks.
 ## Features
 
 - send HTML email from file (`html_path`)
+- wrap outbound HTML in a responsive DoWhiz-branded shell that uses the shared website light-theme colors
 - send attachments from flat directory (`attachments_dir`)
 - supports To/Cc/Bcc + threading headers (`In-Reply-To`, `References`)
 
@@ -37,6 +38,10 @@ let params = SendEmailParams {
 let resp = send_email(&params)?;
 println!("message id: {}", resp.message_id);
 ```
+
+`send_email` expects the draft file to contain the email content itself (paragraphs, headings,
+lists, tables, links). The module applies the shared DoWhiz shell at send time so replies stay
+responsive and avoid overly narrow centered layouts.
 
 ## Tests
 

@@ -1643,8 +1643,8 @@ mod tests {
         // Set required env var for the test
         env::set_var("EMPLOYEE_ID", "test_employee");
 
-        let client = NotionApiClient::from_env("test_employee")
-            .expect("failed to create Notion client");
+        let client =
+            NotionApiClient::from_env("test_employee").expect("failed to create Notion client");
 
         // Build database schema
         let properties = json!({
@@ -1672,12 +1672,7 @@ mod tests {
 
         // Create database
         let db = client
-            .create_database(
-                "default",
-                &parent_page_id,
-                "TPM CLI Test Board",
-                properties,
-            )
+            .create_database("default", &parent_page_id, "TPM CLI Test Board", properties)
             .expect("failed to create database");
 
         assert!(!db.id.is_empty());
@@ -1711,8 +1706,8 @@ mod tests {
         env::set_var("EMPLOYEE_ID", "test_employee");
 
         let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
-        let client = NotionApiClient::from_env("test_employee")
-            .expect("failed to create Notion client");
+        let client =
+            NotionApiClient::from_env("test_employee").expect("failed to create Notion client");
 
         // 1. Create task in MongoDB
         let task = DevTask::new(

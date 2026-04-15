@@ -48,4 +48,6 @@ pub use scheduler::{
     SchedulerError, SendReplyTask, TaskExecution, TaskExecutor, TaskKind, TaskStatusSummary,
 };
 
-pub use dev_task_store::{DevTask, DevTaskStore, DevTaskStoreError, Priority, TaskSource, TaskStatus};
+pub use dev_task_store::{
+    DevTask, DevTaskStore, DevTaskStoreError, Priority, TaskSource, TaskStatus,
+};
