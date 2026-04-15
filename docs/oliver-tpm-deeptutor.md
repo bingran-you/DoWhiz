@@ -513,12 +513,63 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 - ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
 - ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger
 - ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
-- ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search)
+- ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
+- ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
+- ✅ Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
 
 **Remaining:**
-- Frontend integration and organization-linking, creation
+- TPM cron trigger endpoint — API to call `tpm_cli setup-tpm-cron` from frontend when user is first org member
+- Organization creation UI (frontend)
 - Transcript parsing and initial ingestion
 - Proactive search for user feedback
+
+---
+
+## Frontend Organization Flow
+
+User joins an organization via the DoWhiz dashboard (`website/public/auth/index.html`).
+
+**UI Components:**
+- Current organization display (when joined) with Leave button
+- Search input with debounced API calls
+- Dropdown showing matching organizations
+- Join button (disabled until selection)
+
+**Join Flow:**
+```
+1. User types in search box
+                ↓
+2. Debounced (300ms) GET /auth/organizations?search=query
+                ↓
+3. Dropdown shows results, user clicks one
+                ↓
+4. Selection highlighted, Join button enabled
+                ↓
+5. User clicks Join → PUT /auth/account/organization
+                ↓
+6. GET /auth/organization/:name/member-count
+                ↓
+7. If member_count === 1:
+   → [TODO] POST /api/tpm/setup-cron to trigger tpm_cli setup-tpm-cron
+   → Show "TPM mode will be set up" message
+                ↓
+8. UI updates to show current organization
+```
+
+**Leave Flow:**
+```
+1. User clicks Leave → confirmation prompt
+                ↓
+2. DELETE /auth/account/organization
+                ↓
+3. UI resets to search mode
+```
+
+**TODO:** Add `POST /api/tpm/setup-cron` endpoint that:
+- Accepts `{ organization_name: string }`
+- Validates user belongs to organization
+- Calls `tpm_cli setup-tpm-cron --user-id <account_id> --organization <org_name>`
+- Returns success/failure
 
 ---
 
