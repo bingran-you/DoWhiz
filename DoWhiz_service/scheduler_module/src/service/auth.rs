@@ -1601,6 +1601,47 @@ pub async fn list_organizations(
     }
 }
 
+/// GET /auth/organization/:name/member-count - Get the number of members in an organization
+pub async fn get_organization_member_count(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+) -> impl IntoResponse {
+    // Require authentication
+    if let Err(response) = load_authenticated_account_from_headers(&state, &headers).await {
+        return response;
+    }
+
+    let store = state.account_store.clone();
+    let name = org_name.clone();
+
+    let result = task::spawn_blocking(move || store.get_organization_member_count(&name))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match result {
+        Ok(Ok(count)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "organization_name": org_name,
+                "member_count": count,
+            })),
+        )
+            .into_response(),
+        Ok(Err(AccountStoreError::NotFound)) => {
+            json_error_response(StatusCode::NOT_FOUND, &format!("Organization '{}' not found", org_name))
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization member count: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
 /// PUT /auth/account/organization - Set the account's organization
 pub async fn set_account_organization(
     State(state): State<AuthState>,
@@ -6430,6 +6471,7 @@ pub fn auth_router(state: AuthState) -> Router {
         )
         .route("/auth/organization", post(create_organization))
         .route("/auth/organizations", get(list_organizations))
+        .route("/auth/organization/:name/member-count", get(get_organization_member_count))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))
