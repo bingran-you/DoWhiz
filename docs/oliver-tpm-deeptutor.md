@@ -511,7 +511,7 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
   - `sync-tasks` — Pull Notion updates back to MongoDB
   - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
 - ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
-- ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger
+- ✅ Cron job infrastructure — Direct MongoDB upsert with synthetic `postmark_payload.json` trigger when Notion DB is not inited
 - ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
 - ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search)
 
