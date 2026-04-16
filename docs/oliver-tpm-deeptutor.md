@@ -593,3 +593,8 @@ Cron stores **setup user's account_id** → uses **their Notion token** for sche
 5. User's token has access to their own database → sync works
 
 **Note:** No separate "Oliver Notion token" needed for cron. The setup user's token is used since they own the database.
+
+---
+
+## Manual Steps:
+1. The first person who joined the organization must share the task board with others; no sharing command is available via Notion API for Oliver to call within the ACI
