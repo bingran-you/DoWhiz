@@ -21,9 +21,11 @@ use serde_json::{json, Value};
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use tracing::info;
 use uuid::Uuid;
 
 fn main() -> ExitCode {
+    tracing_subscriber::fmt().with_target(false).init();
     dotenvy::dotenv().ok();
 
     let args: Vec<String> = env::args().collect();
@@ -988,6 +990,11 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
 
     let cron_expr = cron_expr.unwrap_or_else(|| "0 0 9 * * MON-FRI".to_string());
 
+    info!(
+        "tpm_cli setup-tpm-cron: user_id={:?}, organization={:?}, cron={}",
+        user_id, organization, cron_expr
+    );
+
     let account_store = match AccountStore::from_env() {
         Ok(s) => s,
         Err(e) => {
@@ -1035,6 +1042,11 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
+
+    info!(
+        "tpm_cli: verified account_id={}, org={}, org_id={}",
+        account.id, organization, org.id
+    );
 
     let identifiers = match account_store.list_identifiers(account_uuid) {
         Ok(ids) => ids,
@@ -1126,8 +1138,12 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
 
     // Add the cron task
     let task_id = match scheduler.add_cron_task(&cron_expr, TaskKind::RunTask(run_task)) {
-        Ok(id) => id,
+        Ok(id) => {
+            info!("tpm_cli: cron task added successfully, task_id={}", id);
+            id
+        }
         Err(e) => {
+            info!("tpm_cli: failed to add cron task: {}", e);
             eprintln!("Error: Failed to add cron task: {}", e);
             return ExitCode::FAILURE;
         }
