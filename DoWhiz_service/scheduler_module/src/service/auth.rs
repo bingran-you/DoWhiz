@@ -1718,6 +1718,11 @@ pub async fn setup_tpm_cron(
     let account_id = account.id.to_string();
     let org_name_for_cli = org_name.clone();
 
+    info!(
+        "setup_tpm_cron: calling tpm_cli setup-tpm-cron --user-id {} --organization {}",
+        account_id, org_name_for_cli
+    );
+
     let cli_result = task::spawn_blocking(move || {
         use std::process::Command;
 
@@ -1752,6 +1757,7 @@ pub async fn setup_tpm_cron(
 
     match cli_result {
         Ok(Ok(output)) => {
+            info!("setup_tpm_cron: tpm_cli succeeded, output: {}", output);
             // Try to parse the JSON output from tpm_cli
             match serde_json::from_str::<serde_json::Value>(&output) {
                 Ok(json_output) => (StatusCode::OK, Json(json_output)).into_response(),
@@ -1767,7 +1773,7 @@ pub async fn setup_tpm_cron(
             }
         }
         Ok(Err(e)) => {
-            error!("tpm_cli setup-tpm-cron failed: {}", e);
+            error!("setup_tpm_cron: tpm_cli failed: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e)
         }
         Err(response) => response,

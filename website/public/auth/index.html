@@ -5853,9 +5853,32 @@
           if (memberCountRes.ok) {
             const memberData = await memberCountRes.json();
             if (memberData.member_count === 1) {
-              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - TPM mode will be set up.`;
-              // TODO: Trigger TPM cron setup via API when endpoint is available
-              console.log('User is only member, should set up TPM cron for account:', data.account_id);
+              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - setting up TPM mode...`;
+
+              // Trigger TPM cron setup
+              try {
+                const tpmRes = await fetch(`${DOWHIZ_API_URL}/api/tpm/setup-cron`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ organization_name: selectedOrganization })
+                });
+
+                if (tpmRes.ok) {
+                  const tpmData = await tpmRes.json();
+                  console.log('TPM cron set up successfully:', tpmData);
+                  orgStatus.textContent = `Joined ${selectedOrganization}! TPM mode is now active.`;
+                } else {
+                  const errData = await tpmRes.json().catch(() => ({}));
+                  console.error('TPM cron setup failed:', tpmRes.status, errData);
+                  orgStatus.textContent = `Joined ${selectedOrganization}! (TPM setup failed: ${errData.error || tpmRes.status})`;
+                }
+              } catch (tpmErr) {
+                console.error('TPM cron setup error:', tpmErr);
+                orgStatus.textContent = `Joined ${selectedOrganization}! (TPM setup error)`;
+              }
             }
           }
 
