@@ -803,6 +803,15 @@ Include the database URL in your reply and these sharing instructions.
 3. Identify stale tasks (no updates in 3+ days)
 4. Post summary to team channel (Discord/Slack)
 
+**Before Creating New Tasks:**
+ALWAYS run `tpm_cli list-tasks --organization {org_name}` first to:
+1. Understand what the org is currently working on
+2. Check for existing tasks that might be duplicates or related
+3. See current priorities and workload distribution
+4. Identify patterns in how tasks are structured
+
+When creating a task, reference related existing tasks if applicable. Do not create duplicates.
+
 **Task Sources:**
 - user_feedback: From user reports, Discord, support emails
 - notetaker: Extracted from meeting transcripts

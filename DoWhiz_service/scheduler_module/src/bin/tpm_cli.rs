@@ -1094,7 +1094,7 @@ fn cmd_setup_tpm_cron(args: &[String]) -> ExitCode {
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
-        reply_to: vec![],
+        reply_to: vec![email.clone()], // Send ack/summary to user's email
         reply_from: None,
         archive_root: None,
         thread_id: None,
@@ -1347,6 +1347,44 @@ mod tests {
         assert_eq!(run_task.runner, "codex");
         assert!(!run_task.codex_disabled);
         assert!(run_task.reply_to.is_empty());
+    }
+
+    #[test]
+    fn test_tpm_cron_task_has_reply_to_email() {
+        // TPM cron tasks should have reply_to set to user's email for ack messages
+        let account_id = Uuid::new_v4();
+        let user_email = "user@example.com".to_string();
+        let workspace_dir = PathBuf::from("/tmp/users/test-user/workspaces/tpm_cron_placeholder");
+
+        let run_task = RunTaskTask {
+            workspace_dir: workspace_dir.clone(),
+            input_email_dir: workspace_dir.join("incoming_email"),
+            input_attachments_dir: workspace_dir.join("incoming_attachments"),
+            memory_dir: PathBuf::from("/tmp/users/test-user/memory"),
+            reference_dir: workspace_dir.join("references"),
+            model_name: "claude-sonnet-4-20250514".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec![user_email.clone()], // TPM cron sends ack to user
+            reply_from: None,
+            archive_root: None,
+            thread_id: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            channel: Channel::Email,
+            slack_team_id: None,
+            employee_id: None,
+            requester_identifier_type: Some("email".to_string()),
+            requester_identifier: Some(user_email.clone()),
+            account_id: Some(account_id),
+            channel_metadata: ChannelMetadata::default(),
+        };
+
+        // Verify reply_to contains user's email
+        assert_eq!(run_task.reply_to.len(), 1);
+        assert_eq!(run_task.reply_to[0], user_email);
+        // Verify requester matches reply_to
+        assert_eq!(run_task.requester_identifier, Some(user_email));
     }
 
     #[test]
