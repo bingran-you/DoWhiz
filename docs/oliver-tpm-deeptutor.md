@@ -597,4 +597,5 @@ Cron stores **setup user's account_id** → uses **their Notion token** for sche
 ---
 
 ## Manual Steps:
+
 1. The first person who joined the organization must share the task board with others; no sharing command is available via Notion API for Oliver to call within the ACI
