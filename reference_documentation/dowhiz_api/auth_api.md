@@ -198,6 +198,54 @@ Leave the current organization.
 
 ---
 
+### POST /api/tpm/setup-cron
+Set up TPM cron job for an organization. Called when first member joins to enable daily TPM syncs.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "organization_name": "deeptutor"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "task_id": "uuid",
+  "user_id": "uuid",
+  "organization": "deeptutor",
+  "email": "user@example.com",
+  "cron": "0 0 9 * * MON-FRI",
+  "workspace_dir": "/path/to/workspace"
+}
+```
+
+**Response 400:**
+```json
+{
+  "error": "You must be a member of an organization to set up TPM cron"
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "You are not a member of organization 'xyz'"
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": "Organization 'xyz' not found"
+}
+```
+
+---
+
 ## Identifier Linking
 
 ### POST /auth/link

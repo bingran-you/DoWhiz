@@ -1657,6 +1657,123 @@ pub async fn get_organization_member_count(
     }
 }
 
+/// POST /api/tpm/setup-cron - Set up TPM cron job for an organization
+///
+/// Called when the first member joins an organization. Triggers `tpm_cli setup-tpm-cron`
+/// to create a daily sync cron job for the TPM workflow.
+pub async fn setup_tpm_cron(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<SetOrganizationRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let org_name = payload.organization_name.clone();
+
+    // Verify user belongs to this organization
+    if account.organization_id.is_none() {
+        return json_error_response(
+            StatusCode::BAD_REQUEST,
+            "You must be a member of an organization to set up TPM cron",
+        );
+    }
+
+    // Fetch the organization to verify name matches
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to fetch organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    // Verify user is in this organization
+    if account.organization_id != Some(org.id) {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            &format!("You are not a member of organization '{}'", org_name),
+        );
+    }
+
+    // Call tpm_cli setup-tpm-cron
+    let account_id = account.id.to_string();
+    let org_name_for_cli = org_name.clone();
+
+    let cli_result = task::spawn_blocking(move || {
+        use std::process::Command;
+
+        let output = Command::new("tpm_cli")
+            .args([
+                "setup-tpm-cron",
+                "--user-id",
+                &account_id,
+                "--organization",
+                &org_name_for_cli,
+            ])
+            .output();
+
+        match output {
+            Ok(out) => {
+                if out.status.success() {
+                    let stdout = String::from_utf8_lossy(&out.stdout);
+                    Ok(stdout.to_string())
+                } else {
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    Err(format!("tpm_cli failed: {}", stderr))
+                }
+            }
+            Err(e) => Err(format!("Failed to execute tpm_cli: {}", e)),
+        }
+    })
+    .await
+    .map_err(|e| {
+        error!("spawn_blocking panicked during tpm_cli: {}", e);
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    });
+
+    match cli_result {
+        Ok(Ok(output)) => {
+            // Try to parse the JSON output from tpm_cli
+            match serde_json::from_str::<serde_json::Value>(&output) {
+                Ok(json_output) => (StatusCode::OK, Json(json_output)).into_response(),
+                Err(_) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "message": "TPM cron job set up successfully",
+                        "organization": org_name,
+                    })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(Err(e)) => {
+            error!("tpm_cli setup-tpm-cron failed: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e)
+        }
+        Err(response) => response,
+    }
+}
+
 /// PUT /auth/account/organization - Set the account's organization
 pub async fn set_account_organization(
     State(state): State<AuthState>,
@@ -6487,6 +6604,7 @@ pub fn auth_router(state: AuthState) -> Router {
         .route("/auth/organization", post(create_organization))
         .route("/auth/organizations", get(list_organizations))
         .route("/auth/organization/:name/member-count", get(get_organization_member_count))
+        .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))
