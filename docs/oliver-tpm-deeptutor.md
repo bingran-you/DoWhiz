@@ -516,9 +516,9 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 - ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
 - ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
 - ✅ Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
+- ✅ TPM cron trigger endpoint (`POST /api/tpm/setup-cron`) — Calls `tpm_cli setup-tpm-cron` when first member joins org
 
 **Remaining:**
-- TPM cron trigger endpoint — API to call `tpm_cli setup-tpm-cron` from frontend when user is first org member
 - Organization creation UI (frontend)
 - Transcript parsing and initial ingestion
 - Proactive search for user feedback
@@ -550,7 +550,7 @@ User joins an organization via the DoWhiz dashboard (`website/public/auth/index.
 6. GET /auth/organization/:name/member-count
                 ↓
 7. If member_count === 1:
-   → [TODO] POST /api/tpm/setup-cron to trigger tpm_cli setup-tpm-cron
+   → POST /api/tpm/setup-cron { organization_name } to trigger tpm_cli setup-tpm-cron
    → Show "TPM mode will be set up" message
                 ↓
 8. UI updates to show current organization
@@ -564,12 +564,6 @@ User joins an organization via the DoWhiz dashboard (`website/public/auth/index.
                 ↓
 3. UI resets to search mode
 ```
-
-**TODO:** Add `POST /api/tpm/setup-cron` endpoint that:
-- Accepts `{ organization_name: string }`
-- Validates user belongs to organization
-- Calls `tpm_cli setup-tpm-cron --user-id <account_id> --organization <org_name>`
-- Returns success/failure
 
 ---
 
