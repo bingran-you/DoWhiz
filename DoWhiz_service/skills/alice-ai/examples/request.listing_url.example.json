@@ -1,0 +1,68 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "91ca3ee0-c2c4-44be-aebf-86a98f85fd1c",
+  "thread_id": "email:alice-demo-thread-001",
+  "channel": "email",
+  "request_mode": "deep_research",
+  "raw_user_message": "Please run a full public-data-first diligence pass on this land listing for a small solar plus long-term hold thesis: https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+  "thesis": {
+    "summary": "Deep diligence on a single listing for small-scale solar screening and a long-term rural hold thesis.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [
+      {
+        "kind": "county",
+        "label": "Hudspeth County, Texas",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County"
+      }
+    ],
+    "filters": {
+      "max_price": 300000,
+      "exclude_major_floodplain": true,
+      "prefer_transmission_proximity": true
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 300000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "input_kind": "listing_url",
+      "raw_value": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+      "normalized": {
+        "platform": "landwatch",
+        "canonical_url": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+        "listing_id": "LW-48229-80A-SB"
+      },
+      "resolution_hints": {
+        "state_fips": "48",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County"
+      }
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

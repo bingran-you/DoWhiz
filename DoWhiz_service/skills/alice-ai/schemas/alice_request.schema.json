@@ -1,0 +1,603 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/alice_request.schema.json",
+  "title": "Alice Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "thread_id",
+    "channel",
+    "request_mode",
+    "raw_user_message",
+    "thesis",
+    "subjects",
+    "output_preferences",
+    "conversation_state_ref"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.request.v1"
+    },
+    "request_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "thread_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel": {
+      "$ref": "#/$defs/channel"
+    },
+    "request_mode": {
+      "$ref": "#/$defs/request_mode"
+    },
+    "raw_user_message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "thesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "use_case_hypotheses",
+        "target_geographies",
+        "filters",
+        "budget",
+        "hold_period",
+        "return_preferences"
+      ],
+      "properties": {
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "use_case_hypotheses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/high_level_use_case"
+          },
+          "uniqueItems": true
+        },
+        "target_geographies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/geography_constraint"
+          }
+        },
+        "filters": {
+          "$ref": "#/$defs/request_filters"
+        },
+        "budget": {
+          "$ref": "#/$defs/request_budget"
+        },
+        "hold_period": {
+          "$ref": "#/$defs/request_hold_period"
+        },
+        "return_preferences": {
+          "$ref": "#/$defs/request_return_preferences"
+        }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subject_input"
+      }
+    },
+    "output_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verbosity",
+        "comparison_requested",
+        "include_markdown_report",
+        "include_json_artifacts"
+      ],
+      "properties": {
+        "verbosity": {
+          "$ref": "#/$defs/verbosity"
+        },
+        "comparison_requested": {
+          "type": "boolean"
+        },
+        "include_markdown_report": {
+          "type": "boolean"
+        },
+        "include_json_artifacts": {
+          "type": "boolean"
+        }
+      }
+    },
+    "conversation_state_ref": {
+      "type": "string",
+      "pattern": "^alice/.+\\.json$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "request_mode": {
+            "const": "deep_research"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subjects": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "request_mode": {
+            "const": "batch_compare"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subjects": {
+            "type": "array",
+            "minItems": 2
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "channel": {
+      "type": "string",
+      "enum": [
+        "email",
+        "slack",
+        "discord",
+        "sms",
+        "telegram",
+        "whatsapp",
+        "google_docs",
+        "google_sheets",
+        "google_slides",
+        "bluebubbles",
+        "notion",
+        "wechat",
+        "wechat_mp",
+        "lark",
+        "zoom"
+      ]
+    },
+    "uuid_string": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "request_mode": {
+      "type": "string",
+      "enum": [
+        "recommendation",
+        "deep_research",
+        "batch_compare",
+        "follow_up"
+      ]
+    },
+    "verbosity": {
+      "type": "string",
+      "enum": [
+        "short",
+        "standard",
+        "full"
+      ]
+    },
+    "coverage_tier": {
+      "type": "string",
+      "enum": [
+        "full",
+        "partial",
+        "minimal"
+      ]
+    },
+    "high_level_use_case": {
+      "type": "string",
+      "enum": [
+        "energy",
+        "agriculture",
+        "residential_light_development",
+        "industrial_storage_commercial",
+        "recreational_rural_hold"
+      ]
+    },
+    "exit_strategy": {
+      "type": "string",
+      "enum": [
+        "hold",
+        "flip",
+        "develop",
+        "ground_lease",
+        "farm",
+        "lease_to_operator",
+        "sell_entitled",
+        "conservation_sale",
+        "unknown"
+      ]
+    },
+    "coordinates_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    },
+    "geography_constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "nationwide",
+            "state",
+            "county",
+            "region",
+            "city",
+            "coordinates_radius"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "county_fips": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{5}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "county_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "center_coordinates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coordinates_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "radius_miles": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "request_filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "acreage_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "acreage_max": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_price_per_acre": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_price_per_acre": {
+          "type": "number",
+          "minimum": 0
+        },
+        "county_fips": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{5}$"
+          },
+          "uniqueItems": true
+        },
+        "county_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "state_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "uniqueItems": true
+        },
+        "exclude_major_floodplain": {
+          "type": "boolean"
+        },
+        "prefer_transmission_proximity": {
+          "type": "boolean"
+        },
+        "require_paved_access": {
+          "type": "boolean"
+        },
+        "require_legal_access": {
+          "type": "boolean"
+        },
+        "desired_coverage_tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/coverage_tier"
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "request_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD"
+          ]
+        },
+        "min_purchase_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_purchase_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_price_per_acre_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_price_per_acre_max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "request_hold_period": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_strategy": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "flip",
+            "develop",
+            "lease",
+            "farm",
+            "conservation",
+            "mixed",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "request_return_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preferred_exit_strategies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/exit_strategy"
+          },
+          "uniqueItems": true
+        },
+        "min_target_multiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_payback_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "listing_platform": {
+      "type": "string",
+      "enum": [
+        "redfin",
+        "zillow",
+        "landwatch",
+        "land_com",
+        "loopnet",
+        "broker_site",
+        "county_listing",
+        "unknown"
+      ]
+    },
+    "subject_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_kind",
+        "raw_value"
+      ],
+      "properties": {
+        "subject_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_kind": {
+          "type": "string",
+          "enum": [
+            "listing_url",
+            "apn",
+            "address",
+            "coordinates",
+            "batch_item",
+            "subject_ref"
+          ]
+        },
+        "raw_value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalized": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "platform": {
+              "$ref": "#/$defs/listing_platform"
+            },
+            "canonical_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "listing_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "apn_raw": {
+              "type": "string",
+              "minLength": 1
+            },
+            "apn_normalized": {
+              "type": "string",
+              "minLength": 1
+            },
+            "address_text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "coordinates": {
+              "$ref": "#/$defs/coordinates_value"
+            },
+            "batch_index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "resolution_hints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state_fips": {
+              "type": "string",
+              "pattern": "^[0-9]{2}$"
+            },
+            "state_code": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "county_fips": {
+              "type": "string",
+              "pattern": "^[0-9]{5}$"
+            },
+            "county_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "city_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1185 @@
+{
+  "schema_version": "alice.land_research.v1",
+  "object_id": "f68f4d5a-73f1-4f6e-abf9-7f2b7f8995e5",
+  "report_type": "deep_research",
+  "created_at": "2026-04-16T18:22:00Z",
+  "request_context": {
+    "request_id": "91ca3ee0-c2c4-44be-aebf-86a98f85fd1c",
+    "thread_id": "email:alice-demo-thread-001",
+    "request_mode": "deep_research",
+    "channel": "email",
+    "user_thesis_summary": "Deep diligence on a single listing for small-scale solar screening and a long-term rural hold thesis.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "user_constraints": {
+      "target_geographies": [
+        {
+          "kind": "county",
+          "label": "Hudspeth County, Texas",
+          "state_code": "TX",
+          "county_fips": "48229",
+          "county_name": "Hudspeth County"
+        }
+      ],
+      "filters": {
+        "max_price": 300000,
+        "exclude_major_floodplain": true,
+        "prefer_transmission_proximity": true
+      },
+      "budget": {
+        "currency": "USD",
+        "max_purchase_price": 300000
+      },
+      "hold_period": {
+        "min_years": 5,
+        "max_years": 15,
+        "target_strategy": "hold"
+      },
+      "return_preferences": {
+        "preferred_exit_strategies": [
+          "hold",
+          "ground_lease"
+        ]
+      }
+    },
+    "batch_parent_id": null
+  },
+  "subject": {
+    "research_unit_type": "single_parcel",
+    "resolution_status": "resolved",
+    "primary_subject_label": "Hudspeth County TX - 80 acres near Sierra Blanca",
+    "raw_inputs": [
+      {
+        "input_kind": "listing_url",
+        "raw_value": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca"
+      }
+    ],
+    "canonical_address": {
+      "value": {
+        "full_address": "Unnamed Road, Sierra Blanca, TX 79851",
+        "street_line1": "Unnamed Road",
+        "street_line2": null,
+        "city": "Sierra Blanca",
+        "county_name": "Hudspeth County",
+        "state_code": "TX",
+        "postal_code": "79851",
+        "country_code": "US"
+      },
+      "status": "confirmed",
+      "confidence": 0.74,
+      "citation_ids": [
+        "c_listing",
+        "c_county_parcel"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "coordinates": {
+      "value": {
+        "latitude": 31.1783,
+        "longitude": -105.3371
+      },
+      "status": "confirmed",
+      "confidence": 0.88,
+      "citation_ids": [
+        "c_listing",
+        "c_county_parcel"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "parcel_count": 1
+  },
+  "listing": {
+    "listing_present": true,
+    "platform": {
+      "value": "landwatch",
+      "status": "confirmed",
+      "confidence": 0.99,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "canonical_url": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+    "listing_id": "LW-48229-80A-SB",
+    "status": "active",
+    "asking_price": {
+      "value": 240000,
+      "status": "confirmed",
+      "confidence": 0.95,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "listed_acreage": {
+      "value": 80,
+      "status": "confirmed",
+      "confidence": 0.9,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "days_on_market": {
+      "value": 47,
+      "status": "estimated",
+      "confidence": 0.66,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Illustrative listing-days count from example fixture."
+    },
+    "listing_agent_name": {
+      "value": "West Desert Land Team",
+      "status": "confirmed",
+      "confidence": 0.82,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "listing_brokerage": {
+      "value": "High Plains Land Co.",
+      "status": "confirmed",
+      "confidence": 0.82,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "listing_text_summary": {
+      "value": "80-acre West Texas parcel marketed as off-grid acreage with expansive views and regional access.",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Listing text is marketing language, not final parcel authority."
+    },
+    "listing_snapshot_at": "2026-04-16T10:12:00Z"
+  },
+  "source_urls": [
+    {
+      "label": "Listing page",
+      "url": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+      "source_id": "listing_landwatch_west_tx_80ac"
+    },
+    {
+      "label": "Hudspeth County parcel GIS",
+      "url": "https://hudspeth.example.gov/arcgis/rest/services/parcels/FeatureServer/0",
+      "source_id": "county_tx_hudspeth_parcel_gis"
+    },
+    {
+      "label": "Hudspeth County tax roll",
+      "url": "https://hudspeth.example.gov/tax-roll/search",
+      "source_id": "county_tx_hudspeth_tax_roll"
+    },
+    {
+      "label": "FEMA flood viewer",
+      "url": "https://msc.fema.gov/portal/search",
+      "source_id": "federal_fema_nfhl"
+    },
+    {
+      "label": "FCC broadband map",
+      "url": "https://broadbandmap.fcc.gov/",
+      "source_id": "federal_fcc_broadband"
+    }
+  ],
+  "jurisdiction": {
+    "state": {
+      "name": "Texas",
+      "fips": "48"
+    },
+    "county": {
+      "name": "Hudspeth",
+      "fips": "48229"
+    },
+    "city_or_unincorporated": {
+      "value": "Unincorporated Hudspeth County",
+      "status": "confirmed",
+      "confidence": 0.95,
+      "citation_ids": [
+        "c_county_boundary"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "special_districts": [],
+    "federal_relevance": [
+      "FEMA flood screening",
+      "USGS terrain context",
+      "FCC broadband screening"
+    ],
+    "coverage_tier": "partial"
+  },
+  "parcel_identity": {
+    "parcels": [
+      {
+        "apn": {
+          "value": "H123-456-7890-0000",
+          "status": "confirmed",
+          "confidence": 0.87,
+          "citation_ids": [
+            "c_county_parcel"
+          ],
+          "as_of": "2026-04-16",
+          "notes": null
+        },
+        "county_parcel_id": {
+          "value": "48229-123456",
+          "status": "confirmed",
+          "confidence": 0.87,
+          "citation_ids": [
+            "c_county_parcel"
+          ],
+          "as_of": "2026-04-16",
+          "notes": null
+        },
+        "assessor_site_address": {
+          "value": {
+            "full_address": "Unnamed Road, Sierra Blanca, TX 79851",
+            "street_line1": "Unnamed Road",
+            "street_line2": null,
+            "city": "Sierra Blanca",
+            "county_name": "Hudspeth County",
+            "state_code": "TX",
+            "postal_code": "79851",
+            "country_code": "US"
+          },
+          "status": "confirmed",
+          "confidence": 0.81,
+          "citation_ids": [
+            "c_county_parcel"
+          ],
+          "as_of": "2026-04-16",
+          "notes": null
+        },
+        "assessor_acreage": {
+          "value": 80,
+          "status": "confirmed",
+          "confidence": 0.89,
+          "citation_ids": [
+            "c_county_parcel"
+          ],
+          "as_of": "2026-04-16",
+          "notes": null
+        },
+        "geometry_source_id": "county_tx_hudspeth_parcel_gis",
+        "geometry_confidence": 0.84,
+        "owner_name_public": {
+          "value": "Illustrative Desert Holdings LLC",
+          "status": "estimated",
+          "confidence": 0.55,
+          "citation_ids": [
+            "c_county_parcel"
+          ],
+          "as_of": "2026-04-16",
+          "notes": "Example owner name included only to demonstrate contract shape."
+        },
+        "tax_status_summary": {
+          "value": "County tax roll appears current for the latest visible year.",
+          "status": "estimated",
+          "confidence": 0.61,
+          "citation_ids": [
+            "c_county_tax"
+          ],
+          "as_of": "2025-10-01",
+          "notes": "Tax status should not be treated as title or lien clearance."
+        }
+      }
+    ],
+    "access_point_estimate": {
+      "value": {
+        "latitude": 31.1779,
+        "longitude": -105.3357
+      },
+      "status": "estimated",
+      "confidence": 0.55,
+      "citation_ids": [
+        "c_txdot_road"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Illustrative road-touch estimate only; legal access remains unresolved."
+    },
+    "boundary_notes": "Single-parcel example using county parcel geometry plus listing centroid context.",
+    "identity_conflicts": []
+  },
+  "planning_and_land_use": {
+    "zoning_designation": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "No machine-readable county zoning designation was available in this example."
+    },
+    "zoning_description": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Parcel-level zoning description remains unresolved."
+    },
+    "future_land_use_designation": {
+      "value": "No municipal future land use map identified for this unincorporated example.",
+      "status": "not_applicable",
+      "confidence": 0.78,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "plan_area": {
+      "value": "Unincorporated Hudspeth County",
+      "status": "confirmed",
+      "confidence": 0.87,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "overlay_districts": [],
+    "minimum_lot_size": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Minimum lot-size rules were not verified from a parcel-specific local source."
+    },
+    "setback_signals": [
+      {
+        "label": "Parcel-specific setback rules were not identified from a machine-readable source.",
+        "status": "missing",
+        "confidence": 0,
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "County planning confirmation still required."
+      }
+    ],
+    "subdivision_signals": [
+      {
+        "label": "Large-lot rural subdivision process may apply if the parcel is later split.",
+        "status": "estimated",
+        "confidence": 0.36,
+        "citation_ids": [
+          "c_county_plan"
+        ],
+        "as_of": "2026-04-16",
+        "notes": "Illustrative directional statement only."
+      }
+    ],
+    "permitted_use_signals": [
+      {
+        "label": "Passive rural hold appears directionally compatible with the unincorporated county context.",
+        "status": "estimated",
+        "confidence": 0.42,
+        "citation_ids": [
+          "c_county_plan"
+        ],
+        "as_of": "2026-04-16",
+        "notes": "Not a zoning determination."
+      }
+    ],
+    "conditional_use_signals": [
+      {
+        "label": "Energy-oriented land use may require separate county, utility, or state follow-up beyond current public map visibility.",
+        "status": "estimated",
+        "confidence": 0.34,
+        "citation_ids": [
+          "c_county_plan"
+        ],
+        "as_of": "2026-04-16",
+        "notes": "Parcel-level entitlement path remains unresolved."
+      }
+    ],
+    "development_constraints_summary": {
+      "value": "Planning visibility is weaker than parcel identity. Local zoning and conditional-use interpretation remain open diligence items.",
+      "status": "estimated",
+      "confidence": 0.42,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "interpretation_limits": [
+      "No directly verified parcel-specific zoning map layer was available in this example.",
+      "Planning conclusions should be treated as directional until confirmed locally."
+    ]
+  },
+  "environmental_constraints": {
+    "flood_zone": {
+      "value": "Outside mapped FEMA Special Flood Hazard Area based on example screening.",
+      "status": "estimated",
+      "confidence": 0.79,
+      "citation_ids": [
+        "c_fema_flood"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Flood screening is directional and not a survey or flood certificate."
+    },
+    "wetlands_signal": {
+      "value": "No mapped NWI wetlands intersecting the example parcel centroid buffer.",
+      "status": "estimated",
+      "confidence": 0.71,
+      "citation_ids": [
+        "c_wetlands"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Not a field delineation."
+    },
+    "slope_signal": {
+      "value": "Most of the example parcel appears to be gently sloped, generally below 5 percent.",
+      "status": "estimated",
+      "confidence": 0.68,
+      "citation_ids": [
+        "c_usgs_slope"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "elevation_signal": {
+      "value": "Approximate elevation is 4,500 feet above mean sea level.",
+      "status": "estimated",
+      "confidence": 0.66,
+      "citation_ids": [
+        "c_usgs_elev"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "soil_constraints_signal": {
+      "value": "Arid soils appear present; geotechnical and percolation conditions remain unresolved.",
+      "status": "estimated",
+      "confidence": 0.48,
+      "citation_ids": [
+        "c_usgs_slope"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Example summary only; no NRCS parcel extract included in this fixture."
+    },
+    "fire_risk_signal": {
+      "value": "Regional wildfire burden appears lower than heavily forested land types, but no local fire-siting clearance is implied.",
+      "status": "estimated",
+      "confidence": 0.43,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "habitat_or_conservation_signal": {
+      "value": "No protected-area overlap was identified from the small example source set.",
+      "status": "estimated",
+      "confidence": 0.41,
+      "citation_ids": [
+        "c_wetlands"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Illustrative only; species-specific review is not included."
+    },
+    "superfund_or_contamination_signal": {
+      "value": "No contamination signal was identified from the limited example sources reviewed.",
+      "status": "estimated",
+      "confidence": 0.33,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Not a Phase I ESA substitute."
+    },
+    "environmental_summary": {
+      "value": "Environmental screening looks directionally workable for early-stage land screening, but all conclusions remain public-data-first and preliminary.",
+      "status": "estimated",
+      "confidence": 0.58,
+      "citation_ids": [
+        "c_fema_flood",
+        "c_wetlands",
+        "c_usgs_slope"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "regulatory_notes": [
+      "Flood and wetlands screening in this example is directional only.",
+      "No field study, environmental site assessment, or engineering review is included."
+    ]
+  },
+  "water_and_agriculture": {
+    "surface_water_proximity": {
+      "value": "No major on-parcel surface water body is visible in the example review.",
+      "status": "estimated",
+      "confidence": 0.52,
+      "citation_ids": [
+        "c_usgs_elev"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "groundwater_or_well_signal": {
+      "value": "Area appears more dependent on private well feasibility than municipal service.",
+      "status": "estimated",
+      "confidence": 0.45,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "No well-log or water-rights extraction is included in this fixture."
+    },
+    "irrigation_district_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Irrigation-district coverage was not verified."
+    },
+    "water_rights_status": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Public water-rights confirmation is outside the current example coverage."
+    },
+    "soil_productivity_signal": {
+      "value": "The parcel does not appear positioned as high-productivity irrigated farmland in this example screening.",
+      "status": "estimated",
+      "confidence": 0.39,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "cropland_or_pasture_signal": {
+      "value": "Sparse desert or rangeland context appears more likely than row-crop use.",
+      "status": "estimated",
+      "confidence": 0.46,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "ag_exemption_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "County ag-exemption status was not verified from the example source set."
+    },
+    "water_and_ag_summary": {
+      "value": "Water and agriculture conclusions remain weaker than parcel identity and environmental screening in this example.",
+      "status": "estimated",
+      "confidence": 0.37,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    }
+  },
+  "infrastructure_and_utilities": {
+    "legal_or_physical_access_signal": {
+      "value": "Physical road approach appears plausible from nearby mapped roads, but legal access is not yet confirmed.",
+      "status": "estimated",
+      "confidence": 0.52,
+      "citation_ids": [
+        "c_txdot_road"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Access remains a live diligence item."
+    },
+    "road_frontage_signal": {
+      "value": "Possible road frontage appears present from the example map context, but frontage length is unresolved.",
+      "status": "estimated",
+      "confidence": 0.49,
+      "citation_ids": [
+        "c_txdot_road"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "power_service_signal": {
+      "value": "Regional electric service appears possible, but parcel-edge service availability and line class remain unresolved.",
+      "status": "estimated",
+      "confidence": 0.44,
+      "citation_ids": [
+        "c_transmission"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "This is not a utility service commitment."
+    },
+    "utility_territory_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Official utility territory was not directly verified."
+    },
+    "substation_proximity_signal": {
+      "value": "No substation proximity measurement was confirmed in this example fixture.",
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "transmission_proximity_signal": {
+      "value": "A regional transmission corridor appears directionally relevant for screening purposes.",
+      "status": "estimated",
+      "confidence": 0.41,
+      "citation_ids": [
+        "c_transmission"
+      ],
+      "as_of": "2026-04-16",
+      "notes": "Proximity is not interconnection feasibility."
+    },
+    "broadband_signal": {
+      "value": "FCC broadband context suggests limited terrestrial coverage relative to urban parcels.",
+      "status": "estimated",
+      "confidence": 0.58,
+      "citation_ids": [
+        "c_fcc_broadband"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "water_service_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0,
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Municipal water service was not confirmed."
+    },
+    "wastewater_or_septic_signal": {
+      "value": "On-site wastewater or septic assumptions would likely need local confirmation if any buildable use is pursued.",
+      "status": "estimated",
+      "confidence": 0.35,
+      "citation_ids": [
+        "c_county_plan"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "rail_or_highway_logistics_signal": {
+      "value": "Regional highway access appears better than parcel-edge industrial infrastructure visibility.",
+      "status": "estimated",
+      "confidence": 0.47,
+      "citation_ids": [
+        "c_txdot_road"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "infrastructure_summary": {
+      "value": "Infrastructure screening is mixed: regional access signals are visible, but utility availability remains materially unresolved.",
+      "status": "estimated",
+      "confidence": 0.46,
+      "citation_ids": [
+        "c_txdot_road",
+        "c_transmission",
+        "c_fcc_broadband"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    }
+  },
+  "market_signals": {
+    "ask_price_per_acre": {
+      "value": 3000,
+      "status": "confirmed",
+      "confidence": 0.95,
+      "citation_ids": [
+        "c_listing"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "nearby_listing_context": [
+      {
+        "label": "Comparable desert acreage listing A",
+        "url": "https://landwatch.example/texas/hudspeth-county/property/100-acre-desert-tract",
+        "asking_price": 265000,
+        "acreage": 100,
+        "citation_ids": [
+          "c_listing_comp_1"
+        ],
+        "notes": "Directional nearby listing context only; not a closed transaction comp."
+      }
+    ],
+    "county_market_context": {
+      "value": "Rural West Texas land appears to trade in a relatively thin market where listing context is easier to observe than closed transaction detail.",
+      "status": "estimated",
+      "confidence": 0.45,
+      "citation_ids": [
+        "c_listing",
+        "c_listing_comp_1"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "tax_burden_signal": {
+      "value": "Carrying costs appear directionally low relative to the current ask, subject to parcel tax verification.",
+      "status": "estimated",
+      "confidence": 0.42,
+      "citation_ids": [
+        "c_county_tax"
+      ],
+      "as_of": "2025-10-01",
+      "notes": null
+    },
+    "liquidity_signal": {
+      "value": "Expected liquidity appears limited compared with infill or suburban land markets.",
+      "status": "estimated",
+      "confidence": 0.43,
+      "citation_ids": [
+        "c_listing",
+        "c_listing_comp_1"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    },
+    "market_summary": {
+      "value": "At the current ask, the parcel may fit a speculative rural hold thesis more naturally than a fully underwritten development thesis.",
+      "status": "estimated",
+      "confidence": 0.47,
+      "citation_ids": [
+        "c_listing",
+        "c_listing_comp_1",
+        "c_county_tax"
+      ],
+      "as_of": "2026-04-16",
+      "notes": null
+    }
+  },
+  "use_case_modules": [
+    {
+      "module_id": "energy_solar",
+      "module_label": "Solar",
+      "fit_assessment": "mixed",
+      "confidence": 0.46,
+      "blocking_flags": [
+        "utility_territory_unconfirmed",
+        "interconnection_path_unresolved"
+      ],
+      "supporting_signals": [
+        "Large contiguous acreage",
+        "Generally gentle terrain",
+        "Directional transmission relevance"
+      ],
+      "key_unknowns": [
+        "Actual utility territory at parcel edge",
+        "Distance and capacity to interconnection point",
+        "Local permitting or county review path"
+      ],
+      "economics_inputs_required": [
+        "Interconnection cost estimate",
+        "Site control and survey",
+        "Local development path confirmation"
+      ],
+      "summary": "The parcel looks directionally screenable for solar from a land-use perspective, but utility and interconnection unknowns are still too large for a strong conclusion.",
+      "citation_ids": [
+        "c_transmission",
+        "c_usgs_slope",
+        "c_fema_flood"
+      ]
+    },
+    {
+      "module_id": "recreational_rural_hold",
+      "module_label": "Recreational / Rural Hold",
+      "fit_assessment": "favorable",
+      "confidence": 0.58,
+      "blocking_flags": [
+        "legal_access_unconfirmed"
+      ],
+      "supporting_signals": [
+        "Rural desert setting",
+        "Low visible flood burden",
+        "Manageable entry price per acre for large acreage"
+      ],
+      "key_unknowns": [
+        "Recorded access rights",
+        "Water development feasibility",
+        "Parcel-level market liquidity at exit"
+      ],
+      "economics_inputs_required": [
+        "Verified tax carry",
+        "Access documentation",
+        "Exit comp set"
+      ],
+      "summary": "The parcel appears to fit a rural hold thesis better than a near-term infrastructure-heavy thesis, but access and water remain important diligence gaps.",
+      "citation_ids": [
+        "c_listing",
+        "c_fema_flood",
+        "c_county_tax"
+      ]
+    }
+  ],
+  "directional_economics": {
+    "status": "limited",
+    "basis": "asking_price_plus_public_proxies",
+    "assumptions": [
+      {
+        "name": "closing_cost_pct",
+        "value": "3%",
+        "source": "market_proxy"
+      },
+      {
+        "name": "hold_period_years",
+        "value": "10",
+        "source": "user_assumption"
+      }
+    ],
+    "carry_costs": {
+      "annual_property_tax": {
+        "value": "Appears low relative to land value, but exact annual burden is unresolved in this example.",
+        "status": "estimated",
+        "confidence": 0.42,
+        "citation_ids": [
+          "c_county_tax"
+        ],
+        "as_of": "2025-10-01",
+        "notes": null
+      }
+    },
+    "improvement_capex_proxies": {
+      "power_extension": {
+        "value": null,
+        "status": "missing",
+        "confidence": 0,
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "Utility quote required."
+      },
+      "well_and_septic": {
+        "value": "Potentially material but unresolved.",
+        "status": "estimated",
+        "confidence": 0.27,
+        "citation_ids": [
+          "c_county_plan"
+        ],
+        "as_of": "2026-04-16",
+        "notes": "Directional placeholder only."
+      }
+    },
+    "revenue_or_exit_cases": [
+      {
+        "scenario_name": "Long-term hold and resale",
+        "description": "Base case assumes passive hold with modest carrying cost and eventual negotiated resale into a thin rural market.",
+        "key_inputs": [
+          "Entry price discipline",
+          "Access confirmation",
+          "Exit market depth"
+        ],
+        "notes": "No closed sale comp model is included."
+      }
+    ],
+    "scenario_summary": [
+      "At the current ask, the parcel may work as a speculative rural hold if access and carrying-cost assumptions stay reasonable.",
+      "Energy-oriented value remains highly contingent on follow-up diligence that is outside this example fixture."
+    ],
+    "limitations": [
+      "No closed transaction comp set was validated.",
+      "No utility quote, water-rights review, title review, survey, or geotechnical work was included."
+    ]
+  },
+  "risks": [
+    {
+      "risk_id": "legal_access_unresolved",
+      "label": "Legal access remains unresolved",
+      "severity": "high",
+      "category": "access",
+      "description": "Physical road approach appears plausible, but recorded legal access has not been confirmed from the example sources.",
+      "impact": "Access risk can materially reduce both usability and resale value.",
+      "mitigation_or_next_check": "Confirm recorded access with title work or county records.",
+      "blocking": true,
+      "citation_ids": [
+        "c_txdot_road"
+      ]
+    },
+    {
+      "risk_id": "planning_visibility_limited",
+      "label": "Planning and zoning visibility is weak",
+      "severity": "medium",
+      "category": "zoning",
+      "description": "Parcel identity is stronger than parcel-level zoning and planning clarity.",
+      "impact": "Use-case feasibility could change after direct local planning confirmation.",
+      "mitigation_or_next_check": "Confirm county planning treatment and any local development limits.",
+      "blocking": false,
+      "citation_ids": [
+        "c_county_plan"
+      ]
+    },
+    {
+      "risk_id": "utility_path_unresolved",
+      "label": "Utility and interconnection path are unresolved",
+      "severity": "high",
+      "category": "utilities",
+      "description": "Directional transmission context exists, but utility territory and parcel-edge service remain unresolved.",
+      "impact": "Energy or development use cases may face materially different costs than current screening implies.",
+      "mitigation_or_next_check": "Obtain official utility territory confirmation and utility feedback.",
+      "blocking": true,
+      "citation_ids": [
+        "c_transmission"
+      ]
+    }
+  ],
+  "unknowns": [
+    {
+      "unknown_id": "recorded_access_docs",
+      "question": "Does the parcel have recorded legal access?",
+      "why_it_matters": "This is critical for both rural-hold usability and many development cases.",
+      "recommended_next_source": "Title commitment, deed chain, or county clerk records",
+      "blocking": true
+    },
+    {
+      "unknown_id": "utility_territory_confirmation",
+      "question": "Which utility has confirmed service territory at the parcel edge?",
+      "why_it_matters": "Utility territory affects service path, cost, and energy-use-case viability.",
+      "recommended_next_source": "Official utility territory map or utility confirmation",
+      "blocking": true
+    },
+    {
+      "unknown_id": "parcel_level_zoning_or_local_review_path",
+      "question": "What local planning or review path applies to the intended use case?",
+      "why_it_matters": "Planning constraints could materially change development or energy conclusions.",
+      "recommended_next_source": "County planning department or parcel-specific zoning map",
+      "blocking": true
+    }
+  ],
+  "next_actions": [
+    {
+      "priority": 1,
+      "action": "Confirm recorded legal access before underwriting any site plan.",
+      "reason": "Access is the clearest current blocking risk."
+    },
+    {
+      "priority": 2,
+      "action": "Verify utility territory and ask for parcel-edge service guidance.",
+      "reason": "Current utility and transmission conclusions are only directional."
+    },
+    {
+      "priority": 3,
+      "action": "Confirm local planning treatment for the intended use case.",
+      "reason": "Planning visibility is weaker than parcel identity and environmental screening."
+    }
+  ],
+  "citations": [
+    {
+      "citation_id": "c_listing",
+      "source_id": "listing_landwatch_west_tx_80ac",
+      "source_name": "LandWatch example listing",
+      "source_category": "listing_platform",
+      "interface_type": "web_only",
+      "url": "https://landwatch.example/texas/hudspeth-county/property/80-acres-near-sierra-blanca",
+      "retrieved_at": "2026-04-16T10:12:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 4,
+      "content_hash": "sha256:listing-example-001",
+      "notes": "Illustrative listing metadata source."
+    },
+    {
+      "citation_id": "c_county_parcel",
+      "source_id": "county_tx_hudspeth_parcel_gis",
+      "source_name": "Hudspeth County parcel GIS",
+      "source_category": "county",
+      "interface_type": "gis_service",
+      "url": "https://hudspeth.example.gov/arcgis/rest/services/parcels/FeatureServer/0",
+      "retrieved_at": "2026-04-16T10:35:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:parcel-example-001",
+      "notes": "Illustrative county parcel source."
+    },
+    {
+      "citation_id": "c_county_boundary",
+      "source_id": "county_tx_hudspeth_boundary",
+      "source_name": "Hudspeth County boundary reference",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "url": "https://hudspeth.example.gov/maps/county-boundary",
+      "retrieved_at": "2026-04-16T10:38:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:boundary-example-001",
+      "notes": null
+    },
+    {
+      "citation_id": "c_county_plan",
+      "source_id": "county_tx_hudspeth_planning",
+      "source_name": "Hudspeth County planning page",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "url": "https://hudspeth.example.gov/planning-and-development",
+      "retrieved_at": "2026-04-16T10:45:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:planning-example-001",
+      "notes": "Planning guidance is illustrative and not parcel-specific zoning proof."
+    },
+    {
+      "citation_id": "c_county_tax",
+      "source_id": "county_tx_hudspeth_tax_roll",
+      "source_name": "Hudspeth County tax roll search",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "url": "https://hudspeth.example.gov/tax-roll/search",
+      "retrieved_at": "2026-04-16T10:50:00Z",
+      "published_or_effective_at": "2025-10-01",
+      "authority_rank": 1,
+      "content_hash": "sha256:tax-example-001",
+      "notes": "Illustrative tax-roll context only."
+    },
+    {
+      "citation_id": "c_fema_flood",
+      "source_id": "federal_fema_nfhl",
+      "source_name": "FEMA National Flood Hazard Layer",
+      "source_category": "federal",
+      "interface_type": "formal_api",
+      "url": "https://msc.fema.gov/portal/search",
+      "retrieved_at": "2026-04-16T11:00:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:fema-example-001",
+      "notes": null
+    },
+    {
+      "citation_id": "c_wetlands",
+      "source_id": "federal_usfws_wetlands",
+      "source_name": "USFWS wetlands mapper",
+      "source_category": "federal",
+      "interface_type": "web_only",
+      "url": "https://wetlands.example.gov/mapper",
+      "retrieved_at": "2026-04-16T11:05:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:wetlands-example-001",
+      "notes": "Illustrative wetlands screening source."
+    },
+    {
+      "citation_id": "c_usgs_elev",
+      "source_id": "federal_usgs_elevation",
+      "source_name": "USGS elevation context",
+      "source_category": "federal",
+      "interface_type": "downloadable_dataset",
+      "url": "https://usgs.example.gov/elevation",
+      "retrieved_at": "2026-04-16T11:08:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:elev-example-001",
+      "notes": null
+    },
+    {
+      "citation_id": "c_usgs_slope",
+      "source_id": "federal_usgs_slope",
+      "source_name": "USGS terrain derivative",
+      "source_category": "federal",
+      "interface_type": "downloadable_dataset",
+      "url": "https://usgs.example.gov/terrain-derivatives",
+      "retrieved_at": "2026-04-16T11:10:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:slope-example-001",
+      "notes": null
+    },
+    {
+      "citation_id": "c_fcc_broadband",
+      "source_id": "federal_fcc_broadband",
+      "source_name": "FCC broadband map",
+      "source_category": "federal",
+      "interface_type": "formal_api",
+      "url": "https://broadbandmap.fcc.gov/",
+      "retrieved_at": "2026-04-16T11:12:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 1,
+      "content_hash": "sha256:fcc-example-001",
+      "notes": null
+    },
+    {
+      "citation_id": "c_txdot_road",
+      "source_id": "state_tx_txdot_roads",
+      "source_name": "Texas road network context",
+      "source_category": "state",
+      "interface_type": "downloadable_dataset",
+      "url": "https://txdot.example.gov/open-data/roads",
+      "retrieved_at": "2026-04-16T11:20:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 2,
+      "content_hash": "sha256:road-example-001",
+      "notes": "Illustrative regional road source."
+    },
+    {
+      "citation_id": "c_transmission",
+      "source_id": "market_tx_transmission_viewer",
+      "source_name": "Regional transmission context viewer",
+      "source_category": "infrastructure_utility_market",
+      "interface_type": "gis_service",
+      "url": "https://grid.example.com/arcgis/rest/services/transmission/MapServer",
+      "retrieved_at": "2026-04-16T11:28:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 3,
+      "content_hash": "sha256:tx-grid-example-001",
+      "notes": "Directional infrastructure source only."
+    },
+    {
+      "citation_id": "c_listing_comp_1",
+      "source_id": "listing_landwatch_comp_desert_100ac",
+      "source_name": "Nearby acreage listing context",
+      "source_category": "listing_platform",
+      "interface_type": "web_only",
+      "url": "https://landwatch.example/texas/hudspeth-county/property/100-acre-desert-tract",
+      "retrieved_at": "2026-04-16T11:35:00Z",
+      "published_or_effective_at": null,
+      "authority_rank": 4,
+      "content_hash": "sha256:listing-comp-example-001",
+      "notes": "Illustrative nearby listing, not a closed sale comp."
+    }
+  ],
+  "scores": {
+    "overall_confidence": 0.63,
+    "overall_completeness": 0.57,
+    "section_confidence": {
+      "identity": 0.84,
+      "planning": 0.35,
+      "environmental": 0.69,
+      "water_and_agriculture": 0.37,
+      "infrastructure": 0.46,
+      "market": 0.47,
+      "economics": 0.29
+    },
+    "section_completeness": {
+      "identity": 0.88,
+      "planning": 0.32,
+      "environmental": 0.76,
+      "water_and_agriculture": 0.48,
+      "infrastructure": 0.43,
+      "market": 0.51,
+      "economics": 0.24
+    },
+    "coverage_tier": "partial",
+    "score_notes": [
+      "Parcel identity is stronger than local planning and utility visibility in this example.",
+      "This fixture intentionally demonstrates separate confidence and completeness scoring."
+    ]
+  }
+}

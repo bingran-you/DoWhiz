@@ -1,0 +1,31 @@
+{
+  "source_id": "county_tx_hudspeth_parcel_gis",
+  "name": "Hudspeth County Parcel GIS",
+  "category": "county",
+  "jurisdiction_level": "county",
+  "geography_scope": {
+    "national": false,
+    "state_fips": "48",
+    "county_fips": "48229",
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "Illustrative county-scoped parcel geometry source."
+  },
+  "interface_type": "gis_service",
+  "capabilities": [
+    "parcel_lookup_by_apn",
+    "parcel_lookup_by_address",
+    "parcel_geometry",
+    "owner_name",
+    "site_address",
+    "tax_roll"
+  ],
+  "base_url": "https://hudspeth.example.gov/arcgis/rest/services/parcels/FeatureServer/0",
+  "priority": 100,
+  "authority_rank": 1,
+  "ttl_hours": 168,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T17:25:00Z",
+  "notes": "Example source descriptor for county parcel identity and geometry coverage."
+}

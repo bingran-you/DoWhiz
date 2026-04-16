@@ -1,0 +1,2053 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/alice_land_research.schema.json",
+  "title": "Alice Land Research Object",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "object_id",
+    "report_type",
+    "created_at",
+    "request_context",
+    "subject",
+    "listing",
+    "source_urls",
+    "jurisdiction",
+    "parcel_identity",
+    "planning_and_land_use",
+    "environmental_constraints",
+    "water_and_agriculture",
+    "infrastructure_and_utilities",
+    "market_signals",
+    "use_case_modules",
+    "directional_economics",
+    "risks",
+    "unknowns",
+    "next_actions",
+    "citations",
+    "scores"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.land_research.v1"
+    },
+    "object_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "report_type": {
+      "$ref": "#/$defs/report_type"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "request_context": {
+      "$ref": "#/$defs/request_context"
+    },
+    "subject": {
+      "$ref": "#/$defs/subject_context"
+    },
+    "listing": {
+      "$ref": "#/$defs/listing_metadata"
+    },
+    "source_urls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_url"
+      }
+    },
+    "jurisdiction": {
+      "$ref": "#/$defs/jurisdiction"
+    },
+    "parcel_identity": {
+      "$ref": "#/$defs/parcel_identity"
+    },
+    "planning_and_land_use": {
+      "$ref": "#/$defs/planning_and_land_use"
+    },
+    "environmental_constraints": {
+      "$ref": "#/$defs/environmental_constraints"
+    },
+    "water_and_agriculture": {
+      "$ref": "#/$defs/water_and_agriculture"
+    },
+    "infrastructure_and_utilities": {
+      "$ref": "#/$defs/infrastructure_and_utilities"
+    },
+    "market_signals": {
+      "$ref": "#/$defs/market_signals"
+    },
+    "use_case_modules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/use_case_module"
+      }
+    },
+    "directional_economics": {
+      "$ref": "#/$defs/directional_economics"
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/risk"
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unknown"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/next_action"
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/citation"
+      }
+    },
+    "scores": {
+      "$ref": "#/$defs/scores"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "research_unit_type": {
+                "const": "single_parcel"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "parcel_count": {
+                "const": 1
+              }
+            }
+          },
+          "parcel_identity": {
+            "type": "object",
+            "properties": {
+              "parcels": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "research_unit_type": {
+                "const": "parcel_group"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject": {
+            "type": "object",
+            "properties": {
+              "parcel_count": {
+                "type": "integer",
+                "minimum": 2
+              }
+            }
+          },
+          "parcel_identity": {
+            "type": "object",
+            "properties": {
+              "parcels": {
+                "type": "array",
+                "minItems": 2
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "bounded_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nullable_string": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "uuid_string": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "date_like": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date"
+        },
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generic_value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "citation_id_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "email",
+        "slack",
+        "discord",
+        "sms",
+        "telegram",
+        "whatsapp",
+        "google_docs",
+        "google_sheets",
+        "google_slides",
+        "bluebubbles",
+        "notion",
+        "wechat",
+        "wechat_mp",
+        "lark",
+        "zoom"
+      ]
+    },
+    "request_mode": {
+      "type": "string",
+      "enum": [
+        "recommendation",
+        "deep_research",
+        "batch_compare",
+        "follow_up"
+      ]
+    },
+    "high_level_use_case": {
+      "type": "string",
+      "enum": [
+        "energy",
+        "agriculture",
+        "residential_light_development",
+        "industrial_storage_commercial",
+        "recreational_rural_hold"
+      ]
+    },
+    "coverage_tier": {
+      "type": "string",
+      "enum": [
+        "full",
+        "partial",
+        "minimal"
+      ]
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "recommendation_candidate",
+        "deep_research",
+        "batch_compare_item"
+      ]
+    },
+    "research_unit_type": {
+      "type": "string",
+      "enum": [
+        "single_parcel",
+        "parcel_group",
+        "unresolved_candidate_set"
+      ]
+    },
+    "resolution_status": {
+      "type": "string",
+      "enum": [
+        "resolved",
+        "partially_resolved",
+        "unresolved"
+      ]
+    },
+    "listing_platform": {
+      "type": "string",
+      "enum": [
+        "redfin",
+        "zillow",
+        "landwatch",
+        "land_com",
+        "loopnet",
+        "broker_site",
+        "county_listing",
+        "unknown"
+      ]
+    },
+    "source_category": {
+      "type": "string",
+      "enum": [
+        "federal",
+        "state",
+        "county",
+        "city_local",
+        "listing_platform",
+        "infrastructure_utility_market"
+      ]
+    },
+    "interface_type": {
+      "type": "string",
+      "enum": [
+        "formal_api",
+        "gis_service",
+        "downloadable_dataset",
+        "web_only"
+      ]
+    },
+    "evidence_status": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "estimated",
+        "conflicting",
+        "missing",
+        "not_applicable"
+      ]
+    },
+    "risk_severity": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "risk_category": {
+      "type": "string",
+      "enum": [
+        "zoning",
+        "environmental",
+        "utilities",
+        "market",
+        "identity",
+        "legal_unknown",
+        "water",
+        "infrastructure",
+        "access"
+      ]
+    },
+    "fit_assessment": {
+      "type": "string",
+      "enum": [
+        "favorable",
+        "mixed",
+        "weak",
+        "not_applicable",
+        "unknown"
+      ]
+    },
+    "economics_status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "limited",
+        "not_enough_data"
+      ]
+    },
+    "assumption_source": {
+      "type": "string",
+      "enum": [
+        "user_assumption",
+        "market_proxy",
+        "public_record",
+        "listing_source",
+        "derived_inference"
+      ]
+    },
+    "listing_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "pending",
+        "sold",
+        "off_market",
+        "unknown"
+      ]
+    },
+    "coordinates_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    },
+    "address_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "full_address",
+        "country_code"
+      ],
+      "properties": {
+        "full_address": {
+          "type": "string",
+          "minLength": 1
+        },
+        "street_line1": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "street_line2": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "city": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "county_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "state_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "postal_code": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "country_code": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        }
+      }
+    },
+    "evidence_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "status",
+        "confidence",
+        "citation_ids",
+        "as_of",
+        "notes"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/generic_value"
+        },
+        "status": {
+          "$ref": "#/$defs/evidence_status"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "as_of": {
+          "$ref": "#/$defs/date_like"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "address_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "status",
+        "confidence",
+        "citation_ids",
+        "as_of",
+        "notes"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/address_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/evidence_status"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "as_of": {
+          "$ref": "#/$defs/date_like"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "coordinates_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "status",
+        "confidence",
+        "citation_ids",
+        "as_of",
+        "notes"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coordinates_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/evidence_status"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "as_of": {
+          "$ref": "#/$defs/date_like"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "platform_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "status",
+        "confidence",
+        "citation_ids",
+        "as_of",
+        "notes"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/listing_platform"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/evidence_status"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "as_of": {
+          "$ref": "#/$defs/date_like"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "source_url": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "url",
+        "source_id"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "state_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "fips"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fips": {
+          "type": "string",
+          "pattern": "^[0-9]{2}$"
+        }
+      }
+    },
+    "county_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "fips"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fips": {
+          "type": "string",
+          "pattern": "^[0-9]{5}$"
+        }
+      }
+    },
+    "geography_constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "nationwide",
+            "state",
+            "county",
+            "region",
+            "city",
+            "coordinates_radius"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "county_fips": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{5}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "county_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "city_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "center_coordinates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coordinates_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "radius_miles": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "request_filters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "acreage_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "acreage_max": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "min_price_per_acre": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_price_per_acre": {
+          "type": "number",
+          "minimum": 0
+        },
+        "county_fips": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{5}$"
+          },
+          "uniqueItems": true
+        },
+        "county_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "state_codes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "uniqueItems": true
+        },
+        "exclude_major_floodplain": {
+          "type": "boolean"
+        },
+        "prefer_transmission_proximity": {
+          "type": "boolean"
+        },
+        "require_paved_access": {
+          "type": "boolean"
+        },
+        "require_legal_access": {
+          "type": "boolean"
+        },
+        "desired_coverage_tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/coverage_tier"
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "request_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD"
+          ]
+        },
+        "min_purchase_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_purchase_price": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_price_per_acre_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_price_per_acre_max": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "request_hold_period": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_strategy": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "flip",
+            "develop",
+            "lease",
+            "farm",
+            "conservation",
+            "mixed",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "request_return_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preferred_exit_strategies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "hold",
+              "flip",
+              "develop",
+              "ground_lease",
+              "farm",
+              "lease_to_operator",
+              "sell_entitled",
+              "conservation_sale",
+              "unknown"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "min_target_multiple": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_payback_years": {
+          "type": "number",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "request_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_geographies",
+        "filters",
+        "budget",
+        "hold_period",
+        "return_preferences"
+      ],
+      "properties": {
+        "target_geographies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/geography_constraint"
+          }
+        },
+        "filters": {
+          "$ref": "#/$defs/request_filters"
+        },
+        "budget": {
+          "$ref": "#/$defs/request_budget"
+        },
+        "hold_period": {
+          "$ref": "#/$defs/request_hold_period"
+        },
+        "return_preferences": {
+          "$ref": "#/$defs/request_return_preferences"
+        }
+      }
+    },
+    "subject_input_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_kind",
+        "raw_value"
+      ],
+      "properties": {
+        "input_kind": {
+          "type": "string",
+          "enum": [
+            "listing_url",
+            "apn",
+            "address",
+            "coordinates",
+            "batch_item",
+            "subject_ref"
+          ]
+        },
+        "raw_value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "signal_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "status",
+        "confidence",
+        "citation_ids",
+        "as_of",
+        "notes"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/evidence_status"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "as_of": {
+          "$ref": "#/$defs/date_like"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "conflict_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_name",
+        "description",
+        "citation_ids"
+      ],
+      "properties": {
+        "field_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        }
+      }
+    },
+    "nearby_listing_context_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "url",
+        "asking_price",
+        "acreage",
+        "citation_ids",
+        "notes"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "asking_price": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "acreage": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "parcel_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apn",
+        "county_parcel_id",
+        "assessor_site_address",
+        "assessor_acreage",
+        "geometry_source_id",
+        "geometry_confidence",
+        "owner_name_public",
+        "tax_status_summary"
+      ],
+      "properties": {
+        "apn": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "county_parcel_id": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "assessor_site_address": {
+          "$ref": "#/$defs/address_field"
+        },
+        "assessor_acreage": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "geometry_source_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "geometry_confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "owner_name_public": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "tax_status_summary": {
+          "$ref": "#/$defs/evidence_field"
+        }
+      }
+    },
+    "use_case_module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "module_id",
+        "module_label",
+        "fit_assessment",
+        "confidence",
+        "blocking_flags",
+        "supporting_signals",
+        "key_unknowns",
+        "economics_inputs_required",
+        "summary",
+        "citation_ids"
+      ],
+      "properties": {
+        "module_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "module_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fit_assessment": {
+          "$ref": "#/$defs/fit_assessment"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "blocking_flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "supporting_signals": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "key_unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "economics_inputs_required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        }
+      }
+    },
+    "economics_assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value",
+        "source"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "#/$defs/assumption_source"
+        }
+      }
+    },
+    "scenario_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_name",
+        "description",
+        "key_inputs",
+        "notes"
+      ],
+      "properties": {
+        "scenario_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "risk_id",
+        "label",
+        "severity",
+        "category",
+        "description",
+        "impact",
+        "mitigation_or_next_check",
+        "blocking",
+        "citation_ids"
+      ],
+      "properties": {
+        "risk_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "$ref": "#/$defs/risk_severity"
+        },
+        "category": {
+          "$ref": "#/$defs/risk_category"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mitigation_or_next_check": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/citation_id_array"
+        }
+      }
+    },
+    "unknown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknown_id",
+        "question",
+        "why_it_matters",
+        "recommended_next_source",
+        "blocking"
+      ],
+      "properties": {
+        "unknown_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why_it_matters": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recommended_next_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocking": {
+          "type": "boolean"
+        }
+      }
+    },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priority",
+        "action",
+        "reason"
+      ],
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "citation_id",
+        "source_id",
+        "source_name",
+        "source_category",
+        "interface_type",
+        "url",
+        "retrieved_at",
+        "published_or_effective_at",
+        "authority_rank",
+        "content_hash",
+        "notes"
+      ],
+      "properties": {
+        "citation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_category": {
+          "$ref": "#/$defs/source_category"
+        },
+        "interface_type": {
+          "$ref": "#/$defs/interface_type"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "retrieved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_or_effective_at": {
+          "$ref": "#/$defs/date_like"
+        },
+        "authority_rank": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "content_hash": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "request_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "thread_id",
+        "request_mode",
+        "channel",
+        "user_thesis_summary",
+        "use_case_hypotheses",
+        "user_constraints",
+        "batch_parent_id"
+      ],
+      "properties": {
+        "request_id": {
+          "$ref": "#/$defs/uuid_string"
+        },
+        "thread_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_mode": {
+          "$ref": "#/$defs/request_mode"
+        },
+        "channel": {
+          "$ref": "#/$defs/channel"
+        },
+        "user_thesis_summary": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "use_case_hypotheses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/high_level_use_case"
+          },
+          "uniqueItems": true
+        },
+        "user_constraints": {
+          "$ref": "#/$defs/request_constraints"
+        },
+        "batch_parent_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid_string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "subject_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "research_unit_type",
+        "resolution_status",
+        "primary_subject_label",
+        "raw_inputs",
+        "canonical_address",
+        "coordinates",
+        "parcel_count"
+      ],
+      "properties": {
+        "research_unit_type": {
+          "$ref": "#/$defs/research_unit_type"
+        },
+        "resolution_status": {
+          "$ref": "#/$defs/resolution_status"
+        },
+        "primary_subject_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subject_input_ref"
+          }
+        },
+        "canonical_address": {
+          "$ref": "#/$defs/address_field"
+        },
+        "coordinates": {
+          "$ref": "#/$defs/coordinates_field"
+        },
+        "parcel_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "listing_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "listing_present",
+        "platform",
+        "canonical_url",
+        "listing_id",
+        "status",
+        "asking_price",
+        "listed_acreage",
+        "days_on_market",
+        "listing_agent_name",
+        "listing_brokerage",
+        "listing_text_summary",
+        "listing_snapshot_at"
+      ],
+      "properties": {
+        "listing_present": {
+          "type": "boolean"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform_field"
+        },
+        "canonical_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "listing_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "status": {
+          "$ref": "#/$defs/listing_status"
+        },
+        "asking_price": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "listed_acreage": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "days_on_market": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "listing_agent_name": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "listing_brokerage": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "listing_text_summary": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "listing_snapshot_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "jurisdiction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "county",
+        "city_or_unincorporated",
+        "special_districts",
+        "federal_relevance",
+        "coverage_tier"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/state_ref"
+        },
+        "county": {
+          "$ref": "#/$defs/county_ref"
+        },
+        "city_or_unincorporated": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "special_districts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "federal_relevance": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "coverage_tier": {
+          "$ref": "#/$defs/coverage_tier"
+        }
+      }
+    },
+    "parcel_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parcels",
+        "access_point_estimate",
+        "boundary_notes",
+        "identity_conflicts"
+      ],
+      "properties": {
+        "parcels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/parcel_record"
+          }
+        },
+        "access_point_estimate": {
+          "$ref": "#/$defs/coordinates_field"
+        },
+        "boundary_notes": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "identity_conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conflict_item"
+          }
+        }
+      }
+    },
+    "planning_and_land_use": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zoning_designation",
+        "zoning_description",
+        "future_land_use_designation",
+        "plan_area",
+        "overlay_districts",
+        "minimum_lot_size",
+        "setback_signals",
+        "subdivision_signals",
+        "permitted_use_signals",
+        "conditional_use_signals",
+        "development_constraints_summary",
+        "interpretation_limits"
+      ],
+      "properties": {
+        "zoning_designation": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "zoning_description": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "future_land_use_designation": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "plan_area": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "overlay_districts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal_item"
+          }
+        },
+        "minimum_lot_size": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "setback_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal_item"
+          }
+        },
+        "subdivision_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal_item"
+          }
+        },
+        "permitted_use_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal_item"
+          }
+        },
+        "conditional_use_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal_item"
+          }
+        },
+        "development_constraints_summary": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "interpretation_limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "environmental_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "flood_zone",
+        "wetlands_signal",
+        "slope_signal",
+        "elevation_signal",
+        "soil_constraints_signal",
+        "fire_risk_signal",
+        "habitat_or_conservation_signal",
+        "superfund_or_contamination_signal",
+        "environmental_summary",
+        "regulatory_notes"
+      ],
+      "properties": {
+        "flood_zone": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "wetlands_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "slope_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "elevation_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "soil_constraints_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "fire_risk_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "habitat_or_conservation_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "superfund_or_contamination_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "environmental_summary": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "regulatory_notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "water_and_agriculture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface_water_proximity",
+        "groundwater_or_well_signal",
+        "irrigation_district_signal",
+        "water_rights_status",
+        "soil_productivity_signal",
+        "cropland_or_pasture_signal",
+        "ag_exemption_signal",
+        "water_and_ag_summary"
+      ],
+      "properties": {
+        "surface_water_proximity": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "groundwater_or_well_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "irrigation_district_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "water_rights_status": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "soil_productivity_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "cropland_or_pasture_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "ag_exemption_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "water_and_ag_summary": {
+          "$ref": "#/$defs/evidence_field"
+        }
+      }
+    },
+    "infrastructure_and_utilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "legal_or_physical_access_signal",
+        "road_frontage_signal",
+        "power_service_signal",
+        "utility_territory_signal",
+        "substation_proximity_signal",
+        "transmission_proximity_signal",
+        "broadband_signal",
+        "water_service_signal",
+        "wastewater_or_septic_signal",
+        "rail_or_highway_logistics_signal",
+        "infrastructure_summary"
+      ],
+      "properties": {
+        "legal_or_physical_access_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "road_frontage_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "power_service_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "utility_territory_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "substation_proximity_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "transmission_proximity_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "broadband_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "water_service_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "wastewater_or_septic_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "rail_or_highway_logistics_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "infrastructure_summary": {
+          "$ref": "#/$defs/evidence_field"
+        }
+      }
+    },
+    "market_signals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ask_price_per_acre",
+        "nearby_listing_context",
+        "county_market_context",
+        "tax_burden_signal",
+        "liquidity_signal",
+        "market_summary"
+      ],
+      "properties": {
+        "ask_price_per_acre": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "nearby_listing_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nearby_listing_context_item"
+          }
+        },
+        "county_market_context": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "tax_burden_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "liquidity_signal": {
+          "$ref": "#/$defs/evidence_field"
+        },
+        "market_summary": {
+          "$ref": "#/$defs/evidence_field"
+        }
+      }
+    },
+    "directional_economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "basis",
+        "assumptions",
+        "carry_costs",
+        "improvement_capex_proxies",
+        "revenue_or_exit_cases",
+        "scenario_summary",
+        "limitations"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/economics_status"
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/economics_assumption"
+          }
+        },
+        "carry_costs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/evidence_field"
+          }
+        },
+        "improvement_capex_proxies": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/evidence_field"
+          }
+        },
+        "revenue_or_exit_cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scenario_case"
+          }
+        },
+        "scenario_summary": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "section_score_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "planning",
+        "environmental",
+        "water_and_agriculture",
+        "infrastructure",
+        "market",
+        "economics"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "planning": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "environmental": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "water_and_agriculture": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "infrastructure": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "market": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "economics": {
+          "$ref": "#/$defs/bounded_score"
+        }
+      }
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_confidence",
+        "overall_completeness",
+        "section_confidence",
+        "section_completeness",
+        "coverage_tier",
+        "score_notes"
+      ],
+      "properties": {
+        "overall_confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "overall_completeness": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "section_confidence": {
+          "$ref": "#/$defs/section_score_map"
+        },
+        "section_completeness": {
+          "$ref": "#/$defs/section_score_map"
+        },
+        "coverage_tier": {
+          "$ref": "#/$defs/coverage_tier"
+        },
+        "score_notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}
