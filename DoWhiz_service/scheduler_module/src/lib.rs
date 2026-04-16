@@ -30,6 +30,7 @@ pub mod zoom_rtms;
 
 pub mod account_store;
 pub mod blob_store;
+pub mod tpm_cron;
 pub mod index_store;
 pub mod memory_diff;
 pub mod memory_queue;
