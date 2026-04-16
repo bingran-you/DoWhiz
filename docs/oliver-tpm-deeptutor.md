@@ -323,7 +323,7 @@ struct DeveloperProfile {
 ### Core Task Queue
 - ✅ MongoDB collection + CRUD operations (`dev_task_store.rs`)
 - ✅ TPM CLI commands (`tpm_cli.rs`): setup-board, create-task, list-tasks, sync-tasks
-- ✅ Cron job initialization (`setup-tpm-cron` with synthetic trigger)
+- ✅ Cron job initialization (via `setup_tpm_cron` function with synthetic trigger)
 - Manual task creation via Oliver
 - Assignment notifications
 
@@ -358,7 +358,6 @@ Task board commands for managing DevTasks across MongoDB and Notion:
 - ✅ `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
 - ✅ `list-tasks` — List tasks from MongoDB with filters
 - ✅ `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
-- ✅ `setup-tpm-cron` — Set up daily TPM sync cron job for a user (direct MongoDB upsert)
 
 #### `setup-board` — Create Notion database for an organization
 
@@ -429,32 +428,37 @@ tpm_cli sync-tasks \
   --workspace-id <WORKSPACE_ID>
 ```
 
-#### `setup-tpm-cron` — Set up daily TPM sync cron job for a user
+#### `setup_tpm_cron` — Set up daily TPM sync cron job for a user
 
-```bash
-tpm_cli setup-tpm-cron \
-  --user-id <USER_ID> \
-  --organization deeptutor \
-  --cron "0 0 9 * * MON-FRI"
+Called directly via `POST /api/tpm/setup-cron` endpoint.
+
+```rust
+// scheduler_module/src/tpm_cron.rs
+pub fn setup_tpm_cron(
+    account_store: &AccountStore,
+    user_id: Uuid,
+    organization: &str,
+    cron_expr: Option<&str>,  // Default: "0 0 9 * * MON-FRI"
+) -> Result<SetupTpmCronResult, TpmCronError>
 ```
 
-Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This directly upserts a `RunTask` into MongoDB, bypassing the email pipeline.
+Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This directly upserts a `RunTask` into the account's `tasks.db`, bypassing the email pipeline.
 
-**Arguments:**
-- `--user-id` (required) — User ID (must belong to the organization)
-- `--organization` (required) — Organization name
-- `--cron` (optional) — Cron expression (default: `"0 0 9 * * MON-FRI"` = 9 AM UTC weekdays)
+**Parameters:**
+- `user_id` (required) — User's account UUID (must belong to the organization)
+- `organization` (required) — Organization name
+- `cron_expr` (optional) — Cron expression (default: `"0 0 9 * * MON-FRI"` = 9 AM UTC weekdays)
 
 **Flow:**
 1. Validate user belongs to organization via `AccountStore`
 2. Derive user email from verified identifiers in their account
 3. Create workspace with synthetic `postmark_payload.json` (subject: "TPM Sync")
 4. Build `RunTask` with workspace pointing to TPM mode
-5. Upsert into MongoDB `tasks` collection with cron schedule
+5. Upsert into account-level `tasks.db` with cron schedule
 
 **Why synthetic trigger?** When cron fires, Codex reads `postmark_payload.json` and sees subject "TPM Sync", triggering the daily sync workflow per the TPM prompt instructions.
 
-**Why direct upsert into MongoDB?** There is no designated sender or receiver for this cron job, no inbound webhook.
+**Why direct upsert?** There is no designated sender or receiver for this cron job, no inbound webhook.
 
 **Cron format:** 6-field expression (second minute hour day-of-month month day-of-week)
 - `"0 0 9 * * MON-FRI"` — 9:00 AM UTC, Monday through Friday
@@ -488,7 +492,8 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
 | **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
-| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks, setup-tpm-cron) |
+| **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks) |
+| **TPM Cron** | `scheduler_module/src/tpm_cron.rs` | **NEW** - `setup_tpm_cron` function for cron job setup |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
 | Notion API Client | `scheduler_module/src/notion_browser/api_client.rs` | `create_database`, `create_database_page`, `query_database` |
 | Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
@@ -504,19 +509,19 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 **Completed:**
 - ✅ Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
 - ✅ DevTaskStore (`dev_task_store.rs`) — MongoDB CRUD for DevTask with multi-tenant organization scoping
-- ✅ TPM CLI (`tpm_cli.rs`) — All task board commands implemented:
+- ✅ TPM CLI (`tpm_cli.rs`) — Task board commands implemented:
   - `setup-board` — Create Notion database with TPM schema
   - `create-task` — Create task in MongoDB + Notion
   - `list-tasks` — Query tasks with status/assignee filters
   - `sync-tasks` — Pull Notion updates back to MongoDB
-  - `setup-tpm-cron` — Set up daily cron job with synthetic trigger
+- ✅ TPM Cron module (`tpm_cron.rs`) — `setup_tpm_cron` function for daily cron job setup
 - ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
 - ✅ Cron job infrastructure — Uses proper Scheduler API (`add_cron_task`) with account-level `tasks.db` storage; synthetic `postmark_payload.json` persists across cron runs (workspace is reused, not recreated)
-- ✅ Automatic cron setup — Oliver runs `setup-tpm-cron --user-id {account_id}` after `setup-board` (account_id injected as template variable from UserIdentities)
+- ✅ Automatic cron setup — `setup_tpm_cron()` function called via `POST /api/tpm/setup-cron` when user joins organization
 - ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
 - ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
 - ✅ Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
-- ✅ TPM cron trigger endpoint (`POST /api/tpm/setup-cron`) — Calls `tpm_cli setup-tpm-cron` when first member joins org
+- ✅ TPM cron trigger endpoint (`POST /api/tpm/setup-cron`) — Calls `setup_tpm_cron()` function directly when first member joins org
 
 **Remaining:**
 - Organization creation UI (frontend)
@@ -550,7 +555,7 @@ User joins an organization via the DoWhiz dashboard (`website/public/auth/index.
 6. GET /auth/organization/:name/member-count
                 ↓
 7. If member_count === 1:
-   → POST /api/tpm/setup-cron { organization_name } to trigger tpm_cli setup-tpm-cron
+   → POST /api/tpm/setup-cron { organization_name } to trigger setup_tpm_cron()
    → Show "TPM mode will be set up" message
                 ↓
 8. UI updates to show current organization
@@ -578,10 +583,10 @@ User sends first TPM request after connecting organization → uses **user's Not
 4. `tpm_cli` reads env var, creates database in user's Notion
 5. User shares database with team + Oliver (manual step via Notion UI)
 
-### Cron Job (setup-tpm-cron)
+### Cron Job (setup_tpm_cron)
 Cron stores **setup user's account_id** → uses **their Notion token** for scheduled syncs.
 
-1. User runs `setup-tpm-cron --user-id <UUID>` 
+1. User joins organization → `POST /api/tpm/setup-cron` calls `setup_tpm_cron(account_id, organization)`
 2. Task stored in account-level `tasks.db` with `account_id: <UUID>` (the setup user)
 3. Cron fires → `resolve_account_for_run_task` returns stored `account_id` via `scheduler.add_cron_task(&cron_expr, RunTaskTask)`
 4. `load_notion_access_token_for_account(account_id)` loads setup user's token

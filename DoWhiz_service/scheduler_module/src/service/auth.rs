@@ -1714,67 +1714,28 @@ pub async fn setup_tpm_cron(
         );
     }
 
-    // Call tpm_cli setup-tpm-cron
-    let account_id = account.id.to_string();
-    let org_name_for_cli = org_name.clone();
+    // Call setup_tpm_cron directly
+    let account_id = account.id;
+    let org_name_for_cron = org_name.clone();
+    let store_clone = state.account_store.clone();
 
-    info!(
-        "setup_tpm_cron: calling tpm_cli setup-tpm-cron --user-id {} --organization {}",
-        account_id, org_name_for_cli
-    );
-
-    let cli_result = task::spawn_blocking(move || {
-        use std::process::Command;
-
-        let output = Command::new("tpm_cli")
-            .args([
-                "setup-tpm-cron",
-                "--user-id",
-                &account_id,
-                "--organization",
-                &org_name_for_cli,
-            ])
-            .output();
-
-        match output {
-            Ok(out) => {
-                if out.status.success() {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    Ok(stdout.to_string())
-                } else {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    Err(format!("tpm_cli failed: {}", stderr))
-                }
-            }
-            Err(e) => Err(format!("Failed to execute tpm_cli: {}", e)),
-        }
+    let cron_result = task::spawn_blocking(move || {
+        crate::tpm_cron::setup_tpm_cron(&store_clone, account_id, &org_name_for_cron, None)
     })
     .await
     .map_err(|e| {
-        error!("spawn_blocking panicked during tpm_cli: {}", e);
+        error!("spawn_blocking panicked during setup_tpm_cron: {}", e);
         json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
     });
 
-    match cli_result {
-        Ok(Ok(output)) => {
-            info!("setup_tpm_cron: tpm_cli succeeded, output: {}", output);
-            // Try to parse the JSON output from tpm_cli
-            match serde_json::from_str::<serde_json::Value>(&output) {
-                Ok(json_output) => (StatusCode::OK, Json(json_output)).into_response(),
-                Err(_) => (
-                    StatusCode::OK,
-                    Json(serde_json::json!({
-                        "success": true,
-                        "message": "TPM cron job set up successfully",
-                        "organization": org_name,
-                    })),
-                )
-                    .into_response(),
-            }
+    match cron_result {
+        Ok(Ok(result)) => {
+            info!("setup_tpm_cron: succeeded, task_id={}", result.task_id);
+            (StatusCode::OK, Json(result)).into_response()
         }
         Ok(Err(e)) => {
-            error!("setup_tpm_cron: tpm_cli failed: {}", e);
-            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e)
+            error!("setup_tpm_cron: failed: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
         }
         Err(response) => response,
     }
