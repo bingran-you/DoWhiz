@@ -7,6 +7,8 @@ description: One-off investment research for a single U.S. stock or single U.S. 
 
 This is the first-version stock investment research workflow for one U.S. public-market asset.
 
+Technical compatibility note: the skill id remains `us-equity-daily-monitor` in this round to avoid broader rename churn. A path or id cleanup can happen later as a dedicated follow-up.
+
 Use it for one-off analysis of:
 
 - one U.S. stock
@@ -122,9 +124,13 @@ Use only these labels:
 
 If signals are mixed, `Wait` is often the honest answer.
 
-Do not mix these labels with `Strong Buy`, `Hold`, `Trim`, `No action`, `Strong Sell`, or any second action taxonomy.
+The formal `## Rating` section must contain exactly one standalone label: `Buy`, `Wait`, or `Sell`.
 
-Do not introduce a second formal confidence scale by default. Express uncertainty in the summary, why-now explanation, and risks instead.
+Never reintroduce legacy formal labels such as `Strong Buy`, `Hold`, `Trim`, `No action`, or `Strong Sell`.
+
+Do not add a second formal action taxonomy such as `Action`, `Final action`, `Trade plan`, or similar.
+
+Do not output a formal `Confidence` label or section by default unless a future version explicitly adds it back. Express uncertainty in the summary, why-now explanation, and risks instead.
 
 ## Quick analysis versus deep research
 
@@ -135,6 +141,8 @@ Do not introduce a second formal confidence scale by default. Express uncertaint
 ## Required output format
 
 Always use this section order:
+
+Use these headers as written. Do not add formal sections such as `Confidence`, `Action`, or `Final action`.
 
 ## Asset identified
 - `Ticker`: ...

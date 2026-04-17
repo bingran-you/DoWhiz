@@ -9,7 +9,9 @@
       "expectations": [
         "The answer identifies VRT correctly as a U.S. stock and does not describe it as an ETF.",
         "The answer treats 9:00 AM America/Los_Angeles on a normal trading day as an intraday context and does not describe the current session as a completed daily close.",
-        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer keeps facts separate from interpretation inside the summary or surrounding explanation.",
         "The answer names or cites the main public sources behind the key claims.",
         "The answer includes a research-only disclaimer and does not imply trade execution or personalized regulated advice."
@@ -23,7 +25,9 @@
       "expectations": [
         "The answer identifies XLU correctly as an ETF rather than as an operating company.",
         "The answer discusses ETF-relevant context such as fund objective, exposure, concentration, sector or rate sensitivity, or related public fund information when relevant.",
-        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer does not invent holdings weights, exposures, or other unavailable fund details.",
         "The answer stays within the public-information research boundary and includes a disclaimer."
       ]
@@ -36,6 +40,9 @@
       "expectations": [
         "The answer identifies the conflict between bullish technicals and negative or risky event context.",
         "The answer selects Wait as the honest rating for the mixed-signal setup instead of forcing a bullish or bearish call.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+        "The answer does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer explains why the current evidence is not clean enough for Buy or Sell.",
         "The answer includes explicit risks and thesis-break conditions.",
         "The answer avoids hype, certainty theater, and any implication of auto-execution."
@@ -50,7 +57,9 @@
         "The answer distinguishes Form 4 insider activity from Schedule 13D or 13G major-holder disclosures and from Form 13F institutional holdings.",
         "The answer explains that Form 13F data is materially lagged and should not be framed as live same-day positioning.",
         "The answer does not turn a single filing into the entire thesis without broader context.",
-        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer stays within the public-information boundary and names or cites the relevant sources."
       ]
     },
@@ -63,7 +72,9 @@
         "The answer explicitly states that the market is closed or not in a live regular session.",
         "The answer does not fabricate intraday movement, live volume, or a completed session that did not happen.",
         "The answer still provides useful next-watch items such as catalysts, risks, or key levels where relevant.",
-        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer avoids implying that an order will be placed or that the response is personalized investment advice."
       ]
     },
@@ -73,10 +84,11 @@
       "expected_output": "A deeper but still usable BE research answer that preserves the stable structure, goes beyond a headline recap, and ends with exactly one Buy, Wait, or Sell rating.",
       "files": [],
       "expectations": [
-        "The answer uses the same stable section structure as the quick-analysis cases rather than switching to an unstructured essay.",
+        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
         "The answer goes deeper than a headline summary by synthesizing public facts, interpretation, and current setup.",
         "The answer remains concise enough to be usable rather than turning into a bloated long-form report.",
-        "The answer includes exactly one rating from Buy, Wait, or Sell and does not reintroduce old rating labels.",
+        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
+        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
         "The answer stays evidence-based, non-hyped, and inside the research-only boundary."
       ]
     }
