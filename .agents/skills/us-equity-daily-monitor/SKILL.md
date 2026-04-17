@@ -1,42 +1,81 @@
 ---
 name: us-equity-daily-monitor
-description: Daily monitoring and email-ready trading notes for U.S. stocks and ETFs. Use this skill whenever the user asks to track or watch a ticker, follow BE or INTC or any other U.S. equity, prepare a daily trading rating, explain what changed versus yesterday, summarize public news or filings, review insider or major-holder activity, or analyze price action, support or resistance, moving averages, momentum, volume, sentiment, event impact, key levels, or risk or reward for a trade decision. Also use it for Buy or Hold or Sell style ratings and for Buy or Wait or Trim or Sell action calls. Separate facts from interpretation, use current market data before making market claims, and do not present this as personalized investment advice or autonomous execution.
+description: One-off investment research for a single U.S. stock or single U.S. ETF. Use this skill whenever the user asks to analyze a ticker, do deep research on one stock or ETF, ask whether it is worth buying now, request an investment view, or wants a structured Buy / Wait / Sell answer grounded in public information. Keep the scope to one U.S. stock or one U.S. ETF, use current public sources, separate facts from interpretation, and do not present personalized investment advice, auto-execution, portfolio construction, recurring automation, or dashboard behavior.
 ---
 
-# U.S. Equity Daily Monitor
+# Stock Investment Skill
 
-Use this skill to produce a disciplined daily note for one U.S. equity or ETF.
+This is the first-version stock investment research workflow for one U.S. public-market asset.
 
-This skill is for research, monitoring, and communication quality. It is not a scheduler and it is not an execution engine.
+Use it for one-off analysis of:
+
+- one U.S. stock
+- one U.S. ETF
+
+This skill is for public-information-based research only. It is not a broker, auto-trader, scheduler, dashboard, or delivery system.
 
 ## Core job
 
-Produce one clear daily view that:
+Produce one clear investment research answer that:
 
-- explains what happened
-- explains what matters now
-- translates professional trading logic into plain language
-- states uncertainty honestly
-- gives an action-oriented but non-hyped conclusion
+- identifies the asset correctly
+- explains the current setup in plain language
+- separates facts from interpretation
+- weighs bullish and bearish evidence honestly
+- returns exactly one rating: `Buy`, `Wait`, or `Sell`
+- stays usable for both quick analysis and deeper one-off research
 
-## Boundaries
+## Hard boundaries
 
 - Use only public information.
 - Do not imply access to non-public information, channel checks, or privileged order flow.
-- Do not present yourself as a licensed investment adviser or promise returns.
+- Do not present yourself as a licensed investment adviser or as giving personalized regulated advice.
 - Do not place trades or imply that a trade will be placed automatically.
-- Do not overstate conviction when the signal set is mixed.
+- Do not expand into options, crypto, global equities, portfolio allocation, or multi-asset comparison.
+- Do not invent unavailable price levels, holdings data, filing details, or "changed vs yesterday" baselines.
+- Do not add scheduler, automation, channel-delivery, or dashboard logic to the analysis.
 
 ## Source hierarchy
 
 Prefer sources in this order:
 
-1. Official company releases, SEC filings, exchange notices, and earnings materials
-2. Reliable market data and chart data for price, volume, and trend context
+1. Official company or fund materials, SEC filings, exchange notices, earnings materials, and fund sponsor or index-provider documents
+2. Reliable market data and chart data for price, volume, trend, and session context
 3. Reputable financial news coverage
-4. Consensus analyst or sector commentary as context, not as the thesis by itself
+4. Consensus analyst or sector commentary as context, never as the thesis by itself
 
-If a source is stale, ambiguous, or inaccessible, say so plainly.
+If a source is stale, gated, ambiguous, or inaccessible, say so plainly and reduce conviction.
+
+## Asset identification
+
+Start by confirming:
+
+- ticker
+- issuer or fund name
+- whether it is a stock or ETF
+- whether the user wants a quick analysis or deep research answer
+
+If the prompt is ambiguous or could map to multiple tickers, resolve the ambiguity before making claims.
+
+## Research workflow
+
+Work in this order:
+
+1. Confirm the asset and whether it is a stock or ETF.
+2. Determine market context: pre-market, intraday, post-close, or market-closed day.
+3. Gather current public facts:
+   - latest relevant news, earnings, guidance, contracts, policy, sector, or fund updates
+   - price action, volume, trend, moving averages, momentum, and key levels when available
+   - ownership or insider filings if relevant
+   - for ETFs, objective, major exposures, concentration, sector or factor sensitivity, and rate sensitivity when relevant
+4. Separate facts from interpretation.
+5. Build the case for both sides:
+   - bullish factors
+   - bearish factors
+   - near-term risks and thesis-break conditions
+6. Assign exactly one rating: `Buy`, `Wait`, or `Sell`.
+7. Write the answer in the required structure.
+8. Name or cite the public sources behind the main claims.
 
 ## Interpret filings correctly
 
@@ -51,113 +90,98 @@ When a filing is material but lagged, say both things:
 1. what the filing shows
 2. why it may not reflect today's live positioning
 
+Do not turn one filing into the whole thesis without broader context.
+
 ## Handle time of day correctly
 
-Before writing the note, determine which market context applies:
+Before writing the answer, determine which market context applies:
 
 - **Pre-market**: before the regular session opens. Use the prior close plus pre-market context if available.
 - **Intraday**: during the regular session. Do not describe the current daily candle as a confirmed end-of-day close.
 - **Post-close**: after the regular session ends. You may discuss the completed daily candle and close.
 - **Market closed day**: weekend or holiday. Do not fabricate a live session; give a carry-forward watchlist view instead.
 
-If the user says "9:00 AM America/Los_Angeles", treat that as a market-status check first, not a fixed assumption that the market is still closed.
-
-## Required thinking process
-
-Build the note in this order:
-
-1. Confirm the ticker and company.
-2. Gather current public facts:
-   - latest relevant news
-   - earnings, guidance, policy, contracts, or sector updates
-   - ownership or insider filings if any
-   - current price action and volume context
-3. Separate **facts** from **interpretation**.
-4. Build the technical view:
-   - trend
-   - support and resistance
-   - relative volume
-   - candlestick context
-   - moving averages
-   - momentum
-5. Build the event view:
-   - catalyst
-   - sentiment
-   - event impact
-   - risk or reward asymmetry
-6. Compare with the prior note if one exists.
-7. Assign rating, confidence, and final action.
-8. Write the note in plain language.
+If the user says "9:00 AM America/Los_Angeles", treat that as a market-status check first, not as a fixed assumption that the market is still closed.
 
 ## If prior-day context is missing
 
 Never invent "what changed vs yesterday."
 
-If no prior report, prior close summary, or prior stored note is available, say:
+If the user asks for a yesterday comparison and no reliable prior report, prior close summary, or stored note is available, say:
 
 - that there is no reliable prior-note baseline
-- what changed versus the latest available public facts instead
+- what changed versus the latest accessible public baseline instead
 
-## Rating rubric
+## Rating semantics
 
-Use these labels consistently:
+Use only these labels:
 
-- `Strong Buy`: multiple aligned bullish signals, favorable risk or reward, and no major near-term contradiction
-- `Buy`: positive setup with some risks or less-than-perfect alignment
-- `Hold`: mixed or balanced setup; evidence does not justify a directional call
-- `Sell`: bearish setup or deteriorating thesis, but not a panic scenario
-- `Strong Sell`: strongly negative setup with multiple aligned bearish signals or major thesis break
+- `Buy`: evidence is sufficiently favorable for a constructive stance right now, even if risks remain
+- `Wait`: setup is mixed, incomplete, extended, or not attractive enough for action right now
+- `Sell`: evidence suggests avoiding, reducing, or exiting because the setup or thesis is deteriorating or broken
 
-Do not force a bullish or bearish rating when `Hold` is the honest answer.
+If signals are mixed, `Wait` is often the honest answer.
 
-## Confidence rubric
+Do not mix these labels with `Strong Buy`, `Hold`, `Trim`, `No action`, `Strong Sell`, or any second action taxonomy.
 
-- `High`: several independent signals align and the main uncertainty is modest
-- `Medium`: the thesis is plausible but key signals are mixed or incomplete
-- `Low`: the setup is noisy, event-driven, or too uncertain for conviction
+Do not introduce a second formal confidence scale by default. Express uncertainty in the summary, why-now explanation, and risks instead.
 
-Confidence is about signal quality, not about sounding authoritative.
+## Quick analysis versus deep research
 
-## Output format
+- For a quick request such as "Analyze NVDA", keep each section concise and decision-useful.
+- For a deep-research request such as "Deep research BE", use the same section order but provide broader synthesis across filings, news, price action, and risks.
+- Deep research should go deeper than a headline recap, but it should still stay readable and structured.
 
-When the user wants an email-ready daily note, use this structure:
+## Required output format
 
-**Subject**
+Always use this section order:
 
-`[TICKER] Daily Trading Rating - [DATE]`
+## Asset identified
+- `Ticker`: ...
+- `Name`: ...
+- `Type`: `Stock` or `ETF`
+- `Market context`: `Pre-market`, `Intraday`, `Post-close`, or `Market closed`
+- `Research mode`: `Quick analysis` or `Deep research`
 
-**Body**
+## Summary
+- `Facts`: 2 to 4 sentences on the most relevant current public facts
+- `Interpretation`: 1 to 3 sentences on what those facts mean now
 
-1. `Rating`: one of the five rating labels
-2. `Confidence`: High, Medium, or Low
-3. `One-sentence reason`
-4. `What happened`
-5. `Top 3 bullish factors`
-6. `Top 3 bearish factors`
-7. `Key price levels to watch`
-8. `What changed vs yesterday`
-9. `Risks`
-10. `Final action`: Buy, Wait, Trim, Sell, or No action
-11. `Key sources`
+## Rating
+`Buy` or `Wait` or `Sell`
+
+## Why now
+Explain why the current timing, catalyst path, valuation backdrop, fund-exposure backdrop, or technical setup supports the rating now.
+
+## Bullish factors
+- 2 to 5 concise bullets
+
+## Bearish factors
+- 2 to 5 concise bullets
+
+## Risks
+- 2 to 5 concise bullets, including what could break the thesis or invalidate the rating
+
+## Key levels to watch
+- Include support, resistance, trend, or trigger levels when relevant and supported by accessible market data
+- If levels are not available or not meaningful, say so instead of inventing them
+
+## Sources
+- Name the main public sources used
+- Put official and primary sources first
+
+## Disclaimer
+`Public-information-based research only, not personalized investment advice or trade execution.`
 
 ## Writing style
 
 - Sound precise, calm, and evidence-based.
-- Explain jargon in plain English.
-- Keep the conclusion concise enough for email.
-- Use short sentences for the final recommendation.
-- If there is little new news, say that and still provide a technical update.
+- Explain jargon in plain language.
+- Keep the answer structured and easy to scan.
+- Avoid hype, memes, and certainty theater.
+- For ETFs, do not write as though the fund were an operating company.
+- For stocks, do not let analyst price targets or a single headline dominate the thesis.
 
-## What to avoid
+## Out of scope
 
-- Do not confuse a lagged 13F with same-day live buying.
-- Do not describe an intraday candle as a fully confirmed daily close.
-- Do not let analyst price targets dominate the conclusion.
-- Do not present every insider buy as bullish or every insider sale as bearish without context.
-- Do not hide uncertainty.
-
-## Automation handoff
-
-This skill drafts the analysis and the email-ready content.
-
-Scheduling, recurring execution, and actual email delivery belong to the automation or scheduler layer. If used inside an automated workflow, return content that is ready to send, but do not mix scheduling rules into the analytical conclusion.
+Automation, recurring execution, channel delivery, dashboards, and broker actions belong to other layers. This skill returns the research answer only.

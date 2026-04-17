@@ -3,65 +3,81 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Track BE - Bloom Energy. It is 9:00 AM America/Los_Angeles on a normal U.S. trading day. Use public web sources to prepare today's email-ready trading note. Include Rating, Confidence, one-sentence reason, top 3 bullish factors, top 3 bearish factors, key price levels, what changed vs yesterday, risks, and final action. If the market is already open at that time, treat this as an intraday update rather than a pre-market note.",
-      "expected_output": "A concise, evidence-based BE note that uses current public information, correctly handles 9:00 AM PT market status, and avoids inventing missing prior-day context.",
+      "prompt": "Analyze VRT and tell me if it is worth buying now. It is 9:00 AM America/Los_Angeles on a normal U.S. trading day. Use current public web sources and return the stock investment research format with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer. If the market is already open at that time, treat the price action as intraday rather than a completed close.",
+      "expected_output": "A structured single-stock research answer for VRT that handles 9:00 AM PT market timing correctly, keeps facts separate from interpretation, and ends with exactly one Buy, Wait, or Sell rating.",
       "files": [],
       "expectations": [
-        "The note explicitly handles market timing correctly and does not call a 9:00 AM PT note a pre-market report if the regular session is already open.",
-        "The note separates factual developments from interpretation or judgment.",
-        "The note includes both bullish and bearish factors instead of presenting a one-sided thesis.",
-        "The note includes concrete price levels and explains why they matter.",
-        "The note cites or clearly names the public sources behind the main claims.",
-        "If no prior report is available, the note says the yesterday comparison baseline is missing instead of inventing a change."
+        "The answer identifies VRT correctly as a U.S. stock and does not describe it as an ETF.",
+        "The answer treats 9:00 AM America/Los_Angeles on a normal trading day as an intraday context and does not describe the current session as a completed daily close.",
+        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer keeps facts separate from interpretation inside the summary or surrounding explanation.",
+        "The answer names or cites the main public sources behind the key claims.",
+        "The answer includes a research-only disclaimer and does not imply trade execution or personalized regulated advice."
       ]
     },
     {
       "id": 2,
-      "prompt": "Track INTC - Intel and write a daily rating note for email delivery. Focus on current public news, sector and macro context, recent price action, support or resistance, volume, moving averages, momentum, sentiment, and event impact. Be rigorous but explain the result for a non-expert. If signals are mixed, say so clearly.",
-      "expected_output": "A balanced INTC note that weighs technical and event-driven evidence, communicates uncertainty clearly, and avoids overconfident language.",
+      "prompt": "Give me an investment view on XLU. Keep it concise but evidence-based, use public information only, and return the same stock investment research format with exactly one rating: Buy, Wait, or Sell.",
+      "expected_output": "A structured ETF research answer for XLU that evaluates the fund as an ETF, uses the stable output contract, and does not drift into operating-company analysis.",
       "files": [],
       "expectations": [
-        "The note includes a rating, a confidence label, and a final action.",
-        "The note explicitly acknowledges mixed signals when the evidence does not point in one direction.",
-        "The note includes trend, price action, and event context rather than relying only on news headlines.",
-        "The explanation is plain-language enough for a non-expert reader without dropping the analytical substance.",
-        "The conclusion does not exaggerate certainty or imply guaranteed upside or downside."
+        "The answer identifies XLU correctly as an ETF rather than as an operating company.",
+        "The answer discusses ETF-relevant context such as fund objective, exposure, concentration, sector or rate sensitivity, or related public fund information when relevant.",
+        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer does not invent holdings weights, exposures, or other unavailable fund details.",
+        "The answer stays within the public-information research boundary and includes a disclaimer."
       ]
     },
     {
       "id": 3,
-      "prompt": "Prepare a daily note for a U.S. equity where the user asks you to monitor major shareholder, insider, and institutional buying or selling. Use public filings if relevant. Explain what each filing means in plain English and say which signals are timely versus lagged.",
-      "expected_output": "A note that correctly distinguishes insider activity, large-holder disclosures, and lagged institutional holdings, instead of blending them into one generic ownership signal.",
+      "prompt": "A single U.S. stock has strong recent momentum and bullish price action, but the latest public headlines are negative and event risk is elevated. Produce the stock investment research answer and choose Buy, Wait, or Sell.",
+      "expected_output": "A mixed-signal research answer that acknowledges the conflict between technical strength and event risk, uses the stable structure, and chooses Wait rather than forcing a directional action.",
       "files": [],
       "expectations": [
-        "The note distinguishes Form 4 insider activity from Schedule 13D or 13G large-holder filings and from Form 13F institutional holdings.",
-        "The note explains that some ownership disclosures can be materially lagged and should not be presented as today's live positioning.",
-        "The note avoids turning any single filing into a directional conclusion without context.",
-        "The note translates the filing categories into plain language for a non-expert reader."
+        "The answer identifies the conflict between bullish technicals and negative or risky event context.",
+        "The answer selects Wait as the honest rating for the mixed-signal setup instead of forcing a bullish or bearish call.",
+        "The answer explains why the current evidence is not clean enough for Buy or Sell.",
+        "The answer includes explicit risks and thesis-break conditions.",
+        "The answer avoids hype, certainty theater, and any implication of auto-execution."
       ]
     },
     {
       "id": 4,
-      "prompt": "It is a U.S. market holiday. The user still wants today's daily rating email for one stock. Produce the note without pretending the market is open. Include what the user should watch next and what remains unchanged from the last active session.",
-      "expected_output": "A market-closed note that is still useful, avoids fabricating live price action, and carries forward a clear watchlist view.",
+      "prompt": "Deep research BE and include any relevant ownership or insider angle from public filings. If you mention Form 4, Schedule 13D or 13G, or Form 13F, explain in plain English what each filing means and which signals are timely versus lagged. Return the same structured stock investment answer with exactly one Buy, Wait, or Sell rating.",
+      "expected_output": "A deep-research answer on BE that correctly interprets ownership filings, distinguishes timely versus lagged signals, and keeps the final view grounded in broader evidence rather than filing labels alone.",
       "files": [],
       "expectations": [
-        "The note explicitly states that the market is closed or not in a live regular session.",
-        "The note does not fabricate intraday movement, a live candlestick, or new session volume.",
-        "The note still provides actionable next-watch items such as levels, upcoming catalysts, or risks.",
-        "The note clearly separates unchanged background context from genuinely new information."
+        "The answer distinguishes Form 4 insider activity from Schedule 13D or 13G major-holder disclosures and from Form 13F institutional holdings.",
+        "The answer explains that Form 13F data is materially lagged and should not be framed as live same-day positioning.",
+        "The answer does not turn a single filing into the entire thesis without broader context.",
+        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer stays within the public-information boundary and names or cites the relevant sources."
       ]
     },
     {
       "id": 5,
-      "prompt": "A stock has strong recent momentum and bullish price action, but the latest public headlines are negative and event risk is elevated. Produce the daily rating email and decide whether the right action is Buy, Wait, Trim, Sell, or No action.",
-      "expected_output": "A note that handles conflicting signals honestly, ties the final action to risk management, and does not force a strong directional call when the setup is mixed.",
+      "prompt": "It is a U.S. market holiday. Analyze NVDA in the stock investment research format without pretending the market is open. Tell me what matters next and keep the response grounded in public information.",
+      "expected_output": "A market-closed stock research answer for NVDA that avoids fabricating live trading context, still provides a useful carry-forward view, and preserves the structured output contract.",
       "files": [],
       "expectations": [
-        "The note identifies the conflict between technical strength and event-driven risk.",
-        "The final action is tied to the mixed-signal setup rather than defaulting to a bullish call.",
-        "The note includes a risks section that explains what could break the thesis.",
-        "The note uses uncertainty-aware language and avoids hype."
+        "The answer explicitly states that the market is closed or not in a live regular session.",
+        "The answer does not fabricate intraday movement, live volume, or a completed session that did not happen.",
+        "The answer still provides useful next-watch items such as catalysts, risks, or key levels where relevant.",
+        "The answer uses the required section structure and includes exactly one rating from Buy, Wait, or Sell.",
+        "The answer avoids implying that an order will be placed or that the response is personalized investment advice."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Deep research BE. I want more than a quick note, but keep it usable. Synthesize current public information into a structured investment view rather than just listing headlines. Return Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
+      "expected_output": "A deeper but still usable BE research answer that preserves the stable structure, goes beyond a headline recap, and ends with exactly one Buy, Wait, or Sell rating.",
+      "files": [],
+      "expectations": [
+        "The answer uses the same stable section structure as the quick-analysis cases rather than switching to an unstructured essay.",
+        "The answer goes deeper than a headline summary by synthesizing public facts, interpretation, and current setup.",
+        "The answer remains concise enough to be usable rather than turning into a bloated long-form report.",
+        "The answer includes exactly one rating from Buy, Wait, or Sell and does not reintroduce old rating labels.",
+        "The answer stays evidence-based, non-hyped, and inside the research-only boundary."
       ]
     }
   ]
