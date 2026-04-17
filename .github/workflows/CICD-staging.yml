@@ -249,7 +249,7 @@ jobs:
         id: update_repo
         run: |
           result=$(ssh -F ~/.ssh/config azureproduction << 'EOF'
-          TARGET_SHA="${{ needs.build.outputs.deploy_sha }}"
+          TARGET_SHA="${{ needs.prepare.outputs.deploy_sha }}"
           [[ -n "$TARGET_SHA" ]] || {
             echo "Missing TARGET_SHA" >&2
             exit 1
