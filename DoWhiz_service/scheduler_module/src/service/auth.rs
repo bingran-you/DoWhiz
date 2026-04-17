@@ -1731,7 +1731,9 @@ pub async fn setup_tpm_cron(
     };
 
     let cron_result = task::spawn_blocking(move || {
-        crate::tpm_cron::setup_tpm_cron(&store_clone, &user_store, account_id, &org_name_for_cron, None)
+        let index_store = IndexStore::new("/tmp/task_index.db")
+            .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
+        crate::tpm_cron::setup_tpm_cron(&store_clone, &user_store, &index_store, account_id, &org_name_for_cron, None)
     })
     .await
     .map_err(|e| {

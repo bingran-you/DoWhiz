@@ -101,6 +101,7 @@ pub enum TpmCronError {
 /// # Arguments
 /// * `account_store` - The account store to use for lookups
 /// * `user_store` - The user store to get/create email user
+/// * `index_store` - The index store to sync tasks to
 /// * `user_id` - The user's account UUID
 /// * `organization` - The organization name
 /// * `cron_expr` - Optional cron expression (defaults to "0 0 9 * * MON-FRI")
@@ -111,6 +112,7 @@ pub enum TpmCronError {
 pub fn setup_tpm_cron(
     account_store: &AccountStore,
     user_store: &UserStore,
+    index_store: &IndexStore,
     user_id: Uuid,
     organization: &str,
     cron_expr: Option<&str>,
@@ -226,8 +228,13 @@ pub fn setup_tpm_cron(
         .add_cron_task(cron_expr, TaskKind::RunTask(run_task))
         .map_err(|e| TpmCronError::CronTaskAdd(e.to_string()))?;
 
+    // Sync to index store using email user_id (same as email handler)
+    index_store
+        .sync_user_tasks(&email_user.user_id, scheduler.tasks())
+        .map_err(|e| TpmCronError::IndexStoreSync(e.to_string()))?;
+
     info!(
-        "setup_tpm_cron: cron task added successfully, task_id={}, email_user_id={}",
+        "setup_tpm_cron: cron task added and synced, task_id={}, email_user_id={}",
         task_id, email_user.user_id
     );
 
