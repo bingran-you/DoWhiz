@@ -533,6 +533,15 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 
 ## Progress Log
 
+### 4/17/26
+**Completed:**
+- ✅ Added `sync_user_tasks` to `setup_tpm_cron` — cron tasks now sync to `task_index` immediately so the worker can discover them (previously cron tasks were only in `tasks` collection and would never fire unless another sync happened for the user)
+
+### 4/16/26
+**Completed:**
+- ✅ Fixed TPM cron user ID mismatch bug — `tpm_cron.rs` now uses `UserStore` to resolve `email_user_id` instead of `account_uuid` for workspace paths and index sync (matches email handler pattern)
+- ✅ Cleaned up 170 stale tasks from `task_index` and 141 from `tasks` collection caused by the mismatch
+
 ### 4/14/26
 **Completed:**
 - ✅ Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
@@ -627,3 +636,87 @@ Cron stores **setup user's account_id** → uses **their Notion token** for sche
 ## Manual Steps:
 
 1. The first person who joined the organization must share the task board with others; no sharing command is available via Notion API for Oliver to call within the ACI
+
+---
+
+## Error Debugging: Task Index Sync User ID Mismatch
+
+### Problem Summary
+
+On 4/16/26, clicking "trigger-sync" caused a 429 rate limit error from CosmosDB due to an explosion of ~170 stale tasks being synced at once.
+
+### Root Cause: Dual Identity System Mismatch
+
+DoWhiz uses two identity systems:
+
+| Identity | Source | Example | Used By |
+|----------|--------|---------|---------|
+| `account_id` | AccountStore (Supabase) | `123e4567-e89b-12d3-a456-426614174000` | Auth, billing, organization membership |
+| `channel_user_id` | UserStore (MongoDB) | `email_abc123...` | Task scheduling, workspace paths, index sync |
+
+The **email handler** uses `channel_user_id` (email user ID) for:
+- Workspace path: `/tmp/users/{email_user_id}/state/tasks.db`
+- Index sync: `index_store.sync_user_tasks(&email_user_id, tasks)`
+- Tasks collection: `owner_scope.id = email_user_id` (extracted from path)
+
+The **original TPM cron** mistakenly used `account_id` (account UUID) for:
+- Workspace path: `/tmp/users/{account_uuid}/state/tasks.db`
+- Index sync: `index_store.sync_user_tasks(&account_uuid, tasks)`
+- Tasks collection: `owner_scope.id = account_uuid` (extracted from path)
+
+### Why Tasks Accumulated
+
+1. **setup_tpm_cron** added cron tasks to `{account_uuid}/state/tasks.db` but never synced to `task_index`
+2. Each cron fire added more tasks to SQLite (under `account_uuid` path)
+3. **trigger_tpm_sync** was first to call `index_store.sync_user_tasks(&account_uuid, tasks)`
+
+### What Happens When Index Sync Uses a "New" User ID
+
+`sync_user_tasks(user_id, tasks)` performs:
+```rust
+// 1. Delete all existing tasks for this user_id
+DELETE FROM task_index WHERE user_id = ?
+
+// 2. Insert all tasks from the SQLite scheduler
+INSERT INTO task_index (user_id, task_id, ...) VALUES ...
+```
+
+When `user_id = account_uuid`:
+- **Delete phase**: Finds nothing (no prior tasks under this "new" user_id)
+- **Insert phase**: Inserts ALL accumulated tasks from the SQLite file
+
+Since the account_uuid path had 170+ accumulated tasks from cron runs, all were synced at once → CosmosDB 429 rate limit.
+
+### Why Frontend Showed the Tasks
+
+The `tasks` collection uses `owner_scope.id` derived from the path via `resolve_owner_scope()`:
+
+```rust
+fn resolve_owner_scope(path: &Path) -> (String, String) {
+    // Extracts component after "users/" in the path
+    // /tmp/users/{user_id}/state/tasks.db → owner_scope.id = user_id
+}
+```
+
+Tasks written under `/tmp/users/{account_uuid}/...` had `owner_scope.id = account_uuid`. The frontend queries by `owner_scope.id`, so it found and displayed these tasks.
+
+### The Fix
+
+Updated `tpm_cron.rs` to use `UserStore` for path resolution (same as email handler):
+
+```rust
+// Get email user from UserStore (same pattern as email handler)
+let email_user = user_store.get_or_create_user("email", &email)?;
+
+// Use UserStore paths (matches email handler exactly)
+let user_paths = user_store.user_paths(&users_root_path, &email_user.user_id);
+
+// Sync using email_user_id
+index_store.sync_user_tasks(&email_user.user_id, scheduler.tasks())?;
+```
+
+This ensures:
+1. `task_index` sync uses `email_user_id` (same as email handler)
+2. `tasks` collection's `owner_scope.id` is `email_user_id` (extracted from path)
+3. No "new" user_id accumulation → sync cleans up properly
+4. Choose email as the user_id source since the channel in RunTaskTask was set to "email".
