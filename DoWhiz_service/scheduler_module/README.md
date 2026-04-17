@@ -75,6 +75,10 @@ cargo test -p scheduler_module --test send_reply_outbound_e2e
 cargo test -p scheduler_module startup_workspace::
 ```
 
+Notes:
+- `scheduler_basic` currently exercises the Mongo-backed scheduler store, so it requires `MONGODB_URI` in the local environment.
+- If Mongo is unavailable, treat `scheduler_basic` as `SKIP` with blocker details in the verification report rather than assuming it is a pure no-infra smoke test.
+
 Live tests and manual scripts are listed in:
 - `reference_documentation/test_plans/DoWhiz_service_tests.md`
 

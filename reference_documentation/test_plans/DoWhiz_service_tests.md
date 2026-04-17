@@ -25,7 +25,7 @@ Status legend:
 |---|---|---|---|
 | AUTO-RUN-01 | `cargo test -p run_task_module` | run_task core/unit/integration coverage | Any `run_task_module` change |
 | AUTO-MAIL-01 | `cargo test -p send_emails_module` | Postmark payload construction + module behavior | Any `send_emails_module` change |
-| AUTO-SCH-01 | `cargo test -p scheduler_module --test scheduler_basic` | scheduler core lifecycle | Any scheduler logic change |
+| AUTO-SCH-01 | `cargo test -p scheduler_module --test scheduler_basic` | scheduler core lifecycle via Mongo-backed scheduler store | Any scheduler logic change (`MONGODB_URI` required; mark `SKIP` with blocker details when unavailable) |
 | AUTO-SCH-02 | `cargo test -p scheduler_module --test scheduler_agent_e2e` | scheduler + run_task integration path | scheduler/run_task orchestration changes |
 | AUTO-SCH-03 | `cargo test -p scheduler_module --test email_html_e2e` | inbound email HTML handling | email ingress/sanitization changes |
 | AUTO-SCH-04 | `cargo test -p scheduler_module --test email_html_e2e_2` | advanced HTML/body fallback behavior | email ingress/sanitization changes |
