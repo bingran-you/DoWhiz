@@ -5971,7 +5971,6 @@
       }
 
       async function leaveOrganization() {
-      async function leaveOrganization() {
         const session = await supabase.auth.getSession();
         const accessToken = session?.data?.session?.access_token;
         if (!accessToken) return;
@@ -6058,7 +6057,6 @@
       }
 
       function setupOrganizationListeners() {
-      function setupOrganizationListeners() {
         const searchInput = document.getElementById('org-search-input');
         const resultsEl = document.getElementById('org-search-results');
         const joinBtn = document.getElementById('join-org-btn');
@@ -6111,7 +6109,6 @@
         }
       }
 
-      async function loadMemo(accessToken) {
       async function loadMemo(accessToken) {
         const memoContent = document.getElementById('memo-content');
         try {
