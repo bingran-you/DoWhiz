@@ -430,14 +430,14 @@ tpm_cli sync-tasks \
 
 **Sync operations:**
 1. **Notion → MongoDB (existing tasks)**: Sync status/priority updates for tasks linked to both
-2. **Notion → MongoDB (new tasks)**: Create MongoDB entry for Notion pages without MongoDB ID, link back
+2. **Notion → MongoDB (new tasks)**: Create MongoDB entry for Notion pages (tasks) without MongoDB ID, link back
 3. **Orphan cleanup**: Delete MongoDB tasks whose Notion page was deleted
 
 **Data model (bidirectional linking):**
 ```
 Notion Page                    MongoDB DevTask
 ┌──────────────────┐          ┌──────────────────┐
-│ id: "abc-123"    │◄────────│ notion_page_id:  │
+│ id: "abc-123"    │◄──────── │ notion_page_id:  │
 │                  │          │   "abc-123"      │
 │ MongoDB ID:      │─────────►│                  │
 │   "507f1f77..."  │          │ _id: 507f1f77... │
