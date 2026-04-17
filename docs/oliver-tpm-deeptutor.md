@@ -419,13 +419,41 @@ tpm_cli list-tasks --organization deeptutor --status backlog
 tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
 ```
 
-#### `sync-tasks` — Pull developer updates from Notion to MongoDB
+#### `sync-tasks` — Bidirectional sync between Notion and MongoDB
 
 ```bash
 tpm_cli sync-tasks \
   --organization deeptutor \
   --database-id <NOTION_DATABASE_ID> \
   --workspace-id <WORKSPACE_ID>
+```
+
+**Sync operations:**
+1. **Notion → MongoDB (existing tasks)**: Sync status/priority updates for tasks linked to both
+2. **Notion → MongoDB (new tasks)**: Create MongoDB entry for Notion pages without MongoDB ID, link back
+3. **Orphan cleanup**: Delete MongoDB tasks whose Notion page was deleted
+
+**Data model (bidirectional linking):**
+```
+Notion Page                    MongoDB DevTask
+┌──────────────────┐          ┌──────────────────┐
+│ id: "abc-123"    │◄────────│ notion_page_id:  │
+│                  │          │   "abc-123"      │
+│ MongoDB ID:      │─────────►│                  │
+│   "507f1f77..."  │          │ _id: 507f1f77... │
+└──────────────────┘          └──────────────────┘
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "synced": 3,
+  "created": 2,
+  "skipped": 0,
+  "orphans_deleted": 1,
+  "errors": []
+}
 ```
 
 #### `setup_tpm_cron` — Set up daily TPM sync cron job for a user
