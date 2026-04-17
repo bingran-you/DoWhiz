@@ -1,0 +1,494 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/evaluation_report.schema.json",
+  "title": "Alice Phase 1 Evaluation Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "git",
+    "evaluation_scope",
+    "scenario_counts",
+    "benchmark_buckets",
+    "pass_fail_summary",
+    "warnings",
+    "capability_summary",
+    "truthfulness_checks",
+    "known_limitations",
+    "recommended_next_work"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.phase1_evaluation_report.v1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "commit",
+        "dirty"
+      ],
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "evaluation_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase_label",
+        "included_steps",
+        "validator_scripts",
+        "notes"
+      ],
+      "properties": {
+        "phase_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "included_steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "validator_scripts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "scenario_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry",
+        "subject_resolution",
+        "planning",
+        "retrieval_assembly",
+        "parcel_candidates",
+        "report_rendering",
+        "use_case_modules",
+        "recommendation",
+        "stabilization"
+      ],
+      "properties": {
+        "registry": {
+          "$ref": "#/$defs/count_block"
+        },
+        "subject_resolution": {
+          "$ref": "#/$defs/count_block"
+        },
+        "planning": {
+          "$ref": "#/$defs/count_block"
+        },
+        "retrieval_assembly": {
+          "$ref": "#/$defs/count_block"
+        },
+        "parcel_candidates": {
+          "$ref": "#/$defs/count_block"
+        },
+        "report_rendering": {
+          "$ref": "#/$defs/count_block"
+        },
+        "use_case_modules": {
+          "$ref": "#/$defs/count_block"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/count_block"
+        },
+        "stabilization": {
+          "$ref": "#/$defs/count_block"
+        }
+      }
+    },
+    "benchmark_buckets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/benchmark_bucket"
+      },
+      "minItems": 1
+    },
+    "pass_fail_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_status",
+        "total_buckets",
+        "passed_buckets",
+        "failed_buckets",
+        "warning_buckets",
+        "failed_bucket_ids",
+        "warning_bucket_ids",
+        "total_duration_ms"
+      ],
+      "properties": {
+        "overall_status": {
+          "$ref": "#/$defs/result_status"
+        },
+        "total_buckets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed_buckets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_buckets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_buckets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_bucket_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "uniqueItems": true
+        },
+        "warning_bucket_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "uniqueItems": true
+        },
+        "total_duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "capability_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supported_input_modes",
+        "supported_output_artifacts",
+        "supported_live_retrieval_paths",
+        "pilot_local_paths",
+        "supported_module_families",
+        "recommendation_modes",
+        "notes"
+      ],
+      "properties": {
+        "supported_input_modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "supported_output_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "supported_live_retrieval_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "pilot_local_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "supported_module_families": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "recommendation_modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "truthfulness_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_checks",
+        "passed_checks",
+        "failed_checks",
+        "warning_checks",
+        "checks"
+      ],
+      "properties": {
+        "total_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_checks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/truthfulness_check"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "known_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "recommended_next_work": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "result_status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "warning"
+      ]
+    },
+    "check_type": {
+      "type": "string",
+      "enum": [
+        "contract",
+        "truthfulness",
+        "heuristic",
+        "integration",
+        "stabilization",
+        "regression"
+      ]
+    },
+    "string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "measurement_map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "count_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_count",
+        "case_labels",
+        "measurements",
+        "notes"
+      ],
+      "properties": {
+        "case_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_labels": {
+          "$ref": "#/$defs/string_list"
+        },
+        "measurements": {
+          "$ref": "#/$defs/measurement_map"
+        },
+        "notes": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "benchmark_bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bucket_id",
+        "label",
+        "validator",
+        "check_types",
+        "case_count",
+        "case_labels",
+        "status",
+        "duration_ms",
+        "summary",
+        "stdout_summary",
+        "failure_message",
+        "notes"
+      ],
+      "properties": {
+        "bucket_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "check_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/check_type"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "case_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_labels": {
+          "$ref": "#/$defs/string_list"
+        },
+        "status": {
+          "$ref": "#/$defs/result_status"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stdout_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failure_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "truthfulness_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_id",
+        "label",
+        "status",
+        "summary",
+        "evidence"
+      ],
+      "properties": {
+        "check_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/result_status"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    }
+  }
+}

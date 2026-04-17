@@ -1,0 +1,111 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "91ee0af7-5d37-51d2-ad0c-12c4f0ca2be5",
+  "request_id": "22222222-2222-4222-8222-222222222222",
+  "request_mode": "recommendation",
+  "batch_purpose": "thesis_search_setup",
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": null,
+    "previous_resolution_ref": null,
+    "previous_report_ref": null
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-thesis-1",
+      "input_kind": "natural_language_intent",
+      "raw_value": "Find currently observed acreage listings under $300k that look more promising for rural hold than for heavier development."
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-thesis-1",
+      "input_kind": "natural_language_intent",
+      "raw_value": "Find currently observed acreage listings under $300k that look more promising for rural hold than for heavier development.",
+      "normalization_status": "normalized",
+      "normalized": {},
+      "resolution_hints": {
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "county_fips": null,
+        "county_name": null,
+        "city_name": null,
+        "source_url": null
+      },
+      "normalization_notes": [
+        "This is a thesis-only input used to prepare recommendation search setup rather than parcel confirmation."
+      ]
+    }
+  ],
+  "subject_kind": "thesis_request",
+  "resolution_status": "partially_resolved",
+  "primary_subject_label": "Open discovery across the observed candidate universe for rural hold under $300k.",
+  "active_subjects": [
+    {
+      "subject_id": "subject-thesis-1",
+      "input_kind": "natural_language_intent",
+      "subject_kind": "thesis",
+      "resolution_level": "thesis_only",
+      "resolution_status": "partially_resolved",
+      "display_label": "Open discovery across the observed candidate universe for rural hold under $300k.",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": null,
+        "address_parse_status": null,
+        "apn_raw": null,
+        "apn_normalized": null,
+        "apn_matching_variants": [],
+        "coordinates": null,
+        "county_fips": null,
+        "county_name": null,
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "city_name": null,
+        "postal_code": null,
+        "subject_ref_key": null
+      },
+      "parcel_candidate_ids": [],
+      "ambiguity_flags": [],
+      "unresolved_questions": [],
+      "next_resolution_actions": []
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [],
+  "geography_context": {
+    "scope_status": "none",
+    "states": [],
+    "counties": [],
+    "cities": [],
+    "region_labels": [],
+    "centroid_coordinates": null,
+    "notes": []
+  },
+  "ambiguity_flags": [],
+  "unresolved_questions": [],
+  "next_resolution_actions": [],
+  "scores": {
+    "resolution_confidence": 0.68,
+    "subject_specificity": 0.35,
+    "geography_specificity": 0.1,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json"
+  ],
+  "generated_at": "2026-04-17T02:05:00Z"
+}

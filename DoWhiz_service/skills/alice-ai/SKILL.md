@@ -15,7 +15,8 @@ Alice supports two product flows:
 
 1. Recommendation flow:
    - Normalize a natural-language land-buying thesis.
-   - Define the search and evaluation contract for future shortlist generation.
+   - Build an observed candidate universe from user-supplied URLs or Alice's current observed listing catalog.
+   - Reuse existing Alice parcel memos to rank candidates into shortlist artifacts honestly.
 
 2. Deep research flow:
    - Normalize a specific listing URL, APN, address, or coordinate request.
@@ -75,9 +76,11 @@ Future implementations should treat the schema files under `schemas/` as authori
 At minimum:
 
 1. `alice/request_normalized.json` should validate against `schemas/alice_request.schema.json`.
-2. `alice/parcel_memo.json` should validate against `schemas/alice_land_research.schema.json`.
-3. County registry rows should validate against `schemas/county_coverage_registry.schema.json`.
-4. Source registry rows should validate against `schemas/source_descriptor.schema.json`.
+2. `alice/subject_resolution.json` should validate against `schemas/subject_resolution.schema.json`.
+3. `alice/session_state.json` should validate against `schemas/alice_session_state.schema.json`.
+4. `alice/parcel_memo.json` should validate against `schemas/alice_land_research.schema.json`.
+5. County registry rows should validate against `schemas/county_coverage_registry.schema.json`.
+6. Source registry rows should validate against `schemas/source_descriptor.schema.json`.
 
 Markdown and channel summaries should be rendered from these structured artifacts, not vice versa.
 
@@ -164,17 +167,33 @@ Important artifact expectations:
    - normalized request envelope
    - canonical intake object for future orchestration
 
-2. `alice/parcel_memo.json`:
+2. `alice/subject_resolution.json`:
+   - canonical subject-resolution artifact
+   - source of truth for whether Alice is still thesis-only, geography-only, parcel-candidate, or parcel-resolved
+
+3. `alice/session_state.json`:
+   - active subject set and thesis snapshot for follow-ups
+   - continuity layer for "compare this with the last one" style requests
+
+4. `alice/parcel_memo.json`:
    - canonical structured research object
    - source of truth for future reports, summaries, and evaluations
 
-3. `alice/report.md`:
+5. `alice/report.md`:
    - human-readable markdown view over the structured memo
 
-4. `alice/recommendation/shortlist.json`:
-   - future recommendation output for ranked candidate lists
+6. `alice/recommendation/candidate_universe.json`:
+   - observed recommendation universe before shortlist pruning
 
-This step only defines the contracts. It does not implement the downstream pipelines that produce every artifact yet.
+7. `alice/recommendation/shortlist.json`:
+   - ranked recommendation output with reasons, blockers, and universe limits
+
+8. `alice/recommendation/shortlist_report.md`:
+   - human-readable recommendation memo over the shortlist artifacts
+
+The current Alice implementation covers structured intake, parcel research, report rendering, and Step 10 shortlist generation.
+
+Coverage breadth and economics depth are still intentionally limited and should stay explicit in the artifacts.
 
 ## Truthfulness and safety expectations
 
@@ -211,6 +230,15 @@ When implementing deep research or recommendation enrichment:
    - parcel group
    - unresolved candidate set
 
+### Subject resolution creation
+
+When implementing parcel/listing intake:
+
+1. Normalize raw subject inputs without over-claiming parcel identity.
+2. Write `alice/subject_resolution.json` before downstream source planning.
+3. Distinguish address-identified, listing-identified, geography-only, parcel-candidate, and parcel-resolved states explicitly.
+4. Keep ambiguity flags and next-resolution actions first-class.
+
 ### Registry use
 
 When implementing source planning and county support:
@@ -227,15 +255,20 @@ Load the relevant references as needed:
 2. `references/coverage_tiers.md`
 3. `references/safety_guardrails.md`
 4. `references/use_case_modules.md`
-5. `references/workspace_artifacts.md`
+5. `references/subject_resolution.md`
+6. `references/workspace_artifacts.md`
+7. `references/recommendation_flow.md`
+8. `references/ranking_policy.md`
 
 ## Examples
 
 The example payloads under `examples/` are schema-valid fixtures for:
 
 1. request normalization
-2. single-parcel memo structure
-3. county coverage registry entries
-4. source descriptor entries
+2. subject resolution
+3. session-state continuity
+4. single-parcel memo structure
+5. county coverage registry entries
+6. source descriptor entries
 
 Treat them as contract examples, not authoritative real-world diligence conclusions.

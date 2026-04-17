@@ -1,0 +1,120 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "4784ad6b-97a1-53be-8fb2-16df6bbae9e1",
+  "request_id": "5c79f5db-53a2-4c49-b50a-8777d7dc1af1",
+  "subject_resolution_id": "c29d05e0-3bd5-503a-8455-d3ddff38f082",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "deep_research",
+  "active_subject_ids": [
+    "subject-1"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "subject-1",
+      "geography_status": "county_inferred",
+      "state_fips": "06",
+      "state_code": "CA",
+      "state_name": "California",
+      "county_fips": "06029",
+      "county_name": "Kern County",
+      "city_or_place": "Bakersfield",
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "subject_resolution_hint",
+        "listing_url_slug_hint"
+      ],
+      "notes": []
+    }
+  ],
+  "geography_status": "county_inferred",
+  "state": {
+    "fips": "06",
+    "code": "CA",
+    "name": "California",
+    "resolution_status": "resolved",
+    "derivation_type": "subject_resolution_hint",
+    "subject_ids": [
+      "subject-1"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": "06029",
+    "name": "Kern County",
+    "resolution_status": "resolved",
+    "derivation_type": "subject_resolution_hint",
+    "subject_ids": [
+      "subject-1"
+    ],
+    "notes": []
+  },
+  "city_or_place": {
+    "name": "Bakersfield",
+    "resolution_status": "resolved",
+    "derivation_type": "subject_resolution_hint",
+    "subject_ids": [
+      "subject-1"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": "06029",
+  "state_fips": "06",
+  "state_code": "CA",
+  "derivation_sources": [
+    {
+      "derivation_id": "aa59e7fe-34c0-5521-88e9-381d23c24035",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "county",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "state_fips": "06",
+      "state_code": "CA",
+      "state_name": "California",
+      "county_fips": "06029",
+      "county_name": "Kern County",
+      "city_name": "Bakersfield",
+      "source_ref": "subject_resolution:active_subjects[0]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    },
+    {
+      "derivation_id": "0c8212a7-af96-5203-a103-9739c3741de2",
+      "derivation_type": "listing_url_slug_hint",
+      "scope": "county",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "state_fips": "06",
+      "state_code": "CA",
+      "state_name": "California",
+      "county_fips": "06029",
+      "county_name": "Kern County",
+      "city_name": null,
+      "source_ref": "subject_resolution:normalized_inputs[0]",
+      "confidence": 0.61,
+      "notes": [
+        "Listing URL path hints provided best-effort geography clues."
+      ]
+    }
+  ],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [],
+  "effective_county_registry_ref": "registry/county_overrides/CA/06029.json",
+  "effective_county_registry_mode": "curated_override",
+  "unresolved_questions": [
+    "Does city-specific planning jurisdiction apply here, or is this still unincorporated county land?"
+  ],
+  "notes": [
+    "A curated county registry override is available for this jurisdiction."
+  ],
+  "scores": {
+    "jurisdiction_confidence": 0.8,
+    "county_attachment_readiness": 1.0,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-17T08:17:32.841846Z"
+}

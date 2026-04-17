@@ -49,7 +49,13 @@
       "raw_value": "H123-456-7890-0000",
       "normalized": {
         "apn_raw": "H123-456-7890-0000",
-        "apn_normalized": "H1234567890000"
+        "apn_normalized": "H12345678900000",
+        "apn_strategy": "state_tx_alphanumeric_hyphenated",
+        "apn_matching_variants": [
+          "H12345678900000",
+          "H123-456-7890-0000",
+          "12345678900000"
+        ]
       },
       "resolution_hints": {
         "state_fips": "48",

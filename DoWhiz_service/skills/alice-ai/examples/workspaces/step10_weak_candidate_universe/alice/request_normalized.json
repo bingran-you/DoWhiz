@@ -1,0 +1,49 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "33333333-3333-4333-8333-333333333333",
+  "thread_id": "email:step10-weak",
+  "channel": "email",
+  "request_mode": "recommendation",
+  "raw_user_message": "Find me West Texas acreage under $260k that still has some solar or hold optionality, but stay conservative if the observed universe is thin.",
+  "thesis": {
+    "summary": "Thin-universe West Texas screen for solar or hold under $260k.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [
+      {
+        "kind": "region",
+        "label": "West Texas",
+        "state_code": "TX"
+      }
+    ],
+    "filters": {
+      "max_price": 260000,
+      "prefer_transmission_proximity": true
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 260000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [],
+  "output_preferences": {
+    "verbosity": "standard",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

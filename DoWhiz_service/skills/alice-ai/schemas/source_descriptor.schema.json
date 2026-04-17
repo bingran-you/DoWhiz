@@ -11,6 +11,7 @@
     "jurisdiction_level",
     "geography_scope",
     "interface_type",
+    "access_mode",
     "capabilities",
     "base_url",
     "priority",
@@ -95,6 +96,9 @@
     },
     "interface_type": {
       "$ref": "#/$defs/interface_type"
+    },
+    "access_mode": {
+      "$ref": "#/$defs/access_mode"
     },
     "capabilities": {
       "type": "array",
@@ -187,6 +191,15 @@
         "manual_review"
       ]
     },
+    "access_mode": {
+      "type": "string",
+      "enum": [
+        "machine_endpoint",
+        "landing_page",
+        "viewer",
+        "mixed"
+      ]
+    },
     "source_capability": {
       "type": "string",
       "enum": [
@@ -202,6 +215,8 @@
         "flood",
         "wetlands",
         "soil",
+        "topography_elevation",
+        "environmental_screening",
         "water_rights",
         "utility_territory",
         "transmission",

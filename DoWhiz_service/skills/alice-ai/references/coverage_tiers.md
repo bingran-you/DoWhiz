@@ -42,6 +42,58 @@ Typical `minimal` conditions:
 
 `minimal` does not mean "unsupported." Alice should still produce an honest output, but that output must surface the limits clearly.
 
+## Mechanical rubric
+
+The stabilization patch formalizes a lightweight rubric so registry validation can infer whether a county deserves `full`, `partial`, or `minimal`.
+
+The rubric uses the Step 3 county capability fields already present in the registry.
+
+### Bucket logic
+
+1. baseline footing
+   - `environmental >= partial`
+2. identity footing
+   - `parcel_identity >= partial` or `tax_roll >= partial`
+3. planning footing
+   - `zoning >= partial` or `planning_docs >= partial`
+4. infrastructure footing
+   - `utilities >= partial` or `transmission >= partial`
+
+### `full` rubric
+
+Use `full` only when all of the following are true:
+
+1. baseline footing is present
+2. `parcel_identity = full`
+3. tax-roll footing is at least `partial`
+4. zoning footing is present
+5. infrastructure footing is present
+
+Registry note:
+
+1. Step 3 county capabilities do not encode parcel geometry as a separate flag, so the rubric proxies strong local parcel geometry support through strong parcel-identity curation plus the curated local source set.
+
+### `partial` rubric
+
+Use `partial` when:
+
+1. baseline footing is present
+2. identity footing is present
+3. either planning footing or infrastructure footing is present
+4. but the county does not meet the stricter `full` rule
+
+### `minimal` rubric
+
+Use `minimal` when the county does not meet the `partial` rule.
+
+Typical cases:
+
+1. generated fallback counties
+2. counties with baseline overlays but no meaningful local parcel or planning footing
+3. counties where only broadband or other weak directional signals exist without local parcel diligence
+
+`broadband` alone does not move a county from `minimal` to `partial`.
+
 ## Coverage tier vs confidence vs completeness
 
 These concepts must stay separate:

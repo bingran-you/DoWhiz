@@ -1,0 +1,48 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "b71f5ba1-f08d-447b-a91a-2a31724cd2f3",
+  "thread_id": "email:alice-demo-thread-010",
+  "channel": "email",
+  "request_mode": "deep_research",
+  "raw_user_message": "Please diligence this listing for a wind plus long-term rural hold thesis: https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+  "thesis": {
+    "summary": "Listing-led diligence where county context should be inferred from the listing path, but the active energy thesis should explicitly exercise wind screening instead of solar.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [],
+    "filters": {
+      "exclude_major_floodplain": true,
+      "prefer_transmission_proximity": true
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 300000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "input_kind": "listing_url",
+      "raw_value": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678"
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

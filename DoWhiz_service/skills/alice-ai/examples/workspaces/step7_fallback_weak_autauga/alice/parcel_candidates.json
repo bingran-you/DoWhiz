@@ -1,0 +1,142 @@
+{
+  "schema_version": "alice.parcel_candidates.v1",
+  "parcel_candidates_id": "0eb48a18-d6ca-547b-abba-cb676b275158",
+  "request_id": "98df68eb-684b-4bec-b34b-8155a7fa1f39",
+  "subject_resolution_id": "0a6f8866-1833-53af-a3be-e639f0fb46a6",
+  "jurisdiction_context_id": "3ee368ef-484c-5574-92a6-cd586877303e",
+  "source_fetch_log_id": "d9c6f722-beb3-5388-ada3-dcf3ab15434a",
+  "generated_at": "2026-04-17T01:10:00Z",
+  "candidate_set_status": "single_weak_candidate",
+  "candidate_strategy": "listing_only",
+  "primary_candidate_id": "cand-subject-1-1",
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "candidate_id": "cand-subject-1-1",
+      "county_fips": "01001",
+      "state_fips": "01",
+      "apn_raw": null,
+      "apn_normalized": null,
+      "apn_variants": [],
+      "parcel_address": {
+        "full_address": "25 Acres in Autauga County Alabama",
+        "street_line1": "25 Acres in Autauga County Alabama",
+        "street_line2": null,
+        "city": null,
+        "county_name": null,
+        "state_code": null,
+        "postal_code": null,
+        "country_code": "US"
+      },
+      "acreage_claims": [
+        {
+          "value_acres": 25.0,
+          "status": "estimated",
+          "confidence": 0.8,
+          "evidence_scope": "listing_derived",
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:listing_listed_acreage",
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": []
+        },
+        {
+          "value_acres": 25.0,
+          "status": "estimated",
+          "confidence": 0.76,
+          "evidence_scope": "listing_derived",
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:parcel_identity_acreage_hint",
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": [
+            "Listing acreage is a seller-facing claim until corroborated by an official parcel source."
+          ]
+        }
+      ],
+      "source_clues": [
+        {
+          "clue_id": "listing_platform_land_com:40534423:listing_listed_acreage",
+          "clue_type": "acreage",
+          "raw_value": 25.0,
+          "normalized_value": 25.0,
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:listing_listed_acreage",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.8,
+          "weight": 0.06,
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": []
+        },
+        {
+          "clue_id": "listing_platform_land_com:40534423:parcel_identity_acreage_hint",
+          "clue_type": "acreage",
+          "raw_value": 25.0,
+          "normalized_value": 25.0,
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:parcel_identity_acreage_hint",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.76,
+          "weight": 0.06,
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": [
+            "Listing acreage is a seller-facing claim until corroborated by an official parcel source."
+          ]
+        },
+        {
+          "clue_id": "listing_platform_land_com:40534423:subject_coordinates",
+          "clue_type": "coordinates",
+          "raw_value": "32.472913,-86.497145",
+          "normalized_value": "32.472913,-86.497145",
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:subject_coordinates",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.7,
+          "weight": 0.08,
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": [
+            "Listing-derived coordinates are directional until parcel geometry is confirmed."
+          ]
+        },
+        {
+          "clue_id": "listing_platform_land_com:40534423:parcel_identity_county_name_hint",
+          "clue_type": "county_name",
+          "raw_value": "Acres in Autauga County",
+          "normalized_value": "Acres in Autauga County",
+          "source_id": "listing_platform_land_com",
+          "source_item_id": "listing_platform_land_com:40534423:parcel_identity_county_name_hint",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.72,
+          "weight": 0.04,
+          "citation_ids": [
+            "c_40534423"
+          ],
+          "notes": []
+        }
+      ],
+      "supporting_source_ids": [
+        "listing_platform_land_com"
+      ],
+      "contradicting_source_ids": [],
+      "candidate_strength": "weak",
+      "confirmation_level": "candidate_unconfirmed",
+      "confirmation_basis": "unknown",
+      "geometry_status": "point_only",
+      "notes": [
+        "Listing URL normalization does not confirm that the listing maps to one parcel.",
+        "Current clues remain weak and should not be treated as parcel confirmation."
+      ]
+    }
+  ],
+  "notes": [
+    "Only a weak single candidate is available; parcel-specific conclusions should remain conservative."
+  ]
+}

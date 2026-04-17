@@ -1,0 +1,144 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "667dc8d4-4a07-5f2a-9094-1eb5f4460d31",
+  "request_id": "6ef6cd1e-a9b1-4c95-bfb0-4e8bb65f7d7a",
+  "subject_resolution_id": "5be2c644-d917-52e7-9c4f-fbfba1c8010f",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "follow_up",
+  "active_subject_ids": [
+    "subject-ref-1"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "subject-ref-1",
+      "geography_status": "county_resolved",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_or_place": null,
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_fips",
+        "inherited_session_state"
+      ],
+      "notes": [
+        "County/state context was inherited from session state rather than restated in the follow-up prompt."
+      ]
+    }
+  ],
+  "geography_status": "county_resolved",
+  "state": {
+    "fips": "48",
+    "code": "TX",
+    "name": "Texas",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_fips",
+    "subject_ids": [
+      "subject-ref-1"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": "48229",
+    "name": "Hudspeth County",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_fips",
+    "subject_ids": [
+      "subject-ref-1"
+    ],
+    "notes": []
+  },
+  "city_or_place": {
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-ref-1"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": "48229",
+  "state_fips": "48",
+  "state_code": "TX",
+  "derivation_sources": [
+    {
+      "derivation_id": "044c7ace-2af2-5729-976b-dabe99fae793",
+      "derivation_type": "explicit_request_geography_fips",
+      "scope": "county",
+      "subject_ids": [
+        "subject-ref-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.98,
+      "notes": [
+        "Request-level target geography supplied county context."
+      ]
+    },
+    {
+      "derivation_id": "70d81990-5b1c-5573-9e22-c706914ac3c0",
+      "derivation_type": "inherited_session_state",
+      "scope": "county",
+      "subject_ids": [
+        "subject-ref-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "session_state:thesis_snapshot.target_geographies[0]",
+      "confidence": 0.88,
+      "notes": [
+        "Follow-up inherited geography from prior Alice session state."
+      ]
+    }
+  ],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [
+    {
+      "district_type": "appraisal_district",
+      "status": "candidate",
+      "name": "Hudspeth Appraisal District",
+      "source_ids": [
+        "county_tx_hudspeth_cad_property_search"
+      ],
+      "notes": [
+        "Relevant special-district source is registered for this county context."
+      ]
+    },
+    {
+      "district_type": "appraisal_district",
+      "status": "candidate",
+      "name": "Hudspeth Appraisal District",
+      "source_ids": [
+        "county_tx_hudspeth_cad_public_information"
+      ],
+      "notes": [
+        "Relevant special-district source is registered for this county context."
+      ]
+    }
+  ],
+  "effective_county_registry_ref": "registry/county_overrides/TX/48229.json",
+  "effective_county_registry_mode": "curated_override",
+  "unresolved_questions": [],
+  "notes": [
+    "A curated county registry override is available for this jurisdiction.",
+    "Jurisdiction context reused prior session-state geography rather than restarting from the follow-up prompt alone."
+  ],
+  "scores": {
+    "jurisdiction_confidence": 0.94,
+    "county_attachment_readiness": 1.0,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-16T22:48:10.003963Z"
+}

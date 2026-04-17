@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <RunQueryResponse xmlns="http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx">
+      <RunQueryResult>
+        <diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
+          <NewDataSet xmlns="">
+            <Table>
+              <mukey>2507263</mukey>
+            </Table>
+          </NewDataSet>
+        </diffgr:diffgram>
+      </RunQueryResult>
+    </RunQueryResponse>
+  </soap:Body>
+</soap:Envelope>

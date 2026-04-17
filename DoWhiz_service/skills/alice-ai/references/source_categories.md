@@ -83,7 +83,7 @@ Typical uses:
 4. market-signal sources
 5. public infrastructure context
 
-## Important distinction: category vs interface type
+## Important distinction: category vs interface type vs access mode
 
 Category answers:
 
@@ -93,6 +93,10 @@ Interface type answers:
 
 1. how Alice accesses the source
 
+Access mode answers:
+
+1. whether Alice expects a machine endpoint, a landing page, a viewer, or a mixed path
+
 The same category can appear through different interface types:
 
 1. `formal_api`
@@ -100,4 +104,11 @@ The same category can appear through different interface types:
 3. `downloadable_dataset`
 4. `web_only`
 
-Alice should reason about both, not just one.
+The same interface family can also have different access modes:
+
+1. `machine_endpoint`
+2. `landing_page`
+3. `viewer`
+4. `mixed`
+
+Alice should reason about all three, not just one.

@@ -1,0 +1,1113 @@
+{
+  "schema_version": "alice.land_research.v1",
+  "object_id": "1bc14e4c-3029-501a-8921-4025d71add3e",
+  "report_type": "deep_research",
+  "created_at": "2026-04-16T23:25:00Z",
+  "request_context": {
+    "request_id": "2e69c948-d90f-4d57-ac4a-f1a017bb229d",
+    "thread_id": "email:alice-demo-thread-005",
+    "request_mode": "deep_research",
+    "channel": "email",
+    "user_thesis_summary": "Deep research request for an APN-only lead with no reliable county context yet.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "user_constraints": {
+      "target_geographies": [],
+      "filters": {
+        "prefer_transmission_proximity": true
+      },
+      "budget": {
+        "currency": "USD"
+      },
+      "hold_period": {
+        "min_years": 5,
+        "max_years": 15,
+        "target_strategy": "hold"
+      },
+      "return_preferences": {
+        "preferred_exit_strategies": [
+          "hold",
+          "ground_lease"
+        ]
+      }
+    },
+    "batch_parent_id": null
+  },
+  "subject": {
+    "research_unit_type": "unresolved_candidate_set",
+    "resolution_status": "unresolved",
+    "primary_subject_label": "APN H123-456-7890-0000",
+    "raw_inputs": [
+      {
+        "input_kind": "apn",
+        "raw_value": "H123-456-7890-0000"
+      }
+    ],
+    "canonical_address": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "coordinates": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "parcel_count": 1
+  },
+  "listing": {
+    "listing_present": false,
+    "platform": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "No listing platform is active for this subject."
+    },
+    "canonical_url": null,
+    "listing_id": null,
+    "status": "unknown",
+    "asking_price": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing asking price was not recovered in Step 7."
+    },
+    "listed_acreage": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing acreage was not recovered in Step 7."
+    },
+    "days_on_market": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Days on market are not yet extracted in Step 7."
+    },
+    "listing_agent_name": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing agent extraction is deferred beyond Step 7."
+    },
+    "listing_brokerage": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing brokerage extraction is deferred beyond Step 7."
+    },
+    "listing_text_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing descriptive text was not recovered in Step 7."
+    },
+    "listing_snapshot_at": null
+  },
+  "source_urls": [],
+  "jurisdiction": {
+    "state": null,
+    "county": null,
+    "city_or_unincorporated": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Jurisdiction remains unresolved."
+    },
+    "special_districts": [],
+    "federal_relevance": [
+      "FEMA flood screening",
+      "USFWS wetlands screening",
+      "USGS terrain screening",
+      "USDA soils screening"
+    ],
+    "coverage_tier": null
+  },
+  "parcel_identity": {
+    "candidate_set_status": "single_weak_candidate",
+    "candidate_strategy": "address_apn_merge",
+    "primary_candidate_id": "cand-subject-1-1",
+    "active_candidate_ids": [
+      "cand-subject-1-1"
+    ],
+    "overall_confirmation_level": "candidate_unconfirmed",
+    "overall_confirmation_basis": "unknown",
+    "parcels": [
+      {
+        "candidate_id": "cand-subject-1-1",
+        "candidate_strength": "weak",
+        "confirmation_level": "candidate_unconfirmed",
+        "confirmation_basis": "unknown",
+        "supporting_source_ids": [
+          "subject_resolution"
+        ],
+        "contradicting_source_ids": [],
+        "geometry_status": "none",
+        "apn": {
+          "value": "H123-456-7890-0000",
+          "status": "estimated",
+          "confidence": 0.62,
+          "evidence_scope": "parcel_candidate",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [
+            "cand-subject-1-1"
+          ],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "Candidate APN synthesized from parcel-candidate clues rather than a dedicated assessor export."
+        },
+        "county_parcel_id": {
+          "value": null,
+          "status": "missing",
+          "confidence": 0.0,
+          "evidence_scope": "unresolved",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "County parcel ID has not been recovered for this candidate."
+        },
+        "assessor_site_address": {
+          "value": null,
+          "status": "missing",
+          "confidence": 0.0,
+          "evidence_scope": "unresolved",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "No assessor or site address was recovered for this candidate."
+        },
+        "assessor_acreage": {
+          "value": null,
+          "status": "missing",
+          "confidence": 0.0,
+          "evidence_scope": "unresolved",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "No acreage claim has been recovered for this candidate."
+        },
+        "geometry_source_id": null,
+        "geometry_confidence": 0.0,
+        "owner_name_public": {
+          "value": null,
+          "status": "missing",
+          "confidence": 0.0,
+          "evidence_scope": "unresolved",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "Owner name extraction remains unresolved for this candidate."
+        },
+        "tax_status_summary": {
+          "value": null,
+          "status": "missing",
+          "confidence": 0.0,
+          "evidence_scope": "parcel_candidate",
+          "supporting_item_ids": [],
+          "linked_candidate_ids": [
+            "cand-subject-1-1"
+          ],
+          "citation_ids": [],
+          "as_of": null,
+          "notes": "Tax-roll extraction is not yet implemented beyond high-level parcel-candidate clues."
+        }
+      }
+    ],
+    "access_point_estimate": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [
+        "cand-subject-1-1"
+      ],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "boundary_notes": "Current parcel identity remains candidate-based; point locations and local pages should not be treated as final parcel-boundary confirmation.",
+    "identity_conflicts": []
+  },
+  "planning_and_land_use": {
+    "zoning_designation": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Parcel-specific zoning designation has not been verified in Step 7."
+    },
+    "zoning_description": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Zoning description remains unresolved without a parcel-specific zoning record."
+    },
+    "future_land_use_designation": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Future land-use designation is not yet extracted in Step 7."
+    },
+    "plan_area": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "overlay_districts": [],
+    "minimum_lot_size": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Minimum lot size is not yet extracted in Step 7."
+    },
+    "setback_signals": [],
+    "subdivision_signals": [],
+    "permitted_use_signals": [],
+    "conditional_use_signals": [],
+    "development_constraints_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "No local planning or zoning source was successfully retrieved in Step 7."
+    },
+    "interpretation_limits": [
+      "Step 7 does not yet interpret local zoning text as legal advice or final entitlement feasibility.",
+      "No strong zoning source was available in the current Step 5 plan, so zoning remains unresolved."
+    ]
+  },
+  "environmental_constraints": {
+    "flood_zone": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Flood screening was not executed or remained unsupported in Step 7."
+    },
+    "wetlands_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Wetlands screening was not executed or remained unsupported in Step 7."
+    },
+    "slope_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Slope remains unresolved without a parcel-specific terrain interpretation."
+    },
+    "elevation_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Elevation could not be sampled in Step 7."
+    },
+    "soil_constraints_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Soil constraints screening was not executed or remained unsupported in Step 7."
+    },
+    "fire_risk_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Fire-risk screening is outside the Step 7 universal baseline."
+    },
+    "habitat_or_conservation_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Habitat or conservation overlays are not yet broadly supported in Step 7."
+    },
+    "superfund_or_contamination_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Environmental contamination screening remains unsupported in Step 7."
+    },
+    "environmental_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": null
+    },
+    "regulatory_notes": [
+      "Flood, wetlands, soils, and elevation are screened directionally in Step 7 and should not be treated as final parcel-boundary determinations."
+    ]
+  },
+  "water_and_agriculture": {
+    "surface_water_proximity": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Surface-water proximity is not yet calculated in Step 7."
+    },
+    "groundwater_or_well_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Groundwater or well screening is not yet implemented in Step 7."
+    },
+    "irrigation_district_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Irrigation district coverage is not yet implemented in Step 7."
+    },
+    "water_rights_status": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Water-rights status remains unresolved and Step 7 provides no legal interpretation."
+    },
+    "soil_productivity_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Soil productivity screening was not recovered in Step 7."
+    },
+    "cropland_or_pasture_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Cropland or pasture classification is not yet implemented in Step 7."
+    },
+    "ag_exemption_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Ag exemption status is not yet implemented in Step 7."
+    },
+    "water_and_ag_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Water and agriculture remain under-resolved in Step 7."
+    }
+  },
+  "infrastructure_and_utilities": {
+    "legal_or_physical_access_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Legal or physical access remains unresolved in Step 7."
+    },
+    "road_frontage_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Road frontage remains unresolved without parcel geometry or county road context."
+    },
+    "power_service_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Power service availability is not yet confirmed in Step 7."
+    },
+    "utility_territory_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Utility territory mapping is not yet parcel-specific in Step 7."
+    },
+    "substation_proximity_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Substation proximity is not yet calculated in Step 7."
+    },
+    "transmission_proximity_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Transmission proximity is not yet calculated in Step 7."
+    },
+    "broadband_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Broadband dataset execution is not yet point-specific in Step 7."
+    },
+    "water_service_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Municipal or private water service remains unresolved in Step 7."
+    },
+    "wastewater_or_septic_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Wastewater or septic feasibility remains unresolved in Step 7."
+    },
+    "rail_or_highway_logistics_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Rail or highway logistics screening is not yet implemented in Step 7."
+    },
+    "infrastructure_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "No utility or transmission source returned a parcel-specific service finding in Step 7."
+    }
+  },
+  "market_signals": {
+    "ask_price_per_acre": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Missing ask price or acreage."
+    },
+    "nearby_listing_context": [],
+    "county_market_context": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "County-wide market context is outside the Step 7 universal baseline."
+    },
+    "tax_burden_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Tax burden remains unresolved until parcel-specific tax roll extraction is added."
+    },
+    "liquidity_signal": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Liquidity signal remains unresolved until broader market evidence is added."
+    },
+    "market_summary": {
+      "value": null,
+      "status": "missing",
+      "confidence": 0.0,
+      "evidence_scope": "unresolved",
+      "supporting_item_ids": [],
+      "linked_candidate_ids": [],
+      "citation_ids": [],
+      "as_of": null,
+      "notes": "Listing ask or acreage was insufficient to compute a directional ask-per-acre signal."
+    }
+  },
+  "citations": [],
+  "use_case_modules": [
+    {
+      "module_id": "recreational_rural_hold",
+      "module_family": "recreational_rural_hold",
+      "module_label": "Recreational / Rural Hold Screening",
+      "module_status": "partially_evaluated",
+      "fit_assessment": "weak",
+      "confidence": 0.397,
+      "blocking_flags": [
+        "Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment.",
+        "Local parcel, tax, and market footing is still thin, so the hold thesis stays mostly directional."
+      ],
+      "supporting_signals": [
+        "The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional.",
+        "The listing or thesis directly supports a rural hold / recreation framing."
+      ],
+      "key_unknowns": [
+        "Carrying costs, tax burden, and resale liquidity are not yet well constrained.",
+        "If the hold thesis depends on future building rights, zoning and utility footing remain unresolved.",
+        "Boundary-based access and environmental confirmation would still be needed before a final buy call."
+      ],
+      "economics_inputs_required": [
+        "property-tax and annual carry-cost proxy",
+        "expected hold period and exit liquidity assumption",
+        "minimal access or gate improvement allowance"
+      ],
+      "evidence_scope_summary": {
+        "dominant_scope": "parcel_candidate",
+        "supporting_scopes": [],
+        "notes": "Module reasoning is dominated by parcel candidate evidence."
+      },
+      "summary": "Screening is constrained at screening grade by current blockers and weak footing. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained.",
+      "citation_ids": []
+    },
+    {
+      "module_id": "energy_solar",
+      "module_family": "energy",
+      "module_label": "Solar Energy Screening",
+      "module_status": "partially_evaluated",
+      "fit_assessment": "weak",
+      "confidence": 0.297,
+      "blocking_flags": [
+        "Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment.",
+        "No authoritative zoning or local solar-compatibility check is attached yet.",
+        "Local county planning and utility footing is still thin, so solar screening stays preliminary."
+      ],
+      "supporting_signals": [
+        "The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional."
+      ],
+      "key_unknowns": [
+        "Interconnection feasibility, queue posture, and upgrade cost are not yet known.",
+        "The authoritative zoning or permitting path for solar has not been confirmed.",
+        "Boundary-based environmental checks are still weaker than parcel geometry would allow."
+      ],
+      "economics_inputs_required": [
+        "purchase basis or site-control structure",
+        "interconnection or utility-upgrade cost proxy",
+        "local permitting and entitlement timeline"
+      ],
+      "evidence_scope_summary": {
+        "dominant_scope": "parcel_candidate",
+        "supporting_scopes": [],
+        "notes": "Module reasoning is dominated by parcel candidate evidence."
+      },
+      "summary": "Screening is constrained at screening grade by current blockers and weak footing. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Interconnection feasibility, queue posture, and upgrade cost are not yet known.",
+      "citation_ids": []
+    }
+  ],
+  "directional_economics": {
+    "status": "limited",
+    "basis": "Directional economics are limited to scenario framing from the current thesis modules, listing basis, and broad public-data signals.",
+    "active_module_ids": [
+      "recreational_rural_hold",
+      "energy_solar"
+    ],
+    "assumptions": [
+      {
+        "name": "Hold period assumption",
+        "value": "5-15 year target hold window",
+        "source": "user_assumption"
+      },
+      {
+        "name": "Lead screening module",
+        "value": "Recreational / Rural Hold Screening (weak)",
+        "source": "derived_inference"
+      }
+    ],
+    "carry_costs": {
+      "holding_period_context": {
+        "value": "5-15 year hold target",
+        "status": "estimated",
+        "confidence": 0.55,
+        "evidence_scope": "inferred",
+        "supporting_item_ids": [],
+        "linked_candidate_ids": [],
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "Carry framing currently reflects user-stated hold timing rather than parcel-specific tax roll evidence."
+      },
+      "property_tax_and_assessment": {
+        "value": null,
+        "status": "missing",
+        "confidence": 0.0,
+        "evidence_scope": "unresolved",
+        "supporting_item_ids": [],
+        "linked_candidate_ids": [],
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "Property-tax and assessment carry costs remain unresolved until tax-roll extraction is added."
+      },
+      "liquidity_and_resale_horizon": {
+        "value": "Rural hold exit timing depends on local resale demand rather than a modeled liquidity curve.",
+        "status": "estimated",
+        "confidence": 0.35,
+        "evidence_scope": "inferred",
+        "supporting_item_ids": [],
+        "linked_candidate_ids": [],
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "Directional only; no comps-backed liquidity model is included yet."
+      }
+    },
+    "improvement_capex_proxies": {
+      "utility_or_interconnection": {
+        "value": "Utility or transmission entry points are visible, but extension and interconnection cost remain unresolved.",
+        "status": "missing",
+        "confidence": 0.0,
+        "evidence_scope": "unresolved",
+        "supporting_item_ids": [],
+        "linked_candidate_ids": [],
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "No interconnection study, queue status, or service-capacity estimate is included in Step 9."
+      },
+      "entitlement_and_local_permits": {
+        "value": "Entitlement, permit, and local approval costs remain unresolved until zoning and local pathway checks are direct.",
+        "status": "estimated",
+        "confidence": 0.32,
+        "evidence_scope": "unresolved",
+        "supporting_item_ids": [],
+        "linked_candidate_ids": [],
+        "citation_ids": [],
+        "as_of": null,
+        "notes": "Step 9 uses screening-grade planning signals only."
+      }
+    },
+    "revenue_or_exit_cases": [
+      {
+        "module_id": "recreational_rural_hold",
+        "scenario_name": "Rural hold / recreation resale",
+        "description": "Screening is constrained at screening grade by current blockers and weak footing. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained.",
+        "key_inputs": [
+          "property-tax and annual carry-cost proxy",
+          "expected hold period and exit liquidity assumption",
+          "minimal access or gate improvement allowance"
+        ],
+        "notes": "Directional only; no final underwriting, IRR, NPV, or revenue model is produced in Step 9."
+      },
+      {
+        "module_id": "energy_solar",
+        "scenario_name": "Solar option value / ground lease",
+        "description": "Screening is constrained at screening grade by current blockers and weak footing. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Interconnection feasibility, queue posture, and upgrade cost are not yet known.",
+        "key_inputs": [
+          "purchase basis or site-control structure",
+          "interconnection or utility-upgrade cost proxy",
+          "local permitting and entitlement timeline"
+        ],
+        "notes": "Directional only; no final underwriting, IRR, NPV, or revenue model is produced in Step 9."
+      }
+    ],
+    "scenario_summary": [
+      "Lead module: Recreational / Rural Hold Screening is weak at screening grade.",
+      "No active listing price is attached, so economics remain scenario framing rather than purchase underwriting.",
+      "Local footing is thin, so economics should be treated as directional only."
+    ],
+    "limitations": [
+      "Step 9 does not produce final underwriting, IRR, NPV, or guaranteed ROI outputs.",
+      "Interconnection feasibility, entitlement certainty, title, and legal water-rights analysis remain outside this step.",
+      "Parcel identity is not yet parcel-confirmed, which weakens parcel-specific economics.",
+      "Only federal baseline plus listing context is available, so local development cost assumptions are especially thin.",
+      "No module currently has enough support for a strong directional-economics framing."
+    ]
+  },
+  "risks": [
+    {
+      "risk_id": "parcel_identity_unconfirmed",
+      "label": "Parcel Identity Unconfirmed",
+      "severity": "high",
+      "category": "identity",
+      "description": "The active subject is not yet anchored to one official parcel record.",
+      "impact": "Later zoning, tax, and environmental conclusions may attach to the wrong parcel.",
+      "mitigation_or_next_check": "Confirm APN or county parcel ID against an official county or appraisal-district source.",
+      "blocking": true,
+      "citation_ids": []
+    },
+    {
+      "risk_id": "zoning_unresolved",
+      "label": "Zoning Still Unresolved",
+      "severity": "medium",
+      "category": "zoning",
+      "description": "No parcel-specific zoning source was confirmed in Step 7.",
+      "impact": "Development and use-case feasibility remain constrained by local planning unknowns.",
+      "mitigation_or_next_check": "Run a direct local zoning verification step before treating use assumptions as reliable.",
+      "blocking": false,
+      "citation_ids": []
+    },
+    {
+      "risk_id": "flood_screen_incomplete",
+      "label": "Flood Screen Incomplete",
+      "severity": "medium",
+      "category": "environmental",
+      "description": "Flood screening was not completed or lacked a defensible point/parcel geometry.",
+      "impact": "Environmental feasibility may change materially after parcel-specific flood review.",
+      "mitigation_or_next_check": "Add coordinates or parcel geometry and rerun federal flood screening.",
+      "blocking": true,
+      "citation_ids": []
+    }
+  ],
+  "unknowns": [
+    {
+      "unknown_id": "missing_environmental_baseline",
+      "question": "What authoritative source will resolve the missing environmental_baseline surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "environmental_baseline",
+      "blocking": false
+    },
+    {
+      "unknown_id": "missing_parcel_geometry",
+      "question": "What authoritative source will resolve the missing parcel_geometry surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "parcel_geometry",
+      "blocking": true
+    },
+    {
+      "unknown_id": "missing_parcel_identity",
+      "question": "What authoritative source will resolve the missing parcel_identity surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "parcel_identity",
+      "blocking": true
+    },
+    {
+      "unknown_id": "missing_planning_docs",
+      "question": "What authoritative source will resolve the missing planning_docs surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "planning_docs",
+      "blocking": false
+    },
+    {
+      "unknown_id": "missing_tax_roll",
+      "question": "What authoritative source will resolve the missing tax_roll surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "tax_roll",
+      "blocking": false
+    },
+    {
+      "unknown_id": "missing_transmission",
+      "question": "What authoritative source will resolve the missing transmission surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "transmission",
+      "blocking": false
+    },
+    {
+      "unknown_id": "missing_utilities",
+      "question": "What authoritative source will resolve the missing utilities surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "utilities",
+      "blocking": false
+    },
+    {
+      "unknown_id": "missing_zoning",
+      "question": "What authoritative source will resolve the missing zoning surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "recommended_next_source": "zoning",
+      "blocking": true
+    },
+    {
+      "unknown_id": "parcel_candidate_strengthening",
+      "question": "Which candidate should be treated as the authoritative parcel target before local conclusions are hardened?",
+      "why_it_matters": "Weak or competing candidate identity can attach local zoning, tax, or acreage findings to the wrong parcel.",
+      "recommended_next_source": "official_county_parcel_source",
+      "blocking": true
+    },
+    {
+      "unknown_id": "subject_resolution_q_1",
+      "question": "Can this APN be confirmed against official parcel records before research proceeds?",
+      "why_it_matters": "Parcel-level diligence should not overclaim beyond the stabilized subject boundary.",
+      "recommended_next_source": "official_county_parcel_source",
+      "blocking": true
+    }
+  ],
+  "next_actions": [
+    {
+      "priority": 1,
+      "action": "strengthen_primary_parcel_candidate",
+      "reason": "Current parcel identity remains weak and needs official local corroboration."
+    },
+    {
+      "priority": 2,
+      "action": "confirm_county_context",
+      "reason": "APN normalization does not reveal the correct county by itself."
+    },
+    {
+      "priority": 3,
+      "action": "query_parcel_by_apn",
+      "reason": "Later parcel lookup should confirm the APN against county or appraisal-district sources."
+    },
+    {
+      "priority": 4,
+      "action": "resolve_parcel_identity",
+      "reason": "parcel_identity is blocked because jurisdiction is not stable enough yet."
+    },
+    {
+      "priority": 5,
+      "action": "resolve_parcel_geometry",
+      "reason": "parcel_geometry is blocked because jurisdiction is not stable enough yet."
+    },
+    {
+      "priority": 6,
+      "action": "resolve_tax_roll",
+      "reason": "tax_roll is blocked because jurisdiction is not stable enough yet."
+    },
+    {
+      "priority": 7,
+      "action": "resolve_zoning",
+      "reason": "zoning is blocked because jurisdiction is not stable enough yet."
+    },
+    {
+      "priority": 8,
+      "action": "resolve_planning_docs",
+      "reason": "planning_docs is blocked because jurisdiction is not stable enough yet."
+    },
+    {
+      "priority": 20,
+      "action": "estimate_rural_hold_carry_and_exit",
+      "reason": "A rural-hold thesis improves materially once carry costs and exit liquidity are bounded."
+    },
+    {
+      "priority": 21,
+      "action": "verify_solar_zoning_and_interconnection",
+      "reason": "Solar screening remains gated by local compatibility and real utility-delivery footing."
+    }
+  ],
+  "scores": {
+    "overall_confidence": 0.143,
+    "overall_completeness": 0.056,
+    "section_confidence": {
+      "identity": 0.62,
+      "planning": 0.0,
+      "environmental": 0.0,
+      "water_and_agriculture": 0.0,
+      "infrastructure": 0.0,
+      "market": 0.0,
+      "economics": 0.38
+    },
+    "section_completeness": {
+      "identity": 0.111,
+      "planning": 0.0,
+      "environmental": 0.0,
+      "water_and_agriculture": 0.0,
+      "infrastructure": 0.0,
+      "market": 0.0,
+      "economics": 0.28
+    },
+    "coverage_tier": null,
+    "score_notes": [
+      "Confidence reflects support quality for populated claims; completeness reflects how much of the diligence surface was actually covered.",
+      "Step 9 use-case modules and directional economics remain screening-grade rather than underwriting-grade.",
+      "Only federal baseline sources were effectively available for local diligence context."
+    ]
+  }
+}

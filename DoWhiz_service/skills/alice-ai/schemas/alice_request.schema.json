@@ -116,6 +116,9 @@
     "conversation_state_ref": {
       "type": "string",
       "pattern": "^alice/.+\\.json$"
+    },
+    "follow_up_context": {
+      "$ref": "#/$defs/follow_up_context"
     }
   },
   "allOf": [
@@ -151,6 +154,20 @@
             "minItems": 2
           }
         }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "request_mode": {
+            "const": "follow_up"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "follow_up_context"
+        ]
       }
     }
   ],
@@ -195,6 +212,10 @@
         "standard",
         "full"
       ]
+    },
+    "artifact_ref": {
+      "type": "string",
+      "pattern": "^alice/.+\\.(json|md)$"
     },
     "coverage_tier": {
       "type": "string",
@@ -247,6 +268,33 @@
           "maximum": 180
         }
       }
+    },
+    "coordinate_source": {
+      "type": "string",
+      "enum": [
+        "user_provided",
+        "text_extracted",
+        "url_query",
+        "unknown"
+      ]
+    },
+    "address_parse_status": {
+      "type": "string",
+      "enum": [
+        "parsed_components",
+        "state_only",
+        "city_state_only",
+        "freeform"
+      ]
+    },
+    "apn_strategy": {
+      "type": "string",
+      "enum": [
+        "generic_alphanumeric",
+        "state_ca_numeric_hyphenated",
+        "state_tx_alphanumeric_hyphenated",
+        "county_hint_alphanumeric"
+      ]
     },
     "geography_constraint": {
       "type": "object",
@@ -504,6 +552,61 @@
         "unknown"
       ]
     },
+    "follow_up_update_kind": {
+      "type": "string",
+      "enum": [
+        "reuse_active_subjects",
+        "compare_with_previous",
+        "append_subjects",
+        "replace_subjects",
+        "refine_thesis",
+        "filter_subject_set"
+      ]
+    },
+    "follow_up_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "update_kind"
+      ],
+      "properties": {
+        "previous_session_state_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "previous_resolution_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "previous_report_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "update_kind": {
+          "$ref": "#/$defs/follow_up_update_kind"
+        },
+        "carry_forward_subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "drop_subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "subject_input": {
       "type": "object",
       "additionalProperties": false,
@@ -523,7 +626,6 @@
             "apn",
             "address",
             "coordinates",
-            "batch_item",
             "subject_ref"
           ]
         },
@@ -546,6 +648,10 @@
               "type": "string",
               "minLength": 1
             },
+            "address_like_slug": {
+              "type": "string",
+              "minLength": 1
+            },
             "apn_raw": {
               "type": "string",
               "minLength": 1
@@ -554,16 +660,53 @@
               "type": "string",
               "minLength": 1
             },
+            "apn_strategy": {
+              "$ref": "#/$defs/apn_strategy"
+            },
+            "apn_matching_variants": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
             "address_text": {
               "type": "string",
               "minLength": 1
             },
+            "address_parse_status": {
+              "$ref": "#/$defs/address_parse_status"
+            },
+            "city_hint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state_code_hint": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "county_text_hint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "postal_code_hint": {
+              "type": "string",
+              "pattern": "^[0-9]{5}(?:-[0-9]{4})?$"
+            },
             "coordinates": {
               "$ref": "#/$defs/coordinates_value"
+            },
+            "coordinate_source": {
+              "$ref": "#/$defs/coordinate_source"
             },
             "batch_index": {
               "type": "integer",
               "minimum": 0
+            },
+            "subject_ref_key": {
+              "type": "string",
+              "minLength": 1
             }
           }
         },

@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/coverage_assessment.schema.json",
+  "title": "Alice Coverage Assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "assessment_id",
+    "request_id",
+    "subject_resolution_id",
+    "jurisdiction_context_id",
+    "request_mode",
+    "effective_county_fips",
+    "effective_coverage_tier",
+    "county_registry_mode",
+    "local_footing_status",
+    "capability_assessment",
+    "critical_surfaces",
+    "missing_surfaces",
+    "source_summary",
+    "constraints_on_next_steps",
+    "suitability_for_deep_research",
+    "notes",
+    "generated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.coverage_assessment.v1"
+    },
+    "assessment_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "request_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "subject_resolution_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "jurisdiction_context_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "request_mode": {
+      "$ref": "#/$defs/request_mode"
+    },
+    "effective_county_fips": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]{5}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "effective_coverage_tier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/coverage_tier"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "county_registry_mode": {
+      "$ref": "#/$defs/county_registry_mode"
+    },
+    "local_footing_status": {
+      "$ref": "#/$defs/local_footing_status"
+    },
+    "capability_assessment": {
+      "$ref": "#/$defs/capability_assessment"
+    },
+    "critical_surfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coverage_capability"
+      },
+      "uniqueItems": true
+    },
+    "missing_surfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coverage_capability"
+      },
+      "uniqueItems": true
+    },
+    "source_summary": {
+      "$ref": "#/$defs/source_summary"
+    },
+    "constraints_on_next_steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/constraint"
+      }
+    },
+    "suitability_for_deep_research": {
+      "$ref": "#/$defs/suitability_for_deep_research"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "uuid_string": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "request_mode": {
+      "type": "string",
+      "enum": [
+        "recommendation",
+        "deep_research",
+        "batch_compare",
+        "follow_up"
+      ]
+    },
+    "coverage_tier": {
+      "type": "string",
+      "enum": [
+        "full",
+        "partial",
+        "minimal"
+      ]
+    },
+    "county_registry_level": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "full",
+        "partial",
+        "minimal",
+        "none",
+        null
+      ]
+    },
+    "county_registry_mode": {
+      "type": "string",
+      "enum": [
+        "curated_override",
+        "generated_fallback",
+        "none"
+      ]
+    },
+    "local_footing_status": {
+      "type": "string",
+      "enum": [
+        "strong_local_footing",
+        "partial_local_footing",
+        "federal_baseline_only",
+        "blocked"
+      ]
+    },
+    "coverage_capability": {
+      "type": "string",
+      "enum": [
+        "parcel_identity",
+        "parcel_geometry",
+        "zoning",
+        "planning_docs",
+        "tax_roll",
+        "environmental_baseline",
+        "water_signals",
+        "utilities",
+        "transmission",
+        "market_context"
+      ]
+    },
+    "capability_status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "partial",
+        "minimal",
+        "unavailable",
+        "blocked_by_unresolved_jurisdiction"
+      ]
+    },
+    "coverage_basis": {
+      "type": "string",
+      "enum": [
+        "county_registry",
+        "state_source_presence",
+        "federal_baseline",
+        "listing_platform",
+        "subject_context_only",
+        "unresolved"
+      ]
+    },
+    "capability_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "county_registry_level",
+        "supporting_source_ids",
+        "coverage_basis",
+        "notes"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/capability_status"
+        },
+        "county_registry_level": {
+          "$ref": "#/$defs/county_registry_level"
+        },
+        "supporting_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "coverage_basis": {
+          "$ref": "#/$defs/coverage_basis"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "capability_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parcel_identity",
+        "parcel_geometry",
+        "zoning",
+        "planning_docs",
+        "tax_roll",
+        "environmental_baseline",
+        "water_signals",
+        "utilities",
+        "transmission",
+        "market_context"
+      ],
+      "properties": {
+        "parcel_identity": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "parcel_geometry": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "zoning": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "planning_docs": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "tax_roll": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "environmental_baseline": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "water_signals": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "utilities": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "transmission": {
+          "$ref": "#/$defs/capability_item"
+        },
+        "market_context": {
+          "$ref": "#/$defs/capability_item"
+        }
+      }
+    },
+    "source_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relevant_source_count",
+        "relevant_source_ids",
+        "preferred_source_ids",
+        "federal_source_ids",
+        "state_source_ids",
+        "county_source_ids",
+        "local_source_ids",
+        "listing_platform_source_ids",
+        "official_source_count",
+        "only_federal_baseline_available"
+      ],
+      "properties": {
+        "relevant_source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relevant_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "preferred_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "federal_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "state_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "county_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "local_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "listing_platform_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "official_source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "only_federal_baseline_available": {
+          "type": "boolean"
+        }
+      }
+    },
+    "constraint_type": {
+      "type": "string",
+      "enum": [
+        "needs_county_resolution",
+        "needs_subject_confirmation",
+        "county_on_fallback_registry",
+        "federal_baseline_only",
+        "local_zoning_missing",
+        "listing_not_parcel_confirmed",
+        "batch_mixed_jurisdiction_certainty",
+        "state_only_research_footing",
+        "no_relevant_sources"
+      ]
+    },
+    "constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraint_type",
+        "message"
+      ],
+      "properties": {
+        "constraint_type": {
+          "$ref": "#/$defs/constraint_type"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "suitability_for_deep_research": {
+      "type": "string",
+      "enum": [
+        "deep_research_ready",
+        "partially_ready",
+        "not_ready"
+      ]
+    }
+  }
+}

@@ -250,6 +250,28 @@
       },
       "uniqueItems": true
     },
+    "item_id_string": {
+      "type": "string",
+      "pattern": "^[a-z0-9_:-]+$"
+    },
+    "item_id_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item_id_string"
+      },
+      "uniqueItems": true
+    },
+    "candidate_id_string": {
+      "type": "string",
+      "pattern": "^[a-z0-9._:-]+$"
+    },
+    "candidate_id_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate_id_string"
+      },
+      "uniqueItems": true
+    },
     "channel": {
       "type": "string",
       "enum": [
@@ -364,6 +386,78 @@
         "not_applicable"
       ]
     },
+    "evidence_scope": {
+      "type": "string",
+      "enum": [
+        "parcel_confirmed",
+        "parcel_candidate",
+        "listing_derived",
+        "county_level",
+        "geography_only",
+        "inferred",
+        "unresolved"
+      ]
+    },
+    "candidate_set_status": {
+      "type": "string",
+      "enum": [
+        "single_strong_candidate",
+        "single_weak_candidate",
+        "multiple_competing_candidates",
+        "parcel_group_case",
+        "no_viable_candidate"
+      ]
+    },
+    "candidate_strategy": {
+      "type": "string",
+      "enum": [
+        "apn_corroboration",
+        "address_apn_merge",
+        "listing_only",
+        "local_record_corroboration",
+        "follow_up_inherited",
+        "clue_cluster",
+        "none"
+      ]
+    },
+    "candidate_strength": {
+      "type": "string",
+      "enum": [
+        "strong",
+        "moderate",
+        "weak",
+        "none"
+      ]
+    },
+    "confirmation_level": {
+      "type": "string",
+      "enum": [
+        "parcel_confirmed",
+        "candidate_corroborated",
+        "candidate_unconfirmed",
+        "listing_hint_only",
+        "geography_only",
+        "unresolved"
+      ]
+    },
+    "confirmation_basis": {
+      "type": "string",
+      "enum": [
+        "text_corroborated",
+        "local_record_corroborated",
+        "geometry_confirmed",
+        "unknown"
+      ]
+    },
+    "geometry_status": {
+      "type": "string",
+      "enum": [
+        "boundary_confirmed",
+        "map_page_hint",
+        "point_only",
+        "none"
+      ]
+    },
     "risk_severity": {
       "type": "string",
       "enum": [
@@ -394,6 +488,15 @@
         "weak",
         "not_applicable",
         "unknown"
+      ]
+    },
+    "module_status": {
+      "type": "string",
+      "enum": [
+        "evaluated",
+        "partially_evaluated",
+        "insufficient_data",
+        "blocked"
       ]
     },
     "economics_status": {
@@ -495,6 +598,9 @@
         "value",
         "status",
         "confidence",
+        "evidence_scope",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids",
         "as_of",
         "notes"
@@ -508,6 +614,15 @@
         },
         "confidence": {
           "$ref": "#/$defs/bounded_score"
+        },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
         },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
@@ -527,6 +642,9 @@
         "value",
         "status",
         "confidence",
+        "evidence_scope",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids",
         "as_of",
         "notes"
@@ -548,6 +666,15 @@
         "confidence": {
           "$ref": "#/$defs/bounded_score"
         },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
+        },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
         },
@@ -566,6 +693,9 @@
         "value",
         "status",
         "confidence",
+        "evidence_scope",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids",
         "as_of",
         "notes"
@@ -587,6 +717,15 @@
         "confidence": {
           "$ref": "#/$defs/bounded_score"
         },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
+        },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
         },
@@ -605,6 +744,9 @@
         "value",
         "status",
         "confidence",
+        "evidence_scope",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids",
         "as_of",
         "notes"
@@ -625,6 +767,15 @@
         },
         "confidence": {
           "$ref": "#/$defs/bounded_score"
+        },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
         },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
@@ -990,13 +1141,36 @@
             "apn",
             "address",
             "coordinates",
-            "batch_item",
             "subject_ref"
           ]
         },
         "raw_value": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "module_evidence_scope_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dominant_scope",
+        "supporting_scopes",
+        "notes"
+      ],
+      "properties": {
+        "dominant_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence_scope"
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
         }
       }
     },
@@ -1007,6 +1181,9 @@
         "label",
         "status",
         "confidence",
+        "evidence_scope",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids",
         "as_of",
         "notes"
@@ -1021,6 +1198,15 @@
         },
         "confidence": {
           "$ref": "#/$defs/bounded_score"
+        },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
         },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
@@ -1039,6 +1225,8 @@
       "required": [
         "field_name",
         "description",
+        "supporting_item_ids",
+        "linked_candidate_ids",
         "citation_ids"
       ],
       "properties": {
@@ -1049,6 +1237,12 @@
         "description": {
           "type": "string",
           "minLength": 1
+        },
+        "supporting_item_ids": {
+          "$ref": "#/$defs/item_id_array"
+        },
+        "linked_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
         },
         "citation_ids": {
           "$ref": "#/$defs/citation_id_array"
@@ -1109,6 +1303,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "candidate_id",
+        "candidate_strength",
+        "confirmation_level",
+        "confirmation_basis",
+        "supporting_source_ids",
+        "contradicting_source_ids",
+        "geometry_status",
         "apn",
         "county_parcel_id",
         "assessor_site_address",
@@ -1119,6 +1320,37 @@
         "tax_status_summary"
       ],
       "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/candidate_id_string"
+        },
+        "candidate_strength": {
+          "$ref": "#/$defs/candidate_strength"
+        },
+        "confirmation_level": {
+          "$ref": "#/$defs/confirmation_level"
+        },
+        "confirmation_basis": {
+          "$ref": "#/$defs/confirmation_basis"
+        },
+        "supporting_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "contradicting_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "geometry_status": {
+          "$ref": "#/$defs/geometry_status"
+        },
         "apn": {
           "$ref": "#/$defs/evidence_field"
         },
@@ -1150,13 +1382,16 @@
       "additionalProperties": false,
       "required": [
         "module_id",
+        "module_family",
         "module_label",
+        "module_status",
         "fit_assessment",
         "confidence",
         "blocking_flags",
         "supporting_signals",
         "key_unknowns",
         "economics_inputs_required",
+        "evidence_scope_summary",
         "summary",
         "citation_ids"
       ],
@@ -1165,9 +1400,15 @@
           "type": "string",
           "pattern": "^[a-z0-9_]+$"
         },
+        "module_family": {
+          "$ref": "#/$defs/high_level_use_case"
+        },
         "module_label": {
           "type": "string",
           "minLength": 1
+        },
+        "module_status": {
+          "$ref": "#/$defs/module_status"
         },
         "fit_assessment": {
           "$ref": "#/$defs/fit_assessment"
@@ -1202,6 +1443,9 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "evidence_scope_summary": {
+          "$ref": "#/$defs/module_evidence_scope_summary"
         },
         "summary": {
           "type": "string",
@@ -1238,12 +1482,17 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "module_id",
         "scenario_name",
         "description",
         "key_inputs",
         "notes"
       ],
       "properties": {
+        "module_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
         "scenario_name": {
           "type": "string",
           "minLength": 1
@@ -1605,10 +1854,24 @@
       ],
       "properties": {
         "state": {
-          "$ref": "#/$defs/state_ref"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/state_ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "county": {
-          "$ref": "#/$defs/county_ref"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/county_ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "city_or_unincorporated": {
           "$ref": "#/$defs/evidence_field"
@@ -1628,7 +1891,14 @@
           }
         },
         "coverage_tier": {
-          "$ref": "#/$defs/coverage_tier"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coverage_tier"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -1636,12 +1906,43 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "candidate_set_status",
+        "candidate_strategy",
+        "primary_candidate_id",
+        "active_candidate_ids",
+        "overall_confirmation_level",
+        "overall_confirmation_basis",
         "parcels",
         "access_point_estimate",
         "boundary_notes",
         "identity_conflicts"
       ],
       "properties": {
+        "candidate_set_status": {
+          "$ref": "#/$defs/candidate_set_status"
+        },
+        "candidate_strategy": {
+          "$ref": "#/$defs/candidate_strategy"
+        },
+        "primary_candidate_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/candidate_id_string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active_candidate_ids": {
+          "$ref": "#/$defs/candidate_id_array"
+        },
+        "overall_confirmation_level": {
+          "$ref": "#/$defs/confirmation_level"
+        },
+        "overall_confirmation_basis": {
+          "$ref": "#/$defs/confirmation_basis"
+        },
         "parcels": {
           "type": "array",
           "items": {
@@ -1922,6 +2223,7 @@
       "required": [
         "status",
         "basis",
+        "active_module_ids",
         "assumptions",
         "carry_costs",
         "improvement_capex_proxies",
@@ -1936,6 +2238,14 @@
         "basis": {
           "type": "string",
           "minLength": 1
+        },
+        "active_module_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "uniqueItems": true
         },
         "assumptions": {
           "type": "array",
@@ -2038,7 +2348,14 @@
           "$ref": "#/$defs/section_score_map"
         },
         "coverage_tier": {
-          "$ref": "#/$defs/coverage_tier"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coverage_tier"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "score_notes": {
           "type": "array",

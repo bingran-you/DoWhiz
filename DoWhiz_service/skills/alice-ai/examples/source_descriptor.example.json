@@ -12,6 +12,7 @@
     "notes": "Illustrative county-scoped parcel geometry source."
   },
   "interface_type": "gis_service",
+  "access_mode": "machine_endpoint",
   "capabilities": [
     "parcel_lookup_by_apn",
     "parcel_lookup_by_address",

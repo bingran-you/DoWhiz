@@ -1,0 +1,503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/source_fetch_log.schema.json",
+  "title": "Alice Source Fetch Log",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fetch_log_id",
+    "request_id",
+    "subject_resolution_id",
+    "jurisdiction_context_id",
+    "source_plan_id",
+    "generated_at",
+    "fetch_entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.source_fetch_log.v1"
+    },
+    "fetch_log_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "request_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "subject_resolution_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "jurisdiction_context_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "source_plan_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fetch_entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/fetch_entry"
+      }
+    }
+  },
+  "$defs": {
+    "uuid_string": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "nullable_string": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generic_value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object"
+        },
+        {
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source_category": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "federal",
+        "state",
+        "county",
+        "city_local",
+        "listing_platform",
+        "infrastructure_utility_market",
+        null
+      ]
+    },
+    "interface_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "formal_api",
+        "gis_service",
+        "downloadable_dataset",
+        "web_only",
+        null
+      ]
+    },
+    "planning_capability": {
+      "type": "string",
+      "enum": [
+        "parcel_identity",
+        "parcel_geometry",
+        "zoning",
+        "planning_docs",
+        "tax_roll",
+        "environmental_baseline",
+        "water_signals",
+        "utilities",
+        "transmission",
+        "market_context"
+      ]
+    },
+    "source_capability": {
+      "type": "string",
+      "enum": [
+        "parcel_lookup_by_apn",
+        "parcel_lookup_by_address",
+        "parcel_geometry",
+        "owner_name",
+        "site_address",
+        "zoning",
+        "future_land_use",
+        "development_code",
+        "tax_roll",
+        "flood",
+        "wetlands",
+        "soil",
+        "topography_elevation",
+        "environmental_screening",
+        "water_rights",
+        "utility_territory",
+        "transmission",
+        "broadband",
+        "listing_search",
+        "market_context"
+      ]
+    },
+    "retrieval_status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "skipped",
+        "deferred",
+        "blocked",
+        "unsupported"
+      ]
+    },
+    "error_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "http_error",
+        "network_error",
+        "timeout",
+        "parse_error",
+        "missing_prerequisite",
+        "unsupported_source",
+        "anti_bot_block",
+        "empty_result",
+        "duplicate_reuse",
+        "manual_review_required"
+      ]
+    },
+    "execution_mode": {
+      "type": "string",
+      "enum": [
+        "live_http",
+        "live_api",
+        "live_gis_query",
+        "live_soap",
+        "fixture_replay",
+        "not_executed"
+      ]
+    },
+    "request_kind": {
+      "type": "string",
+      "enum": [
+        "http_get",
+        "http_post",
+        "arcgis_query",
+        "soap_query",
+        "web_page_access",
+        "listing_page_fetch",
+        "plan_step_block",
+        "dataset_landing_page_fetch"
+      ]
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": [
+        "raw_html",
+        "raw_json",
+        "raw_xml",
+        "raw_text",
+        "response_headers",
+        "request_body",
+        "notes"
+      ]
+    },
+    "coordinates_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "path",
+        "content_type",
+        "sha256",
+        "byte_count"
+      ],
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/artifact_type"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^alice/.+"
+        },
+        "content_type": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "byte_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "request_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_kind",
+        "method",
+        "target_url",
+        "subject_ids",
+        "county_fips",
+        "state_fips",
+        "coordinates",
+        "query_params",
+        "body_preview",
+        "notes"
+      ],
+      "properties": {
+        "request_kind": {
+          "$ref": "#/$defs/request_kind"
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "GET",
+            "POST",
+            null
+          ]
+        },
+        "target_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "county_fips": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{5}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state_fips": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coordinates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/coordinates_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query_params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/generic_value"
+          }
+        },
+        "body_preview": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "fetch_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_id",
+        "source_id",
+        "source_name",
+        "source_category",
+        "interface_type",
+        "capability",
+        "requested_capabilities",
+        "source_capabilities",
+        "subject_ids",
+        "retrieval_status",
+        "execution_mode",
+        "attempted_at",
+        "completed_at",
+        "request_descriptor",
+        "artifact_refs",
+        "extracted_field_refs",
+        "parser_version",
+        "http_status",
+        "error_type",
+        "error_message",
+        "notes"
+      ],
+      "properties": {
+        "entry_id": {
+          "$ref": "#/$defs/uuid_string"
+        },
+        "source_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "source_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "source_category": {
+          "$ref": "#/$defs/source_category"
+        },
+        "interface_type": {
+          "$ref": "#/$defs/interface_type"
+        },
+        "capability": {
+          "$ref": "#/$defs/planning_capability"
+        },
+        "requested_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/planning_capability"
+          },
+          "uniqueItems": true
+        },
+        "source_capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_capability"
+          },
+          "uniqueItems": true
+        },
+        "subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "retrieval_status": {
+          "$ref": "#/$defs/retrieval_status"
+        },
+        "execution_mode": {
+          "$ref": "#/$defs/execution_mode"
+        },
+        "attempted_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "request_descriptor": {
+          "$ref": "#/$defs/request_descriptor"
+        },
+        "artifact_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          }
+        },
+        "extracted_field_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "parser_version": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "error_type": {
+          "$ref": "#/$defs/error_type"
+        },
+        "error_message": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

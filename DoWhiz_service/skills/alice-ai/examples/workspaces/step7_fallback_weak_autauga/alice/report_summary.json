@@ -1,0 +1,280 @@
+{
+  "schema_version": "alice.report_summary.v1",
+  "report_summary_id": "fa3b54d5-c913-506d-8924-8e8e1f7aacad",
+  "request_id": "98df68eb-684b-4bec-b34b-8155a7fa1f39",
+  "land_research_object_id": "91c05bdc-af35-587e-81bf-ef3ad47a32ce",
+  "parcel_candidates_id": "0eb48a18-d6ca-547b-abba-cb676b275158",
+  "render_mode": "generic_summary",
+  "generated_at": "2026-04-17T01:10:00Z",
+  "title": "Alice Deep Research Memo: 25 Acres in Autauga County Alabama",
+  "one_line_conclusion": "Rural hold screening stays directional because parcel identity is still weak and only federal baseline plus listing context are available in Autauga County.",
+  "subject_snapshot": {
+    "primary_subject_label": "Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL)",
+    "request_mode": "deep_research",
+    "research_unit_type": "unresolved_candidate_set",
+    "resolution_status": "partially_resolved",
+    "county_name": "Autauga County",
+    "state_name": "Alabama",
+    "state_code": "AL",
+    "city_or_place": null,
+    "parcel_count": 1,
+    "candidate_set_status": "single_weak_candidate",
+    "overall_confirmation_level": "candidate_unconfirmed",
+    "overall_confirmation_basis": "unknown",
+    "canonical_address": null,
+    "coordinates": "32.472913, -86.497145"
+  },
+  "evidence_quality_panel": {
+    "coverage_tier": "minimal",
+    "local_footing_status": "federal_baseline_only",
+    "suitability_for_deep_research": "partially_ready",
+    "overall_confidence": 0.343,
+    "overall_completeness": 0.187,
+    "evidence_quality_label": "directional_only",
+    "citation_count": 2,
+    "risk_count": 3,
+    "unknown_count": 10,
+    "official_source_count": 6,
+    "listing_source_count": 1,
+    "only_federal_baseline_available": true,
+    "notes": [
+      "Autauga County, Alabama is not yet curated in the Alice county registry; this entry is a generated minimal fallback.",
+      "Local parcel, zoning, planning, tax roll, and utility sources have not yet been verified for this county.",
+      "Current county coverage depends on national baseline sources until county-specific discovery and curation are added."
+    ]
+  },
+  "top_findings": [
+    {
+      "finding_id": "parcel_identity_status",
+      "section": "parcel_identity",
+      "label": "Parcel identity status",
+      "summary": "Parcel-candidate: The active subject still relies on a weak parcel candidate around 25 Acres in Autauga County Alabama.",
+      "evidence_scope": "parcel_candidate",
+      "confidence": 0.64,
+      "citation_ids": [],
+      "supporting_source_ids": []
+    },
+    {
+      "finding_id": "use_case_recreational_rural_hold",
+      "section": "use_case_modules",
+      "label": "Recreational / Rural Hold Screening",
+      "summary": "Parcel-candidate: Recreational / Rural Hold Screening is mixed at screening grade (partially evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Land.com Listings.",
+      "evidence_scope": "parcel_candidate",
+      "confidence": 0.555,
+      "citation_ids": [
+        "c_40534423"
+      ],
+      "supporting_source_ids": [
+        "listing_platform_land_com"
+      ]
+    },
+    {
+      "finding_id": "use_case_residential_light_development",
+      "section": "use_case_modules",
+      "label": "Residential / Light Development Screening",
+      "summary": "Parcel-candidate: Residential / Light Development Screening is weak at screening grade (partially evaluated). Screening is constrained at screening grade by current blockers and weak footing. Available acreage (25 acres) could support a low-density homesite or small-lot concept. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Minimum lot size, subdivision pathway, and local residential zoning compatibility remain unresolved. Sources: Land.com Listings.",
+      "evidence_scope": "parcel_candidate",
+      "confidence": 0.457,
+      "citation_ids": [
+        "c_40534423"
+      ],
+      "supporting_source_ids": [
+        "listing_platform_land_com"
+      ]
+    },
+    {
+      "finding_id": "infrastructure_context",
+      "section": "infrastructure_and_utilities",
+      "label": "Infrastructure and utilities",
+      "summary": "Geography-only: Utility or transmission-related public entrypoints were reachable: FCC Broadband Data Collection Nationwide Data. Sources: FCC Broadband Data Collection Nationwide Downloads.",
+      "evidence_scope": "geography_only",
+      "confidence": 0.5,
+      "citation_ids": [
+        "c_f7b719d5"
+      ],
+      "supporting_source_ids": [
+        "federal_fcc_bdc_national"
+      ]
+    },
+    {
+      "finding_id": "listing_market_context",
+      "section": "market_signals",
+      "label": "Listing and market context",
+      "summary": "Listing-derived: The Land.com listing asks $185,000.00 for 25 acres, or about $7,400.00 per acre. Sources: Land.com Listings.",
+      "evidence_scope": "listing_derived",
+      "confidence": 0.88,
+      "citation_ids": [
+        "c_40534423"
+      ],
+      "supporting_source_ids": [
+        "listing_platform_land_com"
+      ]
+    }
+  ],
+  "top_risks": [
+    {
+      "risk_id": "parcel_identity_unconfirmed",
+      "label": "Parcel Identity Unconfirmed",
+      "severity": "high",
+      "category": "identity",
+      "summary": "The active subject is not yet anchored to one official parcel record.",
+      "blocking": true,
+      "citation_ids": [
+        "c_40534423"
+      ]
+    },
+    {
+      "risk_id": "flood_screen_incomplete",
+      "label": "Flood Screen Incomplete",
+      "severity": "medium",
+      "category": "environmental",
+      "summary": "Flood screening was not completed or lacked a defensible point/parcel geometry.",
+      "blocking": true,
+      "citation_ids": []
+    },
+    {
+      "risk_id": "zoning_unresolved",
+      "label": "Zoning Still Unresolved",
+      "severity": "medium",
+      "category": "zoning",
+      "summary": "No parcel-specific zoning source was confirmed in Step 7.",
+      "blocking": false,
+      "citation_ids": []
+    }
+  ],
+  "top_unknowns": [
+    {
+      "unknown_id": "missing_parcel_geometry",
+      "question": "What authoritative source will resolve the missing parcel_geometry surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "blocking": true,
+      "recommended_next_source": "parcel_geometry"
+    },
+    {
+      "unknown_id": "missing_parcel_identity",
+      "question": "What authoritative source will resolve the missing parcel_identity surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "blocking": true,
+      "recommended_next_source": "parcel_identity"
+    },
+    {
+      "unknown_id": "missing_zoning",
+      "question": "What authoritative source will resolve the missing zoning surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "blocking": true,
+      "recommended_next_source": "zoning"
+    },
+    {
+      "unknown_id": "missing_planning_docs",
+      "question": "What authoritative source will resolve the missing planning_docs surface?",
+      "why_it_matters": "A missing critical diligence surface lowers completeness and may change conclusions materially.",
+      "blocking": false,
+      "recommended_next_source": "planning_docs"
+    }
+  ],
+  "next_actions": [
+    {
+      "priority": 1,
+      "action": "strengthen_primary_parcel_candidate",
+      "reason": "Current parcel identity remains weak and needs official local corroboration."
+    },
+    {
+      "priority": 2,
+      "action": "collect_additional_identifiers",
+      "reason": "Listing URL parsing alone does not anchor the listing to a confirmed parcel."
+    },
+    {
+      "priority": 3,
+      "action": "query_listing_page",
+      "reason": "Listing-page retrieval is needed later to extract APN, address, acreage, and parcel clues."
+    },
+    {
+      "priority": 4,
+      "action": "resolve_parcel_identity",
+      "reason": "No registered source currently supports parcel_identity strongly enough for this context."
+    },
+    {
+      "priority": 5,
+      "action": "resolve_parcel_geometry",
+      "reason": "No registered source currently supports parcel_geometry strongly enough for this context."
+    }
+  ],
+  "source_groups": [
+    {
+      "group_id": "source_group_federal",
+      "label": "Federal official sources",
+      "source_category": "federal",
+      "authority_level": "official",
+      "source_count": 1,
+      "source_ids": [
+        "federal_fcc_bdc_national"
+      ],
+      "source_names": [
+        "FCC Broadband Data Collection Nationwide Downloads"
+      ],
+      "notes": "Baseline environmental and infrastructure screens."
+    },
+    {
+      "group_id": "source_group_listing_platform",
+      "label": "Listing and seller-facing sources",
+      "source_category": "listing_platform",
+      "authority_level": "secondary",
+      "source_count": 1,
+      "source_ids": [
+        "listing_platform_land_com"
+      ],
+      "source_names": [
+        "Land.com Listings"
+      ],
+      "notes": "Seller-facing market and listing context, not parcel confirmation by itself."
+    }
+  ],
+  "warnings": [
+    {
+      "warning_type": "federal_baseline_only",
+      "severity": "high",
+      "message": "Only federal baseline plus listing context is currently available for this memo."
+    },
+    {
+      "warning_type": "parcel_identity_unconfirmed",
+      "severity": "high",
+      "message": "Parcel identity is not yet parcel-confirmed and remains vulnerable to mis-attachment."
+    },
+    {
+      "warning_type": "fallback_county",
+      "severity": "medium",
+      "message": "The effective county uses a generated fallback registry entry rather than a curated override."
+    },
+    {
+      "warning_type": "missing_zoning",
+      "severity": "medium",
+      "message": "Parcel-specific zoning remains unresolved in the current evidence set."
+    },
+    {
+      "warning_type": "thin_local_coverage",
+      "severity": "medium",
+      "message": "Local county footing is thin, so the memo is screening-grade rather than locally complete."
+    },
+    {
+      "warning_type": "listing_dominant_context",
+      "severity": "low",
+      "message": "Market context remains dominated by seller-facing listing information rather than broader comps."
+    }
+  ],
+  "channel_hints": {
+    "canonical_markdown_artifact_ref": "alice/report.md",
+    "slack_artifact_ref": "alice/report_slack.txt",
+    "email_artifact_ref": "alice/report_email.txt",
+    "recommended_email_subject": "Alice Deep Research Memo: 25 Acres in Autauga County Alabama",
+    "recommended_slack_title": "Alice Deep Research Memo: 25 Acres in Autauga County Alabama",
+    "recommended_slack_bullet_limit": 6,
+    "primary_delivery_channel": "email"
+  },
+  "executive_summary": [
+    "Parcel-candidate: The active subject still relies on a weak parcel candidate around 25 Acres in Autauga County Alabama.",
+    "Parcel-candidate: Recreational / Rural Hold Screening is mixed at screening grade (partially evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Land.com Listings.",
+    "Coverage: minimal tier, directional only, confidence 34%, completeness 19%.",
+    "Warning: Only federal baseline plus listing context is currently available for this memo.",
+    "Next action: Current parcel identity remains weak and needs official local corroboration."
+  ]
+}
