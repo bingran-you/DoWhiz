@@ -1,9 +1,0 @@
-Alice recommendation shortlist
-From the candidates Alice was able to observe, LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX ranks first because recreational / rural hold screening is favorable.
-Observed universe: 3 candidates. Not exhaustive market coverage.
-Top candidates:
-1. LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX - favorable; LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX ranks with an overall favorable thesis fit from the observed candidate universe. Primary support: Requested use-case modules land in favorable or clearly supportive territory at screening grade. Primary drag: 2 material blockers are already visible in the current screening set.
-2. Land.com listing 60606060 near Bakersfield, Kern County, CA - mixed; Land.com listing 60606060 near Bakersfield, Kern County, CA ranks with an overall mixed thesis fit from the observed candidate universe. Primary support: Requested use-case modules show usable support, but the thesis still carries material blockers or diligence gaps. Primary drag: 3 material blockers are already visible in the current screening set.
-3. Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL) - mixed; Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL) ranks with an overall mixed thesis fit from the observed candidate universe. Primary support: Requested use-case modules show usable support, but the thesis still carries material blockers or diligence gaps. Primary drag: Parcel identity is still weak or competing, which limits parcel-specific ranking confidence.
-Top blocker/theme: Alice is ranking only the observed candidate universe and does not claim exhaustive market coverage.
-Full memo: alice/recommendation/shortlist_report.md
