@@ -1159,6 +1159,8 @@ pub struct SignupResponse {
     pub account_id: Uuid,
     pub auth_user_id: Uuid,
     pub created: bool,
+    pub organization_id: Option<Uuid>,
+    pub organization_name: Option<String>,
 }
 
 /// POST /auth/signup
@@ -1259,12 +1261,26 @@ pub async fn signup(State(state): State<AuthState>, headers: HeaderMap) -> impl 
                 "created": false,
             }),
         );
+
+        // Fetch organization name if account has one
+        let organization_name = if let Some(org_id) = existing.organization_id {
+            let store = state.account_store.clone();
+            match task::spawn_blocking(move || store.get_organization_by_id(org_id)).await {
+                Ok(Ok(Some(org))) => Some(org.name),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         return (
             StatusCode::OK,
             Json(SignupResponse {
                 account_id: existing.id,
                 auth_user_id: existing.auth_user_id,
                 created: false,
+                organization_id: existing.organization_id,
+                organization_name,
             }),
         )
             .into_response();
@@ -1357,6 +1373,8 @@ pub async fn signup(State(state): State<AuthState>, headers: HeaderMap) -> impl 
                     account_id: account.id,
                     auth_user_id: account.auth_user_id,
                     created: true,
+                    organization_id: None,
+                    organization_name: None,
                 }),
             )
                 .into_response()
