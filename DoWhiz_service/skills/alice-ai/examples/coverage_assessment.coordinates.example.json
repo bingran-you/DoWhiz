@@ -1,0 +1,170 @@
+{
+  "schema_version": "alice.coverage_assessment.v1",
+  "assessment_id": "33f97573-8247-5525-a2e9-30638ea02475",
+  "request_id": "b35f2e44-1817-4f52-b0f1-532de94871ef",
+  "subject_resolution_id": "0d881c46-3ac0-5da9-9a74-13d06d8eb849",
+  "jurisdiction_context_id": "241bf5b5-5046-574c-92a1-3e7815725e03",
+  "request_mode": "deep_research",
+  "effective_county_fips": null,
+  "effective_coverage_tier": null,
+  "county_registry_mode": "none",
+  "local_footing_status": "blocked",
+  "capability_assessment": {
+    "parcel_identity": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "County attachment is required before local parcel, zoning, planning, or tax sources can be used safely."
+      ]
+    },
+    "parcel_geometry": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "Parcel geometry planning is blocked until jurisdiction is more stable."
+      ]
+    },
+    "tax_roll": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "County attachment is required before local parcel, zoning, planning, or tax sources can be used safely."
+      ]
+    },
+    "zoning": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "County attachment is required before local parcel, zoning, planning, or tax sources can be used safely."
+      ]
+    },
+    "planning_docs": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "County attachment is required before local parcel, zoning, planning, or tax sources can be used safely."
+      ]
+    },
+    "environmental_baseline": {
+      "status": "minimal",
+      "county_registry_level": null,
+      "supporting_source_ids": [
+        "federal_epa_ejscreen",
+        "federal_fema_nfhl",
+        "federal_usda_soil_data_access",
+        "federal_usfws_nwi",
+        "federal_usgs_3dep_elevation"
+      ],
+      "coverage_basis": "federal_baseline",
+      "notes": [
+        "Only national baseline overlays are currently attachable."
+      ]
+    },
+    "water_signals": {
+      "status": "minimal",
+      "county_registry_level": null,
+      "supporting_source_ids": [
+        "federal_usda_soil_data_access"
+      ],
+      "coverage_basis": "federal_baseline",
+      "notes": [
+        "Current water or agriculture footing is directional and mostly baseline-level."
+      ]
+    },
+    "utilities": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [
+        "federal_fcc_bdc_national"
+      ],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "Utilities and transmission planning still needs at least state-level geography."
+      ]
+    },
+    "transmission": {
+      "status": "blocked_by_unresolved_jurisdiction",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": [
+        "Utilities and transmission planning still needs at least state-level geography."
+      ]
+    },
+    "market_context": {
+      "status": "unavailable",
+      "county_registry_level": null,
+      "supporting_source_ids": [],
+      "coverage_basis": "unresolved",
+      "notes": []
+    }
+  },
+  "critical_surfaces": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "environmental_baseline",
+    "utilities",
+    "transmission"
+  ],
+  "missing_surfaces": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "utilities",
+    "transmission"
+  ],
+  "source_summary": {
+    "relevant_source_count": 6,
+    "relevant_source_ids": [
+      "federal_epa_ejscreen",
+      "federal_fcc_bdc_national",
+      "federal_fema_nfhl",
+      "federal_usda_soil_data_access",
+      "federal_usfws_nwi",
+      "federal_usgs_3dep_elevation"
+    ],
+    "preferred_source_ids": [],
+    "federal_source_ids": [
+      "federal_epa_ejscreen",
+      "federal_fcc_bdc_national",
+      "federal_fema_nfhl",
+      "federal_usda_soil_data_access",
+      "federal_usfws_nwi",
+      "federal_usgs_3dep_elevation"
+    ],
+    "state_source_ids": [],
+    "county_source_ids": [],
+    "local_source_ids": [],
+    "listing_platform_source_ids": [],
+    "official_source_count": 6,
+    "only_federal_baseline_available": true
+  },
+  "constraints_on_next_steps": [
+    {
+      "constraint_type": "needs_county_resolution",
+      "message": "County or state context is still unresolved, so local parcel-specific planning should not proceed yet."
+    },
+    {
+      "constraint_type": "federal_baseline_only",
+      "message": "Only federal baseline sources are currently attached for this context."
+    }
+  ],
+  "suitability_for_deep_research": "not_ready",
+  "notes": [],
+  "generated_at": "2026-04-16T22:43:47.150585Z"
+}

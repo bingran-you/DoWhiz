@@ -1,0 +1,201 @@
+{
+  "schema_version": "alice.coverage_assessment.v1",
+  "assessment_id": "9986223f-78f5-5ea3-be06-2a459117eb37",
+  "request_id": "b71f5ba1-f08d-447b-a91a-2a31724cd2f3",
+  "subject_resolution_id": "c964d9cd-9df1-5d50-a1a6-0f5857d31e74",
+  "jurisdiction_context_id": "e4420bac-f9d1-525b-9d48-16ab4962ee9b",
+  "request_mode": "deep_research",
+  "effective_county_fips": "48229",
+  "effective_coverage_tier": "partial",
+  "county_registry_mode": "curated_override",
+  "local_footing_status": "partial_local_footing",
+  "capability_assessment": {
+    "parcel_identity": {
+      "status": "available",
+      "county_registry_level": "full",
+      "supporting_source_ids": [
+        "county_tx_hudspeth_cad_property_search",
+        "county_tx_hudspeth_cad_public_information",
+        "state_tx_stratmap_land_parcels"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": []
+    },
+    "parcel_geometry": {
+      "status": "partial",
+      "county_registry_level": null,
+      "supporting_source_ids": [
+        "state_tx_stratmap_land_parcels"
+      ],
+      "coverage_basis": "state_source_presence",
+      "notes": []
+    },
+    "tax_roll": {
+      "status": "available",
+      "county_registry_level": "full",
+      "supporting_source_ids": [
+        "county_tx_hudspeth_cad_property_search",
+        "county_tx_hudspeth_cad_public_information"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": []
+    },
+    "zoning": {
+      "status": "unavailable",
+      "county_registry_level": "none",
+      "supporting_source_ids": [],
+      "coverage_basis": "county_registry",
+      "notes": [
+        "County registry does not currently provide strong footing for this local surface."
+      ]
+    },
+    "planning_docs": {
+      "status": "partial",
+      "county_registry_level": "partial",
+      "supporting_source_ids": [
+        "county_tx_hudspeth_forms_and_applications"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": []
+    },
+    "environmental_baseline": {
+      "status": "partial",
+      "county_registry_level": "partial",
+      "supporting_source_ids": [
+        "federal_epa_ejscreen",
+        "federal_fema_nfhl",
+        "federal_usda_soil_data_access",
+        "federal_usfws_nwi",
+        "federal_usgs_3dep_elevation"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": [
+        "Environmental baseline uses federal overlays even when county-local depth is thin."
+      ]
+    },
+    "water_signals": {
+      "status": "minimal",
+      "county_registry_level": "none",
+      "supporting_source_ids": [
+        "federal_usda_soil_data_access"
+      ],
+      "coverage_basis": "federal_baseline",
+      "notes": [
+        "Current water or agriculture footing is directional and mostly baseline-level."
+      ]
+    },
+    "utilities": {
+      "status": "partial",
+      "county_registry_level": "partial",
+      "supporting_source_ids": [
+        "federal_fcc_bdc_national",
+        "state_tx_puc_electricity_maps"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": []
+    },
+    "transmission": {
+      "status": "partial",
+      "county_registry_level": "partial",
+      "supporting_source_ids": [
+        "state_tx_puc_electricity_maps"
+      ],
+      "coverage_basis": "county_registry",
+      "notes": []
+    },
+    "market_context": {
+      "status": "partial",
+      "county_registry_level": "none",
+      "supporting_source_ids": [
+        "listing_platform_landwatch"
+      ],
+      "coverage_basis": "listing_platform",
+      "notes": [
+        "Listing inputs already provide a directional market context entry point."
+      ]
+    }
+  },
+  "critical_surfaces": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "environmental_baseline",
+    "utilities",
+    "transmission",
+    "market_context"
+  ],
+  "missing_surfaces": [
+    "zoning"
+  ],
+  "source_summary": {
+    "relevant_source_count": 12,
+    "relevant_source_ids": [
+      "county_tx_hudspeth_cad_property_search",
+      "county_tx_hudspeth_cad_public_information",
+      "county_tx_hudspeth_forms_and_applications",
+      "federal_epa_ejscreen",
+      "federal_fcc_bdc_national",
+      "federal_fema_nfhl",
+      "federal_usda_soil_data_access",
+      "federal_usfws_nwi",
+      "federal_usgs_3dep_elevation",
+      "listing_platform_landwatch",
+      "state_tx_puc_electricity_maps",
+      "state_tx_stratmap_land_parcels"
+    ],
+    "preferred_source_ids": [
+      "county_tx_hudspeth_cad_property_search",
+      "county_tx_hudspeth_cad_public_information",
+      "state_tx_stratmap_land_parcels",
+      "state_tx_puc_electricity_maps",
+      "federal_fema_nfhl",
+      "federal_usfws_nwi",
+      "federal_usda_soil_data_access",
+      "federal_usgs_3dep_elevation",
+      "federal_fcc_bdc_national",
+      "federal_epa_ejscreen"
+    ],
+    "federal_source_ids": [
+      "federal_epa_ejscreen",
+      "federal_fcc_bdc_national",
+      "federal_fema_nfhl",
+      "federal_usda_soil_data_access",
+      "federal_usfws_nwi",
+      "federal_usgs_3dep_elevation"
+    ],
+    "state_source_ids": [
+      "state_tx_puc_electricity_maps",
+      "state_tx_stratmap_land_parcels"
+    ],
+    "county_source_ids": [
+      "county_tx_hudspeth_cad_property_search",
+      "county_tx_hudspeth_cad_public_information",
+      "county_tx_hudspeth_forms_and_applications"
+    ],
+    "local_source_ids": [],
+    "listing_platform_source_ids": [
+      "listing_platform_landwatch"
+    ],
+    "official_source_count": 11,
+    "only_federal_baseline_available": false
+  },
+  "constraints_on_next_steps": [
+    {
+      "constraint_type": "listing_not_parcel_confirmed",
+      "message": "Listing inputs still need parcel confirmation before parcel-level conclusions are safe."
+    },
+    {
+      "constraint_type": "local_zoning_missing",
+      "message": "Local zoning visibility is still weak or absent for this county."
+    }
+  ],
+  "suitability_for_deep_research": "partially_ready",
+  "notes": [
+    "Parcel identity and tax context are stronger than zoning visibility in Hudspeth County.",
+    "County-level forms provide procedural clues, but parcel-specific development feasibility still requires local confirmation.",
+    "Water-rights and utility feasibility remain unresolved without deeper state or local follow-up."
+  ],
+  "generated_at": "2026-04-17T08:17:32.814783Z"
+}

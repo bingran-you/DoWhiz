@@ -1,0 +1,113 @@
+{
+  "scenario": "follow_up_resolved",
+  "responses": {
+    "county_tx_hudspeth_cad_property_search.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_tx_hudspeth_cad_property_search.html",
+      "final_url": "https://esearch.hudspethcad.org/",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "county_tx_hudspeth_cad_public_information.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_tx_hudspeth_cad_public_information.html",
+      "final_url": "https://hudspethcad.org/public-information/",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "county_tx_hudspeth_forms_and_applications.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_tx_hudspeth_forms_and_applications.html",
+      "final_url": "https://www.co.hudspeth.tx.us/page/hudspeth.Forms.and.Applicatons",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "state_tx_stratmap_land_parcels.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/state_tx_stratmap_land_parcels.html",
+      "final_url": "https://geographic.texas.gov/stratmap/land-parcels",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "state_tx_puc_electricity_maps.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/state_tx_puc_electricity_maps.html",
+      "final_url": "https://www.puc.texas.gov/industry/maps/electricity/",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "federal_fcc_bdc_national.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/federal_fcc_bdc_national.html",
+      "final_url": "https://broadbandmap.fcc.gov/data-download/nationwide-data",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "federal_epa_ejscreen.page": {
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/federal_epa_ejscreen_404.html",
+      "final_url": "https://www.epa.gov/ejscreen",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "federal_fema_nfhl.point_query": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body_path": "../shared/responses/federal_fema_nfhl_point_nohit.json",
+      "final_url": "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8"
+      }
+    },
+    "federal_usfws_nwi.point_query": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body_path": "../shared/responses/federal_usfws_nwi_point_nohit.json",
+      "final_url": "https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query",
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8"
+      }
+    },
+    "federal_usgs_3dep_elevation.point_query": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body_path": "../shared/responses/federal_usgs_3dep_point_sample.json",
+      "final_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples",
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8"
+      }
+    },
+    "federal_usda_soil_data_access.mukey_lookup": {
+      "status": 200,
+      "content_type": "text/xml; charset=utf-8",
+      "body_path": "../shared/responses/federal_usda_mukey_lookup.xml",
+      "final_url": "https://sdmdataaccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx",
+      "headers": {
+        "Content-Type": "text/xml; charset=utf-8"
+      }
+    },
+    "federal_usda_soil_data_access.muaggatt_lookup": {
+      "status": 200,
+      "content_type": "text/xml; charset=utf-8",
+      "body_path": "../shared/responses/federal_usda_muaggatt_lookup.xml",
+      "final_url": "https://sdmdataaccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx",
+      "headers": {
+        "Content-Type": "text/xml; charset=utf-8"
+      }
+    }
+  }
+}

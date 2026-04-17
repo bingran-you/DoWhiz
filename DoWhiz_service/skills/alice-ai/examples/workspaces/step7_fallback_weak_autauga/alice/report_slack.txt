@@ -1,0 +1,17 @@
+Alice Deep Research Memo: 25 Acres in Autauga County Alabama
+Conclusion: Rural hold screening stays directional because parcel identity is still weak and only federal baseline plus listing context are available in Autauga County.
+Subject: Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL) (candidate unconfirmed; single weak candidate)
+Evidence: minimal tier, directional only, confidence 34%, completeness 19%
+Use-case screens:
+- Parcel-candidate: Recreational / Rural Hold Screening is mixed at screening grade (partially evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Land.com Listings.
+- Parcel-candidate: Residential / Light Development Screening is weak at screening grade (partially evaluated). Screening is constrained at screening grade by current blockers and weak footing. Available acreage (25 acres) could support a low-density homesite or small-lot concept. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Minimum lot size, subdivision pathway, and local residential zoning compatibility remain unresolved. Sources: Land.com Listings.
+Top positives:
+- Parcel-candidate: The active subject still relies on a weak parcel candidate around 25 Acres in Autauga County Alabama.
+- Parcel-candidate: Recreational / Rural Hold Screening is mixed at screening grade (partially evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. The active subject still relies on a weak parcel candidate, so parcel-specific screening stays provisional. Parcel identity is still weak, so parcel-specific thesis conclusions remain vulnerable to mis-attachment. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Land.com Listings.
+Top blockers / unknowns:
+- Only federal baseline plus listing context is currently available for this memo.
+- Parcel identity is not yet parcel-confirmed and remains vulnerable to mis-attachment.
+- What authoritative source will resolve the missing parcel_geometry surface?
+- What authoritative source will resolve the missing parcel_identity surface?
+Recommended next action: Current parcel identity remains weak and needs official local corroboration.
+Full memo: alice/report.md

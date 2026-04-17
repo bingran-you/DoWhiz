@@ -1,0 +1,676 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dowhiz.com/schemas/alice/report_summary.schema.json",
+  "title": "Alice Report Summary Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_summary_id",
+    "request_id",
+    "land_research_object_id",
+    "parcel_candidates_id",
+    "render_mode",
+    "generated_at",
+    "title",
+    "one_line_conclusion",
+    "executive_summary",
+    "subject_snapshot",
+    "evidence_quality_panel",
+    "top_findings",
+    "top_risks",
+    "top_unknowns",
+    "next_actions",
+    "source_groups",
+    "warnings",
+    "channel_hints"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "alice.report_summary.v1"
+    },
+    "report_summary_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "request_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "land_research_object_id": {
+      "$ref": "#/$defs/uuid_string"
+    },
+    "parcel_candidates_id": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/uuid_string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "render_mode": {
+      "$ref": "#/$defs/render_mode"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "one_line_conclusion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "executive_summary": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "subject_snapshot": {
+      "$ref": "#/$defs/subject_snapshot"
+    },
+    "evidence_quality_panel": {
+      "$ref": "#/$defs/evidence_quality_panel"
+    },
+    "top_findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding_item"
+      }
+    },
+    "top_risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/risk_item"
+      }
+    },
+    "top_unknowns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unknown_item"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/next_action_item"
+      }
+    },
+    "source_groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_group"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning_item"
+      }
+    },
+    "channel_hints": {
+      "$ref": "#/$defs/channel_hints"
+    }
+  },
+  "$defs": {
+    "uuid_string": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "bounded_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nullable_string": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_mode": {
+      "type": "string",
+      "enum": [
+        "recommendation",
+        "deep_research",
+        "batch_compare",
+        "follow_up"
+      ]
+    },
+    "render_mode": {
+      "type": "string",
+      "enum": [
+        "slack_summary",
+        "email_summary",
+        "markdown_memo",
+        "generic_summary"
+      ]
+    },
+    "research_unit_type": {
+      "type": "string",
+      "enum": [
+        "single_parcel",
+        "parcel_group",
+        "unresolved_candidate_set"
+      ]
+    },
+    "resolution_status": {
+      "type": "string",
+      "enum": [
+        "resolved",
+        "partially_resolved",
+        "unresolved"
+      ]
+    },
+    "coverage_tier": {
+      "type": "string",
+      "enum": [
+        "minimal",
+        "partial",
+        "full"
+      ]
+    },
+    "candidate_set_status": {
+      "type": "string",
+      "enum": [
+        "single_strong_candidate",
+        "single_weak_candidate",
+        "multiple_competing_candidates",
+        "parcel_group_case",
+        "no_viable_candidate"
+      ]
+    },
+    "confirmation_level": {
+      "type": "string",
+      "enum": [
+        "parcel_confirmed",
+        "candidate_corroborated",
+        "candidate_unconfirmed",
+        "listing_hint_only",
+        "geography_only",
+        "unresolved"
+      ]
+    },
+    "confirmation_basis": {
+      "type": "string",
+      "enum": [
+        "text_corroborated",
+        "local_record_corroborated",
+        "geometry_confirmed",
+        "unknown"
+      ]
+    },
+    "evidence_scope": {
+      "type": "string",
+      "enum": [
+        "parcel_confirmed",
+        "parcel_candidate",
+        "listing_derived",
+        "county_level",
+        "geography_only",
+        "inferred",
+        "unresolved"
+      ]
+    },
+    "source_category": {
+      "type": "string",
+      "enum": [
+        "federal",
+        "state",
+        "county",
+        "city_local",
+        "listing_platform",
+        "infrastructure_utility_market"
+      ]
+    },
+    "authority_level": {
+      "type": "string",
+      "enum": [
+        "official",
+        "secondary"
+      ]
+    },
+    "evidence_quality_label": {
+      "type": "string",
+      "enum": [
+        "strong_footing",
+        "usable_but_partial",
+        "directional_only",
+        "thin_screening_only"
+      ]
+    },
+    "warning_type": {
+      "type": "string",
+      "enum": [
+        "parcel_identity_unconfirmed",
+        "competing_candidates",
+        "fallback_county",
+        "federal_baseline_only",
+        "thin_local_coverage",
+        "geography_only_findings",
+        "follow_up_inherited_context",
+        "missing_zoning",
+        "listing_dominant_context"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "risk_category": {
+      "type": "string",
+      "enum": [
+        "zoning",
+        "environmental",
+        "utilities",
+        "market",
+        "identity",
+        "legal_unknown",
+        "water",
+        "infrastructure",
+        "other"
+      ]
+    },
+    "section_name": {
+      "type": "string",
+      "enum": [
+        "parcel_identity",
+        "jurisdiction",
+        "use_case_modules",
+        "directional_economics",
+        "planning_and_land_use",
+        "environmental_constraints",
+        "water_and_agriculture",
+        "infrastructure_and_utilities",
+        "market_signals"
+      ]
+    },
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "artifact_ref": {
+      "type": "string",
+      "pattern": "^alice/.+\\.(json|md|txt)$"
+    },
+    "subject_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_subject_label",
+        "request_mode",
+        "research_unit_type",
+        "resolution_status",
+        "county_name",
+        "state_name",
+        "state_code",
+        "parcel_count",
+        "candidate_set_status",
+        "overall_confirmation_level",
+        "overall_confirmation_basis"
+      ],
+      "properties": {
+        "primary_subject_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_mode": {
+          "$ref": "#/$defs/request_mode"
+        },
+        "research_unit_type": {
+          "$ref": "#/$defs/research_unit_type"
+        },
+        "resolution_status": {
+          "$ref": "#/$defs/resolution_status"
+        },
+        "county_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "state_name": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "state_code": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "city_or_place": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "parcel_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidate_set_status": {
+          "$ref": "#/$defs/candidate_set_status"
+        },
+        "overall_confirmation_level": {
+          "$ref": "#/$defs/confirmation_level"
+        },
+        "overall_confirmation_basis": {
+          "$ref": "#/$defs/confirmation_basis"
+        },
+        "canonical_address": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "coordinates": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "evidence_quality_panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage_tier",
+        "local_footing_status",
+        "suitability_for_deep_research",
+        "overall_confidence",
+        "overall_completeness",
+        "evidence_quality_label",
+        "citation_count",
+        "risk_count",
+        "unknown_count",
+        "official_source_count",
+        "listing_source_count",
+        "only_federal_baseline_available"
+      ],
+      "properties": {
+        "coverage_tier": {
+          "$ref": "#/$defs/coverage_tier"
+        },
+        "local_footing_status": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "suitability_for_deep_research": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "overall_confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "overall_completeness": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "evidence_quality_label": {
+          "$ref": "#/$defs/evidence_quality_label"
+        },
+        "citation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "risk_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "official_source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "listing_source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "only_federal_baseline_available": {
+          "type": "boolean"
+        },
+        "notes": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "finding_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_id",
+        "section",
+        "label",
+        "summary",
+        "evidence_scope",
+        "confidence",
+        "citation_ids",
+        "supporting_source_ids"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_:-]+$"
+        },
+        "section": {
+          "$ref": "#/$defs/section_name"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_scope": {
+          "$ref": "#/$defs/evidence_scope"
+        },
+        "confidence": {
+          "$ref": "#/$defs/bounded_score"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/string_array"
+        },
+        "supporting_source_ids": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "risk_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "risk_id",
+        "label",
+        "severity",
+        "category",
+        "summary",
+        "blocking",
+        "citation_ids"
+      ],
+      "properties": {
+        "risk_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "category": {
+          "$ref": "#/$defs/risk_category"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "citation_ids": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "unknown_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknown_id",
+        "question",
+        "why_it_matters",
+        "blocking",
+        "recommended_next_source"
+      ],
+      "properties": {
+        "unknown_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why_it_matters": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocking": {
+          "type": "boolean"
+        },
+        "recommended_next_source": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "next_action_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priority",
+        "action",
+        "reason"
+      ],
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "source_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "label",
+        "source_category",
+        "authority_level",
+        "source_count",
+        "source_ids",
+        "source_names"
+      ],
+      "properties": {
+        "group_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_:-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_category": {
+          "$ref": "#/$defs/source_category"
+        },
+        "authority_level": {
+          "$ref": "#/$defs/authority_level"
+        },
+        "source_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_ids": {
+          "$ref": "#/$defs/string_array"
+        },
+        "source_names": {
+          "$ref": "#/$defs/string_array"
+        },
+        "notes": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    },
+    "warning_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "warning_type",
+        "severity",
+        "message"
+      ],
+      "properties": {
+        "warning_type": {
+          "$ref": "#/$defs/warning_type"
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "channel_hints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonical_markdown_artifact_ref",
+        "slack_artifact_ref",
+        "email_artifact_ref",
+        "recommended_email_subject",
+        "recommended_slack_title",
+        "recommended_slack_bullet_limit",
+        "primary_delivery_channel"
+      ],
+      "properties": {
+        "canonical_markdown_artifact_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "slack_artifact_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "email_artifact_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "recommended_email_subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recommended_slack_title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recommended_slack_bullet_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "primary_delivery_channel": {
+          "$ref": "#/$defs/nullable_string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "93f8fa68-e701-5042-8392-140c7f88d199",
+  "request_id": "c11d9f9e-9a66-4d95-8f73-f0bb6eebf7c1",
+  "subject_resolution_id": "8f85853f-3f8c-58f4-9e6c-4fb53a6d8f4d",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "follow_up",
+  "active_subject_ids": [
+    "active_subject_1"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "active_subject_1",
+      "geography_status": "county_resolved",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_or_place": "Sierra Blanca",
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_fips",
+        "inherited_session_state",
+        "subject_resolution_hint"
+      ],
+      "notes": [
+        "County/state context was inherited from session state rather than restated in the follow-up prompt."
+      ]
+    }
+  ],
+  "geography_status": "county_resolved",
+  "state": {
+    "fips": "48",
+    "code": "TX",
+    "name": "Texas",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_fips",
+    "subject_ids": [
+      "active_subject_1"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": "48229",
+    "name": "Hudspeth County",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_fips",
+    "subject_ids": [
+      "active_subject_1"
+    ],
+    "notes": []
+  },
+  "city_or_place": {
+    "name": "Sierra Blanca",
+    "resolution_status": "resolved",
+    "derivation_type": "subject_resolution_hint",
+    "subject_ids": [
+      "active_subject_1"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": "48229",
+  "state_fips": "48",
+  "state_code": "TX",
+  "derivation_sources": [
+    {
+      "derivation_id": "04b707a6-b70e-5866-b90a-7c894f0a6361",
+      "derivation_type": "explicit_request_geography_fips",
+      "scope": "county",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.98,
+      "notes": [
+        "Request-level target geography supplied county context."
+      ]
+    },
+    {
+      "derivation_id": "eaa540cc-389f-5db8-8009-820d5afefd7d",
+      "derivation_type": "inherited_session_state",
+      "scope": "county",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "session_state:thesis_snapshot.target_geographies[0]",
+      "confidence": 0.88,
+      "notes": [
+        "Follow-up inherited geography from prior Alice session state."
+      ]
+    },
+    {
+      "derivation_id": "09adc4a8-58ea-56ee-9c7f-9fc5c8dcd3a1",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "county",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": "Sierra Blanca",
+      "source_ref": "subject_resolution:active_subjects[0]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    }
+  ],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [
+    {
+      "district_type": "appraisal_district",
+      "status": "candidate",
+      "name": "Hudspeth Appraisal District",
+      "source_ids": [
+        "county_tx_hudspeth_cad_property_search"
+      ],
+      "notes": [
+        "Relevant special-district source is registered for this county context."
+      ]
+    },
+    {
+      "district_type": "appraisal_district",
+      "status": "candidate",
+      "name": "Hudspeth Appraisal District",
+      "source_ids": [
+        "county_tx_hudspeth_cad_public_information"
+      ],
+      "notes": [
+        "Relevant special-district source is registered for this county context."
+      ]
+    }
+  ],
+  "effective_county_registry_ref": "registry/county_overrides/TX/48229.json",
+  "effective_county_registry_mode": "curated_override",
+  "unresolved_questions": [
+    "Does city-specific planning jurisdiction apply here, or is this still unincorporated county land?"
+  ],
+  "notes": [
+    "A curated county registry override is available for this jurisdiction.",
+    "Jurisdiction context reused prior session-state geography rather than restarting from the follow-up prompt alone."
+  ],
+  "scores": {
+    "jurisdiction_confidence": 0.94,
+    "county_attachment_readiness": 1.0,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-17T08:17:32.858101Z"
+}

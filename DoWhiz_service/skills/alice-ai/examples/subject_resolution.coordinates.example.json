@@ -1,0 +1,168 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "0d881c46-3ac0-5da9-9a74-13d06d8eb849",
+  "request_id": "b35f2e44-1817-4f52-b0f1-532de94871ef",
+  "request_mode": "deep_research",
+  "batch_purpose": null,
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": null,
+    "previous_resolution_ref": null,
+    "previous_report_ref": null
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-coord-1",
+      "input_kind": "coordinates",
+      "raw_value": "31.175600, -105.357300"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-coord-1",
+      "input_kind": "coordinates",
+      "raw_value": "31.175600, -105.357300",
+      "normalization_status": "normalized",
+      "normalized": {
+        "coordinates": {
+          "latitude": 31.1756,
+          "longitude": -105.3573
+        },
+        "coordinate_source": "user_provided"
+      },
+      "resolution_hints": {
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "county_fips": null,
+        "county_name": null,
+        "city_name": null,
+        "source_url": null
+      },
+      "normalization_notes": [
+        "Validated the coordinate pair, but did not infer parcel boundaries or county overlays in Step 4.",
+        "Request-provided normalized fields were preserved where available."
+      ]
+    }
+  ],
+  "subject_kind": "geography_only",
+  "resolution_status": "partially_resolved",
+  "primary_subject_label": "Point at 31.1756, -105.3573",
+  "active_subjects": [
+    {
+      "subject_id": "subject-coord-1",
+      "input_kind": "coordinates",
+      "subject_kind": "coordinate_point",
+      "resolution_level": "geography_only",
+      "resolution_status": "partially_resolved",
+      "display_label": "Point at 31.1756, -105.3573",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": null,
+        "address_parse_status": null,
+        "apn_raw": null,
+        "apn_normalized": null,
+        "apn_matching_variants": [],
+        "coordinates": {
+          "latitude": 31.1756,
+          "longitude": -105.3573
+        },
+        "county_fips": null,
+        "county_name": null,
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "city_name": null,
+        "postal_code": null,
+        "subject_ref_key": null
+      },
+      "parcel_candidate_ids": [],
+      "ambiguity_flags": [
+        "coordinates_not_parcel_confirmed"
+      ],
+      "unresolved_questions": [
+        "Which parcel, if any, contains this point?"
+      ],
+      "next_resolution_actions": [
+        {
+          "action": "intersect_coordinates_with_parcel_fabric",
+          "priority": "high",
+          "subject_ids": [
+            "subject-coord-1"
+          ],
+          "rationale": "Later parcel-fabric intersection is required before parcel-specific conclusions."
+        },
+        {
+          "action": "proceed_with_geography_only_research",
+          "priority": "medium",
+          "subject_ids": [
+            "subject-coord-1"
+          ],
+          "rationale": "Geography-only research can still proceed if parcel data remains unavailable."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [],
+  "geography_context": {
+    "scope_status": "point_scoped",
+    "states": [],
+    "counties": [],
+    "cities": [],
+    "region_labels": [],
+    "centroid_coordinates": {
+      "latitude": 31.1756,
+      "longitude": -105.3573
+    },
+    "notes": [
+      "Coordinates support geography-only resolution until parcel-fabric intersection exists."
+    ]
+  },
+  "ambiguity_flags": [
+    "coordinates_not_parcel_confirmed"
+  ],
+  "unresolved_questions": [
+    "Which parcel, if any, contains this point?"
+  ],
+  "next_resolution_actions": [
+    {
+      "action": "intersect_coordinates_with_parcel_fabric",
+      "priority": "high",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "rationale": "Later parcel-fabric intersection is required before parcel-specific conclusions."
+    },
+    {
+      "action": "proceed_with_geography_only_research",
+      "priority": "medium",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "rationale": "Geography-only research can still proceed if parcel data remains unavailable."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.65,
+    "subject_specificity": 0.45,
+    "geography_specificity": 0.72,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json"
+  ],
+  "generated_at": "2026-04-16T21:43:00Z"
+}

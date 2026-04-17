@@ -1,0 +1,27 @@
+{
+  "source_id": "federal_fcc_bdc_national",
+  "name": "FCC Broadband Data Collection Nationwide Downloads",
+  "category": "federal",
+  "jurisdiction_level": "federal",
+  "geography_scope": {
+    "national": true,
+    "state_fips": null,
+    "county_fips": null,
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "National broadband availability baseline."
+  },
+  "interface_type": "downloadable_dataset",
+  "access_mode": "landing_page",
+  "capabilities": [
+    "broadband"
+  ],
+  "base_url": "https://broadbandmap.fcc.gov/data-download/nationwide-data",
+  "priority": 60,
+  "authority_rank": 1,
+  "ttl_hours": 720,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Broadband baseline source for rural access context. Not a substitute for local utility feasibility."
+}

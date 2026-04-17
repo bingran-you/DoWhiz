@@ -1,0 +1,213 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "0a6f8866-1833-53af-a3be-e639f0fb46a6",
+  "request_id": "98df68eb-684b-4bec-b34b-8155a7fa1f39",
+  "request_mode": "deep_research",
+  "batch_purpose": null,
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": null,
+    "previous_resolution_ref": null,
+    "previous_report_ref": null
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "listing_url",
+      "raw_value": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555/"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "listing_url",
+      "raw_value": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555/",
+      "normalization_status": "normalized",
+      "normalized": {
+        "platform": "land_com",
+        "canonical_url": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555",
+        "state_code_hint": "AL",
+        "county_text_hint": "Autauga County",
+        "listing_id": "55555555",
+        "address_like_slug": "25-acres-in-Autauga-County-Alabama"
+      },
+      "resolution_hints": {
+        "state_fips": "01",
+        "state_code": "AL",
+        "state_name": "Alabama",
+        "county_fips": "01001",
+        "county_name": "Autauga County",
+        "city_name": null,
+        "source_url": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555"
+      },
+      "normalization_notes": []
+    }
+  ],
+  "subject_kind": "unresolved_candidate_set",
+  "resolution_status": "partially_resolved",
+  "primary_subject_label": "Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL)",
+  "active_subjects": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "listing_url",
+      "subject_kind": "listing",
+      "resolution_level": "listing_identified",
+      "resolution_status": "partially_resolved",
+      "display_label": "Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL)",
+      "identifiers": {
+        "listing_platform": "land_com",
+        "canonical_url": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555",
+        "listing_id": "55555555",
+        "address_like_slug": "25-acres-in-Autauga-County-Alabama",
+        "address_text": null,
+        "address_parse_status": null,
+        "apn_raw": null,
+        "apn_normalized": null,
+        "apn_matching_variants": [],
+        "coordinates": null,
+        "county_fips": "01001",
+        "county_name": "Autauga County",
+        "state_fips": "01",
+        "state_code": "AL",
+        "state_name": "Alabama",
+        "city_name": null,
+        "postal_code": null,
+        "subject_ref_key": null
+      },
+      "parcel_candidate_ids": [
+        "cand-subject-1-1"
+      ],
+      "ambiguity_flags": [
+        "listing_to_parcel_unconfirmed"
+      ],
+      "unresolved_questions": [
+        "Which parcel or APN on this listing should be treated as the authoritative parcel target?"
+      ],
+      "next_resolution_actions": [
+        {
+          "action": "collect_additional_identifiers",
+          "priority": "high",
+          "subject_ids": [
+            "subject-1"
+          ],
+          "rationale": "Listing URL parsing alone does not anchor the listing to a confirmed parcel."
+        },
+        {
+          "action": "query_listing_page",
+          "priority": "high",
+          "subject_ids": [
+            "subject-1"
+          ],
+          "rationale": "Listing-page retrieval is needed later to extract APN, address, acreage, and parcel clues."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": true,
+    "listing_subject_ids": [
+      "subject-1"
+    ],
+    "platforms": [
+      "land_com"
+    ],
+    "canonical_urls": [
+      "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555"
+    ],
+    "extracted_listing_ids": [
+      "55555555"
+    ],
+    "address_like_slugs": [
+      "25-acres-in-Autauga-County-Alabama"
+    ],
+    "listing_count": 1,
+    "notes": []
+  },
+  "parcel_candidates": [
+    {
+      "candidate_id": "cand-subject-1-1",
+      "source_subject_ids": [
+        "subject-1"
+      ],
+      "candidate_status": "hinted",
+      "label": "Unconfirmed parcel from Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL)",
+      "apn_raw": null,
+      "apn_normalized": null,
+      "county_fips": "01001",
+      "county_name": "Autauga County",
+      "state_fips": "01",
+      "state_code": "AL",
+      "state_name": "Alabama",
+      "address_text": "25 Acres in Autauga County Alabama",
+      "coordinates": null,
+      "match_basis": [
+        "listing_url_id",
+        "listing_url_slug"
+      ],
+      "confidence": 0.48,
+      "notes": [
+        "Listing URL normalization does not confirm that the listing maps to one parcel."
+      ]
+    }
+  ],
+  "geography_context": {
+    "scope_status": "county_scoped",
+    "states": [
+      {
+        "state_fips": "01",
+        "state_code": "AL",
+        "state_name": "Alabama"
+      }
+    ],
+    "counties": [
+      {
+        "county_fips": "01001",
+        "county_name": "Autauga County",
+        "state_fips": "01",
+        "state_code": "AL",
+        "state_name": "Alabama"
+      }
+    ],
+    "cities": [],
+    "region_labels": [],
+    "centroid_coordinates": null,
+    "notes": [
+      "County context is available early, but this still does not imply parcel confirmation."
+    ]
+  },
+  "ambiguity_flags": [
+    "listing_to_parcel_unconfirmed"
+  ],
+  "unresolved_questions": [
+    "Which parcel or APN on this listing should be treated as the authoritative parcel target?"
+  ],
+  "next_resolution_actions": [
+    {
+      "action": "collect_additional_identifiers",
+      "priority": "high",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "rationale": "Listing URL parsing alone does not anchor the listing to a confirmed parcel."
+    },
+    {
+      "action": "query_listing_page",
+      "priority": "high",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "rationale": "Listing-page retrieval is needed later to extract APN, address, acreage, and parcel clues."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.65,
+    "subject_specificity": 0.64,
+    "geography_specificity": 0.84,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555",
+    "alice/session_state.json"
+  ],
+  "generated_at": "2026-04-16T22:38:29.047121Z"
+}

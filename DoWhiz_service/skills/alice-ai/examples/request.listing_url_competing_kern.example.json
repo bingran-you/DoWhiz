@@ -1,0 +1,50 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "5c79f5db-53a2-4c49-b50a-8777d7dc1af1",
+  "thread_id": "email:alice-demo-thread-008",
+  "channel": "email",
+  "request_mode": "deep_research",
+  "raw_user_message": "Please diligence this Kern County listing for solar and industrial outdoor-storage optionality: https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060/",
+  "thesis": {
+    "summary": "Listing-led diligence in a curated Kern County path where local parcel clues conflict and Alice should preserve multiple parcel candidates instead of collapsing them.",
+    "use_case_hypotheses": [
+      "energy",
+      "industrial_storage_commercial"
+    ],
+    "target_geographies": [],
+    "filters": {
+      "prefer_transmission_proximity": true,
+      "notes": [
+        "User prefers relatively flat ground if that can be inferred later from geometry-aware diligence."
+      ]
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 900000
+    },
+    "hold_period": {
+      "min_years": 4,
+      "max_years": 12,
+      "target_strategy": "mixed"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "ground_lease",
+        "sell_entitled"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "input_kind": "listing_url",
+      "raw_value": "https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060/"
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

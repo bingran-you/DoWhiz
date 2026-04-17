@@ -1,0 +1,27 @@
+{
+  "source_id": "county_tx_hudspeth_forms_and_applications",
+  "name": "Hudspeth County Forms and Applications",
+  "category": "county",
+  "jurisdiction_level": "county",
+  "geography_scope": {
+    "national": false,
+    "state_fips": "48",
+    "county_fips": "48229",
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "County forms page used as a lightweight planning and procedural reference."
+  },
+  "interface_type": "web_only",
+  "access_mode": "landing_page",
+  "capabilities": [
+    "development_code"
+  ],
+  "base_url": "https://www.co.hudspeth.tx.us/page/hudspeth.Forms.and.Applicatons",
+  "priority": 70,
+  "authority_rank": 1,
+  "ttl_hours": 720,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Procedural county page with subdivision, addressing, and related local application references. Not a substitute for parcel-specific zoning confirmation."
+}

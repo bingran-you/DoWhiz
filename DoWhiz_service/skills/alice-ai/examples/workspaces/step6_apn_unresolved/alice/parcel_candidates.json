@@ -1,0 +1,75 @@
+{
+  "schema_version": "alice.parcel_candidates.v1",
+  "parcel_candidates_id": "23f7c09c-519d-5546-8e2f-05be8d43ae31",
+  "request_id": "2e69c948-d90f-4d57-ac4a-f1a017bb229d",
+  "subject_resolution_id": "9b9e239f-9bd8-5d7d-abd1-e8b9095d38dd",
+  "jurisdiction_context_id": "4596b489-87d0-51f9-b786-329486723668",
+  "source_fetch_log_id": "f2fff875-8bc3-5ae1-a0e9-49c526b202ce",
+  "generated_at": "2026-04-16T23:25:00Z",
+  "candidate_set_status": "single_weak_candidate",
+  "candidate_strategy": "address_apn_merge",
+  "primary_candidate_id": "cand-subject-1-1",
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "candidate_id": "cand-subject-1-1",
+      "county_fips": null,
+      "state_fips": null,
+      "apn_raw": "H123-456-7890-0000",
+      "apn_normalized": "H12345678900000",
+      "apn_variants": [
+        "H12345678900000",
+        "H123-456-7890-0000"
+      ],
+      "parcel_address": null,
+      "acreage_claims": [],
+      "source_clues": [
+        {
+          "clue_id": "subject_resolution:subject-1:apn",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "subject_resolution",
+          "source_item_id": null,
+          "evidence_scope": "inferred",
+          "confidence": 0.52,
+          "weight": 0.22,
+          "citation_ids": [],
+          "notes": [
+            "APN carried from subject resolution or prior session state rather than a Step 7 fetched local record."
+          ]
+        },
+        {
+          "clue_id": "subject_resolution:cand-subject-1-1:seed_apn",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "subject_resolution",
+          "source_item_id": null,
+          "evidence_scope": "inferred",
+          "confidence": 0.45,
+          "weight": 0.22,
+          "citation_ids": [],
+          "notes": [
+            "APN normalization is a matching aid only; official parcel lookup is still required."
+          ]
+        }
+      ],
+      "supporting_source_ids": [
+        "subject_resolution"
+      ],
+      "contradicting_source_ids": [],
+      "candidate_strength": "weak",
+      "confirmation_level": "candidate_unconfirmed",
+      "confirmation_basis": "unknown",
+      "geometry_status": "none",
+      "notes": [
+        "APN normalization is a matching aid only; official parcel lookup is still required.",
+        "Current clues remain weak and should not be treated as parcel confirmation."
+      ]
+    }
+  ],
+  "notes": [
+    "Only a weak single candidate is available; parcel-specific conclusions should remain conservative."
+  ]
+}

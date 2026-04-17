@@ -1,0 +1,1001 @@
+{
+  "schema_version": "alice.extracted_evidence.v1",
+  "extracted_evidence_id": "21003e83-d00e-5960-961d-0a7343bb7157",
+  "request_id": "b71f5ba1-f08d-447b-a91a-2a31724cd2f3",
+  "subject_resolution_id": "c964d9cd-9df1-5d50-a1a6-0f5857d31e74",
+  "fetch_log_id": "e3bfd7e3-4b34-5ae2-9a04-2fa6c2953e78",
+  "generated_at": "2026-04-17T01:05:00Z",
+  "items": [
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:page_title",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Property Detail - Hudspeth Appraisal District",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:page_meta_description",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Parcel detail for Hudspeth Appraisal District property H123-456-7890-0000.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:page_text_excerpt",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Property Detail - Hudspeth Appraisal District Hudspeth Appraisal District Property Detail Property ID: 998877 APN: H123-456-7890-0000 Site Address: 0 County Road 111, Sierra Blanca, TX 79851 Owner Name: Sierra Blanca Desert Holdings LLC Acres: 80.00 Legal Description: Section 14 Block 72 TSP RR Co S",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_apn_hint",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.apn_hint",
+      "extraction_status": "parsed",
+      "value": "H123-456-7890-0000",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.79,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "apn",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": [
+        "APN text came from a fetched public page and should still be reconciled against competing clues before parcel confirmation."
+      ]
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_county_parcel_id_hint",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.county_parcel_id_hint",
+      "extraction_status": "parsed",
+      "value": "998877",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.8,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "county_parcel_id",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_site_address_hint",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.site_address_hint",
+      "extraction_status": "parsed",
+      "value": {
+        "full_address": "0 County Road 111, Sierra Blanca, TX 79851",
+        "street_line1": "0 County Road 111, Sierra Blanca, TX 79851",
+        "street_line2": null,
+        "city": null,
+        "county_name": null,
+        "state_code": null,
+        "postal_code": null,
+        "country_code": "US"
+      },
+      "value_type": "object",
+      "status": "estimated",
+      "confidence": 0.76,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "address",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_owner_name_hint",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.owner_name_hint",
+      "extraction_status": "parsed",
+      "value": "Sierra Blanca Desert Holdings LLC",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.74,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "owner_name",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_legal_description_fragment",
+      "fetch_entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.legal_description_fragment",
+      "extraction_status": "parsed",
+      "value": "Section 14 Block 72 TSP RR Co Surveys",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.71,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "legal_description",
+      "citation_ids": [
+        "c_a164adc9"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:page_title",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Public Information - Hudspeth Appraisal District Parcel Detail",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:page_meta_description",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Public information snapshot for parcel H123-456-7890-0000 in Hudspeth Appraisal District.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:page_text_excerpt",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Public Information - Hudspeth Appraisal District Parcel Detail Public Information APN: H123-456-7890-0000 Property ID: 998877 Owner Name: Sierra Blanca Desert Holdings LLC Situs Address: 0 County Road 111, Sierra Blanca, TX 79851 Gross Acres: 80.00 Public roll excerpt for manual verification and rec",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_apn_hint",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.apn_hint",
+      "extraction_status": "parsed",
+      "value": "H123-456-7890-0000",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.79,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "apn",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": [
+        "APN text came from a fetched public page and should still be reconciled against competing clues before parcel confirmation."
+      ]
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_county_parcel_id_hint",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.county_parcel_id_hint",
+      "extraction_status": "parsed",
+      "value": "998877",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.8,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "county_parcel_id",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_site_address_hint",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.site_address_hint",
+      "extraction_status": "parsed",
+      "value": {
+        "full_address": "0 County Road 111, Sierra Blanca, TX 79851",
+        "street_line1": "0 County Road 111, Sierra Blanca, TX 79851",
+        "street_line2": null,
+        "city": null,
+        "county_name": null,
+        "state_code": null,
+        "postal_code": null,
+        "country_code": "US"
+      },
+      "value_type": "object",
+      "status": "estimated",
+      "confidence": 0.76,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "address",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_owner_name_hint",
+      "fetch_entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.owner_name_hint",
+      "extraction_status": "parsed",
+      "value": "Sierra Blanca Desert Holdings LLC",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.74,
+      "evidence_scope": "parcel_candidate",
+      "clue_type": "owner_name",
+      "citation_ids": [
+        "c_bdaaa408"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:8170d536:page_title",
+      "fetch_entry_id": "8170d536-7ee9-598d-aaba-23be26231dd8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Texas StratMap Land Parcels",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_8170d536"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/8170d536-7ee9-598d-aaba-23be26231dd8.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:8170d536:page_meta_description",
+      "fetch_entry_id": "8170d536-7ee9-598d-aaba-23be26231dd8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Texas statewide land parcels dataset landing page under the Texas Natural Resources Information System.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_8170d536"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/8170d536-7ee9-598d-aaba-23be26231dd8.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:8170d536:page_text_excerpt",
+      "fetch_entry_id": "8170d536-7ee9-598d-aaba-23be26231dd8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Texas StratMap Land Parcels Texas StratMap Land Parcels Statewide parcel dataset landing page for Texas land parcel information.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_8170d536"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/8170d536-7ee9-598d-aaba-23be26231dd8.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_title",
+      "fetch_entry_id": "9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Hudspeth County Forms and Applications",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_9cc08b9d"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_meta_description",
+      "fetch_entry_id": "9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Hudspeth County forms and applications page for permits, public forms, and procedural county filings.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_9cc08b9d"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_text_excerpt",
+      "fetch_entry_id": "9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Hudspeth County Forms and Applications Forms and Applications County procedural forms and applications for public use.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_9cc08b9d"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:9cc08b9d:parcel_identity_county_name_hint",
+      "fetch_entry_id": "9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.county_name_hint",
+      "extraction_status": "parsed",
+      "value": "Applications Forms and Applications County",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.7,
+      "evidence_scope": "county_level",
+      "clue_type": "county_name",
+      "citation_ids": [
+        "c_9cc08b9d"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:f7b719d5:page_title",
+      "fetch_entry_id": "f7b719d5-16a7-55d2-8ec0-84a7a167be13",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "FCC Broadband Data Collection Nationwide Data",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_f7b719d5"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/f7b719d5-16a7-55d2-8ec0-84a7a167be13.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:f7b719d5:page_meta_description",
+      "fetch_entry_id": "f7b719d5-16a7-55d2-8ec0-84a7a167be13",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Nationwide broadband data download resources from the FCC Broadband Data Collection program.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_f7b719d5"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/f7b719d5-16a7-55d2-8ec0-84a7a167be13.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:f7b719d5:page_text_excerpt",
+      "fetch_entry_id": "f7b719d5-16a7-55d2-8ec0-84a7a167be13",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "FCC Broadband Data Collection Nationwide Data Nationwide Broadband Data Download and reference resources for FCC broadband coverage data.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_f7b719d5"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/f7b719d5-16a7-55d2-8ec0-84a7a167be13.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:388a298c:page_title",
+      "fetch_entry_id": "388a298c-beef-5204-b183-515bc3076bb9",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Texas PUC Electricity Maps",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_388a298c"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/388a298c-beef-5204-b183-515bc3076bb9.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:388a298c:page_meta_description",
+      "fetch_entry_id": "388a298c-beef-5204-b183-515bc3076bb9",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Texas Public Utility Commission electricity maps and service-area resources.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_388a298c"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/388a298c-beef-5204-b183-515bc3076bb9.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:388a298c:page_text_excerpt",
+      "fetch_entry_id": "388a298c-beef-5204-b183-515bc3076bb9",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Texas PUC Electricity Maps Electricity Maps Public utility and electricity map resources for Texas.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_388a298c"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/388a298c-beef-5204-b183-515bc3076bb9.html",
+      "notes": []
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:listing_title",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "listing",
+      "field_name": "listing.title",
+      "extraction_status": "parsed",
+      "value": "80 Acres near Sierra Blanca, TX 79851 - LandWatch Listing 12345678",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.74,
+      "evidence_scope": "listing_derived",
+      "clue_type": "listing_identifier",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": []
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:listing_canonical_url",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "listing",
+      "field_name": "listing.canonical_url",
+      "extraction_status": "parsed",
+      "value": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.9,
+      "evidence_scope": "listing_derived",
+      "clue_type": "listing_identifier",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": []
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:listing_asking_price",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "listing",
+      "field_name": "listing.asking_price",
+      "extraction_status": "parsed",
+      "value": 240000.0,
+      "value_type": "number",
+      "status": "confirmed",
+      "confidence": 0.88,
+      "evidence_scope": "listing_derived",
+      "clue_type": "market_signal",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": []
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:listing_listed_acreage",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "listing",
+      "field_name": "listing.listed_acreage",
+      "extraction_status": "parsed",
+      "value": 80.0,
+      "value_type": "number",
+      "status": "confirmed",
+      "confidence": 0.8,
+      "evidence_scope": "listing_derived",
+      "clue_type": "acreage",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": []
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_acreage_hint",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.acreage_hint",
+      "extraction_status": "parsed",
+      "value": 80.0,
+      "value_type": "number",
+      "status": "estimated",
+      "confidence": 0.76,
+      "evidence_scope": "listing_derived",
+      "clue_type": "acreage",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "Listing acreage is a seller-facing claim until corroborated by an official parcel source."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:listing_description_text",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "listing",
+      "field_name": "listing.description_text",
+      "extraction_status": "parsed",
+      "value": "80-acre West Texas parcel near Sierra Blanca with county-road access, broad desert views, and seller-marketed solar and rural hold potential.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.73,
+      "evidence_scope": "listing_derived",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "Listing description is marketing text and does not confirm parcel identity."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:subject_address",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "subject",
+      "field_name": "subject.address",
+      "extraction_status": "parsed",
+      "value": {
+        "full_address": "County Road 111, Sierra Blanca, TX, 79851",
+        "street_line1": "County Road 111",
+        "street_line2": null,
+        "city": "Sierra Blanca",
+        "county_name": "Hudspeth County",
+        "state_code": "TX",
+        "postal_code": "79851",
+        "country_code": "US"
+      },
+      "value_type": "object",
+      "status": "estimated",
+      "confidence": 0.68,
+      "evidence_scope": "listing_derived",
+      "clue_type": "address",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "Listing-derived address should be confirmed against official parcel or assessor records."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_site_address_hint",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.site_address_hint",
+      "extraction_status": "parsed",
+      "value": {
+        "full_address": "County Road 111, Sierra Blanca, TX, 79851",
+        "street_line1": "County Road 111",
+        "street_line2": null,
+        "city": "Sierra Blanca",
+        "county_name": "Hudspeth County",
+        "state_code": "TX",
+        "postal_code": "79851",
+        "country_code": "US"
+      },
+      "value_type": "object",
+      "status": "estimated",
+      "confidence": 0.68,
+      "evidence_scope": "listing_derived",
+      "clue_type": "address",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "Listing-derived address is a parcel clue, not parcel confirmation by itself."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:subject_coordinates",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "subject",
+      "field_name": "subject.coordinates",
+      "extraction_status": "parsed",
+      "value": {
+        "latitude": 31.1783,
+        "longitude": -105.3371
+      },
+      "value_type": "object",
+      "status": "estimated",
+      "confidence": 0.7,
+      "evidence_scope": "listing_derived",
+      "clue_type": "coordinates",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "Listing-derived coordinates are directional until parcel geometry is confirmed."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_apn_hint",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.apn_hint",
+      "extraction_status": "parsed",
+      "value": "H123-456-7890-0000",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.7,
+      "evidence_scope": "listing_derived",
+      "clue_type": "apn",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": [
+        "APN clue came from a listing page and is not parcel confirmation by itself."
+      ]
+    },
+    {
+      "item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_county_name_hint",
+      "fetch_entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "capability": "market_context",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.county_name_hint",
+      "extraction_status": "parsed",
+      "value": "Hudspeth County",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.72,
+      "evidence_scope": "listing_derived",
+      "clue_type": "county_name",
+      "citation_ids": [
+        "c_f8a8c354"
+      ],
+      "observed_at": "2026-04-17T01:05:00Z",
+      "evidence_ref": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+      "notes": []
+    }
+  ]
+}

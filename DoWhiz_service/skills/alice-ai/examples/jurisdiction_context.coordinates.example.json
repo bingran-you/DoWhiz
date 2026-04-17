@@ -1,0 +1,80 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "241bf5b5-5046-574c-92a1-3e7815725e03",
+  "request_id": "b35f2e44-1817-4f52-b0f1-532de94871ef",
+  "subject_resolution_id": "0d881c46-3ac0-5da9-9a74-13d06d8eb849",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "deep_research",
+  "active_subject_ids": [
+    "subject-coord-1"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "subject-coord-1",
+      "geography_status": "geography_only",
+      "state_fips": null,
+      "state_code": null,
+      "state_name": null,
+      "county_fips": null,
+      "county_name": null,
+      "city_or_place": null,
+      "incorporated_status": "unknown",
+      "derivation_types": [],
+      "notes": [
+        "Coordinates are preserved as geography-only context until offline county lookup exists."
+      ]
+    }
+  ],
+  "geography_status": "geography_only",
+  "state": {
+    "fips": null,
+    "code": null,
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-coord-1"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": null,
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-coord-1"
+    ],
+    "notes": []
+  },
+  "city_or_place": {
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-coord-1"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": null,
+  "state_fips": null,
+  "state_code": null,
+  "derivation_sources": [],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [],
+  "effective_county_registry_ref": null,
+  "effective_county_registry_mode": "none",
+  "unresolved_questions": [
+    "What county or state should govern local parcel-level research before county registry coverage is attached?"
+  ],
+  "notes": [
+    "At least one active subject remains geography-only, so parcel-level local planning must stay conservative."
+  ],
+  "scores": {
+    "jurisdiction_confidence": 0.46,
+    "county_attachment_readiness": 0.18,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-16T22:43:47.150509Z"
+}

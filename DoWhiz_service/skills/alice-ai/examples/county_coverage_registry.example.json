@@ -1,0 +1,38 @@
+{
+  "county_fips": "48229",
+  "state_fips": "48",
+  "county_name": "Hudspeth",
+  "registry_version": "alice.county_coverage_registry.v1",
+  "coverage_tier": "partial",
+  "capabilities": {
+    "parcel_identity": "full",
+    "zoning": "minimal",
+    "planning_docs": "partial",
+    "tax_roll": "partial",
+    "utilities": "minimal",
+    "environmental": "partial",
+    "water": "minimal",
+    "transmission": "minimal",
+    "broadband": "partial",
+    "listings": "partial"
+  },
+  "preferred_source_ids": [
+    "county_tx_hudspeth_parcel_gis",
+    "county_tx_hudspeth_tax_roll",
+    "federal_fema_nfhl",
+    "federal_fcc_broadband"
+  ],
+  "discovered_source_ids": [
+    "county_tx_hudspeth_parcel_gis",
+    "county_tx_hudspeth_tax_roll",
+    "county_tx_hudspeth_planning",
+    "federal_fema_nfhl",
+    "federal_fcc_broadband",
+    "market_tx_transmission_viewer"
+  ],
+  "known_limitations": [
+    "Parcel-level zoning is not directly machine-verifiable from the current example county sources.",
+    "Utility territory remains weaker than parcel identity and tax visibility."
+  ],
+  "last_verified_at": "2026-04-16T17:40:00Z"
+}

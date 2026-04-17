@@ -1,0 +1,173 @@
+{
+  "schema_version": "alice.recommendation_candidates.v1",
+  "recommendation_candidates_id": "5e32a09b-33b7-59c3-97b7-16dd82dc1b1e",
+  "request_id": "11111111-1111-4111-8111-111111111111",
+  "subject_resolution_id": "4dfa5c9d-666a-59ef-9790-6302a5f04486",
+  "generated_at": "2026-04-17T02:00:00Z",
+  "request_mode": "user_supplied_ranking",
+  "thesis_summary": "Rank supplied listings for solar or long-term rural hold under $700k, with parcel certainty and evidence quality carrying real weight.",
+  "search_scope": {
+    "target_geographies": [],
+    "filters": {
+      "max_price": 700000,
+      "prefer_transmission_proximity": true,
+      "desired_coverage_tiers": [
+        "full",
+        "partial",
+        "minimal"
+      ]
+    },
+    "budget_max_purchase_price": 700000,
+    "active_use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "notes": []
+  },
+  "acquisition_summary": {
+    "observed_platforms": [
+      "landwatch",
+      "land_com"
+    ],
+    "input_subject_count": 4,
+    "duplicate_input_count": 1,
+    "matched_existing_research_count": 3,
+    "unmatched_input_count": 0,
+    "candidate_observation_limitations": [
+      "Recommendation v0 ranks candidates only from user-supplied URLs or Alice's observed listing catalog.",
+      "This candidate universe is not a live or exhaustive market crawl."
+    ],
+    "acquisition_notes": [
+      "Alice keeps hard-filtered and thin-evidence candidates visible instead of silently dropping them.",
+      "Candidate acquisition preserves the observed universe before shortlist pruning."
+    ]
+  },
+  "candidate_count": 3,
+  "candidates": [
+    {
+      "candidate_subject_id": "candidate-5d06e138",
+      "source_listing_url": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+      "platform": "landwatch",
+      "acquisition_path": "user_supplied_listing_url",
+      "candidate_observation_status": "observed_with_research_artifacts",
+      "observed_at": "2026-04-17T01:05:00Z",
+      "raw_listing_hints": {
+        "title": "LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX",
+        "asking_price": 240000.0,
+        "acreage": 80.0,
+        "county_name": "Hudspeth County",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "listing_id": "12345678",
+        "listing_text_summary": "80-acre West Texas parcel near Sierra Blanca with county-road access, broad desert views, and seller-marketed solar and rural hold potential."
+      },
+      "normalized_subject_seed": {
+        "input_kind": "listing_url",
+        "raw_value": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678?utm_source=test",
+        "canonical_url": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+        "listing_platform": "landwatch",
+        "listing_id": "12345678",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      },
+      "dedupe_group_id": "dedupe-98bc331a",
+      "initial_match_rationale": "User supplied this listing directly, and Alice matched it to an observed research workspace.",
+      "initial_eligibility_status": "eligible",
+      "linked_workspace_artifacts": {
+        "workspace_root": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth",
+        "parcel_memo_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/parcel_memo.json",
+        "coverage_assessment_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/coverage_assessment.json",
+        "parcel_candidates_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/parcel_candidates.json",
+        "report_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/report.md"
+      },
+      "notes": [
+        "Duplicate user-supplied candidate input was collapsed by canonical listing URL."
+      ]
+    },
+    {
+      "candidate_subject_id": "candidate-9e187840",
+      "source_listing_url": "https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060",
+      "platform": "land_com",
+      "acquisition_path": "user_supplied_listing_url",
+      "candidate_observation_status": "observed_with_research_artifacts",
+      "observed_at": "2026-04-17T01:15:00Z",
+      "raw_listing_hints": {
+        "title": "Land.com listing 60606060 near Bakersfield, Kern County, CA",
+        "asking_price": 640000.0,
+        "acreage": 160.0,
+        "county_name": "Kern County",
+        "state_code": "CA",
+        "county_fips": "06029",
+        "listing_id": "60606060",
+        "listing_text_summary": "160-acre Kern County land listing near Bakersfield with seller-stated APN 123-450-17-00-5, rural road frontage, and solar plus storage potential."
+      },
+      "normalized_subject_seed": {
+        "input_kind": "listing_url",
+        "raw_value": "https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060/",
+        "canonical_url": "https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060",
+        "listing_platform": "land_com",
+        "listing_id": "60606060",
+        "county_fips": "06029",
+        "county_name": "Kern County",
+        "state_fips": "06",
+        "state_code": "CA",
+        "state_name": "California"
+      },
+      "dedupe_group_id": "dedupe-18c23636",
+      "initial_match_rationale": "User supplied this listing directly, and Alice matched it to an observed research workspace.",
+      "initial_eligibility_status": "eligible",
+      "linked_workspace_artifacts": {
+        "workspace_root": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_competing_kern",
+        "parcel_memo_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_competing_kern/alice/parcel_memo.json",
+        "coverage_assessment_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_competing_kern/alice/coverage_assessment.json",
+        "parcel_candidates_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_competing_kern/alice/parcel_candidates.json",
+        "report_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_competing_kern/alice/report.md"
+      },
+      "notes": []
+    },
+    {
+      "candidate_subject_id": "candidate-80cb900e",
+      "source_listing_url": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555",
+      "platform": "land_com",
+      "acquisition_path": "user_supplied_listing_url",
+      "candidate_observation_status": "observed_with_research_artifacts",
+      "observed_at": "2026-04-17T01:10:00Z",
+      "raw_listing_hints": {
+        "title": "Land.com listing 55555555 near 25 Acres in Autauga County Alabama (AL)",
+        "asking_price": 185000.0,
+        "acreage": 25.0,
+        "county_name": "Autauga County",
+        "state_code": "AL",
+        "county_fips": "01001",
+        "listing_id": "55555555",
+        "listing_text_summary": "25-acre Alabama listing with rural road access and light development upside, offered as a first-pass rural hold opportunity."
+      },
+      "normalized_subject_seed": {
+        "input_kind": "listing_url",
+        "raw_value": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555/",
+        "canonical_url": "https://www.land.com/property/25-acres-in-Autauga-County-Alabama/55555555",
+        "listing_platform": "land_com",
+        "listing_id": "55555555",
+        "county_fips": "01001",
+        "county_name": "Autauga County",
+        "state_fips": "01",
+        "state_code": "AL",
+        "state_name": "Alabama"
+      },
+      "dedupe_group_id": "dedupe-757321f9",
+      "initial_match_rationale": "User supplied this listing directly, and Alice matched it to an observed research workspace.",
+      "initial_eligibility_status": "eligible",
+      "linked_workspace_artifacts": {
+        "workspace_root": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_fallback_weak_autauga",
+        "parcel_memo_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_fallback_weak_autauga/alice/parcel_memo.json",
+        "coverage_assessment_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_fallback_weak_autauga/alice/coverage_assessment.json",
+        "parcel_candidates_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_fallback_weak_autauga/alice/parcel_candidates.json",
+        "report_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_fallback_weak_autauga/alice/report.md"
+      },
+      "notes": []
+    }
+  ]
+}

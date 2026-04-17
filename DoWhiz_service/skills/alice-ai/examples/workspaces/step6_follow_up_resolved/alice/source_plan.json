@@ -1,0 +1,196 @@
+{
+  "schema_version": "alice.source_plan.v1",
+  "source_plan_id": "8a641a24-7e61-5ede-a512-02c5a5fd19b0",
+  "request_id": "c11d9f9e-9a66-4d95-8f73-f0bb6eebf7c1",
+  "subject_resolution_id": "8f85853f-3f8c-58f4-9e6c-4fb53a6d8f4d",
+  "jurisdiction_context_id": "93f8fa68-e701-5042-8392-140c7f88d199",
+  "coverage_assessment_id": "926c4e1b-87b5-5063-992b-43348ae63c5d",
+  "plan_status": "partially_blocked",
+  "request_mode": "follow_up",
+  "active_use_cases": [
+    "energy",
+    "recreational_rural_hold"
+  ],
+  "required_capabilities": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "environmental_baseline",
+    "utilities",
+    "transmission"
+  ],
+  "planned_source_groups": [
+    {
+      "capability": "parcel_identity",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "county_tx_hudspeth_cad_property_search",
+        "county_tx_hudspeth_cad_public_information",
+        "state_tx_stratmap_land_parcels"
+      ],
+      "source_selection_rationale": "Start with Hudspeth Appraisal District Property Search because the effective county registry prefers this source for parcel_identity in the current jurisdiction.",
+      "priority_order": 1,
+      "authority_level": "mixed",
+      "execution_preconditions": [
+        "county_fips must be stable before this local source group runs",
+        "subject must retain at least one parcel clue such as APN, address, listing URL, or inherited parcel reference"
+      ],
+      "fallback_if_missing": [
+        "If county parcel search is missing, fall back to statewide parcel programs where available or request explicit county/APN clarification."
+      ],
+      "group_status": "ready",
+      "notes": []
+    },
+    {
+      "capability": "parcel_geometry",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "state_tx_stratmap_land_parcels"
+      ],
+      "source_selection_rationale": "Start with Texas StratMap Land Parcels because the effective county registry prefers this source for parcel_geometry in the current jurisdiction.",
+      "priority_order": 2,
+      "authority_level": "official_state",
+      "execution_preconditions": [
+        "county_fips must be stable before this local source group runs"
+      ],
+      "fallback_if_missing": [
+        "If county geometry is unavailable, fall back to statewide parcel datasets or keep geometry unresolved."
+      ],
+      "group_status": "ready",
+      "notes": []
+    },
+    {
+      "capability": "tax_roll",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "county_tx_hudspeth_cad_property_search",
+        "county_tx_hudspeth_cad_public_information"
+      ],
+      "source_selection_rationale": "Start with Hudspeth Appraisal District Property Search because the effective county registry prefers this source for tax_roll in the current jurisdiction.",
+      "priority_order": 3,
+      "authority_level": "official_local_or_county",
+      "execution_preconditions": [
+        "county_fips must be stable before this local source group runs"
+      ],
+      "fallback_if_missing": [
+        "If tax roll access is missing, keep assessed value and ownership context unresolved until a county source is added."
+      ],
+      "group_status": "ready",
+      "notes": []
+    },
+    {
+      "capability": "planning_docs",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "county_tx_hudspeth_forms_and_applications"
+      ],
+      "source_selection_rationale": "Start with Hudspeth County Forms and Applications because it is the strongest currently registered source group for planning_docs given the present jurisdiction footing.",
+      "priority_order": 5,
+      "authority_level": "official_local_or_county",
+      "execution_preconditions": [
+        "county_fips must be stable before this local source group runs"
+      ],
+      "fallback_if_missing": [
+        "If local planning documents are thin, rely on county procedural pages and keep entitlement interpretation conservative."
+      ],
+      "group_status": "ready",
+      "notes": []
+    },
+    {
+      "capability": "environmental_baseline",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "federal_fema_nfhl",
+        "federal_usfws_nwi",
+        "federal_usda_soil_data_access",
+        "federal_usgs_3dep_elevation",
+        "federal_epa_ejscreen"
+      ],
+      "source_selection_rationale": "Start with FEMA National Flood Hazard Layer because national baseline overlays should be retrieved before narrower parcel-specific interpretation.",
+      "priority_order": 6,
+      "authority_level": "official_federal",
+      "execution_preconditions": [
+        "a defensible geography anchor such as county, state, or coordinates must be present"
+      ],
+      "fallback_if_missing": [
+        "If one national overlay is degraded, continue with the remaining federal baseline sources and record the missing layer explicitly."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "Environmental baseline uses federal overlays even when county-local depth is thin."
+      ]
+    },
+    {
+      "capability": "utilities",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "state_tx_puc_electricity_maps",
+        "federal_fcc_bdc_national"
+      ],
+      "source_selection_rationale": "Start with Texas PUC Electricity Maps because the effective county registry prefers this source for utilities in the current jurisdiction.",
+      "priority_order": 7,
+      "authority_level": "mixed",
+      "execution_preconditions": [
+        "at least state-level geography should be stable before infrastructure retrieval begins"
+      ],
+      "fallback_if_missing": [
+        "If local utility service areas are unclear, fall back to statewide utility maps and keep service conclusions directional."
+      ],
+      "group_status": "ready",
+      "notes": []
+    },
+    {
+      "capability": "transmission",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "source_ids": [
+        "state_tx_puc_electricity_maps"
+      ],
+      "source_selection_rationale": "Start with Texas PUC Electricity Maps because the effective county registry prefers this source for transmission in the current jurisdiction.",
+      "priority_order": 8,
+      "authority_level": "official_state",
+      "execution_preconditions": [
+        "at least state-level geography should be stable before infrastructure retrieval begins"
+      ],
+      "fallback_if_missing": [
+        "If state or local transmission context is thin, retain transmission proximity as a directional screen only."
+      ],
+      "group_status": "ready",
+      "notes": []
+    }
+  ],
+  "deferred_steps": [],
+  "blocked_steps": [
+    {
+      "capability": "zoning",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "blocker_type": "local_source_gap",
+      "reason": "No registered source currently supports zoning strongly enough for this context.",
+      "dependency": null
+    }
+  ],
+  "missing_capabilities": [
+    "zoning"
+  ],
+  "notes": [
+    "This artifact is a retrieval plan only. No live source fetches have been executed in Step 5."
+  ],
+  "generated_at": "2026-04-17T08:20:53.473852Z"
+}

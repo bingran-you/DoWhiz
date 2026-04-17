@@ -1,0 +1,30 @@
+{
+  "source_id": "county_ca_kern_interactive_mapping",
+  "name": "Kern County Interactive Mapping",
+  "category": "county",
+  "jurisdiction_level": "county",
+  "geography_scope": {
+    "national": false,
+    "state_fips": "06",
+    "county_fips": "06029",
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "County interactive mapping viewer used for parcel geometry and zoning-adjacent overlays."
+  },
+  "interface_type": "web_only",
+  "access_mode": "viewer",
+  "capabilities": [
+    "parcel_geometry",
+    "site_address",
+    "zoning",
+    "future_land_use"
+  ],
+  "base_url": "https://www.kerncounty.com/government/departments/assessor-recorder/property/mapping-gis/interactive-mapping",
+  "priority": 105,
+  "authority_rank": 1,
+  "ttl_hours": 168,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Public county viewer for parcel context and planning overlays. Automated extraction may still require browser-oriented handling."
+}

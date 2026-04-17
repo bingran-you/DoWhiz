@@ -1,0 +1,94 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "ec39d72b-b8e6-41fa-a95b-630fd0e9d9cc",
+  "thread_id": "slack:C09ALICE:1744745902.000212",
+  "channel": "slack",
+  "request_mode": "batch_compare",
+  "raw_user_message": "Compare these three candidate land listings for small solar or long-term hold: https://www.redfin.com/TX/Sierra-Blanca/12345-Ranch-Rd-79851/home/123456789 https://www.zillow.com/homedetails/12345-County-Road-12-Sierra-Blanca-TX-79851/207654321_zpid/ https://www.land.com/property/80-acres-in-Hudspeth-County-Texas/87654321/",
+  "thesis": {
+    "summary": "Batch comparison of user-supplied listings for a small solar plus long-term hold thesis.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [
+      {
+        "kind": "state",
+        "label": "Texas",
+        "state_code": "TX"
+      }
+    ],
+    "filters": {
+      "prefer_transmission_proximity": true,
+      "exclude_major_floodplain": true
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 500000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "subject_id": "subject-batch-1",
+      "input_kind": "listing_url",
+      "raw_value": "https://www.redfin.com/TX/Sierra-Blanca/12345-Ranch-Rd-79851/home/123456789",
+      "normalized": {
+        "platform": "redfin",
+        "canonical_url": "https://www.redfin.com/tx/sierra-blanca/12345-ranch-rd-79851/home/123456789",
+        "listing_id": "123456789",
+        "address_like_slug": "12345-Ranch-Rd-79851",
+        "state_code_hint": "TX"
+      }
+    },
+    {
+      "subject_id": "subject-batch-2",
+      "input_kind": "listing_url",
+      "raw_value": "https://www.zillow.com/homedetails/12345-County-Road-12-Sierra-Blanca-TX-79851/207654321_zpid/",
+      "normalized": {
+        "platform": "zillow",
+        "canonical_url": "https://www.zillow.com/homedetails/12345-County-Road-12-Sierra-Blanca-TX-79851/207654321_zpid",
+        "listing_id": "207654321",
+        "address_like_slug": "12345-County-Road-12-Sierra-Blanca-TX-79851",
+        "state_code_hint": "TX"
+      }
+    },
+    {
+      "subject_id": "subject-batch-3",
+      "input_kind": "listing_url",
+      "raw_value": "https://www.land.com/property/80-acres-in-Hudspeth-County-Texas/87654321/",
+      "normalized": {
+        "platform": "land_com",
+        "canonical_url": "https://www.land.com/property/80-acres-in-Hudspeth-County-Texas/87654321",
+        "listing_id": "87654321",
+        "address_like_slug": "80-acres-in-Hudspeth-County-Texas",
+        "state_code_hint": "TX",
+        "county_text_hint": "Hudspeth County"
+      },
+      "resolution_hints": {
+        "state_fips": "48",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "source_url": "https://www.land.com/property/80-acres-in-Hudspeth-County-Texas/87654321"
+      }
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": true,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

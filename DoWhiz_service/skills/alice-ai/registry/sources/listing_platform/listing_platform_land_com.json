@@ -1,0 +1,28 @@
+{
+  "source_id": "listing_platform_land_com",
+  "name": "Land.com Listings",
+  "category": "listing_platform",
+  "jurisdiction_level": "platform",
+  "geography_scope": {
+    "national": true,
+    "state_fips": null,
+    "county_fips": null,
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "National listing platform used for directional land listing context."
+  },
+  "interface_type": "web_only",
+  "access_mode": "landing_page",
+  "capabilities": [
+    "listing_search",
+    "market_context"
+  ],
+  "base_url": "https://www.land.com/",
+  "priority": 45,
+  "authority_rank": 4,
+  "ttl_hours": 24,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Listing platform source for asking what the listing says and for directional market context. Not an authoritative parcel, zoning, or feasibility source."
+}

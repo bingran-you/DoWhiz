@@ -1,0 +1,315 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "b8ebd68d-59bd-58c2-b8b9-aa8f1ae76e64",
+  "request_id": "ec39d72b-b8e6-41fa-a95b-630fd0e9d9cc",
+  "subject_resolution_id": "7158c6fb-52e3-51a1-b211-f308f293b535",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "batch_compare",
+  "active_subject_ids": [
+    "subject-batch-1",
+    "subject-batch-2",
+    "subject-batch-3"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "subject-batch-1",
+      "geography_status": "state_resolved",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_or_place": null,
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_text",
+        "subject_resolution_hint",
+        "listing_url_slug_hint"
+      ],
+      "notes": []
+    },
+    {
+      "subject_id": "subject-batch-2",
+      "geography_status": "state_resolved",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_or_place": null,
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_text",
+        "subject_resolution_hint",
+        "listing_url_slug_hint"
+      ],
+      "notes": []
+    },
+    {
+      "subject_id": "subject-batch-3",
+      "geography_status": "county_resolved",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_or_place": null,
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_text",
+        "explicit_subject_hint",
+        "subject_resolution_hint",
+        "listing_url_slug_hint"
+      ],
+      "notes": []
+    }
+  ],
+  "geography_status": "mixed_subjects",
+  "state": {
+    "fips": "48",
+    "code": "TX",
+    "name": "Texas",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_text",
+    "subject_ids": [
+      "subject-batch-1",
+      "subject-batch-2",
+      "subject-batch-3"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": "48229",
+    "name": "Hudspeth County",
+    "resolution_status": "candidate",
+    "derivation_type": "explicit_subject_hint",
+    "subject_ids": [
+      "subject-batch-3"
+    ],
+    "notes": [
+      "At least one active subject points at this county, but the full active subject set does not yet share it."
+    ]
+  },
+  "city_or_place": {
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-batch-1",
+      "subject-batch-2",
+      "subject-batch-3"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": null,
+  "state_fips": "48",
+  "state_code": "TX",
+  "derivation_sources": [
+    {
+      "derivation_id": "436a110f-4436-5c0b-a36c-9cd7a4351ce0",
+      "derivation_type": "explicit_request_geography_text",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.93,
+      "notes": [
+        "Request-level target geography supplied state context."
+      ]
+    },
+    {
+      "derivation_id": "0881b518-2546-59a0-a2b8-1f09879a3bb6",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "subject_resolution:active_subjects[0]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    },
+    {
+      "derivation_id": "c7505ad6-5c6c-5b36-bb9e-a846255d9c25",
+      "derivation_type": "listing_url_slug_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "subject_resolution:normalized_inputs[0]",
+      "confidence": 0.61,
+      "notes": [
+        "Listing URL path hints provided best-effort geography clues."
+      ]
+    },
+    {
+      "derivation_id": "02cf6532-85d4-5472-8c79-27706b1b4471",
+      "derivation_type": "explicit_request_geography_text",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-2"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.93,
+      "notes": [
+        "Request-level target geography supplied state context."
+      ]
+    },
+    {
+      "derivation_id": "637dd4b3-92f0-5318-a1d2-e96e16be4068",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-2"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "subject_resolution:active_subjects[1]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    },
+    {
+      "derivation_id": "a2309c79-c7c0-5879-a1a5-51ff4a5ad1df",
+      "derivation_type": "listing_url_slug_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-2"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "subject_resolution:normalized_inputs[1]",
+      "confidence": 0.61,
+      "notes": [
+        "Listing URL path hints provided best-effort geography clues."
+      ]
+    },
+    {
+      "derivation_id": "465ad045-7184-5b93-af11-0cec1bc27587",
+      "derivation_type": "explicit_request_geography_text",
+      "scope": "state",
+      "subject_ids": [
+        "subject-batch-3"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.93,
+      "notes": [
+        "Request-level target geography supplied state context."
+      ]
+    },
+    {
+      "derivation_id": "094133e8-dad9-5ac2-8db7-010a9ce8c25b",
+      "derivation_type": "explicit_subject_hint",
+      "scope": "county",
+      "subject_ids": [
+        "subject-batch-3"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "request:subjects[2].resolution_hints",
+      "confidence": 0.9,
+      "notes": [
+        "Request-level subject hints provided geography context directly."
+      ]
+    },
+    {
+      "derivation_id": "4ea952e8-f5e5-5b3d-9882-9873f73c039e",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "county",
+      "subject_ids": [
+        "subject-batch-3"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "subject_resolution:active_subjects[2]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    },
+    {
+      "derivation_id": "996674f3-8f04-55cf-8d7a-39e53dc4c0fd",
+      "derivation_type": "listing_url_slug_hint",
+      "scope": "county",
+      "subject_ids": [
+        "subject-batch-3"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "city_name": null,
+      "source_ref": "subject_resolution:normalized_inputs[2]",
+      "confidence": 0.61,
+      "notes": [
+        "Listing URL path hints provided best-effort geography clues."
+      ]
+    }
+  ],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [],
+  "effective_county_registry_ref": null,
+  "effective_county_registry_mode": "none",
+  "unresolved_questions": [
+    "Which county should govern local parcel, zoning, and tax research for this subject?",
+    "Should Alice narrow this batch to subjects that share one county before local source planning proceeds?"
+  ],
+  "notes": [],
+  "scores": {
+    "jurisdiction_confidence": 0.4,
+    "county_attachment_readiness": 0.42,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-16T22:48:10.015821Z"
+}

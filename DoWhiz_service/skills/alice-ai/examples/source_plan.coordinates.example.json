@@ -1,0 +1,132 @@
+{
+  "schema_version": "alice.source_plan.v1",
+  "source_plan_id": "be9ec8b1-5c5d-5b8f-a218-4ee029dc8944",
+  "request_id": "b35f2e44-1817-4f52-b0f1-532de94871ef",
+  "subject_resolution_id": "0d881c46-3ac0-5da9-9a74-13d06d8eb849",
+  "jurisdiction_context_id": "241bf5b5-5046-574c-92a1-3e7815725e03",
+  "coverage_assessment_id": "33f97573-8247-5525-a2e9-30638ea02475",
+  "plan_status": "partially_blocked",
+  "request_mode": "deep_research",
+  "active_use_cases": [
+    "energy",
+    "recreational_rural_hold"
+  ],
+  "required_capabilities": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "environmental_baseline",
+    "utilities",
+    "transmission"
+  ],
+  "planned_source_groups": [
+    {
+      "capability": "environmental_baseline",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "source_ids": [
+        "federal_usfws_nwi",
+        "federal_fema_nfhl",
+        "federal_usda_soil_data_access",
+        "federal_usgs_3dep_elevation",
+        "federal_epa_ejscreen"
+      ],
+      "source_selection_rationale": "Start with U.S. Fish and Wildlife Service National Wetlands Inventory because national baseline overlays should be retrieved before narrower parcel-specific interpretation.",
+      "priority_order": 6,
+      "authority_level": "official_federal",
+      "execution_preconditions": [
+        "a defensible geography anchor such as county, state, or coordinates must be present"
+      ],
+      "fallback_if_missing": [
+        "If one national overlay is degraded, continue with the remaining federal baseline sources and record the missing layer explicitly."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "Only national baseline overlays are currently attachable."
+      ]
+    }
+  ],
+  "deferred_steps": [],
+  "blocked_steps": [
+    {
+      "capability": "parcel_identity",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "county_required",
+      "reason": "parcel_identity is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "parcel_geometry",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "county_required",
+      "reason": "parcel_geometry is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "tax_roll",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "county_required",
+      "reason": "tax_roll is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "zoning",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "county_required",
+      "reason": "zoning is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "planning_docs",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "county_required",
+      "reason": "planning_docs is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "utilities",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "jurisdiction_unresolved",
+      "reason": "utilities is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "stable_geography_anchor"
+    },
+    {
+      "capability": "transmission",
+      "subject_ids": [
+        "subject-coord-1"
+      ],
+      "blocker_type": "jurisdiction_unresolved",
+      "reason": "transmission is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "stable_geography_anchor"
+    }
+  ],
+  "missing_capabilities": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "zoning",
+    "planning_docs",
+    "utilities",
+    "transmission"
+  ],
+  "notes": [
+    "This artifact is a retrieval plan only. No live source fetches have been executed in Step 5.",
+    "Current source plan is dominated by federal baseline sources because local coverage is still thin."
+  ],
+  "generated_at": "2026-04-16T22:43:47.150651Z"
+}

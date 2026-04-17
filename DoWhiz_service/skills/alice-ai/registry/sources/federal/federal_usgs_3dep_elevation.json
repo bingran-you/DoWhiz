@@ -1,0 +1,27 @@
+{
+  "source_id": "federal_usgs_3dep_elevation",
+  "name": "USGS 3D Elevation Program Image Service",
+  "category": "federal",
+  "jurisdiction_level": "federal",
+  "geography_scope": {
+    "national": true,
+    "state_fips": null,
+    "county_fips": null,
+    "city_name": null,
+    "special_district_name": null,
+    "notes": "National elevation and topography baseline."
+  },
+  "interface_type": "gis_service",
+  "access_mode": "machine_endpoint",
+  "capabilities": [
+    "topography_elevation"
+  ],
+  "base_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+  "priority": 65,
+  "authority_rank": 1,
+  "ttl_hours": 720,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Machine-friendly national elevation source for directional slope and topography screening."
+}

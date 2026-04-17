@@ -1,0 +1,158 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "5be2c644-d917-52e7-9c4f-fbfba1c8010f",
+  "request_id": "6ef6cd1e-a9b1-4c95-bfb0-4e8bb65f7d7a",
+  "request_mode": "follow_up",
+  "batch_purpose": "follow_up_refinement",
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": "alice/session_state.json",
+    "previous_resolution_ref": "alice/subject_resolution.json",
+    "previous_report_ref": "alice/report.md"
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-ref-1",
+      "input_kind": "subject_ref",
+      "raw_value": "active_subject_1"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-ref-1",
+      "input_kind": "subject_ref",
+      "raw_value": "active_subject_1",
+      "normalization_status": "normalized",
+      "normalized": {
+        "subject_ref_key": "active_subject_1"
+      },
+      "resolution_hints": {
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "county_fips": null,
+        "county_name": null,
+        "city_name": null,
+        "source_url": null
+      },
+      "normalization_notes": [
+        "Subject reference depends on prior Alice session state and is not parcel resolution by itself.",
+        "Request-provided normalized fields were preserved where available."
+      ]
+    }
+  ],
+  "subject_kind": "unresolved_candidate_set",
+  "resolution_status": "unresolved",
+  "primary_subject_label": "Follow-up reference: active_subject_1",
+  "active_subjects": [
+    {
+      "subject_id": "subject-ref-1",
+      "input_kind": "subject_ref",
+      "subject_kind": "subject_reference",
+      "resolution_level": "subject_reference_only",
+      "resolution_status": "unresolved",
+      "display_label": "Follow-up reference: active_subject_1",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": null,
+        "address_parse_status": null,
+        "apn_raw": null,
+        "apn_normalized": null,
+        "apn_matching_variants": [],
+        "coordinates": null,
+        "county_fips": null,
+        "county_name": null,
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "city_name": null,
+        "postal_code": null,
+        "subject_ref_key": "active_subject_1"
+      },
+      "parcel_candidate_ids": [],
+      "ambiguity_flags": [
+        "follow_up_reference_ambiguous"
+      ],
+      "unresolved_questions": [
+        "Which previously resolved subject should this follow-up attach to?"
+      ],
+      "next_resolution_actions": [
+        {
+          "action": "confirm_follow_up_subject_reference",
+          "priority": "high",
+          "subject_ids": [
+            "subject-ref-1"
+          ],
+          "rationale": "Follow-up references need session-state resolution before reuse."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [],
+  "geography_context": {
+    "scope_status": "county_scoped",
+    "states": [
+      {
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      }
+    ],
+    "counties": [
+      {
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      }
+    ],
+    "cities": [],
+    "region_labels": [],
+    "centroid_coordinates": null,
+    "notes": [
+      "County context is available early, but this still does not imply parcel confirmation."
+    ]
+  },
+  "ambiguity_flags": [
+    "follow_up_reference_ambiguous"
+  ],
+  "unresolved_questions": [
+    "Which previously resolved subject should this follow-up attach to?"
+  ],
+  "next_resolution_actions": [
+    {
+      "action": "confirm_follow_up_subject_reference",
+      "priority": "high",
+      "subject_ids": [
+        "subject-ref-1"
+      ],
+      "rationale": "Follow-up references need session-state resolution before reuse."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.29,
+    "subject_specificity": 0.4,
+    "geography_specificity": 0.84,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json",
+    "alice/subject_resolution.json",
+    "alice/report.md"
+  ],
+  "generated_at": "2026-04-16T21:45:00Z"
+}

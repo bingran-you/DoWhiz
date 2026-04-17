@@ -1,0 +1,46 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "2e69c948-d90f-4d57-ac4a-f1a017bb229d",
+  "thread_id": "email:alice-demo-thread-005",
+  "channel": "email",
+  "request_mode": "deep_research",
+  "raw_user_message": "Research APN H123-456-7890-0000 for me. I want to know if it's viable for small solar or long-term hold, but I don't have the county yet.",
+  "thesis": {
+    "summary": "Deep research request for an APN-only lead with no reliable county context yet.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [],
+    "filters": {
+      "prefer_transmission_proximity": true
+    },
+    "budget": {
+      "currency": "USD"
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "input_kind": "apn",
+      "raw_value": "H123-456-7890-0000"
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

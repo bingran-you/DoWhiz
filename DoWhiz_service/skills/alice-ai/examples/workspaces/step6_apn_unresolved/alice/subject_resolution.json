@@ -1,0 +1,199 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "9b9e239f-9bd8-5d7d-abd1-e8b9095d38dd",
+  "request_id": "2e69c948-d90f-4d57-ac4a-f1a017bb229d",
+  "request_mode": "deep_research",
+  "batch_purpose": null,
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": null,
+    "previous_resolution_ref": null,
+    "previous_report_ref": null
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "apn",
+      "raw_value": "H123-456-7890-0000"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "apn",
+      "raw_value": "H123-456-7890-0000",
+      "normalization_status": "normalized",
+      "normalized": {
+        "apn_raw": "H123-456-7890-0000",
+        "apn_normalized": "H12345678900000",
+        "apn_strategy": "generic_alphanumeric",
+        "apn_matching_variants": [
+          "H12345678900000",
+          "H123-456-7890-0000",
+          "12345678900000"
+        ]
+      },
+      "resolution_hints": {
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "county_fips": null,
+        "county_name": null,
+        "city_name": null,
+        "source_url": null
+      },
+      "normalization_notes": [
+        "Preserved the raw APN exactly as supplied.",
+        "No county context was available, so only conservative generic normalization was applied.",
+        "The normalized APN retains letters; this is acceptable for matching but not proof of parcel identity."
+      ]
+    }
+  ],
+  "subject_kind": "unresolved_candidate_set",
+  "resolution_status": "unresolved",
+  "primary_subject_label": "APN H123-456-7890-0000",
+  "active_subjects": [
+    {
+      "subject_id": "subject-1",
+      "input_kind": "apn",
+      "subject_kind": "parcel",
+      "resolution_level": "parcel_candidate_identified",
+      "resolution_status": "unresolved",
+      "display_label": "APN H123-456-7890-0000",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": null,
+        "address_parse_status": null,
+        "apn_raw": "H123-456-7890-0000",
+        "apn_normalized": "H12345678900000",
+        "apn_matching_variants": [
+          "H12345678900000",
+          "H123-456-7890-0000",
+          "12345678900000"
+        ],
+        "coordinates": null,
+        "county_fips": null,
+        "county_name": null,
+        "state_fips": null,
+        "state_code": null,
+        "state_name": null,
+        "city_name": null,
+        "postal_code": null,
+        "subject_ref_key": null
+      },
+      "parcel_candidate_ids": [
+        "cand-subject-1-1"
+      ],
+      "ambiguity_flags": [
+        "apn_needs_county_context",
+        "apn_format_unusual"
+      ],
+      "unresolved_questions": [
+        "Can this APN be confirmed against official parcel records before research proceeds?",
+        "What county or state should this APN be searched in?"
+      ],
+      "next_resolution_actions": [
+        {
+          "action": "confirm_county_context",
+          "priority": "high",
+          "subject_ids": [
+            "subject-1"
+          ],
+          "rationale": "APN normalization does not reveal the correct county by itself."
+        },
+        {
+          "action": "query_parcel_by_apn",
+          "priority": "high",
+          "subject_ids": [
+            "subject-1"
+          ],
+          "rationale": "Later parcel lookup should confirm the APN against county or appraisal-district sources."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [
+    {
+      "candidate_id": "cand-subject-1-1",
+      "source_subject_ids": [
+        "subject-1"
+      ],
+      "candidate_status": "hinted",
+      "label": "APN H123-456-7890-0000",
+      "apn_raw": "H123-456-7890-0000",
+      "apn_normalized": "H12345678900000",
+      "county_fips": null,
+      "county_name": null,
+      "state_fips": null,
+      "state_code": null,
+      "state_name": null,
+      "address_text": null,
+      "coordinates": null,
+      "match_basis": [
+        "user_supplied_apn"
+      ],
+      "confidence": 0.45,
+      "notes": [
+        "APN normalization is a matching aid only; official parcel lookup is still required."
+      ]
+    }
+  ],
+  "geography_context": {
+    "scope_status": "none",
+    "states": [],
+    "counties": [],
+    "cities": [],
+    "region_labels": [],
+    "centroid_coordinates": null,
+    "notes": []
+  },
+  "ambiguity_flags": [
+    "apn_needs_county_context",
+    "apn_format_unusual"
+  ],
+  "unresolved_questions": [
+    "Can this APN be confirmed against official parcel records before research proceeds?",
+    "What county or state should this APN be searched in?"
+  ],
+  "next_resolution_actions": [
+    {
+      "action": "confirm_county_context",
+      "priority": "high",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "rationale": "APN normalization does not reveal the correct county by itself."
+    },
+    {
+      "action": "query_parcel_by_apn",
+      "priority": "high",
+      "subject_ids": [
+        "subject-1"
+      ],
+      "rationale": "Later parcel lookup should confirm the APN against county or appraisal-district sources."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.26,
+    "subject_specificity": 0.82,
+    "geography_specificity": 0.1,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json"
+  ],
+  "generated_at": "2026-04-16T22:38:29.033603Z"
+}

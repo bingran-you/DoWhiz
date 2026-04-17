@@ -1,0 +1,77 @@
+{
+  "scenario": "competing_kern",
+  "responses": {
+    "listing_platform_land_com.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/listing_platform_land_com_kern.html",
+      "final_url": "https://www.land.com/property/160-acres-near-Bakersfield-Kern-County-California/60606060",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "county_ca_kern_parcelquest_property_search.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_ca_kern_parcelquest_property_result.html",
+      "final_url": "https://www.kerncounty.com/government/departments/assessor-recorder/property/parcelquest-property-search",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "county_ca_kern_interactive_mapping.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_ca_kern_interactive_mapping_result.html",
+      "final_url": "https://www.kerncounty.com/government/departments/assessor-recorder/property/mapping-gis/interactive-mapping",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "county_ca_kern_gis_data.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/county_ca_kern_gis_data.html",
+      "final_url": "https://www.kerncounty.com/government/departments/assessor-recorder/property/mapping-gis/gis-data",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "local_ca_bakersfield_planning.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/local_ca_bakersfield_planning_result.html",
+      "final_url": "https://www.bakersfieldcity.us/920/Public-Notices-Reports-and-Plans",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "state_ca_energy_commission_transmission.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../shared/responses/state_ca_energy_commission_transmission.html",
+      "final_url": "https://www.energy.ca.gov/data-reports/energy-almanac/california-electricity-data/california-transmission-lines",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "federal_fcc_bdc_national.page": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../../step6/shared/responses/federal_fcc_bdc_national.html",
+      "final_url": "https://broadbandmap.fcc.gov/data-download/nationwide-data",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    },
+    "federal_epa_ejscreen.page": {
+      "status": 404,
+      "content_type": "text/html; charset=utf-8",
+      "body_path": "../../step6/shared/responses/federal_epa_ejscreen_404.html",
+      "final_url": "https://www.epa.gov/ejscreen",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    }
+  }
+}
