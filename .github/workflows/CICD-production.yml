@@ -150,7 +150,22 @@ jobs:
         run: rm -rf target/debug
 
       - name: Build release binaries
-        run: cargo build --locked -p scheduler_module --bins --release
+        run: |
+          cargo build --locked -p scheduler_module --release \
+            --bin rust_service \
+            --bin inbound_fanout \
+            --bin inbound_gateway \
+            --bin google-docs \
+            --bin google-sheets \
+            --bin google-slides \
+            --bin set_postmark_inbound_hook \
+            --bin notion_api_cli \
+            --bin tpm_cli \
+            --bin slack_cli \
+            --bin discord_cli \
+            --bin lark_cli \
+            --bin identity_lookup_cli \
+            --bin grocery_cli
 
       - name: Archive rust binaries
         uses: actions/upload-artifact@v4
