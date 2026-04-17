@@ -817,6 +817,9 @@ When creating a task, reference related existing tasks if applicable. Do not cre
 - manual: Manually created
 
 **Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
+
+**Account ID for trigger-sync:** {account_id}
+- `tpm_cli trigger-sync --user-id {account_id} --organization {org_name}` - Queue immediate TPM sync task
 "#,
         org_name = org_name,
         account_id = account_id

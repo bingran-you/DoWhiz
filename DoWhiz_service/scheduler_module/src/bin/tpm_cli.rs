@@ -13,7 +13,9 @@
 use mongodb::bson::oid::ObjectId;
 use scheduler_module::account_store::{AccountStore, UserContact};
 use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSource, TaskStatus};
+use scheduler_module::index_store::IndexStore;
 use scheduler_module::notion_browser::NotionApiClient;
+use scheduler_module::tpm_cron::trigger_tpm_sync;
 use serde_json::{json, Value};
 use std::env;
 use std::process::ExitCode;
@@ -37,6 +39,7 @@ fn main() -> ExitCode {
         "create-task" => cmd_create_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
         "sync-tasks" => cmd_sync_tasks(&args[2..]),
+        "trigger-sync" => cmd_trigger_sync(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
             ExitCode::SUCCESS
@@ -93,6 +96,10 @@ Task Board Commands:
     --organization <org>     Organization name (required)
     --database-id <id>       Notion database ID
     --workspace-id <ws>      Notion workspace ID
+
+  trigger-sync      Trigger immediate TPM sync (one-shot task)
+    --user-id <uuid>         Account UUID (required)
+    --organization <org>     Organization name (required)
 
 
 Environment:
@@ -1025,6 +1032,82 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Trigger an immediate TPM sync (one-shot task).
+fn cmd_trigger_sync(args: &[String]) -> ExitCode {
+    let mut user_id: Option<String> = None;
+    let mut organization: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--user-id" => {
+                i += 1;
+                user_id = args.get(i).cloned();
+            }
+            "--organization" => {
+                i += 1;
+                organization = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(user_id_str) = user_id else {
+        eprintln!("Error: --user-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let user_id = match Uuid::parse_str(&user_id_str) {
+        Ok(uuid) => uuid,
+        Err(_) => {
+            eprintln!("Error: Invalid user-id UUID format");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let Some(organization) = organization else {
+        eprintln!("Error: --organization is required");
+        return ExitCode::FAILURE;
+    };
+
+    let account_store = match AccountStore::from_env() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to connect to account store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let index_store = match IndexStore::new("/tmp/task_index.db") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to create index store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match trigger_tpm_sync(&account_store, &index_store, user_id, &organization) {
+        Ok(result) => {
+            let output = json!({
+                "success": result.success,
+                "task_id": result.task_id,
+                "user_id": result.user_id,
+                "organization": result.organization,
+                "email": result.email,
+                "workspace_dir": result.workspace_dir,
+                "message": "TPM sync task queued for immediate execution"
+            });
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            ExitCode::FAILURE
+        }
     }
 }
 
