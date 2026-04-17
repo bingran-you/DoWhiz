@@ -120,6 +120,26 @@ When a message arrives, the system creates a task. But there are **two different
 1. **`legacy_user_id`** - Created by `user_store.get_or_create_user("discord", sender)`. This is used by the **worker** to execute tasks.
 2. **`account_id`** - The unified account ID from `account_store`. This is used by the **frontend** to query tasks.
 
+### Why Two Identities? Channel vs Account
+
+**Channel Identity** (e.g., `email_abc123`, `discord_guild_user`)
+- Created automatically when a message arrives from any channel
+- Always exists - works even if user hasn't created an account
+- Stored at `users_root/{channel_identity}/state/tasks.db`
+- Worker polls via `task_index` which references this identity
+
+**Account Identity** (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- Only exists if user has explicitly linked their channel to an Anthropic account
+- Stored at `users_root/{account_uuid}/state/tasks.db`
+- Frontend Task Center queries tasks by this identity
+
+**The core problem:**
+- Someone can email/Discord Oliver without having an account → worker must still process their task
+- If they DO have a linked account → task should also appear in their Task Center UI
+- These are two different scheduler paths, so we need two writes
+
+**Exception - TPM:** TPM mode works directly with accounts (users are already in an organization with a linked account). Since `user_id = account_id`, only ONE scheduler exists at the account path. No dual-write needed - just `add_one_shot_in` + `sync_user_tasks`.
+
 The MongoDB `tasks` collection uses `owner_scope.id` to scope queries. The `owner_scope.id` is derived from the file path:
 
 ```rust
@@ -182,6 +202,8 @@ store.record_execution_finish(task_id, ...);  // Updates by task_id
 |--------|---------|------------------|---------|
 | `add_one_shot_in` | Generates new `Uuid::new_v4()` | `legacy_user_id` | Worker execution |
 | `add_one_shot_in_with_id` | Uses provided `Uuid` | `account_id` | Frontend visibility |
+
+**Important:** Neither method syncs to `task_index` automatically. You must call `index_store.sync_user_tasks(user_id, scheduler.tasks())` after adding tasks so the worker can find them.
 
 ### Why Do We Still Need the Legacy User ID?
 
