@@ -852,6 +852,7 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     };
 
     let mut synced = 0;
+    let mut created = 0;
     let mut skipped = 0;
     let mut errors: Vec<String> = Vec::new();
     let mut notion_page_ids: Vec<String> = Vec::new();
@@ -859,12 +860,84 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     for item in items {
         // Collect all Notion page IDs for orphan cleanup
         notion_page_ids.push(item.id.clone());
+
         // Extract MongoDB ID from Notion page properties
         let mongo_id_str = extract_rich_text_property(&item.properties, "MongoDB ID");
-        let Some(mongo_id_str) = mongo_id_str else {
-            skipped += 1;
+
+        // If no MongoDB ID, create task in MongoDB from Notion data
+        if mongo_id_str.is_none() || mongo_id_str.as_ref().map(|s| s.is_empty()).unwrap_or(false) {
+            let title = match extract_title_property(&item.properties, "Name") {
+                Some(t) => t,
+                None => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+
+            let status = match extract_select_property(&item.properties, "Status").as_deref() {
+                Some("Backlog") => TaskStatus::Backlog,
+                Some("In Progress") => TaskStatus::InProgress,
+                Some("Review") => TaskStatus::Review,
+                Some("Done") => TaskStatus::Done,
+                Some("Blocked") => TaskStatus::Blocked,
+                _ => TaskStatus::Backlog,
+            };
+
+            let priority = match extract_select_property(&item.properties, "Priority").as_deref() {
+                Some("P0") => Priority::P0,
+                Some("P1") => Priority::P1,
+                Some("P2") => Priority::P2,
+                Some("P3") => Priority::P3,
+                _ => Priority::P2,
+            };
+
+            let source = match extract_select_property(&item.properties, "Source").as_deref() {
+                Some("User Feedback") => TaskSource::UserFeedback,
+                Some("Notetaker") => TaskSource::Notetaker,
+                Some("Market Research") => TaskSource::MarketResearch,
+                _ => TaskSource::Manual,
+            };
+
+            // Create task in MongoDB
+            let task = DevTask::new(
+                organization.clone(),
+                title,
+                String::new(), // No description in table view
+                source,
+            )
+            .with_priority(priority)
+            .with_status(status);
+
+            let task_id = match store.insert_task(&task) {
+                Ok(id) => id,
+                Err(e) => {
+                    errors.push(format!("Failed to create task from Notion: {}", e));
+                    continue;
+                }
+            };
+
+            // Link notion_page_id to MongoDB
+            if let Err(e) = store.link_notion_page(&task_id, &item.id) {
+                errors.push(format!("Failed to link Notion page {}: {}", item.id, e));
+            }
+
+            // Update Notion page with MongoDB ID
+            let update_props = json!({
+                "MongoDB ID": {
+                    "rich_text": [{
+                        "text": { "content": task_id.to_string() }
+                    }]
+                }
+            });
+            if let Err(e) = client.update_page(&workspace_id, &item.id, update_props) {
+                errors.push(format!("Failed to update Notion page with MongoDB ID: {}", e));
+            }
+
+            created += 1;
             continue;
-        };
+        }
+
+        let mongo_id_str = mongo_id_str.unwrap();
 
         let Ok(object_id) = ObjectId::parse_str(&mongo_id_str) else {
             errors.push(format!("Invalid ObjectId: {}", mongo_id_str));
@@ -941,6 +1014,7 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     let output = json!({
         "success": errors.is_empty(),
         "synced": synced,
+        "created": created,
         "skipped": skipped,
         "orphans_deleted": orphans_deleted,
         "errors": errors
@@ -968,6 +1042,15 @@ fn extract_select_property(props: &Value, name: &str) -> Option<String> {
 /// Extract a rich_text property value from Notion properties.
 fn extract_rich_text_property(props: &Value, name: &str) -> Option<String> {
     props[name]["rich_text"]
+        .as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|item| item["plain_text"].as_str())
+        .map(|s| s.to_string())
+}
+
+/// Extract a title property value from Notion properties.
+fn extract_title_property(props: &Value, name: &str) -> Option<String> {
+    props[name]["title"]
         .as_array()
         .and_then(|arr| arr.first())
         .and_then(|item| item["plain_text"].as_str())
