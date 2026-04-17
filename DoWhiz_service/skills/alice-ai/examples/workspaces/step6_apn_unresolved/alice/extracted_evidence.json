@@ -1,9 +1,0 @@
-{
-  "schema_version": "alice.extracted_evidence.v1",
-  "extracted_evidence_id": "de26b754-442a-53de-990e-b746231615a2",
-  "request_id": "2e69c948-d90f-4d57-ac4a-f1a017bb229d",
-  "subject_resolution_id": "9b9e239f-9bd8-5d7d-abd1-e8b9095d38dd",
-  "fetch_log_id": "f2fff875-8bc3-5ae1-a0e9-49c526b202ce",
-  "generated_at": "2026-04-16T23:25:00Z",
-  "items": []
-}
