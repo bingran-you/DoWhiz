@@ -22,7 +22,10 @@ Create a new account.
 ```json
 {
   "account_id": "uuid",
-  "auth_user_id": "uuid"
+  "auth_user_id": "uuid",
+  "created": false,
+  "organization_id": "uuid or null",
+  "organization_name": "deeptutor or null"
 }
 ```
 
