@@ -184,6 +184,11 @@ impl DevTask {
         self.assignee = Some(assignee);
         self
     }
+
+    pub fn with_status(mut self, status: TaskStatus) -> Self {
+        self.status = status;
+        self
+    }
 }
 
 // -----------------------------------------------------------------------------
