@@ -111,6 +111,11 @@ When `skills_dir` is set, the shared skill directories under that path are copie
 each task workspace at `.agents/skills/`, so new shared skills can be added without
 changing run_task runtime code.
 
+Current default:
+- Built-in employees currently point `skills_dir` at `DoWhiz_service/skills`.
+- `DoWhiz_service/skills/manifest.toml` is the maintained index of runtime-copyable skill directories.
+- Placeholder folders like `DoWhiz_service/employees/<id>/skills/` are inactive unless `skills_dir` is explicitly pointed at them.
+
 ### 3.2 Gateway config
 
 Default path resolution:
@@ -444,6 +449,9 @@ cargo test -p scheduler_module --test scheduler_basic
 cargo test -p scheduler_module --test send_reply_outbound_e2e
 cargo test -p scheduler_module --test service_real_email -- --nocapture
 ```
+
+Notes:
+- `cargo test -p scheduler_module --test scheduler_basic` currently opens the Mongo-backed scheduler store, so `MONGODB_URI` must be set. If local Mongo is unavailable, mark it `SKIP` in verification notes with the blocker.
 
 ### 7.2 Live E2E
 

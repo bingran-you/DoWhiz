@@ -450,7 +450,7 @@ Core gates for this migration:
    - `cargo test -p run_task_module`
    - `cargo test -p send_emails_module`
 2. Scheduler behavior parity:
-   - `cargo test -p scheduler_module --test scheduler_basic`
+   - `cargo test -p scheduler_module --test scheduler_basic` (`MONGODB_URI` required)
    - `cargo test -p scheduler_module --test scheduler_followups`
    - `cargo test -p scheduler_module --test scheduler_concurrency`
    - `cargo test -p scheduler_module --test thread_latest_epoch_e2e`
