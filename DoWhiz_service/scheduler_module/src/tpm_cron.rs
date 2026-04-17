@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::account_store::AccountStore;
 use crate::channel::{Channel, ChannelMetadata};
 use crate::index_store::IndexStore;
+use crate::user_store::UserStore;
 use crate::{ModuleExecutor, RunTaskTask, Scheduler, TaskKind};
 
 /// Result of setting up a TPM cron job
@@ -85,6 +86,12 @@ pub enum TpmCronError {
 
     #[error("Failed to sync to index store: {0}")]
     IndexStoreSync(String),
+
+    #[error("Failed to get or create email user: {0}")]
+    UserStoreLookup(String),
+
+    #[error("Failed to ensure user directories: {0}")]
+    UserDirsCreation(String),
 }
 
 /// Set up a TPM cron job for a user in an organization.
@@ -93,6 +100,7 @@ pub enum TpmCronError {
 ///
 /// # Arguments
 /// * `account_store` - The account store to use for lookups
+/// * `user_store` - The user store to get/create email user
 /// * `user_id` - The user's account UUID
 /// * `organization` - The organization name
 /// * `cron_expr` - Optional cron expression (defaults to "0 0 9 * * MON-FRI")
@@ -102,6 +110,7 @@ pub enum TpmCronError {
 /// * `Err(TpmCronError)` on failure
 pub fn setup_tpm_cron(
     account_store: &AccountStore,
+    user_store: &UserStore,
     user_id: Uuid,
     organization: &str,
     cron_expr: Option<&str>,
@@ -150,14 +159,22 @@ pub fn setup_tpm_cron(
         .map(|id| id.identifier.clone())
         .ok_or_else(|| TpmCronError::NoVerifiedEmail(user_id_str.clone()))?;
 
-    // Set up workspace paths
+    // Get or create email user in UserStore (same pattern as email handler)
+    let email_user = user_store
+        .get_or_create_user("email", &email)
+        .map_err(|e| TpmCronError::UserStoreLookup(e.to_string()))?;
+
+    // Use same path structure as email handler
     let users_root = std::env::var("USERS_ROOT").unwrap_or_else(|_| "/tmp/users".to_string());
     let users_root_path = PathBuf::from(&users_root);
+    let user_paths = user_store.user_paths(&users_root_path, &email_user.user_id);
 
-    let workspace_dir = users_root_path
-        .join(&user_id_str)
-        .join("workspaces")
-        .join("tpm_cron_placeholder");
+    // Ensure user directories exist (same as email handler)
+    user_store
+        .ensure_user_dirs(&user_paths)
+        .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
+
+    let workspace_dir = user_paths.workspaces_root.join("tpm_cron_placeholder");
     let input_email_dir = workspace_dir.join("incoming_email");
 
     // Create workspace directory
@@ -181,7 +198,7 @@ pub fn setup_tpm_cron(
         workspace_dir: workspace_dir.clone(),
         input_email_dir: input_email_dir.clone(),
         input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: users_root_path.join(&user_id_str).join("memory"),
+        memory_dir: user_paths.memory_dir.clone(),
         reference_dir: workspace_dir.join("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
@@ -201,28 +218,23 @@ pub fn setup_tpm_cron(
         channel_metadata: ChannelMetadata::default(),
     };
 
-    // Load scheduler and add cron task
-    let account_tasks_path = users_root_path
-        .join(&user_id_str)
-        .join("state")
-        .join("tasks.db");
-
-    std::fs::create_dir_all(account_tasks_path.parent().unwrap())
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
-
-    let mut scheduler = Scheduler::load(&account_tasks_path, ModuleExecutor::default())
+    // Load scheduler from email user's tasks.db (same path as email handler)
+    let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())
         .map_err(|e| TpmCronError::SchedulerLoad(e.to_string()))?;
 
     let task_id = scheduler
         .add_cron_task(cron_expr, TaskKind::RunTask(run_task))
         .map_err(|e| TpmCronError::CronTaskAdd(e.to_string()))?;
 
-    info!("setup_tpm_cron: cron task added successfully, task_id={}", task_id);
+    info!(
+        "setup_tpm_cron: cron task added successfully, task_id={}, email_user_id={}",
+        task_id, email_user.user_id
+    );
 
     Ok(SetupTpmCronResult {
         success: true,
         task_id: task_id.to_string(),
-        user_id: user_id_str,
+        user_id: email_user.user_id,
         organization: organization.to_string(),
         email,
         cron: cron_expr.to_string(),
@@ -237,6 +249,7 @@ pub fn setup_tpm_cron(
 ///
 /// # Arguments
 /// * `account_store` - The account store to use for lookups
+/// * `user_store` - The user store to get/create email user
 /// * `index_store` - The index store to sync tasks to
 /// * `user_id` - The user's account UUID
 /// * `organization` - The organization name
@@ -246,6 +259,7 @@ pub fn setup_tpm_cron(
 /// * `Err(TpmCronError)` on failure
 pub fn trigger_tpm_sync(
     account_store: &AccountStore,
+    user_store: &UserStore,
     index_store: &IndexStore,
     user_id: Uuid,
     organization: &str,
@@ -293,14 +307,22 @@ pub fn trigger_tpm_sync(
         .map(|id| id.identifier.clone())
         .ok_or_else(|| TpmCronError::NoVerifiedEmail(user_id_str.clone()))?;
 
-    // Set up workspace paths
+    // Get or create email user in UserStore (same pattern as email handler)
+    let email_user = user_store
+        .get_or_create_user("email", &email)
+        .map_err(|e| TpmCronError::UserStoreLookup(e.to_string()))?;
+
+    // Use same path structure as email handler
     let users_root = std::env::var("USERS_ROOT").unwrap_or_else(|_| "/tmp/users".to_string());
     let users_root_path = PathBuf::from(&users_root);
+    let user_paths = user_store.user_paths(&users_root_path, &email_user.user_id);
 
-    let workspace_dir = users_root_path
-        .join(&user_id_str)
-        .join("workspaces")
-        .join("tpm_trigger_oneshot");
+    // Ensure user directories exist (same as email handler)
+    user_store
+        .ensure_user_dirs(&user_paths)
+        .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
+
+    let workspace_dir = user_paths.workspaces_root.join("tpm_trigger_oneshot");
     let input_email_dir = workspace_dir.join("incoming_email");
 
     // Create workspace directory
@@ -324,7 +346,7 @@ pub fn trigger_tpm_sync(
         workspace_dir: workspace_dir.clone(),
         input_email_dir: input_email_dir.clone(),
         input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: users_root_path.join(&user_id_str).join("memory"),
+        memory_dir: user_paths.memory_dir.clone(),
         reference_dir: workspace_dir.join("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
@@ -344,36 +366,28 @@ pub fn trigger_tpm_sync(
         channel_metadata: ChannelMetadata::default(),
     };
 
-    // Load scheduler and add one-shot task
-    let account_tasks_path = users_root_path
-        .join(&user_id_str)
-        .join("state")
-        .join("tasks.db");
-
-    std::fs::create_dir_all(account_tasks_path.parent().unwrap())
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
-
-    let mut scheduler = Scheduler::load(&account_tasks_path, ModuleExecutor::default())
+    // Load scheduler from email user's tasks.db (same path as email handler)
+    let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())
         .map_err(|e| TpmCronError::SchedulerLoad(e.to_string()))?;
 
     let task_id = scheduler
         .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
         .map_err(|e| TpmCronError::OneShotTaskAdd(e.to_string()))?;
 
-    // Sync to index store so the worker can find it
+    // Sync to index store using email user_id (same as email handler)
     index_store
-        .sync_user_tasks(&user_id_str, scheduler.tasks())
+        .sync_user_tasks(&email_user.user_id, scheduler.tasks())
         .map_err(|e| TpmCronError::IndexStoreSync(e.to_string()))?;
 
     info!(
-        "trigger_tpm_sync: one-shot task added and synced, task_id={}",
-        task_id
+        "trigger_tpm_sync: one-shot task added and synced, task_id={}, email_user_id={}",
+        task_id, email_user.user_id
     );
 
     Ok(TriggerTpmSyncResult {
         success: true,
         task_id: task_id.to_string(),
-        user_id: user_id_str,
+        user_id: email_user.user_id,
         organization: organization.to_string(),
         email,
         workspace_dir: workspace_dir.to_string_lossy().to_string(),
