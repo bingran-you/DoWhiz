@@ -1,0 +1,14 @@
+{
+  "object_id": "64bc7b5f-ea5c-5dc1-9a13-8a7beeff1391",
+  "report_type": "deep_research",
+  "resolution_status": "partially_resolved",
+  "candidate_set_status": "multiple_competing_candidates",
+  "overall_confirmation_level": "candidate_corroborated",
+  "overall_confirmation_basis": "local_record_corroborated",
+  "coverage_tier": "full",
+  "overall_confidence": 0.452,
+  "overall_completeness": 0.266,
+  "citation_count": 7,
+  "risk_count": 2,
+  "unknown_count": 10
+}

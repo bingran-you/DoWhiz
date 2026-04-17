@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <RunQueryResponse xmlns="http://SDMDataAccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx">
+      <RunQueryResult>
+        <diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
+          <NewDataSet xmlns="">
+            <Table>
+              <mukey>2507263</mukey>
+              <muname>McAllister fine sandy loam, 0 to 3 percent slopes</muname>
+              <slopegraddcp>2</slopegraddcp>
+              <drclassdcd>Well drained</drclassdcd>
+              <hydgrpdcd>B</hydgrpdcd>
+              <flodfreqdcd>None</flodfreqdcd>
+              <niccdcd>6</niccdcd>
+              <awmmfpwwta>0</awmmfpwwta>
+              <aws0100wta>14.6</aws0100wta>
+              <hydclprs>0</hydclprs>
+            </Table>
+          </NewDataSet>
+        </diffgr:diffgram>
+      </RunQueryResult>
+    </RunQueryResponse>
+  </soap:Body>
+</soap:Envelope>

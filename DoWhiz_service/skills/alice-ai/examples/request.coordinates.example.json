@@ -1,0 +1,55 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "b35f2e44-1817-4f52-b0f1-532de94871ef",
+  "thread_id": "slack:C09ALICE:1744744902.000211",
+  "channel": "slack",
+  "request_mode": "deep_research",
+  "raw_user_message": "Can you screen this point first: 31.175600, -105.357300. I want to know if it is worth deeper diligence for solar or hold.",
+  "thesis": {
+    "summary": "Point-based screening request for small solar or long-term hold potential.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [],
+    "filters": {
+      "prefer_transmission_proximity": true,
+      "exclude_major_floodplain": true
+    },
+    "budget": {
+      "currency": "USD"
+    },
+    "hold_period": {
+      "min_years": 4,
+      "max_years": 12,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "subject_id": "subject-coord-1",
+      "input_kind": "coordinates",
+      "raw_value": "31.175600, -105.357300",
+      "normalized": {
+        "coordinates": {
+          "latitude": 31.1756,
+          "longitude": -105.3573
+        },
+        "coordinate_source": "user_provided"
+      }
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "standard",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

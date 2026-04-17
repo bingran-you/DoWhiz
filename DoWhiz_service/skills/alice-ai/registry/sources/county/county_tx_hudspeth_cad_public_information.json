@@ -1,0 +1,28 @@
+{
+  "source_id": "county_tx_hudspeth_cad_public_information",
+  "name": "Hudspeth Appraisal District Public Information",
+  "category": "county",
+  "jurisdiction_level": "special_district",
+  "geography_scope": {
+    "national": false,
+    "state_fips": "48",
+    "county_fips": "48229",
+    "city_name": null,
+    "special_district_name": "Hudspeth Appraisal District",
+    "notes": "Public information page for appraisal district data exports and map requests."
+  },
+  "interface_type": "web_only",
+  "access_mode": "landing_page",
+  "capabilities": [
+    "tax_roll",
+    "owner_name"
+  ],
+  "base_url": "https://hudspethcad.org/public-information/",
+  "priority": 95,
+  "authority_rank": 1,
+  "ttl_hours": 720,
+  "auth_required": false,
+  "status": "active",
+  "last_verified_at": "2026-04-16T08:00:00Z",
+  "notes": "Useful for appraisal roll exports, public ownership context, and manual follow-up when property search is thin."
+}

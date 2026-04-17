@@ -1,0 +1,17 @@
+Alice Deep Research Memo: Parcel-confirmed APN H123-456-7890-0000 in Hudspeth County, TX
+Conclusion: The follow-up stays anchored to a parcel-confirmed Hudspeth County subject and now shows a mixed rural hold screen, a mixed solar screen, but zoning and water-related diligence still remain incomplete.
+Subject: Confirmed Hudspeth County parcel APN H123-456-7890-0000 (parcel confirmed; single strong candidate; local-record corroborated)
+Evidence: partial tier, usable but partial, confidence 51%, completeness 31%
+Use-case screens:
+- Parcel-confirmed: Recreational / Rural Hold Screening is mixed at screening grade (evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. Parcel identity is already parcel-confirmed, which reduces subject mismatch risk. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Hudspeth Appraisal District Property Search; FEMA National Flood Hazard Layer; U.S. Fish and Wildlife Service National Wetlands Inventory.
+- Parcel-confirmed: Solar Energy Screening is mixed at screening grade (evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. Parcel identity is already parcel-confirmed, which reduces subject mismatch risk. No authoritative zoning or local solar-compatibility check is attached yet. Key unknown: Interconnection feasibility, queue posture, and upgrade cost are not yet known. Sources: Hudspeth Appraisal District Property Search; FCC Broadband Data Collection Nationwide Downloads; FEMA National Flood Hazard Layer; +3 more.
+Top positives:
+- Parcel-confirmed: County public records corroborate active parcel candidate H123-456-7890-0000 at or near 0 County Road 111, Sierra Blanca, TX 79851. Sources: Hudspeth Appraisal District Property Search.
+- Parcel-confirmed: Recreational / Rural Hold Screening is mixed at screening grade (evaluated). Screening has usable supporting signals, but material blockers or diligence gaps remain. Parcel identity is already parcel-confirmed, which reduces subject mismatch risk. Key unknown: Carrying costs, tax burden, and resale liquidity are not yet well constrained. Sources: Hudspeth Appraisal District Property Search; FEMA National Flood Hazard Layer; U.S. Fish and Wildlife Service National Wetlands Inventory.
+Top blockers / unknowns:
+- Key environmental signals are point- or geography-linked rather than parcel-boundary confirmed.
+- Parcel-specific zoning remains unresolved in the current evidence set.
+- What authoritative source will resolve the missing zoning surface?
+- What annual carry cost and local exit-liquidity profile should be assumed for a rural hold?
+Recommended next action: Follow-up successfully attached to the prior confirmed parcel in session state.
+Full memo: alice/report.md

@@ -1,0 +1,169 @@
+{
+  "schema_version": "alice.parcel_candidates.v1",
+  "parcel_candidates_id": "e0157916-86d4-522d-b055-35f222e1c9f8",
+  "request_id": "c11d9f9e-9a66-4d95-8f73-f0bb6eebf7c1",
+  "subject_resolution_id": "8f85853f-3f8c-58f4-9e6c-4fb53a6d8f4d",
+  "jurisdiction_context_id": "93f8fa68-e701-5042-8392-140c7f88d199",
+  "source_fetch_log_id": "d68a8894-41a6-5303-ab1f-ea7ea8d02379",
+  "generated_at": "2026-04-17T01:20:00Z",
+  "candidate_set_status": "single_strong_candidate",
+  "candidate_strategy": "follow_up_inherited",
+  "primary_candidate_id": "parcel-48229-h12345678900000",
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "candidate_id": "parcel-48229-h12345678900000",
+      "county_fips": "48229",
+      "state_fips": "48",
+      "apn_raw": "H123-456-7890-0000",
+      "apn_normalized": "H12345678900000",
+      "apn_variants": [
+        "H12345678900000",
+        "H123-456-7890-0000"
+      ],
+      "parcel_address": {
+        "full_address": "0 County Road 123, Sierra Blanca, TX 79851",
+        "street_line1": "0 County Road 123, Sierra Blanca, TX 79851",
+        "street_line2": null,
+        "city": null,
+        "county_name": null,
+        "state_code": null,
+        "postal_code": null,
+        "country_code": "US"
+      },
+      "acreage_claims": [],
+      "source_clues": [
+        {
+          "clue_id": "subject_resolution:active_subject_1:apn",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "subject_resolution",
+          "source_item_id": null,
+          "evidence_scope": "inferred",
+          "confidence": 0.78,
+          "weight": 0.36,
+          "citation_ids": [],
+          "notes": [
+            "APN carried from subject resolution or prior session state rather than a Step 7 fetched local record."
+          ]
+        },
+        {
+          "clue_id": "subject_resolution:parcel-48229-h12345678900000:seed_apn",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "subject_resolution",
+          "source_item_id": null,
+          "evidence_scope": "inferred",
+          "confidence": 0.96,
+          "weight": 0.22,
+          "citation_ids": [],
+          "notes": [
+            "This confirmed parcel identity was carried forward from prior Alice session state."
+          ]
+        },
+        {
+          "clue_id": "county_tx_hudspeth_cad_property_search:d5877e64:parcel_identity_apn_hint",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "county_tx_hudspeth_cad_property_search",
+          "source_item_id": "county_tx_hudspeth_cad_property_search:d5877e64:parcel_identity_apn_hint",
+          "evidence_scope": "parcel_candidate",
+          "confidence": 0.79,
+          "weight": 0.5,
+          "citation_ids": [
+            "c_d5877e64"
+          ],
+          "notes": [
+            "APN text came from a fetched public page and should still be reconciled against competing clues before parcel confirmation.",
+            "APN normalized conservatively for candidate matching."
+          ]
+        },
+        {
+          "clue_id": "county_tx_hudspeth_cad_public_information:e4f77819:parcel_identity_apn_hint",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "county_tx_hudspeth_cad_public_information",
+          "source_item_id": "county_tx_hudspeth_cad_public_information:e4f77819:parcel_identity_apn_hint",
+          "evidence_scope": "parcel_candidate",
+          "confidence": 0.79,
+          "weight": 0.5,
+          "citation_ids": [
+            "c_e4f77819"
+          ],
+          "notes": [
+            "APN text came from a fetched public page and should still be reconciled against competing clues before parcel confirmation.",
+            "APN normalized conservatively for candidate matching."
+          ]
+        },
+        {
+          "clue_id": "county_tx_hudspeth_cad_property_search:d5877e64:parcel_identity_site_address_hint",
+          "clue_type": "address",
+          "raw_value": "0 County Road 111, Sierra Blanca, TX 79851",
+          "normalized_value": "0 County Road 111, Sierra Blanca, TX 79851",
+          "source_id": "county_tx_hudspeth_cad_property_search",
+          "source_item_id": "county_tx_hudspeth_cad_property_search:d5877e64:parcel_identity_site_address_hint",
+          "evidence_scope": "parcel_candidate",
+          "confidence": 0.76,
+          "weight": 0.22,
+          "citation_ids": [
+            "c_d5877e64"
+          ],
+          "notes": []
+        },
+        {
+          "clue_id": "county_tx_hudspeth_cad_public_information:e4f77819:parcel_identity_site_address_hint",
+          "clue_type": "address",
+          "raw_value": "0 County Road 111, Sierra Blanca, TX 79851",
+          "normalized_value": "0 County Road 111, Sierra Blanca, TX 79851",
+          "source_id": "county_tx_hudspeth_cad_public_information",
+          "source_item_id": "county_tx_hudspeth_cad_public_information:e4f77819:parcel_identity_site_address_hint",
+          "evidence_scope": "parcel_candidate",
+          "confidence": 0.76,
+          "weight": 0.22,
+          "citation_ids": [
+            "c_e4f77819"
+          ],
+          "notes": []
+        },
+        {
+          "clue_id": "subject_resolution:active_subject_1:address",
+          "clue_type": "address",
+          "raw_value": "0 County Road 123, Sierra Blanca, TX 79851",
+          "normalized_value": "0 County Road 123, Sierra Blanca, TX 79851",
+          "source_id": "subject_resolution",
+          "source_item_id": null,
+          "evidence_scope": "inferred",
+          "confidence": 0.72,
+          "weight": 0.18,
+          "citation_ids": [],
+          "notes": [
+            "Address carried from subject resolution and still subject to official parcel-record confirmation."
+          ]
+        }
+      ],
+      "supporting_source_ids": [
+        "subject_resolution",
+        "county_tx_hudspeth_cad_property_search",
+        "county_tx_hudspeth_cad_public_information"
+      ],
+      "contradicting_source_ids": [],
+      "candidate_strength": "strong",
+      "confirmation_level": "parcel_confirmed",
+      "confirmation_basis": "local_record_corroborated",
+      "geometry_status": "none",
+      "notes": [
+        "This confirmed parcel identity was carried forward from prior Alice session state.",
+        "Merged same-source parcel clues from cand-address-48229-0-county-road-111-sierra-blanca-tx-79851 into parcel-48229-h12345678900000.",
+        "Merged same-source parcel clues from cand-address-48229-0-county-road-123-sierra-blanca-tx-79851 into parcel-48229-h12345678900000.",
+        "Current clues support one conservatively parcel-confirmed candidate."
+      ]
+    }
+  ],
+  "notes": [
+    "One candidate currently stands above the rest based on corroborated parcel clues."
+  ]
+}

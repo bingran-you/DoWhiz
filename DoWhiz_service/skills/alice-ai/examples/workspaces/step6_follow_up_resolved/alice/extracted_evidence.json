@@ -1,0 +1,618 @@
+{
+  "schema_version": "alice.extracted_evidence.v1",
+  "extracted_evidence_id": "8ef5bc2f-c044-5277-a204-aa55d9b2bc3c",
+  "request_id": "c11d9f9e-9a66-4d95-8f73-f0bb6eebf7c1",
+  "subject_resolution_id": "8f85853f-3f8c-58f4-9e6c-4fb53a6d8f4d",
+  "fetch_log_id": "d68a8894-41a6-5303-ab1f-ea7ea8d02379",
+  "generated_at": "2026-04-16T23:30:00Z",
+  "items": [
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:d5877e64:page_title",
+      "fetch_entry_id": "d5877e64-95a9-5132-9f3e-70a1c9d72291",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Property Search - Hudspeth Appraisal District",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_d5877e64"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/d5877e64-95a9-5132-9f3e-70a1c9d72291.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:d5877e64:page_meta_description",
+      "fetch_entry_id": "d5877e64-95a9-5132-9f3e-70a1c9d72291",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Search Hudspeth Appraisal District property records by owner, property, or parcel identifier.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_d5877e64"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/d5877e64-95a9-5132-9f3e-70a1c9d72291.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_property_search:d5877e64:page_text_excerpt",
+      "fetch_entry_id": "d5877e64-95a9-5132-9f3e-70a1c9d72291",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Property Search - Hudspeth Appraisal District Hudspeth Appraisal District Property Search Search by owner name, property address, or property ID.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_d5877e64"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/d5877e64-95a9-5132-9f3e-70a1c9d72291.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:e4f77819:page_title",
+      "fetch_entry_id": "e4f77819-57ee-5474-8590-6acdb802c728",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Public Information - Hudspeth Appraisal District",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_e4f77819"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/e4f77819-57ee-5474-8590-6acdb802c728.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:e4f77819:page_meta_description",
+      "fetch_entry_id": "e4f77819-57ee-5474-8590-6acdb802c728",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Hudspeth Appraisal District public information, notices, reports, and data-access guidance.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_e4f77819"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/e4f77819-57ee-5474-8590-6acdb802c728.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_cad_public_information:e4f77819:page_text_excerpt",
+      "fetch_entry_id": "e4f77819-57ee-5474-8590-6acdb802c728",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_identity",
+      "section_hint": "parcel_identity",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Public Information - Hudspeth Appraisal District Public Information Public notices, reports, forms, and data access for Hudspeth Appraisal District.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_e4f77819"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/e4f77819-57ee-5474-8590-6acdb802c728.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:af8e30c7:page_title",
+      "fetch_entry_id": "af8e30c7-1323-581e-b07e-14c5074a9ec8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Texas StratMap Land Parcels",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_af8e30c7"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/af8e30c7-1323-581e-b07e-14c5074a9ec8.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:af8e30c7:page_meta_description",
+      "fetch_entry_id": "af8e30c7-1323-581e-b07e-14c5074a9ec8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Texas statewide land parcels dataset landing page under the Texas Natural Resources Information System.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_af8e30c7"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/af8e30c7-1323-581e-b07e-14c5074a9ec8.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_stratmap_land_parcels:af8e30c7:page_text_excerpt",
+      "fetch_entry_id": "af8e30c7-1323-581e-b07e-14c5074a9ec8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "parcel_geometry",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Texas StratMap Land Parcels Texas StratMap Land Parcels Statewide parcel dataset landing page for Texas land parcel information.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_af8e30c7"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_stratmap_land_parcels/af8e30c7-1323-581e-b07e-14c5074a9ec8.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:71741153:page_title",
+      "fetch_entry_id": "71741153-b36f-5e63-8844-af8a51ffacde",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Hudspeth County Forms and Applications",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_71741153"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/71741153-b36f-5e63-8844-af8a51ffacde.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:71741153:page_meta_description",
+      "fetch_entry_id": "71741153-b36f-5e63-8844-af8a51ffacde",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Hudspeth County forms and applications page for permits, public forms, and procedural county filings.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_71741153"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/71741153-b36f-5e63-8844-af8a51ffacde.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:71741153:page_text_excerpt",
+      "fetch_entry_id": "71741153-b36f-5e63-8844-af8a51ffacde",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "planning_and_land_use",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Hudspeth County Forms and Applications Forms and Applications County procedural forms and applications for public use.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "county_level",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_71741153"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/71741153-b36f-5e63-8844-af8a51ffacde.html",
+      "notes": []
+    },
+    {
+      "item_id": "county_tx_hudspeth_forms_and_applications:71741153:parcel_identity_county_name_hint",
+      "fetch_entry_id": "71741153-b36f-5e63-8844-af8a51ffacde",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "planning_docs",
+      "section_hint": "parcel_identity",
+      "field_name": "parcel_identity.county_name_hint",
+      "extraction_status": "parsed",
+      "value": "Applications Forms and Applications County",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.7,
+      "evidence_scope": "county_level",
+      "clue_type": "county_name",
+      "citation_ids": [
+        "c_71741153"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/71741153-b36f-5e63-8844-af8a51ffacde.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fema_nfhl:c770e0f1:environmental_flood_zone",
+      "fetch_entry_id": "c770e0f1-096b-513b-bb23-824d2789a7b1",
+      "source_id": "federal_fema_nfhl",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "environmental_constraints",
+      "field_name": "environmental.flood_zone",
+      "extraction_status": "parsed",
+      "value": "No intersecting FEMA flood-hazard zone was returned for the sampled point.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.74,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_c770e0f1"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fema_nfhl/c770e0f1-096b-513b-bb23-824d2789a7b1.json",
+      "notes": [
+        "This is a point-based flood screen, not a parcel-boundary determination."
+      ]
+    },
+    {
+      "item_id": "federal_usda_soil_data_access:3051e106:soil_mukey",
+      "fetch_entry_id": "3051e106-5664-5a18-9f35-08efb79c7ef1",
+      "source_id": "federal_usda_soil_data_access",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "environmental_constraints",
+      "field_name": "soil.mukey",
+      "extraction_status": "parsed",
+      "value": "2507263",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_3051e106"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_usda_soil_data_access/3051e106-5664-5a18-9f35-08efb79c7ef1__mukey.xml",
+      "notes": []
+    },
+    {
+      "item_id": "federal_usda_soil_data_access:3051e106:environmental_soil_constraints_signal",
+      "fetch_entry_id": "3051e106-5664-5a18-9f35-08efb79c7ef1",
+      "source_id": "federal_usda_soil_data_access",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "environmental_constraints",
+      "field_name": "environmental.soil_constraints_signal",
+      "extraction_status": "parsed",
+      "value": "McAllister fine sandy loam, 0 to 3 percent slopes; slope 2%; Well drained; hydrologic group B.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.82,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_3051e106"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_usda_soil_data_access/3051e106-5664-5a18-9f35-08efb79c7ef1__muaggatt.xml",
+      "notes": [
+        "NRCS soil data is directional and point-linked until parcel geometry is confirmed."
+      ]
+    },
+    {
+      "item_id": "federal_usda_soil_data_access:3051e106:water_ag_soil_productivity_signal",
+      "fetch_entry_id": "3051e106-5664-5a18-9f35-08efb79c7ef1",
+      "source_id": "federal_usda_soil_data_access",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "water_and_agriculture",
+      "field_name": "water_ag.soil_productivity_signal",
+      "extraction_status": "parsed",
+      "value": "NRCS soil attributes indicate nonirrigated capability class 6, available water storage to 100 cm 14.6, soil flood frequency None.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_3051e106"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_usda_soil_data_access/3051e106-5664-5a18-9f35-08efb79c7ef1__muaggatt.xml",
+      "notes": []
+    },
+    {
+      "item_id": "federal_usfws_nwi:03cc2558:environmental_wetlands_signal",
+      "fetch_entry_id": "03cc2558-afb8-55f7-9725-dd54420bf591",
+      "source_id": "federal_usfws_nwi",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "environmental_constraints",
+      "field_name": "environmental.wetlands_signal",
+      "extraction_status": "parsed",
+      "value": "No mapped wetland polygon intersected the sampled point in the NWI service.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.73,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_03cc2558"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_usfws_nwi/03cc2558-afb8-55f7-9725-dd54420bf591.json",
+      "notes": [
+        "This is a point-based wetlands screen, not a parcel-boundary determination."
+      ]
+    },
+    {
+      "item_id": "federal_usgs_3dep_elevation:8d9357d6:environmental_elevation_meters",
+      "fetch_entry_id": "8d9357d6-6a7b-5ca6-960d-33823ce3b215",
+      "source_id": "federal_usgs_3dep_elevation",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "environmental_baseline",
+      "section_hint": "environmental_constraints",
+      "field_name": "environmental.elevation_meters",
+      "extraction_status": "parsed",
+      "value": 1365.24,
+      "value_type": "number",
+      "status": "confirmed",
+      "confidence": 0.9,
+      "evidence_scope": "geography_only",
+      "clue_type": "environmental_signal",
+      "citation_ids": [
+        "c_8d9357d6"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_usgs_3dep_elevation/8d9357d6-6a7b-5ca6-960d-33823ce3b215.json",
+      "notes": [
+        "USGS 3DEP returned a point elevation sample."
+      ]
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:5c3ae159:page_title",
+      "fetch_entry_id": "5c3ae159-7672-5162-ab9e-6e17af77794e",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "FCC Broadband Data Collection Nationwide Data",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_5c3ae159"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/5c3ae159-7672-5162-ab9e-6e17af77794e.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:5c3ae159:page_meta_description",
+      "fetch_entry_id": "5c3ae159-7672-5162-ab9e-6e17af77794e",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Nationwide broadband data download resources from the FCC Broadband Data Collection program.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_5c3ae159"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/5c3ae159-7672-5162-ab9e-6e17af77794e.html",
+      "notes": []
+    },
+    {
+      "item_id": "federal_fcc_bdc_national:5c3ae159:page_text_excerpt",
+      "fetch_entry_id": "5c3ae159-7672-5162-ab9e-6e17af77794e",
+      "source_id": "federal_fcc_bdc_national",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "utilities",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "FCC Broadband Data Collection Nationwide Data Nationwide Broadband Data Download and reference resources for FCC broadband coverage data.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_5c3ae159"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/federal_fcc_bdc_national/5c3ae159-7672-5162-ab9e-6e17af77794e.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:3ca98c29:page_title",
+      "fetch_entry_id": "3ca98c29-0106-5ffc-9b3d-c717597c777d",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.title",
+      "extraction_status": "parsed",
+      "value": "Texas PUC Electricity Maps",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.86,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_3ca98c29"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/3ca98c29-0106-5ffc-9b3d-c717597c777d.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:3ca98c29:page_meta_description",
+      "fetch_entry_id": "3ca98c29-0106-5ffc-9b3d-c717597c777d",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.meta_description",
+      "extraction_status": "parsed",
+      "value": "Texas Public Utility Commission electricity maps and service-area resources.",
+      "value_type": "string",
+      "status": "confirmed",
+      "confidence": 0.78,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_3ca98c29"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/3ca98c29-0106-5ffc-9b3d-c717597c777d.html",
+      "notes": []
+    },
+    {
+      "item_id": "state_tx_puc_electricity_maps:3ca98c29:page_text_excerpt",
+      "fetch_entry_id": "3ca98c29-0106-5ffc-9b3d-c717597c777d",
+      "source_id": "state_tx_puc_electricity_maps",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "capability": "transmission",
+      "section_hint": "infrastructure_and_utilities",
+      "field_name": "page.text_excerpt",
+      "extraction_status": "derived",
+      "value": "Texas PUC Electricity Maps Electricity Maps Public utility and electricity map resources for Texas.",
+      "value_type": "string",
+      "status": "estimated",
+      "confidence": 0.6,
+      "evidence_scope": "geography_only",
+      "clue_type": "page_context",
+      "citation_ids": [
+        "c_3ca98c29"
+      ],
+      "observed_at": "2026-04-16T23:30:00Z",
+      "evidence_ref": "alice/raw_evidence/state_tx_puc_electricity_maps/3ca98c29-0106-5ffc-9b3d-c717597c777d.html",
+      "notes": []
+    }
+  ]
+}

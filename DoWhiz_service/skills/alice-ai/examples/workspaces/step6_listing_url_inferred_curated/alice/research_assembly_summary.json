@@ -1,0 +1,14 @@
+{
+  "object_id": "d4c0ea20-c6bb-5b80-812f-1f5767bd1c28",
+  "report_type": "deep_research",
+  "resolution_status": "partially_resolved",
+  "candidate_set_status": "single_weak_candidate",
+  "overall_confirmation_level": "candidate_unconfirmed",
+  "overall_confirmation_basis": "unknown",
+  "coverage_tier": "partial",
+  "overall_confidence": 0.435,
+  "overall_completeness": 0.274,
+  "citation_count": 7,
+  "risk_count": 3,
+  "unknown_count": 10
+}

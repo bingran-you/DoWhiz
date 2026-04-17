@@ -1,0 +1,159 @@
+{
+  "schema_version": "alice.jurisdiction_context.v1",
+  "jurisdiction_context_id": "b0f8d1b3-4bf1-5b33-878a-733bcad1e423",
+  "request_id": "0c54d98f-64e2-4f12-8ae2-4b2947bd4b11",
+  "subject_resolution_id": "2874761c-7b54-56ad-afb7-95a2d7e32409",
+  "session_state_ref": "alice/session_state.json",
+  "request_mode": "deep_research",
+  "active_subject_ids": [
+    "subject-address-1"
+  ],
+  "subject_jurisdictions": [
+    {
+      "subject_id": "subject-address-1",
+      "geography_status": "city_state_partial",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_or_place": "Sierra Blanca",
+      "incorporated_status": "unknown",
+      "derivation_types": [
+        "explicit_request_geography_text",
+        "explicit_subject_hint",
+        "subject_resolution_hint",
+        "address_parse_hint"
+      ],
+      "notes": []
+    }
+  ],
+  "geography_status": "city_state_partial",
+  "state": {
+    "fips": "48",
+    "code": "TX",
+    "name": "Texas",
+    "resolution_status": "resolved",
+    "derivation_type": "explicit_request_geography_text",
+    "subject_ids": [
+      "subject-address-1"
+    ],
+    "notes": []
+  },
+  "county": {
+    "fips": null,
+    "name": null,
+    "resolution_status": "unresolved",
+    "derivation_type": null,
+    "subject_ids": [
+      "subject-address-1"
+    ],
+    "notes": []
+  },
+  "city_or_place": {
+    "name": "Sierra Blanca",
+    "resolution_status": "resolved",
+    "derivation_type": "subject_resolution_hint",
+    "subject_ids": [
+      "subject-address-1"
+    ],
+    "notes": []
+  },
+  "incorporated_status": "unknown",
+  "county_fips": null,
+  "state_fips": "48",
+  "state_code": "TX",
+  "derivation_sources": [
+    {
+      "derivation_id": "22817d49-9fa6-5b6d-89db-26259dc82a67",
+      "derivation_type": "explicit_request_geography_text",
+      "scope": "state",
+      "subject_ids": [
+        "subject-address-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "request:thesis.target_geographies[0]",
+      "confidence": 0.93,
+      "notes": [
+        "Request-level target geography supplied state context."
+      ]
+    },
+    {
+      "derivation_id": "f86576d8-03d8-599e-95e2-41607f48e15e",
+      "derivation_type": "explicit_subject_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-address-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": null,
+      "source_ref": "request:subjects[0].resolution_hints",
+      "confidence": 0.9,
+      "notes": [
+        "Request-level subject hints provided geography context directly."
+      ]
+    },
+    {
+      "derivation_id": "8cf2f5e1-e7b8-5c1c-b2be-2b041867fce4",
+      "derivation_type": "subject_resolution_hint",
+      "scope": "state",
+      "subject_ids": [
+        "subject-address-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": "Sierra Blanca",
+      "source_ref": "subject_resolution:active_subjects[0]",
+      "confidence": 0.79,
+      "notes": [
+        "Step 4 subject identifiers already contained geography hints."
+      ]
+    },
+    {
+      "derivation_id": "4a9ef079-323e-5fc4-8135-59a5978cf03a",
+      "derivation_type": "address_parse_hint",
+      "scope": "city_or_place",
+      "subject_ids": [
+        "subject-address-1"
+      ],
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "county_fips": null,
+      "county_name": null,
+      "city_name": "Sierra Blanca",
+      "source_ref": "subject_resolution:normalized_inputs[0]",
+      "confidence": 0.68,
+      "notes": [
+        "Step 4 address parsing yielded non-authoritative jurisdiction clues."
+      ]
+    }
+  ],
+  "jurisdiction_conflicts": [],
+  "special_district_placeholders": [],
+  "effective_county_registry_ref": null,
+  "effective_county_registry_mode": "none",
+  "unresolved_questions": [
+    "Which county should govern local parcel, zoning, and tax research for this subject?",
+    "Does city-specific planning jurisdiction apply here, or is this still unincorporated county land?"
+  ],
+  "notes": [],
+  "scores": {
+    "jurisdiction_confidence": 0.66,
+    "county_attachment_readiness": 0.42,
+    "subject_alignment_score": 1.0
+  },
+  "generated_at": "2026-04-16T22:43:47.144656Z"
+}

@@ -1,0 +1,178 @@
+{
+  "schema_version": "alice.shortlist.v1",
+  "shortlist_id": "cac419ae-b1af-5437-b430-57f8343b3cfe",
+  "request_id": "33333333-3333-4333-8333-333333333333",
+  "subject_resolution_id": "a0c3301d-1222-5d40-a7bb-c720912b78c5",
+  "recommendation_candidates_id": "d38e42c3-463b-52b8-a50b-df8523a92c7a",
+  "generated_at": "2026-04-17T02:15:00Z",
+  "ranking_basis": {
+    "request_mode": "open_discovery",
+    "active_module_ids": [
+      "energy_solar",
+      "recreational_rural_hold"
+    ],
+    "ranking_policy_notes": [
+      "Hard request mismatches are filtered before softer comparative ranking.",
+      "Alice then prioritizes thesis-fit modules, blocker burden, unknown burden, evidence quality, parcel identity strength, and coverage footing.",
+      "This ranking is comparative within the observed universe, not a market-wide score."
+    ],
+    "applied_filters": [
+      "geography:West Texas",
+      "max_price:260000",
+      "max_purchase_price:260000.0",
+      "prefer_transmission_proximity:True"
+    ]
+  },
+  "shortlist_summary": {
+    "selected_count": 1,
+    "filtered_out_count": 0,
+    "top_pick_candidate_subject_id": "candidate-715ec41d",
+    "top_pick_label": "LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX",
+    "one_line_summary": "From the candidates Alice was able to observe, LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX ranks first because recreational / rural hold screening is favorable.",
+    "limitation_note": "This shortlist is limited to the 1 candidates Alice was able to observe and process. It is not exhaustive market coverage."
+  },
+  "candidate_universe_limits": {
+    "observed_candidate_count": 1,
+    "eligible_candidate_count": 1,
+    "ranked_candidate_count": 1,
+    "filtered_candidate_count": 0,
+    "observed_platforms": [
+      "landwatch"
+    ],
+    "exhaustive_market_scan": false,
+    "limitation_note": "This shortlist is limited to the 1 candidates Alice was able to observe and process. It is not exhaustive market coverage."
+  },
+  "ranked_items": [
+    {
+      "rank": 1,
+      "candidate_subject_id": "candidate-715ec41d",
+      "primary_label": "LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX",
+      "source_listing_url": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+      "platform": "landwatch",
+      "geography": {
+        "county_name": "Hudspeth County",
+        "state_code": "TX",
+        "state_name": "Texas",
+        "city_or_place": "County-level context only; city or unincorporated place not yet confirmed for Hudspeth County."
+      },
+      "asking_price": 240000.0,
+      "acreage": 80.0,
+      "fit_assessment_summary": {
+        "overall_fit": "favorable",
+        "summary": "Recreational / Rural Hold Screening is favorable; Solar Energy Screening is mixed",
+        "module_outcomes": [
+          {
+            "module_id": "recreational_rural_hold",
+            "module_label": "Recreational / Rural Hold Screening",
+            "fit_assessment": "favorable",
+            "module_status": "evaluated",
+            "confidence": 0.824
+          },
+          {
+            "module_id": "energy_solar",
+            "module_label": "Solar Energy Screening",
+            "fit_assessment": "mixed",
+            "module_status": "evaluated",
+            "confidence": 0.769
+          }
+        ]
+      },
+      "active_module_ids": [
+        "recreational_rural_hold",
+        "energy_solar"
+      ],
+      "ranking_factors": [
+        {
+          "factor_type": "module_fit",
+          "effect": "strong_positive",
+          "rationale": "Requested use-case modules land in favorable or clearly supportive territory at screening grade."
+        },
+        {
+          "factor_type": "parcel_identity",
+          "effect": "strong_positive",
+          "rationale": "Parcel identity is parcel-confirmed, which reduces subject mismatch risk."
+        },
+        {
+          "factor_type": "coverage_footing",
+          "effect": "neutral",
+          "rationale": "Coverage footing is usable but still partial."
+        },
+        {
+          "factor_type": "evidence_quality",
+          "effect": "neutral",
+          "rationale": "Evidence quality is usable but incomplete."
+        },
+        {
+          "factor_type": "budget_match",
+          "effect": "positive",
+          "rationale": "Listing ask of $240,000.00 fits inside the active budget ceiling."
+        },
+        {
+          "factor_type": "geography_match",
+          "effect": "positive",
+          "rationale": "This candidate sits inside the active geography scope."
+        },
+        {
+          "factor_type": "directional_economics",
+          "effect": "positive",
+          "rationale": "Directional economics are available enough to frame acquisition and exit scenarios."
+        },
+        {
+          "factor_type": "transmission_preference",
+          "effect": "positive",
+          "rationale": "Current listing or infrastructure context carries at least a directional transmission or utility signal."
+        },
+        {
+          "factor_type": "blocker_burden",
+          "effect": "negative",
+          "rationale": "2 material blockers are already visible in the current screening set."
+        },
+        {
+          "factor_type": "unknown_burden",
+          "effect": "negative",
+          "rationale": "4 major unknowns still separate this candidate from stronger conviction."
+        }
+      ],
+      "major_blockers": [
+        "Flood screening was not completed or lacked a defensible point/parcel geometry.",
+        "No authoritative zoning or local solar-compatibility check is attached yet."
+      ],
+      "major_unknowns": [
+        "Boundary-based access and environmental confirmation would still be needed before a final buy call.",
+        "Boundary-based environmental checks are still weaker than parcel geometry would allow.",
+        "Carrying costs, tax burden, and resale liquidity are not yet well constrained."
+      ],
+      "evidence_quality_summary": {
+        "overall_confidence": 0.44,
+        "overall_completeness": 0.274,
+        "coverage_tier": "partial",
+        "local_footing_status": "partial_local_footing",
+        "parcel_identity_level": "parcel_confirmed"
+      },
+      "candidate_universe_positioning_note": "LandWatch listing 12345678 near 80 Acres near Sierra Blanca (TX) in Hudspeth County, TX ranks with an overall favorable thesis fit from the observed candidate universe. Primary support: Requested use-case modules land in favorable or clearly supportive territory at screening grade. Primary drag: 2 material blockers are already visible in the current screening set.",
+      "linked_workspace_artifacts": {
+        "workspace_root": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth",
+        "parcel_memo_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/parcel_memo.json",
+        "coverage_assessment_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/coverage_assessment.json",
+        "parcel_candidates_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/parcel_candidates.json",
+        "report_ref": "DoWhiz_service/skills/alice-ai/examples/workspaces/step7_strong_curated_hudspeth/alice/report.md"
+      }
+    }
+  ],
+  "filtered_out_items": [],
+  "warnings": [
+    {
+      "warning_type": "non_exhaustive_market_coverage",
+      "message": "Alice is ranking only the observed candidate universe and does not claim exhaustive market coverage."
+    },
+    {
+      "warning_type": "thin_candidate_universe",
+      "message": "The observed candidate universe is thin, so ranking confidence is constrained by coverage."
+    }
+  ],
+  "source_coverage_notes": [
+    "Listing platforms remain market context; they do not override parcel-confirmed local evidence.",
+    "Official local coverage still matters: weak local footing can drag a candidate below stronger-data peers even when listing optics look attractive.",
+    "Recommendations reuse Step 6-9 candidate artifacts rather than inventing a parallel shallow scorer."
+  ]
+}

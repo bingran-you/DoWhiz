@@ -1,0 +1,197 @@
+{
+  "schema_version": "alice.source_plan.v1",
+  "source_plan_id": "6ae4e1ba-4be6-5ec6-896b-1a0fb3fe45e9",
+  "request_id": "ec39d72b-b8e6-41fa-a95b-630fd0e9d9cc",
+  "subject_resolution_id": "7158c6fb-52e3-51a1-b211-f308f293b535",
+  "jurisdiction_context_id": "b8ebd68d-59bd-58c2-b8b9-aa8f1ae76e64",
+  "coverage_assessment_id": "778696b2-da24-530b-9acf-9cdbe0c78e45",
+  "plan_status": "partially_blocked",
+  "request_mode": "batch_compare",
+  "active_use_cases": [
+    "energy",
+    "recreational_rural_hold"
+  ],
+  "required_capabilities": [
+    "parcel_identity",
+    "parcel_geometry",
+    "tax_roll",
+    "environmental_baseline",
+    "utilities",
+    "transmission",
+    "market_context"
+  ],
+  "planned_source_groups": [
+    {
+      "capability": "parcel_geometry",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "source_ids": [
+        "state_tx_stratmap_land_parcels"
+      ],
+      "source_selection_rationale": "Start with Texas StratMap Land Parcels because it is the strongest currently registered source group for parcel_geometry given the present jurisdiction footing.",
+      "priority_order": 2,
+      "authority_level": "official_state",
+      "execution_preconditions": [
+        "county_fips must be stable before this local source group runs"
+      ],
+      "fallback_if_missing": [
+        "If county geometry is unavailable, fall back to statewide parcel datasets or keep geometry unresolved."
+      ],
+      "group_status": "deferred",
+      "notes": [
+        "Statewide parcel geometry may help later, but county attachment is still missing."
+      ]
+    },
+    {
+      "capability": "environmental_baseline",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "source_ids": [
+        "federal_usfws_nwi",
+        "federal_fema_nfhl",
+        "federal_usda_soil_data_access",
+        "federal_usgs_3dep_elevation",
+        "federal_epa_ejscreen"
+      ],
+      "source_selection_rationale": "Start with U.S. Fish and Wildlife Service National Wetlands Inventory because national baseline overlays should be retrieved before narrower parcel-specific interpretation.",
+      "priority_order": 4,
+      "authority_level": "official_federal",
+      "execution_preconditions": [
+        "a defensible geography anchor such as county, state, or coordinates must be present"
+      ],
+      "fallback_if_missing": [
+        "If one national overlay is degraded, continue with the remaining federal baseline sources and record the missing layer explicitly."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "Only national baseline overlays are currently attachable."
+      ]
+    },
+    {
+      "capability": "utilities",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "source_ids": [
+        "state_tx_puc_electricity_maps",
+        "federal_fcc_bdc_national"
+      ],
+      "source_selection_rationale": "Start with Texas PUC Electricity Maps because it is the strongest currently registered source group for utilities given the present jurisdiction footing.",
+      "priority_order": 5,
+      "authority_level": "mixed",
+      "execution_preconditions": [
+        "at least state-level geography should be stable before infrastructure retrieval begins"
+      ],
+      "fallback_if_missing": [
+        "If local utility service areas are unclear, fall back to statewide utility maps and keep service conclusions directional."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "State-level infrastructure sources are available, but local feasibility remains directional."
+      ]
+    },
+    {
+      "capability": "transmission",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "source_ids": [
+        "state_tx_puc_electricity_maps"
+      ],
+      "source_selection_rationale": "Start with Texas PUC Electricity Maps because it is the strongest currently registered source group for transmission given the present jurisdiction footing.",
+      "priority_order": 6,
+      "authority_level": "official_state",
+      "execution_preconditions": [
+        "at least state-level geography should be stable before infrastructure retrieval begins"
+      ],
+      "fallback_if_missing": [
+        "If state or local transmission context is thin, retain transmission proximity as a directional screen only."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "State-level infrastructure sources are available, but local feasibility remains directional."
+      ]
+    },
+    {
+      "capability": "market_context",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "source_ids": [
+        "listing_platform_land_com",
+        "listing_platform_zillow",
+        "listing_platform_redfin"
+      ],
+      "source_selection_rationale": "Start with Land.com Listings because listing-platform context is the fastest supported way to recover seller-facing listing or market clues for this capability.",
+      "priority_order": 7,
+      "authority_level": "platform",
+      "execution_preconditions": [
+        "listing URL inputs remain in the active subject set"
+      ],
+      "fallback_if_missing": [
+        "If one listing platform is missing, use the remaining listing or market context sources and mark any platform-specific gaps."
+      ],
+      "group_status": "ready",
+      "notes": [
+        "Listing inputs already provide a directional market context entry point."
+      ]
+    }
+  ],
+  "deferred_steps": [
+    {
+      "capability": "parcel_geometry",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "blocker_type": "mixed_batch_jurisdiction",
+      "reason": "parcel_geometry is deferred because the active batch does not yet share one stable county.",
+      "dependency": "shared_county_context"
+    }
+  ],
+  "blocked_steps": [
+    {
+      "capability": "parcel_identity",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "blocker_type": "county_required",
+      "reason": "parcel_identity is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    },
+    {
+      "capability": "tax_roll",
+      "subject_ids": [
+        "subject-batch-1",
+        "subject-batch-2",
+        "subject-batch-3"
+      ],
+      "blocker_type": "county_required",
+      "reason": "tax_roll is blocked because jurisdiction is not stable enough yet.",
+      "dependency": "county_fips"
+    }
+  ],
+  "missing_capabilities": [
+    "parcel_identity",
+    "tax_roll"
+  ],
+  "notes": [
+    "This artifact is a retrieval plan only. No live source fetches have been executed in Step 5."
+  ],
+  "generated_at": "2026-04-16T22:48:10.018501Z"
+}

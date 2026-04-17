@@ -1,0 +1,180 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "2874761c-7b54-56ad-afb7-95a2d7e32409",
+  "request_id": "0c54d98f-64e2-4f12-8ae2-4b2947bd4b11",
+  "request_mode": "deep_research",
+  "batch_purpose": null,
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": null,
+    "previous_resolution_ref": null,
+    "previous_report_ref": null
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "subject-address-1",
+      "input_kind": "address",
+      "raw_value": "0 County Road 123, Sierra Blanca, TX 79851"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "subject-address-1",
+      "input_kind": "address",
+      "raw_value": "0 County Road 123, Sierra Blanca, TX 79851",
+      "normalization_status": "normalized",
+      "normalized": {
+        "address_text": "0 County Road 123, Sierra Blanca, TX 79851",
+        "address_parse_status": "parsed_components",
+        "city_hint": "Sierra Blanca",
+        "state_code_hint": "TX",
+        "postal_code_hint": "79851"
+      },
+      "resolution_hints": {
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas",
+        "county_fips": null,
+        "county_name": null,
+        "city_name": "Sierra Blanca",
+        "source_url": null
+      },
+      "normalization_notes": [
+        "Parsed a street, city, state, and optional postal code from the address text.",
+        "Request-provided normalized fields were preserved where available.",
+        "Request-provided resolution hints were merged into the normalized subject."
+      ]
+    }
+  ],
+  "subject_kind": "unresolved_candidate_set",
+  "resolution_status": "partially_resolved",
+  "primary_subject_label": "0 County Road 123, Sierra Blanca, TX 79851",
+  "active_subjects": [
+    {
+      "subject_id": "subject-address-1",
+      "input_kind": "address",
+      "subject_kind": "address_point",
+      "resolution_level": "address_identified",
+      "resolution_status": "partially_resolved",
+      "display_label": "0 County Road 123, Sierra Blanca, TX 79851",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": "0 County Road 123, Sierra Blanca, TX 79851",
+        "address_parse_status": "parsed_components",
+        "apn_raw": null,
+        "apn_normalized": null,
+        "apn_matching_variants": [],
+        "coordinates": null,
+        "county_fips": null,
+        "county_name": null,
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas",
+        "city_name": "Sierra Blanca",
+        "postal_code": "79851",
+        "subject_ref_key": null
+      },
+      "parcel_candidate_ids": [
+        "cand-subject-address-1-1"
+      ],
+      "ambiguity_flags": [
+        "address_needs_geocoding"
+      ],
+      "unresolved_questions": [
+        "What parcel contains this address after geocoding?"
+      ],
+      "next_resolution_actions": [
+        {
+          "action": "geocode_address",
+          "priority": "high",
+          "subject_ids": [
+            "subject-address-1"
+          ],
+          "rationale": "Later geocoding is required before parcel lookup can begin."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [
+    {
+      "candidate_id": "cand-subject-address-1-1",
+      "source_subject_ids": [
+        "subject-address-1"
+      ],
+      "candidate_status": "hinted",
+      "label": "Parcel containing address 0 County Road 123, Sierra Blanca, TX 79851",
+      "apn_raw": null,
+      "apn_normalized": null,
+      "county_fips": null,
+      "county_name": null,
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "address_text": "0 County Road 123, Sierra Blanca, TX 79851",
+      "coordinates": null,
+      "match_basis": [
+        "user_supplied_address"
+      ],
+      "confidence": 0.56,
+      "notes": [
+        "Address normalization does not imply parcel identity until geocoding and parcel lookup happen later."
+      ]
+    }
+  ],
+  "geography_context": {
+    "scope_status": "state_scoped",
+    "states": [
+      {
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      }
+    ],
+    "counties": [],
+    "cities": [
+      "Sierra Blanca"
+    ],
+    "region_labels": [],
+    "centroid_coordinates": null,
+    "notes": []
+  },
+  "ambiguity_flags": [
+    "address_needs_geocoding"
+  ],
+  "unresolved_questions": [
+    "What parcel contains this address after geocoding?"
+  ],
+  "next_resolution_actions": [
+    {
+      "action": "geocode_address",
+      "priority": "high",
+      "subject_ids": [
+        "subject-address-1"
+      ],
+      "rationale": "Later geocoding is required before parcel lookup can begin."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.65,
+    "subject_specificity": 0.68,
+    "geography_specificity": 0.62,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json"
+  ],
+  "generated_at": "2026-04-16T21:42:00Z"
+}

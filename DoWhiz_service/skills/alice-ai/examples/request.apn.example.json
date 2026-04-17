@@ -1,0 +1,75 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "4ca7d7c9-a8bf-44c9-b413-54fbc785d850",
+  "thread_id": "email:alice-demo-thread-002",
+  "channel": "email",
+  "request_mode": "deep_research",
+  "raw_user_message": "Research APN H123-456-7890-0000 in Hudspeth County, Texas. I care about grazing potential and a long-term rural hold thesis.",
+  "thesis": {
+    "summary": "Public-data-first diligence on a Hudspeth County parcel for agriculture and rural hold screening.",
+    "use_case_hypotheses": [
+      "agriculture",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [
+      {
+        "kind": "county",
+        "label": "Hudspeth County, Texas",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County"
+      }
+    ],
+    "filters": {
+      "require_legal_access": true,
+      "desired_coverage_tiers": [
+        "full",
+        "partial",
+        "minimal"
+      ]
+    },
+    "budget": {
+      "currency": "USD"
+    },
+    "hold_period": {
+      "min_years": 7,
+      "max_years": 20,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "farm"
+      ]
+    }
+  },
+  "subjects": [
+    {
+      "input_kind": "apn",
+      "raw_value": "H123-456-7890-0000",
+      "normalized": {
+        "apn_raw": "H123-456-7890-0000",
+        "apn_normalized": "H12345678900000",
+        "apn_strategy": "state_tx_alphanumeric_hyphenated",
+        "apn_matching_variants": [
+          "H12345678900000",
+          "H123-456-7890-0000",
+          "12345678900000"
+        ]
+      },
+      "resolution_hints": {
+        "state_fips": "48",
+        "state_code": "TX",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County"
+      }
+    }
+  ],
+  "output_preferences": {
+    "verbosity": "full",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

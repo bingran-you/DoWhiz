@@ -1,0 +1,59 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "30c9d8f7-4a6e-4aaf-9f37-b8dc3dbb7821",
+  "thread_id": "slack:C09ALICE:1744741902.000200",
+  "channel": "slack",
+  "request_mode": "recommendation",
+  "raw_user_message": "I want 40 to 200 acres in West Texas for solar or long-term hold, under $500k, not too far from transmission, and preferably outside a major floodplain.",
+  "thesis": {
+    "summary": "West Texas acreage thesis for solar screening plus long-term hold.",
+    "use_case_hypotheses": [
+      "energy",
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [
+      {
+        "kind": "region",
+        "label": "West Texas",
+        "state_code": "TX"
+      }
+    ],
+    "filters": {
+      "acreage_min": 40,
+      "acreage_max": 200,
+      "max_price": 500000,
+      "exclude_major_floodplain": true,
+      "prefer_transmission_proximity": true,
+      "desired_coverage_tiers": [
+        "full",
+        "partial"
+      ]
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 500000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold",
+        "ground_lease"
+      ],
+      "notes": [
+        "Prioritize parcels that can still work as a passive hold if the energy thesis weakens."
+      ]
+    }
+  },
+  "subjects": [],
+  "output_preferences": {
+    "verbosity": "standard",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}

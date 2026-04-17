@@ -1,0 +1,193 @@
+{
+  "schema_version": "alice.subject_resolution.v1",
+  "resolution_id": "8f85853f-3f8c-58f4-9e6c-4fb53a6d8f4d",
+  "request_id": "c11d9f9e-9a66-4d95-8f73-f0bb6eebf7c1",
+  "request_mode": "follow_up",
+  "batch_purpose": "follow_up_refinement",
+  "state_refs": {
+    "conversation_state_ref": "alice/session_state.json",
+    "previous_session_state_ref": "alice/session_state.json",
+    "previous_resolution_ref": "alice/subject_resolution.json",
+    "previous_report_ref": "alice/report.md"
+  },
+  "raw_inputs": [
+    {
+      "subject_id": "active_subject_1",
+      "input_kind": "subject_ref",
+      "raw_value": "active_subject_1"
+    }
+  ],
+  "normalized_inputs": [
+    {
+      "subject_id": "active_subject_1",
+      "input_kind": "subject_ref",
+      "raw_value": "active_subject_1",
+      "normalization_status": "normalized",
+      "normalized": {
+        "subject_ref_key": "active_subject_1"
+      },
+      "resolution_hints": {
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas",
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "city_name": "Sierra Blanca",
+        "source_url": null
+      },
+      "normalization_notes": [
+        "Subject reference was attached to a previously confirmed parcel in session state."
+      ]
+    }
+  ],
+  "subject_kind": "single_parcel",
+  "resolution_status": "resolved",
+  "primary_subject_label": "Confirmed Hudspeth County parcel APN H123-456-7890-0000",
+  "active_subjects": [
+    {
+      "subject_id": "active_subject_1",
+      "input_kind": "subject_ref",
+      "subject_kind": "parcel",
+      "resolution_level": "parcel_resolved",
+      "resolution_status": "resolved",
+      "display_label": "Confirmed Hudspeth County parcel APN H123-456-7890-0000",
+      "identifiers": {
+        "listing_platform": null,
+        "canonical_url": null,
+        "listing_id": null,
+        "address_like_slug": null,
+        "address_text": "0 County Road 123, Sierra Blanca, TX 79851",
+        "address_parse_status": "parsed_components",
+        "apn_raw": "H123-456-7890-0000",
+        "apn_normalized": "H12345678900000",
+        "apn_matching_variants": [
+          "H12345678900000",
+          "H123-456-7890-0000",
+          "12345678900000"
+        ],
+        "coordinates": {
+          "latitude": 31.1756,
+          "longitude": -105.3573
+        },
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas",
+        "city_name": "Sierra Blanca",
+        "postal_code": "79851",
+        "subject_ref_key": "active_subject_1"
+      },
+      "parcel_candidate_ids": [
+        "parcel-48229-h12345678900000"
+      ],
+      "ambiguity_flags": [],
+      "unresolved_questions": [],
+      "next_resolution_actions": [
+        {
+          "action": "reuse_prior_resolved_subject",
+          "priority": "low",
+          "subject_ids": [
+            "active_subject_1"
+          ],
+          "rationale": "Follow-up successfully attached to the prior confirmed parcel in session state."
+        }
+      ]
+    }
+  ],
+  "listing_context": {
+    "has_listing_inputs": false,
+    "listing_subject_ids": [],
+    "platforms": [],
+    "canonical_urls": [],
+    "extracted_listing_ids": [],
+    "address_like_slugs": [],
+    "listing_count": 0,
+    "notes": []
+  },
+  "parcel_candidates": [
+    {
+      "candidate_id": "parcel-48229-h12345678900000",
+      "source_subject_ids": [
+        "active_subject_1"
+      ],
+      "candidate_status": "confirmed",
+      "label": "Confirmed Hudspeth County parcel APN H123-456-7890-0000",
+      "apn_raw": "H123-456-7890-0000",
+      "apn_normalized": "H12345678900000",
+      "county_fips": "48229",
+      "county_name": "Hudspeth County",
+      "state_fips": "48",
+      "state_code": "TX",
+      "state_name": "Texas",
+      "address_text": "0 County Road 123, Sierra Blanca, TX 79851",
+      "coordinates": {
+        "latitude": 31.1756,
+        "longitude": -105.3573
+      },
+      "match_basis": [
+        "follow_up_reference",
+        "conversation_state"
+      ],
+      "confidence": 0.96,
+      "notes": [
+        "This confirmed parcel identity was carried forward from prior Alice session state."
+      ]
+    }
+  ],
+  "geography_context": {
+    "scope_status": "county_scoped",
+    "states": [
+      {
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      }
+    ],
+    "counties": [
+      {
+        "county_fips": "48229",
+        "county_name": "Hudspeth County",
+        "state_fips": "48",
+        "state_code": "TX",
+        "state_name": "Texas"
+      }
+    ],
+    "cities": [
+      "Sierra Blanca"
+    ],
+    "region_labels": [],
+    "centroid_coordinates": {
+      "latitude": 31.1756,
+      "longitude": -105.3573
+    },
+    "notes": [
+      "County context came from prior parcel confirmation in session state."
+    ]
+  },
+  "ambiguity_flags": [],
+  "unresolved_questions": [],
+  "next_resolution_actions": [
+    {
+      "action": "reuse_prior_resolved_subject",
+      "priority": "low",
+      "subject_ids": [
+        "active_subject_1"
+      ],
+      "rationale": "Follow-up successfully attached to the prior confirmed parcel in session state."
+    }
+  ],
+  "scores": {
+    "resolution_confidence": 0.95,
+    "subject_specificity": 0.96,
+    "geography_specificity": 0.84,
+    "batch_readiness": null
+  },
+  "citations_or_evidence_refs": [
+    "alice/session_state.json",
+    "alice/subject_resolution.json",
+    "alice/parcel_memo.json",
+    "alice/report.md"
+  ],
+  "generated_at": "2026-04-16T21:48:00Z"
+}

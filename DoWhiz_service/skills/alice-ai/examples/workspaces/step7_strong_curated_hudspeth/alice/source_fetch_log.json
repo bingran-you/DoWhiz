@@ -1,0 +1,791 @@
+{
+  "schema_version": "alice.source_fetch_log.v1",
+  "fetch_log_id": "e3bfd7e3-4b34-5ae2-9a04-2fa6c2953e78",
+  "request_id": "b71f5ba1-f08d-447b-a91a-2a31724cd2f3",
+  "subject_resolution_id": "c964d9cd-9df1-5d50-a1a6-0f5857d31e74",
+  "jurisdiction_context_id": "e4420bac-f9d1-525b-9d48-16ab4962ee9b",
+  "source_plan_id": "a77d4011-c9a5-55e6-a45e-70f440029f95",
+  "generated_at": "2026-04-17T01:05:00Z",
+  "fetch_entries": [
+    {
+      "entry_id": "6f58faff-938b-5b8d-9633-03ca7000ab62",
+      "source_id": null,
+      "source_name": null,
+      "source_category": null,
+      "interface_type": null,
+      "capability": "zoning",
+      "requested_capabilities": [
+        "zoning"
+      ],
+      "source_capabilities": [],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "blocked",
+      "execution_mode": "not_executed",
+      "attempted_at": null,
+      "completed_at": null,
+      "request_descriptor": {
+        "request_kind": "plan_step_block",
+        "method": null,
+        "target_url": null,
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": null,
+        "state_fips": null,
+        "coordinates": null,
+        "query_params": {
+          "dependency": null
+        },
+        "body_preview": null,
+        "notes": [
+          "local_source_gap: No registered source currently supports zoning strongly enough for this context."
+        ]
+      },
+      "artifact_refs": [],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": null,
+      "error_type": "unsupported_source",
+      "error_message": "No registered source currently supports zoning strongly enough for this context.",
+      "notes": [
+        "No registered source currently supports zoning strongly enough for this context."
+      ]
+    },
+    {
+      "entry_id": "a164adc9-71a7-54f8-9c4b-4b39dafbbaf5",
+      "source_id": "county_tx_hudspeth_cad_property_search",
+      "source_name": "Hudspeth Appraisal District Property Search",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "capability": "parcel_identity",
+      "requested_capabilities": [
+        "parcel_identity",
+        "tax_roll"
+      ],
+      "source_capabilities": [
+        "owner_name",
+        "parcel_lookup_by_address",
+        "parcel_lookup_by_apn",
+        "site_address",
+        "tax_roll"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "web_page_access",
+        "method": "GET",
+        "target_url": "https://esearch.hudspethcad.org/",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "c80f791bf936eea7d976ccd2be727143e71f603840313239abe023e0873a6690",
+          "byte_count": 663
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/county_tx_hudspeth_cad_property_search/a164adc9-71a7-54f8-9c4b-4b39dafbbaf5.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "county_tx_hudspeth_cad_property_search:a164adc9:page_title",
+        "county_tx_hudspeth_cad_property_search:a164adc9:page_meta_description",
+        "county_tx_hudspeth_cad_property_search:a164adc9:page_text_excerpt",
+        "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_apn_hint",
+        "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_county_parcel_id_hint",
+        "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_site_address_hint",
+        "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_owner_name_hint",
+        "county_tx_hudspeth_cad_property_search:a164adc9:parcel_identity_legal_description_fragment"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://esearch.hudspethcad.org/ successfully."
+      ]
+    },
+    {
+      "entry_id": "bdaaa408-68f8-55c9-ba88-ab1266034dc7",
+      "source_id": "county_tx_hudspeth_cad_public_information",
+      "source_name": "Hudspeth Appraisal District Public Information",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "capability": "parcel_identity",
+      "requested_capabilities": [
+        "parcel_identity",
+        "tax_roll"
+      ],
+      "source_capabilities": [
+        "owner_name",
+        "tax_roll"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "web_page_access",
+        "method": "GET",
+        "target_url": "https://hudspethcad.org/public-information/",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "6db3df20673559b8184a75cb4611e9efd748b42365187c5613cdabdc599c248f",
+          "byte_count": 686
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/county_tx_hudspeth_cad_public_information/bdaaa408-68f8-55c9-ba88-ab1266034dc7.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "county_tx_hudspeth_cad_public_information:bdaaa408:page_title",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:page_meta_description",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:page_text_excerpt",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_apn_hint",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_county_parcel_id_hint",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_site_address_hint",
+        "county_tx_hudspeth_cad_public_information:bdaaa408:parcel_identity_owner_name_hint"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://hudspethcad.org/public-information/ successfully."
+      ]
+    },
+    {
+      "entry_id": "8170d536-7ee9-598d-aaba-23be26231dd8",
+      "source_id": "state_tx_stratmap_land_parcels",
+      "source_name": "Texas StratMap Land Parcels",
+      "source_category": "state",
+      "interface_type": "downloadable_dataset",
+      "capability": "parcel_geometry",
+      "requested_capabilities": [
+        "parcel_geometry",
+        "parcel_identity"
+      ],
+      "source_capabilities": [
+        "owner_name",
+        "parcel_geometry",
+        "site_address"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "dataset_landing_page_fetch",
+        "method": "GET",
+        "target_url": "https://geographic.texas.gov/stratmap/land-parcels",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/state_tx_stratmap_land_parcels/8170d536-7ee9-598d-aaba-23be26231dd8.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "f7ce6733a9fb86c81633b60838d2079f9f47e2d2bf91116eda081e482db84ec2",
+          "byte_count": 442
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/state_tx_stratmap_land_parcels/8170d536-7ee9-598d-aaba-23be26231dd8.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "state_tx_stratmap_land_parcels:8170d536:page_title",
+        "state_tx_stratmap_land_parcels:8170d536:page_meta_description",
+        "state_tx_stratmap_land_parcels:8170d536:page_text_excerpt"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://geographic.texas.gov/stratmap/land-parcels successfully."
+      ]
+    },
+    {
+      "entry_id": "9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec",
+      "source_id": "county_tx_hudspeth_forms_and_applications",
+      "source_name": "Hudspeth County Forms and Applications",
+      "source_category": "county",
+      "interface_type": "web_only",
+      "capability": "planning_docs",
+      "requested_capabilities": [
+        "planning_docs"
+      ],
+      "source_capabilities": [
+        "development_code"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "web_page_access",
+        "method": "GET",
+        "target_url": "https://www.co.hudspeth.tx.us/page/hudspeth.Forms.and.Applicatons",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "e93e1041d799b35be66e090e5824e6875898c85e2a7b800b0527664f2518a231",
+          "byte_count": 430
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/county_tx_hudspeth_forms_and_applications/9cc08b9d-7fa0-581c-8f7e-8a58787dd0ec.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_title",
+        "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_meta_description",
+        "county_tx_hudspeth_forms_and_applications:9cc08b9d:page_text_excerpt",
+        "county_tx_hudspeth_forms_and_applications:9cc08b9d:parcel_identity_county_name_hint"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://www.co.hudspeth.tx.us/page/hudspeth.Forms.and.Applicatons successfully."
+      ]
+    },
+    {
+      "entry_id": "fdb78883-5a21-5b27-ae56-adb265c6dc3b",
+      "source_id": "federal_epa_ejscreen",
+      "source_name": "EPA EJScreen",
+      "source_category": "federal",
+      "interface_type": "web_only",
+      "capability": "environmental_baseline",
+      "requested_capabilities": [
+        "environmental_baseline"
+      ],
+      "source_capabilities": [
+        "environmental_screening"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "failed",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "web_page_access",
+        "method": "GET",
+        "target_url": "https://www.epa.gov/ejscreen",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/federal_epa_ejscreen/fdb78883-5a21-5b27-ae56-adb265c6dc3b.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "a67d5130d71c05d3b9ab0dca707a01c2928e86166f769ba5440258aa21f66b56",
+          "byte_count": 246
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/federal_epa_ejscreen/fdb78883-5a21-5b27-ae56-adb265c6dc3b.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": 404,
+      "error_type": "http_error",
+      "error_message": "HTTP status 404 returned from https://www.epa.gov/ejscreen",
+      "notes": [
+        "HTTP status 404 returned from https://www.epa.gov/ejscreen"
+      ]
+    },
+    {
+      "entry_id": "84cc9856-564d-520f-b934-78b71d361cde",
+      "source_id": "federal_fema_nfhl",
+      "source_name": "FEMA National Flood Hazard Layer",
+      "source_category": "federal",
+      "interface_type": "web_only",
+      "capability": "environmental_baseline",
+      "requested_capabilities": [
+        "environmental_baseline"
+      ],
+      "source_capabilities": [
+        "flood"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "blocked",
+      "execution_mode": "not_executed",
+      "attempted_at": null,
+      "completed_at": null,
+      "request_descriptor": {
+        "request_kind": "arcgis_query",
+        "method": "GET",
+        "target_url": "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {
+          "f": "json",
+          "geometry": "{\"x\": null, \"y\": null, \"spatialReference\": {\"wkid\": 4326}}",
+          "geometryType": "esriGeometryPoint",
+          "spatialRel": "esriSpatialRelIntersects",
+          "returnGeometry": "false",
+          "outFields": "FLD_ZONE,ZONE_SUBTY,SFHA_TF,STATIC_BFE,V_DATUM"
+        },
+        "body_preview": null,
+        "notes": [
+          "Point geometry missing; query not executed."
+        ]
+      },
+      "artifact_refs": [],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": null,
+      "error_type": "missing_prerequisite",
+      "error_message": "Point geometry is required for this source.",
+      "notes": [
+        "Skipped because no coordinates were available for a point query."
+      ]
+    },
+    {
+      "entry_id": "c707df34-112b-58c8-8b29-b2cbb56aeca9",
+      "source_id": "federal_usda_soil_data_access",
+      "source_name": "USDA NRCS Soil Data Access",
+      "source_category": "federal",
+      "interface_type": "formal_api",
+      "capability": "environmental_baseline",
+      "requested_capabilities": [
+        "environmental_baseline"
+      ],
+      "source_capabilities": [
+        "soil"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "blocked",
+      "execution_mode": "not_executed",
+      "attempted_at": null,
+      "completed_at": null,
+      "request_descriptor": {
+        "request_kind": "soap_query",
+        "method": "POST",
+        "target_url": "https://sdmdataaccess.nrcs.usda.gov/Tabular/SDMTabularService.asmx",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": [
+          "Point geometry missing; SOAP query not executed."
+        ]
+      },
+      "artifact_refs": [],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": null,
+      "error_type": "missing_prerequisite",
+      "error_message": "Point geometry is required for USDA SDA soil lookup.",
+      "notes": [
+        "Skipped USDA soil lookup because no coordinates were available."
+      ]
+    },
+    {
+      "entry_id": "3a42ff42-fa53-5c6f-bea2-dd07ed3a6bff",
+      "source_id": "federal_usfws_nwi",
+      "source_name": "U.S. Fish and Wildlife Service National Wetlands Inventory",
+      "source_category": "federal",
+      "interface_type": "downloadable_dataset",
+      "capability": "environmental_baseline",
+      "requested_capabilities": [
+        "environmental_baseline"
+      ],
+      "source_capabilities": [
+        "wetlands"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "blocked",
+      "execution_mode": "not_executed",
+      "attempted_at": null,
+      "completed_at": null,
+      "request_descriptor": {
+        "request_kind": "arcgis_query",
+        "method": "GET",
+        "target_url": "https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer/0/query",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {
+          "f": "json",
+          "geometry": "{\"x\": null, \"y\": null, \"spatialReference\": {\"wkid\": 4326}}",
+          "geometryType": "esriGeometryPoint",
+          "spatialRel": "esriSpatialRelIntersects",
+          "returnGeometry": "false",
+          "outFields": "Wetlands.ATTRIBUTE,Wetlands.WETLAND_TYPE,Wetlands.ACRES,NWI_Wetland_Codes.SYSTEM_NAME,NWI_Wetland_Codes.CLASS_NAME"
+        },
+        "body_preview": null,
+        "notes": [
+          "Point geometry missing; query not executed."
+        ]
+      },
+      "artifact_refs": [],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": null,
+      "error_type": "missing_prerequisite",
+      "error_message": "Point geometry is required for this source.",
+      "notes": [
+        "Skipped because no coordinates were available for a point query."
+      ]
+    },
+    {
+      "entry_id": "abbf5245-2ab2-59aa-bee8-bd447463dc26",
+      "source_id": "federal_usgs_3dep_elevation",
+      "source_name": "USGS 3D Elevation Program Image Service",
+      "source_category": "federal",
+      "interface_type": "gis_service",
+      "capability": "environmental_baseline",
+      "requested_capabilities": [
+        "environmental_baseline"
+      ],
+      "source_capabilities": [
+        "topography_elevation"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "blocked",
+      "execution_mode": "not_executed",
+      "attempted_at": null,
+      "completed_at": null,
+      "request_descriptor": {
+        "request_kind": "arcgis_query",
+        "method": "GET",
+        "target_url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {
+          "geometry": "{\"x\": null, \"y\": null, \"spatialReference\": {\"wkid\": 4326}}",
+          "geometryType": "esriGeometryPoint",
+          "returnFirstValueOnly": "true",
+          "f": "pjson"
+        },
+        "body_preview": null,
+        "notes": [
+          "Point geometry missing; query not executed."
+        ]
+      },
+      "artifact_refs": [],
+      "extracted_field_refs": [],
+      "parser_version": null,
+      "http_status": null,
+      "error_type": "missing_prerequisite",
+      "error_message": "Point geometry is required for this source.",
+      "notes": [
+        "Skipped because no coordinates were available for a point query."
+      ]
+    },
+    {
+      "entry_id": "f7b719d5-16a7-55d2-8ec0-84a7a167be13",
+      "source_id": "federal_fcc_bdc_national",
+      "source_name": "FCC Broadband Data Collection Nationwide Downloads",
+      "source_category": "federal",
+      "interface_type": "downloadable_dataset",
+      "capability": "utilities",
+      "requested_capabilities": [
+        "utilities"
+      ],
+      "source_capabilities": [
+        "broadband"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "dataset_landing_page_fetch",
+        "method": "GET",
+        "target_url": "https://broadbandmap.fcc.gov/data-download/nationwide-data",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/federal_fcc_bdc_national/f7b719d5-16a7-55d2-8ec0-84a7a167be13.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "f984b76d1737a0c3a9b72204c45cf6d1e9ba2a7e7076a3a9386829c818f1bf51",
+          "byte_count": 440
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/federal_fcc_bdc_national/f7b719d5-16a7-55d2-8ec0-84a7a167be13.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "federal_fcc_bdc_national:f7b719d5:page_title",
+        "federal_fcc_bdc_national:f7b719d5:page_meta_description",
+        "federal_fcc_bdc_national:f7b719d5:page_text_excerpt"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://broadbandmap.fcc.gov/data-download/nationwide-data successfully."
+      ]
+    },
+    {
+      "entry_id": "388a298c-beef-5204-b183-515bc3076bb9",
+      "source_id": "state_tx_puc_electricity_maps",
+      "source_name": "Texas PUC Electricity Maps",
+      "source_category": "state",
+      "interface_type": "web_only",
+      "capability": "transmission",
+      "requested_capabilities": [
+        "transmission",
+        "utilities"
+      ],
+      "source_capabilities": [
+        "transmission",
+        "utility_territory"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "web_page_access",
+        "method": "GET",
+        "target_url": "https://www.puc.texas.gov/industry/maps/electricity/",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/state_tx_puc_electricity_maps/388a298c-beef-5204-b183-515bc3076bb9.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "1bc3cdd97680e38135e8e12460404e55ebcb18db38f6e2cd620e458bac99bae0",
+          "byte_count": 386
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/state_tx_puc_electricity_maps/388a298c-beef-5204-b183-515bc3076bb9.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "state_tx_puc_electricity_maps:388a298c:page_title",
+        "state_tx_puc_electricity_maps:388a298c:page_meta_description",
+        "state_tx_puc_electricity_maps:388a298c:page_text_excerpt"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://www.puc.texas.gov/industry/maps/electricity/ successfully."
+      ]
+    },
+    {
+      "entry_id": "f8a8c354-4eb7-57f5-b2b2-8b1446553417",
+      "source_id": "listing_platform_landwatch",
+      "source_name": "LandWatch Listings",
+      "source_category": "listing_platform",
+      "interface_type": "web_only",
+      "capability": "market_context",
+      "requested_capabilities": [
+        "market_context"
+      ],
+      "source_capabilities": [
+        "listing_search",
+        "market_context"
+      ],
+      "subject_ids": [
+        "subject-1"
+      ],
+      "retrieval_status": "success",
+      "execution_mode": "fixture_replay",
+      "attempted_at": "2026-04-17T01:05:00Z",
+      "completed_at": "2026-04-17T01:05:00Z",
+      "request_descriptor": {
+        "request_kind": "listing_page_fetch",
+        "method": "GET",
+        "target_url": "https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678",
+        "subject_ids": [
+          "subject-1"
+        ],
+        "county_fips": "48229",
+        "state_fips": "48",
+        "coordinates": null,
+        "query_params": {},
+        "body_preview": null,
+        "notes": []
+      },
+      "artifact_refs": [
+        {
+          "artifact_type": "raw_html",
+          "path": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.html",
+          "content_type": "text/html; charset=utf-8",
+          "sha256": "f684cf6c4932baa222ba622cb857d20eca3037009eb79ba614fd3b3ada2fb619",
+          "byte_count": 1449
+        },
+        {
+          "artifact_type": "response_headers",
+          "path": "alice/raw_evidence/listing_platform_landwatch/f8a8c354-4eb7-57f5-b2b2-8b1446553417.headers.json",
+          "content_type": "application/json",
+          "sha256": "6a4d703ae2af11b30738fc7e2dc6d627ac4e61957ea1928a107e23b20cced04e",
+          "byte_count": 48
+        }
+      ],
+      "extracted_field_refs": [
+        "listing_platform_landwatch:f8a8c354:listing_title",
+        "listing_platform_landwatch:f8a8c354:listing_canonical_url",
+        "listing_platform_landwatch:f8a8c354:listing_asking_price",
+        "listing_platform_landwatch:f8a8c354:listing_listed_acreage",
+        "listing_platform_landwatch:f8a8c354:parcel_identity_acreage_hint",
+        "listing_platform_landwatch:f8a8c354:listing_description_text",
+        "listing_platform_landwatch:f8a8c354:subject_address",
+        "listing_platform_landwatch:f8a8c354:parcel_identity_site_address_hint",
+        "listing_platform_landwatch:f8a8c354:subject_coordinates",
+        "listing_platform_landwatch:f8a8c354:parcel_identity_apn_hint",
+        "listing_platform_landwatch:f8a8c354:parcel_identity_county_name_hint"
+      ],
+      "parser_version": "alice.extract.v2",
+      "http_status": 200,
+      "error_type": "none",
+      "error_message": null,
+      "notes": [
+        "Fetched https://www.landwatch.com/texas-land-for-sale/hudspeth-county/property/80-acres-near-sierra-blanca/id/12345678 successfully."
+      ]
+    }
+  ]
+}

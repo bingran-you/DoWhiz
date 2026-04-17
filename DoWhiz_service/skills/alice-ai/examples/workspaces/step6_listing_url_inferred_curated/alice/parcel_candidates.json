@@ -1,0 +1,106 @@
+{
+  "schema_version": "alice.parcel_candidates.v1",
+  "parcel_candidates_id": "479533cf-a6c9-51a9-8292-4fac4dd3f424",
+  "request_id": "b71f5ba1-f08d-447b-a91a-2a31724cd2f3",
+  "subject_resolution_id": "c964d9cd-9df1-5d50-a1a6-0f5857d31e74",
+  "jurisdiction_context_id": "e4420bac-f9d1-525b-9d48-16ab4962ee9b",
+  "source_fetch_log_id": "e3bfd7e3-4b34-5ae2-9a04-2fa6c2953e78",
+  "generated_at": "2026-04-16T23:15:00Z",
+  "candidate_set_status": "single_weak_candidate",
+  "candidate_strategy": "listing_only",
+  "primary_candidate_id": "cand-apn-48229-h12345678900000",
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "candidate_id": "cand-apn-48229-h12345678900000",
+      "county_fips": "48229",
+      "state_fips": "48",
+      "apn_raw": "H123-456-7890-0000",
+      "apn_normalized": "H12345678900000",
+      "apn_variants": [
+        "H12345678900000",
+        "H123-456-7890-0000"
+      ],
+      "parcel_address": {
+        "full_address": "County Road 111, Sierra Blanca, TX, 79851",
+        "street_line1": "County Road 111, Sierra Blanca, TX, 79851",
+        "street_line2": null,
+        "city": null,
+        "county_name": null,
+        "state_code": null,
+        "postal_code": null,
+        "country_code": "US"
+      },
+      "acreage_claims": [],
+      "source_clues": [
+        {
+          "clue_id": "listing_platform_landwatch:f8a8c354:parcel_identity_apn_hint",
+          "clue_type": "apn",
+          "raw_value": "H123-456-7890-0000",
+          "normalized_value": "H12345678900000",
+          "source_id": "listing_platform_landwatch",
+          "source_item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_apn_hint",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.7,
+          "weight": 0.32,
+          "citation_ids": [
+            "c_f8a8c354"
+          ],
+          "notes": [
+            "APN clue came from a listing page and is not parcel confirmation by itself.",
+            "APN normalized conservatively for candidate matching."
+          ]
+        },
+        {
+          "clue_id": "listing_platform_landwatch:f8a8c354:subject_address",
+          "clue_type": "address",
+          "raw_value": "County Road 111, Sierra Blanca, TX, 79851",
+          "normalized_value": "County Road 111, Sierra Blanca, TX, 79851",
+          "source_id": "listing_platform_landwatch",
+          "source_item_id": "listing_platform_landwatch:f8a8c354:subject_address",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.68,
+          "weight": 0.14,
+          "citation_ids": [
+            "c_f8a8c354"
+          ],
+          "notes": [
+            "Listing-derived address should be confirmed against official parcel or assessor records."
+          ]
+        },
+        {
+          "clue_id": "listing_platform_landwatch:f8a8c354:parcel_identity_site_address_hint",
+          "clue_type": "address",
+          "raw_value": "County Road 111, Sierra Blanca, TX, 79851",
+          "normalized_value": "County Road 111, Sierra Blanca, TX, 79851",
+          "source_id": "listing_platform_landwatch",
+          "source_item_id": "listing_platform_landwatch:f8a8c354:parcel_identity_site_address_hint",
+          "evidence_scope": "listing_derived",
+          "confidence": 0.68,
+          "weight": 0.14,
+          "citation_ids": [
+            "c_f8a8c354"
+          ],
+          "notes": [
+            "Listing-derived address is a parcel clue, not parcel confirmation by itself."
+          ]
+        }
+      ],
+      "supporting_source_ids": [
+        "listing_platform_landwatch"
+      ],
+      "contradicting_source_ids": [],
+      "candidate_strength": "weak",
+      "confirmation_level": "candidate_unconfirmed",
+      "confirmation_basis": "unknown",
+      "geometry_status": "none",
+      "notes": [
+        "Merged same-source parcel clues from cand-address-48229-county-road-111-sierra-blanca-tx-79851 into cand-apn-48229-h12345678900000.",
+        "Current clues remain weak and should not be treated as parcel confirmation."
+      ]
+    }
+  ],
+  "notes": [
+    "Only a weak single candidate is available; parcel-specific conclusions should remain conservative."
+  ]
+}

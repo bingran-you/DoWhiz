@@ -1,0 +1,40 @@
+{
+  "schema_version": "alice.request.v1",
+  "request_id": "22222222-2222-4222-8222-222222222222",
+  "thread_id": "email:step10-open-discovery",
+  "channel": "email",
+  "request_mode": "recommendation",
+  "raw_user_message": "Find currently observed acreage listings under $300k that look more promising for rural hold than for heavier development.",
+  "thesis": {
+    "summary": "Open discovery across the observed candidate universe for rural hold under $300k.",
+    "use_case_hypotheses": [
+      "recreational_rural_hold"
+    ],
+    "target_geographies": [],
+    "filters": {
+      "max_price": 300000
+    },
+    "budget": {
+      "currency": "USD",
+      "max_purchase_price": 300000
+    },
+    "hold_period": {
+      "min_years": 5,
+      "max_years": 15,
+      "target_strategy": "hold"
+    },
+    "return_preferences": {
+      "preferred_exit_strategies": [
+        "hold"
+      ]
+    }
+  },
+  "subjects": [],
+  "output_preferences": {
+    "verbosity": "standard",
+    "comparison_requested": false,
+    "include_markdown_report": true,
+    "include_json_artifacts": true
+  },
+  "conversation_state_ref": "alice/session_state.json"
+}
