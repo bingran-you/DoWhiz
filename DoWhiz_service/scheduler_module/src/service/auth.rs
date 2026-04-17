@@ -1720,8 +1720,18 @@ pub async fn setup_tpm_cron(
     let org_name_for_cron = org_name.clone();
     let store_clone = state.account_store.clone();
 
+    let user_store = match &state.user_store {
+        Some(store) => store.clone(),
+        None => {
+            return json_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "User store not configured",
+            );
+        }
+    };
+
     let cron_result = task::spawn_blocking(move || {
-        crate::tpm_cron::setup_tpm_cron(&store_clone, account_id, &org_name_for_cron, None)
+        crate::tpm_cron::setup_tpm_cron(&store_clone, &user_store, account_id, &org_name_for_cron, None)
     })
     .await
     .map_err(|e| {
@@ -1803,10 +1813,20 @@ pub async fn trigger_tpm_sync_endpoint(
     let org_name_for_sync = org_name.clone();
     let store_clone = state.account_store.clone();
 
+    let user_store = match &state.user_store {
+        Some(store) => store.clone(),
+        None => {
+            return json_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "User store not configured",
+            );
+        }
+    };
+
     let sync_result = task::spawn_blocking(move || {
         let index_store = IndexStore::new("/tmp/task_index.db")
             .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
-        crate::tpm_cron::trigger_tpm_sync(&store_clone, &index_store, account_id, &org_name_for_sync)
+        crate::tpm_cron::trigger_tpm_sync(&store_clone, &user_store, &index_store, account_id, &org_name_for_sync)
     })
     .await
     .map_err(|e| {

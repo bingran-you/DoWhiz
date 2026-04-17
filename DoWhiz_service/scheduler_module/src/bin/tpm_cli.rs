@@ -16,6 +16,7 @@ use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSour
 use scheduler_module::index_store::IndexStore;
 use scheduler_module::notion_browser::NotionApiClient;
 use scheduler_module::tpm_cron::trigger_tpm_sync;
+use scheduler_module::user_store::UserStore;
 use serde_json::{json, Value};
 use std::env;
 use std::process::ExitCode;
@@ -1082,6 +1083,14 @@ fn cmd_trigger_sync(args: &[String]) -> ExitCode {
         }
     };
 
+    let user_store = match UserStore::new("/tmp/users.db") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to create user store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
     let index_store = match IndexStore::new("/tmp/task_index.db") {
         Ok(s) => s,
         Err(e) => {
@@ -1090,7 +1099,7 @@ fn cmd_trigger_sync(args: &[String]) -> ExitCode {
         }
     };
 
-    match trigger_tpm_sync(&account_store, &index_store, user_id, &organization) {
+    match trigger_tpm_sync(&account_store, &user_store, &index_store, user_id, &organization) {
         Ok(result) => {
             let output = json!({
                 "success": result.success,
