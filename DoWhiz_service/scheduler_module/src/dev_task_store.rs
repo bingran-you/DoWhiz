@@ -184,6 +184,11 @@ impl DevTask {
         self.assignee = Some(assignee);
         self
     }
+
+    pub fn with_status(mut self, status: TaskStatus) -> Self {
+        self.status = status;
+        self
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -450,6 +455,23 @@ impl DevTaskStore {
             return Err(DevTaskStoreError::NotFound(task_id.to_string()));
         }
         Ok(())
+    }
+
+    /// Delete orphaned tasks whose notion_page_id is not in the given set.
+    /// Returns the number of deleted tasks.
+    pub fn delete_orphaned_tasks(
+        &self,
+        valid_notion_page_ids: &[String],
+    ) -> Result<u64, DevTaskStoreError> {
+        let filter = doc! {
+            "organization": &self.organization,
+            "notion_page_id": {
+                "$exists": true,
+                "$nin": valid_notion_page_ids,
+            }
+        };
+        let result = self.tasks.delete_many(filter, None)?;
+        Ok(result.deleted_count)
     }
 }
 
