@@ -2176,6 +2176,7 @@
                   <a class="sidebar-link" href="#section-channels">Connections</a>
                   <a class="sidebar-link" href="#section-workspace">Checklist</a>
                   <a class="sidebar-link" href="#section-work">Work</a>
+                  <a class="sidebar-link" href="#section-organization">Organization</a>
                   <a class="sidebar-link" href="#section-settings">Preferences</a>
                 </nav>
                 <div class="sidebar-note">
@@ -2456,6 +2457,49 @@
                         Refresh
                       </button>
                       <span id="memo-status" class="memo-status"></span>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="section-organization" class="legal-card dashboard-section">
+                  <p class="dashboard-section-eyebrow">Team</p>
+                  <h2>Organization</h2>
+                  <p>Join an organization to enable TPM mode and team task management.</p>
+
+                  <div class="settings-panel" style="margin-top: 1.5rem;">
+                    <div id="org-current-display" class="current-org-display hidden">
+                      <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                        <span class="current-org-label">Current organization:</span>
+                        <span id="org-current-name" class="current-org-name" style="font-weight: 600;"></span>
+                      </div>
+                      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="trigger-tpm-sync-btn" class="auth-btn auth-btn-primary">
+                          Trigger TPM Sync
+                        </button>
+                        <button id="org-leave-btn" class="auth-btn auth-btn-oauth">
+                          Leave Organization
+                        </button>
+                      </div>
+                      <span id="org-sync-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
+                    </div>
+
+                    <div id="org-join-container" class="org-search-container">
+                      <h3>Join an organization</h3>
+                      <p style="font-size: 0.9rem; color: var(--text-muted, #888); margin-bottom: 1rem;">
+                        Search for your organization to join and enable TPM mode.
+                      </p>
+                      <div class="org-search-input-wrap">
+                        <input
+                          type="text"
+                          id="org-join-search-input"
+                          class="org-search-input"
+                          placeholder="Search organizations..."
+                          autocomplete="off"
+                        />
+                        <div id="org-join-search-results" class="org-search-results hidden"></div>
+                      </div>
+                      <button id="org-join-btn" class="auth-btn auth-btn-primary" disabled style="margin-top: 0.75rem;">Join</button>
+                      <span id="org-join-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
                     </div>
                   </div>
                 </section>
@@ -2814,7 +2858,8 @@
         'section-routines': 'Open Routines',
         'section-settings': 'Open Settings',
         'section-tasks': 'Open Tasks',
-        'section-workspace': 'Open Checklist'
+        'section-workspace': 'Open Checklist',
+        'section-organization': 'Open Organization'
       };
       const WORKSPACE_RECOMMENDATION_CACHE_KEY = 'dowhiz_workspace_recommendation_cache_v2';
       const WORKSPACE_RECOMMENDATION_SUPPRESSION_KEY = 'dowhiz_workspace_recommendation_suppression_v1';
@@ -5734,12 +5779,15 @@
       let selectedOrganization = null;
       let currentOrganizationName = null;
 
-      // Initialize organization UI from account data
       function initOrganizationUI(accountData) {
         const currentOrgDisplay = document.getElementById('current-org-display');
         const currentOrgName = document.getElementById('current-org-name');
         const orgSearchContainer = document.getElementById('org-search-container');
         const orgStatus = document.getElementById('org-status');
+
+        const orgCurrentDisplay = document.getElementById('org-current-display');
+        const orgCurrentName = document.getElementById('org-current-name');
+        const orgJoinContainer = document.getElementById('org-join-container');
 
         currentOrganizationName = accountData.organization_name || null;
 
@@ -5748,9 +5796,24 @@
           currentOrgDisplay.classList.remove('hidden');
           orgSearchContainer.classList.add('hidden');
           orgStatus.textContent = '';
+
+          if (orgCurrentDisplay && orgCurrentName) {
+            orgCurrentName.textContent = currentOrganizationName;
+            orgCurrentDisplay.classList.remove('hidden');
+          }
+          if (orgJoinContainer) {
+            orgJoinContainer.classList.add('hidden');
+          }
         } else {
           currentOrgDisplay.classList.add('hidden');
           orgSearchContainer.classList.remove('hidden');
+
+          if (orgCurrentDisplay) {
+            orgCurrentDisplay.classList.add('hidden');
+          }
+          if (orgJoinContainer) {
+            orgJoinContainer.classList.remove('hidden');
+          }
         }
       }
 
@@ -5882,13 +5945,23 @@
             }
           }
 
-          // Refresh UI
           currentOrganizationName = selectedOrganization;
           selectedOrganization = null;
           document.getElementById('org-search-input').value = '';
           document.getElementById('current-org-name').textContent = currentOrganizationName;
           document.getElementById('current-org-display').classList.remove('hidden');
           document.getElementById('org-search-container').classList.add('hidden');
+
+          const orgCurrentDisplay = document.getElementById('org-current-display');
+          const orgCurrentName = document.getElementById('org-current-name');
+          const orgJoinContainer = document.getElementById('org-join-container');
+          if (orgCurrentDisplay && orgCurrentName) {
+            orgCurrentName.textContent = currentOrganizationName;
+            orgCurrentDisplay.classList.remove('hidden');
+          }
+          if (orgJoinContainer) {
+            orgJoinContainer.classList.add('hidden');
+          }
 
         } catch (err) {
           orgStatus.textContent = normalizeApiFetchError(err);
@@ -5897,7 +5970,7 @@
         }
       }
 
-      // Leave organization
+      async function leaveOrganization() {
       async function leaveOrganization() {
         const session = await supabase.auth.getSession();
         const accessToken = session?.data?.session?.access_token;
@@ -5924,11 +5997,19 @@
           orgStatus.textContent = 'Left organization';
           orgStatus.className = 'org-status success';
 
-          // Reset UI
           currentOrganizationName = null;
           document.getElementById('current-org-display').classList.add('hidden');
           document.getElementById('org-search-container').classList.remove('hidden');
           document.getElementById('join-org-btn').disabled = true;
+
+          const orgCurrentDisplay = document.getElementById('org-current-display');
+          const orgJoinContainer = document.getElementById('org-join-container');
+          if (orgCurrentDisplay) {
+            orgCurrentDisplay.classList.add('hidden');
+          }
+          if (orgJoinContainer) {
+            orgJoinContainer.classList.remove('hidden');
+          }
 
         } catch (err) {
           orgStatus.textContent = normalizeApiFetchError(err);
@@ -5938,7 +6019,45 @@
         }
       }
 
-      // Setup organization event listeners
+      async function triggerTpmSync() {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken || !currentOrganizationName) return;
+
+        const syncBtn = document.getElementById('trigger-tpm-sync-btn');
+        const syncStatus = document.getElementById('org-sync-status');
+
+        syncBtn.disabled = true;
+        syncStatus.textContent = 'Triggering sync...';
+        syncStatus.className = 'org-status';
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/api/tpm/trigger-sync`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ organization_name: currentOrganizationName })
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to trigger sync');
+          }
+
+          const data = await res.json();
+          syncStatus.textContent = `Sync triggered! Task ID: ${data.task_id.slice(0, 8)}...`;
+          syncStatus.className = 'org-status success';
+        } catch (err) {
+          syncStatus.textContent = normalizeApiFetchError(err);
+          syncStatus.className = 'org-status error';
+        } finally {
+          syncBtn.disabled = false;
+        }
+      }
+
+      function setupOrganizationListeners() {
       function setupOrganizationListeners() {
         const searchInput = document.getElementById('org-search-input');
         const resultsEl = document.getElementById('org-search-results');
@@ -5981,9 +6100,18 @@
 
         joinBtn.addEventListener('click', joinOrganization);
         leaveBtn.addEventListener('click', leaveOrganization);
+
+        const triggerSyncBtn = document.getElementById('trigger-tpm-sync-btn');
+        const orgLeaveBtn = document.getElementById('org-leave-btn');
+        if (triggerSyncBtn) {
+          triggerSyncBtn.addEventListener('click', triggerTpmSync);
+        }
+        if (orgLeaveBtn) {
+          orgLeaveBtn.addEventListener('click', leaveOrganization);
+        }
       }
 
-      // Load memo content
+      async function loadMemo(accessToken) {
       async function loadMemo(accessToken) {
         const memoContent = document.getElementById('memo-content');
         try {

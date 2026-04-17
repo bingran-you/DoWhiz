@@ -16,6 +16,7 @@ use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::index_store::IndexStore;
 use crate::account_store::{
     AccountStore, AccountStoreError, AnalyticsEventInsert, ChannelInstallOnboardingState,
 };
@@ -1735,6 +1736,91 @@ pub async fn setup_tpm_cron(
         }
         Ok(Err(e)) => {
             error!("setup_tpm_cron: failed: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
+        }
+        Err(response) => response,
+    }
+}
+
+/// POST /api/tpm/trigger-sync - Trigger an immediate TPM sync for an organization
+///
+/// Creates a one-shot task that runs immediately to sync TPM workflows.
+pub async fn trigger_tpm_sync_endpoint(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Json(payload): Json<SetOrganizationRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let org_name = payload.organization_name.clone();
+
+    // Verify user belongs to an organization
+    if account.organization_id.is_none() {
+        return json_error_response(
+            StatusCode::BAD_REQUEST,
+            "You must be a member of an organization to trigger TPM sync",
+        );
+    }
+
+    // Fetch the organization to verify name matches
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to fetch organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    // Verify user is in this organization
+    if account.organization_id != Some(org.id) {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            &format!("You are not a member of organization '{}'", org_name),
+        );
+    }
+
+    // Call trigger_tpm_sync
+    let account_id = account.id;
+    let org_name_for_sync = org_name.clone();
+    let store_clone = state.account_store.clone();
+
+    let sync_result = task::spawn_blocking(move || {
+        let index_store = IndexStore::new("/tmp/task_index.db")
+            .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
+        crate::tpm_cron::trigger_tpm_sync(&store_clone, &index_store, account_id, &org_name_for_sync)
+    })
+    .await
+    .map_err(|e| {
+        error!("spawn_blocking panicked during trigger_tpm_sync: {}", e);
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    });
+
+    match sync_result {
+        Ok(Ok(result)) => {
+            info!("trigger_tpm_sync: succeeded, task_id={}", result.task_id);
+            (StatusCode::OK, Json(result)).into_response()
+        }
+        Ok(Err(e)) => {
+            error!("trigger_tpm_sync: failed: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())
         }
         Err(response) => response,
@@ -6572,6 +6658,7 @@ pub fn auth_router(state: AuthState) -> Router {
         .route("/auth/organizations", get(list_organizations))
         .route("/auth/organization/:name/member-count", get(get_organization_member_count))
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
+        .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))
         .route("/auth/link", post(link_identifier))
         .route("/auth/verify", post(verify_identifier))
         .route("/auth/verify-email", get(verify_email))
