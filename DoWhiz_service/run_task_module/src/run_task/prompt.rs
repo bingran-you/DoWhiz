@@ -785,11 +785,9 @@ You are operating as a Technical Program Manager (TPM) for the {org_name} organi
 - `tpm_cli create-task --organization {org_name} --database-id <DB_ID> --workspace-id <WS_ID> --title "..." --description "..." --priority p1 --source user_feedback` - Create new task
 
 **After creating a new task board (setup-board):**
-The database is created in the USER's Notion workspace (they own it). You MUST:
-1. Run `tpm_cli setup-tpm-cron --user-id {account_id} --organization {org_name}` to set up daily syncs
-2. Remind the user to share the database:
-   - Share with team members (Can Edit) so they can update tasks
-   - Share with oliver@dowhiz.com (Can Edit) so I can run scheduled syncs
+The database is created in the USER's Notion workspace (they own it). Remind the user to share the database:
+- Share with team members (Can Edit) so they can update tasks
+- Share with oliver@dowhiz.com (Can Edit) so I can run scheduled syncs
 Include the database URL in your reply and these sharing instructions.
 
 **Notion CLI Commands (notion_api_cli):**
@@ -819,6 +817,9 @@ When creating a task, reference related existing tasks if applicable. Do not cre
 - manual: Manually created
 
 **Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
+
+**Account ID for trigger-sync:** {account_id}
+- `tpm_cli trigger-sync --user-id {account_id} --organization {org_name}` - Queue immediate TPM sync task
 "#,
         org_name = org_name,
         account_id = account_id

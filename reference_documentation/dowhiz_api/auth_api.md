@@ -246,6 +246,53 @@ Set up TPM cron job for an organization. Called when first member joins to enabl
 
 ---
 
+### POST /api/tpm/trigger-sync
+Trigger an immediate TPM sync for an organization. Creates a one-shot task that runs immediately.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "organization_name": "deeptutor"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "task_id": "uuid",
+  "user_id": "uuid",
+  "organization": "deeptutor",
+  "email": "user@example.com",
+  "workspace_dir": "/path/to/workspace"
+}
+```
+
+**Response 400:**
+```json
+{
+  "error": "You must be a member of an organization to trigger TPM sync"
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "You are not a member of organization 'xyz'"
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": "Organization 'xyz' not found"
+}
+```
+
+---
+
 ## Identifier Linking
 
 ### POST /auth/link

@@ -13,7 +13,10 @@
 use mongodb::bson::oid::ObjectId;
 use scheduler_module::account_store::{AccountStore, UserContact};
 use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSource, TaskStatus};
+use scheduler_module::index_store::IndexStore;
 use scheduler_module::notion_browser::NotionApiClient;
+use scheduler_module::tpm_cron::trigger_tpm_sync;
+use scheduler_module::user_store::UserStore;
 use serde_json::{json, Value};
 use std::env;
 use std::process::ExitCode;
@@ -37,6 +40,7 @@ fn main() -> ExitCode {
         "create-task" => cmd_create_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
         "sync-tasks" => cmd_sync_tasks(&args[2..]),
+        "trigger-sync" => cmd_trigger_sync(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
             ExitCode::SUCCESS
@@ -93,6 +97,10 @@ Task Board Commands:
     --organization <org>     Organization name (required)
     --database-id <id>       Notion database ID
     --workspace-id <ws>      Notion workspace ID
+
+  trigger-sync      Trigger immediate TPM sync (one-shot task)
+    --user-id <uuid>         Account UUID (required)
+    --organization <org>     Organization name (required)
 
 
 Environment:
@@ -852,16 +860,92 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     };
 
     let mut synced = 0;
+    let mut created = 0;
     let mut skipped = 0;
     let mut errors: Vec<String> = Vec::new();
+    let mut notion_page_ids: Vec<String> = Vec::new();
 
     for item in items {
+        // Collect all Notion page IDs for orphan cleanup
+        notion_page_ids.push(item.id.clone());
+
         // Extract MongoDB ID from Notion page properties
         let mongo_id_str = extract_rich_text_property(&item.properties, "MongoDB ID");
-        let Some(mongo_id_str) = mongo_id_str else {
-            skipped += 1;
+
+        // If no MongoDB ID, create task in MongoDB from Notion data
+        if mongo_id_str.is_none() || mongo_id_str.as_ref().map(|s| s.is_empty()).unwrap_or(false) {
+            let title = match extract_title_property(&item.properties, "Name") {
+                Some(t) => t,
+                None => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+
+            let status = match extract_select_property(&item.properties, "Status").as_deref() {
+                Some("Backlog") => TaskStatus::Backlog,
+                Some("In Progress") => TaskStatus::InProgress,
+                Some("Review") => TaskStatus::Review,
+                Some("Done") => TaskStatus::Done,
+                Some("Blocked") => TaskStatus::Blocked,
+                _ => TaskStatus::Backlog,
+            };
+
+            let priority = match extract_select_property(&item.properties, "Priority").as_deref() {
+                Some("P0") => Priority::P0,
+                Some("P1") => Priority::P1,
+                Some("P2") => Priority::P2,
+                Some("P3") => Priority::P3,
+                _ => Priority::P2,
+            };
+
+            let source = match extract_select_property(&item.properties, "Source").as_deref() {
+                Some("User Feedback") => TaskSource::UserFeedback,
+                Some("Notetaker") => TaskSource::Notetaker,
+                Some("Market Research") => TaskSource::MarketResearch,
+                _ => TaskSource::Manual,
+            };
+
+            // Create task in MongoDB
+            let task = DevTask::new(
+                organization.clone(),
+                title,
+                String::new(), // No description in table view
+                source,
+            )
+            .with_priority(priority)
+            .with_status(status);
+
+            let task_id = match store.insert_task(&task) {
+                Ok(id) => id,
+                Err(e) => {
+                    errors.push(format!("Failed to create task from Notion: {}", e));
+                    continue;
+                }
+            };
+
+            // Link notion_page_id to MongoDB
+            if let Err(e) = store.link_notion_page(&task_id, &item.id) {
+                errors.push(format!("Failed to link Notion page {}: {}", item.id, e));
+            }
+
+            // Update Notion page with MongoDB ID
+            let update_props = json!({
+                "MongoDB ID": {
+                    "rich_text": [{
+                        "text": { "content": task_id.to_string() }
+                    }]
+                }
+            });
+            if let Err(e) = client.update_page(&workspace_id, &item.id, update_props) {
+                errors.push(format!("Failed to update Notion page with MongoDB ID: {}", e));
+            }
+
+            created += 1;
             continue;
-        };
+        }
+
+        let mongo_id_str = mongo_id_str.unwrap();
 
         let Ok(object_id) = ObjectId::parse_str(&mongo_id_str) else {
             errors.push(format!("Invalid ObjectId: {}", mongo_id_str));
@@ -926,10 +1010,21 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         }
     }
 
+    // Delete orphaned tasks (linked to Notion pages that no longer exist)
+    let orphans_deleted = match store.delete_orphaned_tasks(&notion_page_ids) {
+        Ok(count) => count,
+        Err(e) => {
+            errors.push(format!("Failed to delete orphaned tasks: {}", e));
+            0
+        }
+    };
+
     let output = json!({
         "success": errors.is_empty(),
         "synced": synced,
+        "created": created,
         "skipped": skipped,
+        "orphans_deleted": orphans_deleted,
         "errors": errors
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
@@ -938,6 +1033,90 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// Trigger an immediate TPM sync (one-shot task).
+fn cmd_trigger_sync(args: &[String]) -> ExitCode {
+    let mut user_id: Option<String> = None;
+    let mut organization: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--user-id" => {
+                i += 1;
+                user_id = args.get(i).cloned();
+            }
+            "--organization" => {
+                i += 1;
+                organization = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(user_id_str) = user_id else {
+        eprintln!("Error: --user-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let user_id = match Uuid::parse_str(&user_id_str) {
+        Ok(uuid) => uuid,
+        Err(_) => {
+            eprintln!("Error: Invalid user-id UUID format");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let Some(organization) = organization else {
+        eprintln!("Error: --organization is required");
+        return ExitCode::FAILURE;
+    };
+
+    let account_store = match AccountStore::from_env() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to connect to account store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let user_store = match UserStore::new("/tmp/users.db") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to create user store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let index_store = match IndexStore::new("/tmp/task_index.db") {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to create index store: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    match trigger_tpm_sync(&account_store, &user_store, &index_store, user_id, &organization) {
+        Ok(result) => {
+            let output = json!({
+                "success": result.success,
+                "task_id": result.task_id,
+                "user_id": result.user_id,
+                "organization": result.organization,
+                "email": result.email,
+                "workspace_dir": result.workspace_dir,
+                "message": "TPM sync task queued for immediate execution"
+            });
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -955,6 +1134,15 @@ fn extract_select_property(props: &Value, name: &str) -> Option<String> {
 /// Extract a rich_text property value from Notion properties.
 fn extract_rich_text_property(props: &Value, name: &str) -> Option<String> {
     props[name]["rich_text"]
+        .as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|item| item["plain_text"].as_str())
+        .map(|s| s.to_string())
+}
+
+/// Extract a title property value from Notion properties.
+fn extract_title_property(props: &Value, name: &str) -> Option<String> {
+    props[name]["title"]
         .as_array()
         .and_then(|arr| arr.first())
         .and_then(|item| item["plain_text"].as_str())
