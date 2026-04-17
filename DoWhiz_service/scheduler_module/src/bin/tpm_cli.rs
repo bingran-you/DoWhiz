@@ -854,8 +854,11 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
     let mut synced = 0;
     let mut skipped = 0;
     let mut errors: Vec<String> = Vec::new();
+    let mut notion_page_ids: Vec<String> = Vec::new();
 
     for item in items {
+        // Collect all Notion page IDs for orphan cleanup
+        notion_page_ids.push(item.id.clone());
         // Extract MongoDB ID from Notion page properties
         let mongo_id_str = extract_rich_text_property(&item.properties, "MongoDB ID");
         let Some(mongo_id_str) = mongo_id_str else {
@@ -926,10 +929,20 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         }
     }
 
+    // Delete orphaned tasks (linked to Notion pages that no longer exist)
+    let orphans_deleted = match store.delete_orphaned_tasks(&notion_page_ids) {
+        Ok(count) => count,
+        Err(e) => {
+            errors.push(format!("Failed to delete orphaned tasks: {}", e));
+            0
+        }
+    };
+
     let output = json!({
         "success": errors.is_empty(),
         "synced": synced,
         "skipped": skipped,
+        "orphans_deleted": orphans_deleted,
         "errors": errors
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
