@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use uuid::Uuid;
 
-use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
+use crate::mongo_store::{
+    create_client_from_env, database_from_env, ensure_index_compatible, retry_mongo_write,
+};
 
 use super::super::types::{Schedule, ScheduledTask, SchedulerError};
 use super::super::utils::{task_kind_channel, task_kind_label};
@@ -176,28 +178,28 @@ impl MongoSchedulerStore {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
         let filter = self.task_filter(&task.id.to_string());
-        let result = self.tasks
-            .update_one(
-                filter.clone(),
-                doc! {
-                    "$set": {
-                        "owner_scope": self.owner_scope_doc(),
-                        "task_id": task.id.to_string(),
-                        "kind": task_kind_label(&task.kind),
-                        "channel": task_kind_channel(&task.kind).to_string(),
-                        "enabled": task.enabled,
-                        "created_at": BsonDateTime::from_chrono(task.created_at),
-                        "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
-                        "schedule": schedule_doc(&task.schedule),
-                        "task_json": task_json,
-                    },
-                    "$setOnInsert": {
-                        "retry_count": 0i32,
-                    },
-                },
-                UpdateOptions::builder().upsert(Some(true)).build(),
-            )
-            .map_err(mongo_err)?;
+        let update = doc! {
+            "$set": {
+                "owner_scope": self.owner_scope_doc(),
+                "task_id": task.id.to_string(),
+                "kind": task_kind_label(&task.kind),
+                "channel": task_kind_channel(&task.kind).to_string(),
+                "enabled": task.enabled,
+                "created_at": BsonDateTime::from_chrono(task.created_at),
+                "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
+                "schedule": schedule_doc(&task.schedule),
+                "task_json": task_json,
+            },
+            "$setOnInsert": {
+                "retry_count": 0i32,
+            },
+        };
+        let options = UpdateOptions::builder().upsert(Some(true)).build();
+        let result = retry_mongo_write("tasks.insert_task", || {
+            self.tasks
+                .update_one(filter.clone(), update.clone(), options.clone())
+        })
+        .map_err(mongo_err)?;
 
         tracing::info!(
             "insert_task: task_id={} owner_scope=({}, {}) upserted={} matched={}",
@@ -214,20 +216,18 @@ impl MongoSchedulerStore {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
         let filter = self.task_filter(&task.id.to_string());
-        let result = self.tasks
-            .update_one(
-                filter.clone(),
-                doc! {
-                    "$set": {
-                        "enabled": task.enabled,
-                        "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
-                        "schedule": schedule_doc(&task.schedule),
-                        "task_json": task_json,
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let update = doc! {
+            "$set": {
+                "enabled": task.enabled,
+                "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
+                "schedule": schedule_doc(&task.schedule),
+                "task_json": task_json,
+            }
+        };
+        let result = retry_mongo_write("tasks.update_task", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
 
         // Log warning if no document was matched - this indicates a bug
         if result.matched_count == 0 {
@@ -279,20 +279,19 @@ impl MongoSchedulerStore {
             execution_id: next_execution_id(started_at),
             started_at,
         };
-        self.executions
-            .insert_one(
-                doc! {
-                    "owner_scope": self.owner_scope_doc(),
-                    "execution_id": execution.execution_id,
-                    "task_id": task_id.to_string(),
-                    "started_at": BsonDateTime::from_chrono(started_at),
-                    "finished_at": Bson::Null,
-                    "status": "running",
-                    "error_message": Bson::Null,
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let document = doc! {
+            "owner_scope": self.owner_scope_doc(),
+            "execution_id": execution.execution_id,
+            "task_id": task_id.to_string(),
+            "started_at": BsonDateTime::from_chrono(started_at),
+            "finished_at": Bson::Null,
+            "status": "running",
+            "error_message": Bson::Null,
+        };
+        retry_mongo_write("task_executions.record_execution_start", || {
+            self.executions.insert_one(document.clone(), None)
+        })
+        .map_err(mongo_err)?;
         Ok(execution)
     }
 
@@ -304,27 +303,26 @@ impl MongoSchedulerStore {
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        let result = self
-            .executions
-            .update_one(
-                doc! {
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "task_id": task_id.to_string(),
-                    "execution_id": execution.execution_id,
-                    "started_at": BsonDateTime::from_chrono(execution.started_at),
-                    "status": "running",
-                },
-                doc! {
-                    "$set": {
-                        "finished_at": BsonDateTime::from_chrono(finished_at),
-                        "status": status,
-                        "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": task_id.to_string(),
+            "execution_id": execution.execution_id,
+            "started_at": BsonDateTime::from_chrono(execution.started_at),
+            "status": "running",
+        };
+        let update = doc! {
+            "$set": {
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        let result = retry_mongo_write("task_executions.record_execution_finish", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         if result.matched_count == 0 {
             return Err(SchedulerError::Storage(format!(
                 "missing running execution row for task {} execution_id={} started_at={}",
@@ -444,53 +442,54 @@ impl MongoSchedulerStore {
         &self,
         archive: &TaskDebugArchiveRecord,
     ) -> Result<(), SchedulerError> {
-        self.debug_archives
-            .update_one(
-                doc! {
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "task_id": &archive.task_id,
-                    "execution_id": archive.execution_id,
-                },
-                doc! {
-                    "$set": {
-                        "owner_scope": self.owner_scope_doc(),
-                        "task_id": &archive.task_id,
-                        "execution_id": archive.execution_id,
-                        "archive_type": &archive.archive_type,
-                        "archive_version": archive.archive_version,
-                        "status": &archive.status,
-                        "storage_backend": &archive.storage_backend,
-                        "storage_account": archive.storage_account.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_container": archive.blob_container.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_path": archive.blob_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_reference": archive.blob_reference.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "local_fallback_path": archive.local_fallback_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "sha256": &archive.sha256,
-                        "size_bytes": archive.size_bytes,
-                        "runner": &archive.runner,
-                        "model": &archive.model,
-                        "deploy_target": &archive.deploy_target,
-                        "started_at": BsonDateTime::from_chrono(archive.started_at),
-                        "finished_at": BsonDateTime::from_chrono(archive.finished_at),
-                        "duration_ms": archive.duration_ms,
-                        "archive_build_duration_ms": archive.archive_build_duration_ms,
-                        "upload_duration_ms": archive.upload_duration_ms,
-                        "workspace_before_file_count": archive.workspace_before_file_count,
-                        "workspace_after_file_count": archive.workspace_after_file_count,
-                        "redacted_file_count": archive.redacted_file_count,
-                        "skipped_file_count": archive.skipped_file_count,
-                        "has_workspace_before": archive.has_workspace_before,
-                        "has_workspace_after": archive.has_workspace_after,
-                        "has_run_task_trace": archive.has_run_task_trace,
-                        "has_aci_logs": archive.has_aci_logs,
-                        "error_summary": archive.error_summary.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "created_at": BsonDateTime::from_chrono(archive.created_at),
-                    }
-                },
-                UpdateOptions::builder().upsert(Some(true)).build(),
-            )
-            .map_err(mongo_err)?;
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": &archive.task_id,
+            "execution_id": archive.execution_id,
+        };
+        let update = doc! {
+            "$set": {
+                "owner_scope": self.owner_scope_doc(),
+                "task_id": &archive.task_id,
+                "execution_id": archive.execution_id,
+                "archive_type": &archive.archive_type,
+                "archive_version": archive.archive_version,
+                "status": &archive.status,
+                "storage_backend": &archive.storage_backend,
+                "storage_account": archive.storage_account.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_container": archive.blob_container.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_path": archive.blob_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_reference": archive.blob_reference.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "local_fallback_path": archive.local_fallback_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "sha256": &archive.sha256,
+                "size_bytes": archive.size_bytes,
+                "runner": &archive.runner,
+                "model": &archive.model,
+                "deploy_target": &archive.deploy_target,
+                "started_at": BsonDateTime::from_chrono(archive.started_at),
+                "finished_at": BsonDateTime::from_chrono(archive.finished_at),
+                "duration_ms": archive.duration_ms,
+                "archive_build_duration_ms": archive.archive_build_duration_ms,
+                "upload_duration_ms": archive.upload_duration_ms,
+                "workspace_before_file_count": archive.workspace_before_file_count,
+                "workspace_after_file_count": archive.workspace_after_file_count,
+                "redacted_file_count": archive.redacted_file_count,
+                "skipped_file_count": archive.skipped_file_count,
+                "has_workspace_before": archive.has_workspace_before,
+                "has_workspace_after": archive.has_workspace_after,
+                "has_run_task_trace": archive.has_run_task_trace,
+                "has_aci_logs": archive.has_aci_logs,
+                "error_summary": archive.error_summary.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "created_at": BsonDateTime::from_chrono(archive.created_at),
+            }
+        };
+        let options = UpdateOptions::builder().upsert(Some(true)).build();
+        retry_mongo_write("task_debug_archives.record_task_debug_archive", || {
+            self.debug_archives
+                .update_one(filter.clone(), update.clone(), options.clone())
+        })
+        .map_err(mongo_err)?;
         Ok(())
     }
 
@@ -526,25 +525,24 @@ impl MongoSchedulerStore {
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        let result = self
-            .executions
-            .update_one(
-                doc! {
-                    "_id": doc_id.clone(),
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "status": "running",
-                },
-                doc! {
-                    "$set": {
-                        "finished_at": BsonDateTime::from_chrono(finished_at),
-                        "status": status,
-                        "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = doc! {
+            "_id": doc_id.clone(),
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "status": "running",
+        };
+        let update = doc! {
+            "$set": {
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        let result = retry_mongo_write("task_executions.finish_execution_row", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         if result.matched_count == 0 {
             return Err(SchedulerError::Storage(
                 "missing running execution row while reconciling stale execution".to_string(),
@@ -565,24 +563,22 @@ impl MongoSchedulerStore {
     }
 
     pub(crate) fn increment_retry_count(&self, task_id: &str) -> Result<u32, SchedulerError> {
-        self.tasks
-            .update_one(
-                self.task_filter(task_id),
-                doc! { "$inc": { "retry_count": 1i32 } },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = self.task_filter(task_id);
+        let update = doc! { "$inc": { "retry_count": 1i32 } };
+        retry_mongo_write("tasks.increment_retry_count", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         self.get_retry_count(task_id)
     }
 
     pub(crate) fn reset_retry_count(&self, task_id: &str) -> Result<(), SchedulerError> {
-        self.tasks
-            .update_one(
-                self.task_filter(task_id),
-                doc! { "$set": { "retry_count": 0i32 } },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = self.task_filter(task_id);
+        let update = doc! { "$set": { "retry_count": 0i32 } };
+        retry_mongo_write("tasks.reset_retry_count", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         Ok(())
     }
 
