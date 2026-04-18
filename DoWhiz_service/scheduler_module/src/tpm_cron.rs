@@ -330,7 +330,9 @@ pub fn trigger_tpm_sync(
         .ensure_user_dirs(&user_paths)
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
-    let workspace_dir = user_paths.workspaces_root.join("tpm_trigger_oneshot");
+    // Use unique workspace per trigger to avoid blocking on concurrent executions
+    let trigger_id = Uuid::new_v4();
+    let workspace_dir = user_paths.workspaces_root.join(format!("tpm_trigger_{}", trigger_id));
 
     // Create all workspace directories required by RunTaskTask validation
     for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
