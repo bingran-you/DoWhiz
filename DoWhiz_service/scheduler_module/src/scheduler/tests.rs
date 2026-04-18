@@ -623,6 +623,34 @@ fn add_one_shot_in_with_id_persists_to_database() {
 }
 
 #[test]
+fn add_one_shot_in_if_absent_with_id_skips_existing_task() {
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = temp.path().join("tasks.db");
+    let specific_id = Uuid::new_v4();
+
+    {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        let inserted = scheduler
+            .add_one_shot_in_if_absent_with_id(specific_id, Duration::from_secs(0), TaskKind::Noop)
+            .expect("insert first task");
+        assert!(inserted, "first insertion should create the task");
+
+        let inserted_again = scheduler
+            .add_one_shot_in_if_absent_with_id(specific_id, Duration::from_secs(0), TaskKind::Noop)
+            .expect("second insert should not fail");
+        assert!(
+            !inserted_again,
+            "duplicate insertion should be skipped for the same task id"
+        );
+        assert_eq!(scheduler.tasks().len(), 1);
+    }
+
+    let scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("reload");
+    assert_eq!(scheduler.tasks().len(), 1);
+    assert_eq!(scheduler.tasks()[0].id, specific_id);
+}
+
+#[test]
 fn execution_status_can_be_recorded_for_task() {
     let temp = TempDir::new().expect("tempdir");
     let tasks_db = temp.path().join("tasks.db");

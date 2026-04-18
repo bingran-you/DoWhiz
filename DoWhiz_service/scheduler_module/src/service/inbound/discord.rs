@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::account_store::AccountStore;
 use crate::channel::Channel;
@@ -237,7 +238,22 @@ pub(crate) fn process_discord_inbound_message(
             err
         );
     }
-    let task_id = scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?;
+    let task_id = if let Some(stable_task_id) = discord_message_task_id(message) {
+        let inserted = scheduler.add_one_shot_in_if_absent_with_id(
+            stable_task_id,
+            Duration::from_secs(0),
+            TaskKind::RunTask(run_task),
+        )?;
+        if !inserted {
+            info!(
+                "skipping duplicate discord full-task enqueue user_id={} task_id={} message_id={:?}",
+                user.user_id, stable_task_id, message.message_id
+            );
+        }
+        stable_task_id
+    } else {
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?
+    };
 
     index_store.sync_user_tasks(&user.user_id, scheduler.tasks())?;
 
@@ -265,14 +281,20 @@ pub(crate) fn process_discord_inbound_message(
             match Scheduler::load(&user_tasks_db_path, ModuleExecutor::default()) {
                 Ok(mut user_scheduler) => {
                     // Use the same task_id so we can update status at completion
-                    match user_scheduler.add_one_shot_in_with_id(
+                    match user_scheduler.add_one_shot_in_if_absent_with_id(
                         task_id,
                         Duration::from_secs(0),
                         TaskKind::RunTask(run_task_for_account),
                     ) {
-                        Ok(()) => {
+                        Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={}",
+                                account.id, task_id
+                            );
+                        }
+                        Ok(false) => {
+                            info!(
+                                "skipping duplicate discord account-level enqueue account={} task_id={}",
                                 account.id, task_id
                             );
                         }
@@ -295,6 +317,27 @@ pub(crate) fn process_discord_inbound_message(
     }
 
     Ok(())
+}
+
+fn discord_message_task_id(message: &crate::channel::InboundMessage) -> Option<Uuid> {
+    let channel_id = message.metadata.discord_channel_id?.to_string();
+    let message_id = message
+        .message_id
+        .as_deref()
+        .or(message.metadata.discord_message_id.as_deref())?
+        .trim();
+    let thread_id = message.thread_id.trim();
+    if message_id.is_empty() || thread_id.is_empty() {
+        return None;
+    }
+
+    let guild_id = message
+        .metadata
+        .discord_guild_id
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "dm".to_string());
+    let dedupe_key = format!("discord:{guild_id}:{channel_id}:{thread_id}:{message_id}");
+    Some(Uuid::from_bytes(md5::compute(dedupe_key.as_bytes()).0))
 }
 
 pub(super) fn append_discord_message_payload(
@@ -768,5 +811,76 @@ mod tests {
         assert_eq!(fs::read(archived_attachment)?, attachment_bytes);
 
         Ok(())
+    }
+
+    #[test]
+    fn discord_message_task_id_is_stable_for_duplicate_delivery() {
+        let channel_id = 67890u64;
+        let mut first = InboundMessage {
+            channel: Channel::Discord,
+            sender: "12345".to_string(),
+            sender_name: Some("test-user".to_string()),
+            recipient: channel_id.to_string(),
+            subject: None,
+            text_body: Some("Hello".to_string()),
+            html_body: None,
+            thread_id: "thread-abc".to_string(),
+            message_id: Some("msg-1".to_string()),
+            attachments: Vec::new(),
+            reply_to: vec!["12345".to_string(), channel_id.to_string()],
+            raw_payload: br#"{"event_id":"evt-1"}"#.to_vec(),
+            metadata: ChannelMetadata {
+                discord_guild_id: Some(111u64),
+                discord_channel_id: Some(channel_id),
+                discord_message_id: Some("msg-1".to_string()),
+                ..Default::default()
+            },
+        };
+
+        let mut duplicate = first.clone();
+        duplicate.raw_payload = br#"{"event_id":"evt-2"}"#.to_vec();
+
+        assert_eq!(
+            discord_message_task_id(&first),
+            discord_message_task_id(&duplicate)
+        );
+
+        first.raw_payload = br#"{"event_id":"evt-3"}"#.to_vec();
+        assert_eq!(
+            discord_message_task_id(&first),
+            discord_message_task_id(&duplicate)
+        );
+    }
+
+    #[test]
+    fn discord_message_task_id_changes_for_distinct_messages() {
+        let first = InboundMessage {
+            channel: Channel::Discord,
+            sender: "12345".to_string(),
+            sender_name: Some("test-user".to_string()),
+            recipient: "67890".to_string(),
+            subject: None,
+            text_body: Some("Hello".to_string()),
+            html_body: None,
+            thread_id: "thread-abc".to_string(),
+            message_id: Some("msg-1".to_string()),
+            attachments: Vec::new(),
+            reply_to: vec!["12345".to_string(), "67890".to_string()],
+            raw_payload: br#"{"event_id":"evt-1"}"#.to_vec(),
+            metadata: ChannelMetadata {
+                discord_guild_id: Some(111u64),
+                discord_channel_id: Some(67890u64),
+                discord_message_id: Some("msg-1".to_string()),
+                ..Default::default()
+            },
+        };
+        let mut second = first.clone();
+        second.message_id = Some("msg-2".to_string());
+        second.metadata.discord_message_id = Some("msg-2".to_string());
+
+        assert_ne!(
+            discord_message_task_id(&first),
+            discord_message_task_id(&second)
+        );
     }
 }
