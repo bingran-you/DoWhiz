@@ -187,8 +187,8 @@ pub fn setup_tpm_cron(
     let now = Utc::now();
     let synthetic_payload = json!({
         "From": "TPM Cron <cron@dowhiz.com>",
-        "Subject": "TPM Sync",
-        "TextBody": "This is a scheduled TPM sync. Run the daily TPM sync workflow.",
+        "Subject": format!("TPM Sync for {}", organization),
+        "TextBody": format!("This is a scheduled TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
     let payload_path = input_email_dir.join("postmark_payload.json");
@@ -340,8 +340,8 @@ pub fn trigger_tpm_sync(
     let now = Utc::now();
     let synthetic_payload = json!({
         "From": "TPM Trigger <trigger@dowhiz.com>",
-        "Subject": "TPM Sync (Manual Trigger)",
-        "TextBody": "This is a manually triggered TPM sync. Run the daily TPM sync workflow.",
+        "Subject": format!("TPM Sync for {} (Manual Trigger)", organization),
+        "TextBody": format!("This is a manually triggered TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
     let payload_path = input_email_dir.join("postmark_payload.json");
