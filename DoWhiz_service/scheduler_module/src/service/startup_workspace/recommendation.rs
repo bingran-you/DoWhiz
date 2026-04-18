@@ -596,6 +596,7 @@ mod tests {
         execution_status: Option<&str>,
         request_summary: Option<&str>,
     ) -> TaskStatusSummary {
+        let status = execution_status.unwrap_or("scheduled");
         TaskStatusSummary {
             id: id.to_string(),
             kind: "run_task".to_string(),
@@ -610,6 +611,13 @@ mod tests {
             execution_status: execution_status.map(|value| value.to_string()),
             error_message: None,
             execution_started_at: Some(Utc::now().to_rfc3339()),
+            status: status.to_string(),
+            status_reason: None,
+            status_changed_at: Some(Utc::now().to_rfc3339()),
+            retry_count: 0,
+            is_running_long: false,
+            can_cancel: false,
+            can_resubmit: matches!(status, "failed" | "expired"),
         }
     }
 

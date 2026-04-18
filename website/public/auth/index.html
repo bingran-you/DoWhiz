@@ -496,6 +496,26 @@
         background: rgba(156, 163, 175, 0.2);
         color: #9ca3af;
       }
+      .task-badge.scheduled,
+      .task-badge.queued {
+        background: rgba(148, 163, 184, 0.18);
+        color: #cbd5f5;
+      }
+      .task-badge.retry_scheduled,
+      .task-badge.cancellation_requested {
+        background: rgba(251, 191, 36, 0.18);
+        color: #fbbf24;
+      }
+      .task-badge.cancelled,
+      .task-badge.superseded,
+      .task-badge.paused {
+        background: rgba(148, 163, 184, 0.18);
+        color: #d1d5db;
+      }
+      .task-badge.expired {
+        background: rgba(249, 115, 22, 0.18);
+        color: #fb923c;
+      }
       .work-item-meta-flow,
       .task-details {
         display: flex;
@@ -774,6 +794,81 @@
         text-align: right;
         word-break: break-all;
         max-width: 60%;
+      }
+      .task-modal-section + .task-modal-section {
+        margin-top: 1.25rem;
+      }
+      .task-modal-section-title {
+        margin: 0 0 0.75rem;
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: var(--text, #fff);
+      }
+      .task-modal-note {
+        margin: 0 0 0.75rem;
+        padding: 0.75rem 0.9rem;
+        border-radius: 0.85rem;
+        background: rgba(59, 130, 246, 0.12);
+        border: 1px solid rgba(59, 130, 246, 0.24);
+        color: #dbeafe;
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+      .task-modal-empty {
+        padding: 0.9rem;
+        border: 1px dashed var(--border, #333);
+        border-radius: 0.9rem;
+        color: var(--text-muted, #888);
+        text-align: center;
+        font-size: 0.88rem;
+      }
+      .task-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+      }
+      .task-timeline-item {
+        padding: 0.9rem;
+        border-radius: 0.95rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
+      }
+      .task-timeline-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.55rem;
+      }
+      .task-timeline-meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 0.6rem 0.8rem;
+      }
+      .task-timeline-meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+      .task-timeline-meta-label {
+        font-size: 0.74rem;
+        color: var(--text-muted, #888);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .task-timeline-meta-value {
+        font-size: 0.88rem;
+        color: var(--text, #fff);
+        word-break: break-word;
+      }
+      .task-timeline-error {
+        margin-top: 0.7rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid rgba(239, 68, 68, 0.16);
+        color: #fca5a5;
+        font-size: 0.88rem;
+        line-height: 1.45;
+        word-break: break-word;
       }
 
       #refresh-tasks-btn {
@@ -2860,6 +2955,9 @@
       let cachedRoutines = { active: [], history: [] };
       let activeWorkView = 'tasks';
       let activeRoutineTab = 'active';
+      let taskActionBusyIds = new Set();
+      let taskActionErrors = {};
+      let openTaskModalTaskId = null;
       let routineActionBusyIds = new Set();
       let routineActionErrors = {};
       let cachedMemoContent = '';
@@ -3553,7 +3651,7 @@
       }
 
       function taskExecutionStatus(task) {
-        return String(task?.execution_status || '').trim().toLowerCase();
+        return taskStatusKey(task);
       }
 
       function countSuccessfulTasks(tasks = cachedTasks) {
@@ -3561,7 +3659,7 @@
       }
 
       function countReviewableTasks(tasks = cachedTasks) {
-        const terminalStatuses = new Set(['success', 'failed', 'failure', 'error', 'complete', 'completed', 'cancelled']);
+        const terminalStatuses = new Set(['success', 'failed', 'failure', 'error', 'complete', 'completed', 'cancelled', 'expired', 'superseded']);
         return (Array.isArray(tasks) ? tasks : []).filter((task) => terminalStatuses.has(taskExecutionStatus(task))).length;
       }
 
@@ -5325,6 +5423,9 @@
         cachedRoutines = { active: [], history: [] };
         activeWorkView = 'tasks';
         activeRoutineTab = 'active';
+        taskActionBusyIds = new Set();
+        taskActionErrors = {};
+        openTaskModalTaskId = null;
         routineActionBusyIds = new Set();
         routineActionErrors = {};
         cachedMemoContent = '';
@@ -6766,6 +6867,7 @@
         const taskList = document.getElementById('task-list');
         const tasksStatus = document.getElementById('tasks-status');
         const hadExistingData = Array.isArray(cachedTasks) && cachedTasks.length > 0;
+        const previousTasks = Array.isArray(cachedTasks) ? [...cachedTasks] : [];
         const requestNonce = ++taskLoadRequestNonce;
 
         try {
@@ -6800,16 +6902,20 @@
           }
 
           const allTasks = Array.isArray(data.tasks) ? [...data.tasks] : [];
-          cachedTasks = allTasks;
+          const visibleIds = new Set(allTasks.map((task) => task.id));
+          taskActionErrors = Object.fromEntries(
+            Object.entries(taskActionErrors).filter(([taskId]) => visibleIds.has(taskId))
+          );
 
           // Sort by created_at descending (newest first)
           allTasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          cachedTasks = allTasks;
 
           // Auto-complete "Get Started" when a new "Create Workspace Brief" task completes
           const briefStatus = localStorage.getItem('workspace_brief_status');
           const completedCount = allTasks.filter(t =>
             (t.request_summary || '').toLowerCase().includes('workspace brief') &&
-            t.execution_status === 'success'
+            taskStatusKey(t) === 'success'
           ).length;
           const consumedCount = Number(localStorage.getItem('workspace_brief_consumed_count') || 0);
           console.log('[workspace_brief] status:', briefStatus, 'completedCount:', completedCount, 'consumedCount:', consumedCount);
@@ -6824,7 +6930,7 @@
           const planStatus = localStorage.getItem('workspace_plan_status');
           const planCompletedCount = allTasks.filter(t =>
             (t.request_summary || '').toLowerCase().includes('-day plan') &&
-            t.execution_status === 'success'
+            taskStatusKey(t) === 'success'
           ).length;
           const planConsumedCount = Number(localStorage.getItem('workspace_plan_consumed_count') || 0);
           console.log('[workspace_plan] status:', planStatus, 'completedCount:', planCompletedCount, 'consumedCount:', planConsumedCount);
@@ -6845,9 +6951,13 @@
             taskList.innerHTML = allTasks.map(task => renderTask(task)).join('');
           }
 
+          notifyTaskStatusChanges(previousTasks, allTasks);
           tasksStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
           loadWorkspaceSummaryFromStorage();
           renderNextSteps(cachedIdentifiers);
+          if (openTaskModalTaskId && allTasks.some((task) => task.id === openTaskModalTaskId)) {
+            await showTaskModal(openTaskModalTaskId, { silent: true });
+          }
         } catch (err) {
           if (requestNonce !== taskLoadRequestNonce) {
             return;
@@ -7026,29 +7136,86 @@
         return task.schedule_type || 'One-time';
       }
 
+      function taskStatusKey(task) {
+        return String(task?.status || task?.execution_status || 'scheduled').toLowerCase();
+      }
+
+      function taskStatusPresentation(task) {
+        const status = taskStatusKey(task);
+        switch (status) {
+          case 'running':
+            return {
+              key: 'running',
+              className: 'running',
+              label: task?.is_running_long ? 'Running >1h' : 'Running'
+            };
+          case 'retry_scheduled':
+            return { key: status, className: status, label: 'Retry Scheduled' };
+          case 'queued':
+            return { key: status, className: status, label: 'Queued' };
+          case 'scheduled':
+            return { key: status, className: status, label: 'Scheduled' };
+          case 'success':
+            return { key: status, className: 'success', label: 'Completed' };
+          case 'failed':
+            return { key: status, className: 'failed', label: 'Failed' };
+          case 'cancelled':
+            return { key: status, className: status, label: 'Cancelled' };
+          case 'cancellation_requested':
+            return { key: status, className: status, label: 'Stopping' };
+          case 'expired':
+            return { key: status, className: status, label: 'Expired' };
+          case 'superseded':
+            return { key: status, className: status, label: 'Superseded' };
+          case 'paused':
+            return { key: status, className: status, label: 'Paused' };
+          default:
+            return {
+              key: status || 'scheduled',
+              className: status || 'scheduled',
+              label: humanizeTaskToken(status) || 'Scheduled'
+            };
+        }
+      }
+
+      function taskUpdatedAt(task) {
+        return task.status_changed_at || task.last_run || task.execution_started_at || task.created_at;
+      }
+
       function buildTaskModalRows(task) {
+        const status = taskStatusPresentation(task);
         return [
           { label: 'Task ID', value: task.id || 'N/A' },
+          { label: 'Title', value: formatTaskTitle(task) },
           { label: 'Channel', value: formatWorkChannelLabel(task.channel || task.source) },
-          { label: 'Status', value: task.execution_status || 'running' },
+          { label: 'Status', value: status.label },
           { label: 'Enabled', value: task.enabled ? 'Yes' : 'No' },
           { label: 'Schedule Type', value: task.schedule_type || 'N/A' },
+          { label: 'Retry Count', value: Number(task.retry_count || 0) },
           { label: 'Created At', value: formatLocalDateTime(task.created_at, null) },
           { label: 'Next Run', value: formatLocalDateTime(task.next_run, null) },
           { label: 'Last Run', value: formatLocalDateTime(task.last_run, null) },
+          { label: 'Last Status Change', value: formatLocalDateTime(task.status_changed_at, null) },
         ];
       }
 
       function mapTaskToWorkItem(task) {
-        const status = String(task.execution_status || 'running').toLowerCase();
-        const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-        const updatedAt = task.last_run || task.execution_started_at || task.created_at;
-        const taskData = encodeURIComponent(JSON.stringify(task));
+        const status = taskStatusPresentation(task);
+        const updatedAt = taskUpdatedAt(task);
+        const isBusy = taskActionBusyIds.has(task.id);
+        const actionError = taskActionErrors[task.id];
         const metaItems = [
           { label: 'Channel', value: formatWorkChannelLabel(task.channel || task.source) },
           { label: 'Schedule', value: buildTaskScheduleDisplay(task) },
           { label: 'Updated', value: formatLocalDateTime(updatedAt) }
         ];
+
+        if (task.status_reason) {
+          metaItems.push({
+            label: 'Note',
+            value: task.status_reason
+          });
+        }
 
         if (task.error_message) {
           metaItems.push({
@@ -7058,15 +7225,39 @@
           });
         }
 
+        const busyLabel = isBusy ? 'Working...' : '';
+        const actions = [];
+        if (task.can_cancel) {
+          actions.push({
+            label: busyLabel || 'Cancel',
+            onClick: `handleTaskAction('${task.id}', 'cancel')`,
+            disabled: isBusy,
+            tone: 'danger'
+          });
+        }
+        if (task.can_resubmit) {
+          actions.push({
+            label: busyLabel || 'Resubmit',
+            onClick: `handleTaskAction('${task.id}', 'resubmit')`,
+            disabled: isBusy
+          });
+        }
+        actions.push({
+          label: 'View details',
+          onClick: `showTaskModal('${task.id}')`,
+          disabled: false
+        });
+
         return {
           tagName: 'li',
           className: 'task-item work-item',
           title: formatTaskTitle(task),
-          badgeLabel: statusLabel,
-          badgeClassName: `task-badge work-item-badge ${status}`,
+          badgeLabel: status.label,
+          badgeClassName: `task-badge work-item-badge ${status.className}`,
           metaLayout: 'flow',
           metaItems,
-          metaSuffixHtml: `<button class="task-info-btn" onclick="showTaskModal('${taskData}')" title="View details" style="margin-left: auto;">i</button>`
+          actions,
+          inlineError: actionError || ''
         };
       }
 
@@ -7106,6 +7297,117 @@
         // Fallback: extract first meaningful line
         const firstLine = errorMessage.split('\n')[0];
         return firstLine.length > 150 ? firstLine.substring(0, 150) + '...' : firstLine;
+      }
+
+      function formatDurationSeconds(seconds) {
+        if (seconds == null || Number.isNaN(Number(seconds))) return 'N/A';
+        const total = Math.max(0, Number(seconds));
+        if (total < 60) return `${total}s`;
+        const minutes = Math.floor(total / 60);
+        const remainingSeconds = total % 60;
+        if (minutes < 60) return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+      }
+
+      function renderTaskModalLoading(task) {
+        const title = task ? escapeHtml(formatTaskTitle(task)) : 'Loading task details...';
+        return `
+          <div class="task-modal-section">
+            <div class="task-modal-empty">${title}</div>
+          </div>
+        `;
+      }
+
+      function renderTaskTimeline(executions = []) {
+        if (!Array.isArray(executions) || executions.length === 0) {
+          return '<div class="task-modal-empty">No execution history yet.</div>';
+        }
+
+        return `
+          <div class="task-timeline">
+            ${executions.map((execution) => {
+              const status = taskStatusPresentation({ status: execution.status });
+              const errorHtml = execution.error_message
+                ? `<div class="task-timeline-error">${escapeHtml(parseErrorMessage(execution.error_message))}</div>`
+                : '';
+              return `
+                <div class="task-timeline-item">
+                  <div class="task-timeline-header">
+                    <span class="task-badge ${status.className}">${escapeHtml(status.label)}</span>
+                    <span class="task-timeline-meta-value">Execution #${escapeHtml(String(execution.execution_id || 'N/A'))}</span>
+                  </div>
+                  <div class="task-timeline-meta">
+                    <div class="task-timeline-meta-item">
+                      <span class="task-timeline-meta-label">Started</span>
+                      <span class="task-timeline-meta-value">${escapeHtml(formatLocalDateTime(execution.started_at, null))}</span>
+                    </div>
+                    <div class="task-timeline-meta-item">
+                      <span class="task-timeline-meta-label">Finished</span>
+                      <span class="task-timeline-meta-value">${escapeHtml(formatLocalDateTime(execution.finished_at, null))}</span>
+                    </div>
+                    <div class="task-timeline-meta-item">
+                      <span class="task-timeline-meta-label">Duration</span>
+                      <span class="task-timeline-meta-value">${escapeHtml(formatDurationSeconds(execution.duration_seconds))}</span>
+                    </div>
+                  </div>
+                  ${errorHtml}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      function renderTaskModalContent(task, executions = []) {
+        const noteHtml = task.status_reason
+          ? `<div class="task-modal-note">${escapeHtml(task.status_reason)}</div>`
+          : '';
+        return `
+          <div class="task-modal-section">
+            ${noteHtml}
+            ${renderWorkItemModalRows(buildTaskModalRows(task))}
+          </div>
+          <div class="task-modal-section">
+            <h4 class="task-modal-section-title">Execution Timeline</h4>
+            ${renderTaskTimeline(executions)}
+          </div>
+        `;
+      }
+
+      function notifyTaskStatusChanges(previousTasks, nextTasks) {
+        if (!Array.isArray(previousTasks) || previousTasks.length === 0 || !Array.isArray(nextTasks)) {
+          return;
+        }
+
+        const previousById = new Map(previousTasks.map((task) => [task.id, task]));
+        const changes = [];
+        nextTasks.forEach((task) => {
+          const previous = previousById.get(task.id);
+          if (!previous) return;
+
+          const previousStatus = taskStatusKey(previous);
+          const nextStatus = taskStatusKey(task);
+          if (!nextStatus || previousStatus === nextStatus) return;
+          if (!['success', 'failed', 'retry_scheduled', 'cancelled', 'cancellation_requested', 'expired'].includes(nextStatus)) {
+            return;
+          }
+
+          const nextLabel = taskStatusPresentation(task).label;
+          changes.push(`${formatTaskTitle(task)} -> ${nextLabel}`);
+        });
+
+        if (changes.length === 0) return;
+
+        const hasFailure = nextTasks.some((task) => {
+          const previous = previousById.get(task.id);
+          return previous && taskStatusKey(previous) !== taskStatusKey(task) && ['failed', 'expired'].includes(taskStatusKey(task));
+        });
+        const message = changes.length === 1
+          ? `Task update: ${changes[0]}`
+          : `Task updates: ${changes.slice(0, 2).join(' | ')}${changes.length > 2 ? ` (+${changes.length - 2} more)` : ''}`;
+        showMessage(message, hasFailure ? 'error' : 'success');
       }
 
       function setRoutineTabState() {
@@ -7394,6 +7696,71 @@
         }
       }
 
+      async function handleTaskAction(taskId, action) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          showMessage('Please sign in first.');
+          return;
+        }
+
+        const task = cachedTasks.find((item) => item.id === taskId);
+        if (action === 'cancel') {
+          const isRunning = taskStatusKey(task) === 'running';
+          const confirmed = window.confirm(
+            isRunning
+              ? 'Cancel this running task? The worker will stop as soon as it sees the cancellation signal.'
+              : 'Cancel this task before it runs?'
+          );
+          if (!confirmed) {
+            return;
+          }
+        }
+
+        const tasksStatus = document.getElementById('tasks-status');
+        taskActionBusyIds.add(taskId);
+        delete taskActionErrors[taskId];
+        if (Array.isArray(cachedTasks) && cachedTasks.length > 0) {
+          document.getElementById('task-list').innerHTML = cachedTasks.map((item) => renderTask(item)).join('');
+        }
+        tasksStatus.textContent = `${humanizeTaskToken(action)} in progress...`;
+
+        try {
+          const endpoint = `${DOWHIZ_API_URL}/api/account/tasks/${encodeURIComponent(taskId)}/${action}`;
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+
+          if (!res.ok) {
+            throw new Error(await readApiErrorMessage(res, `Failed to ${action} task.`));
+          }
+
+          const result = await res.json().catch(() => null);
+          await loadTasks(session.access_token);
+          if (action === 'cancel') {
+            showMessage('Task cancellation requested.', 'success');
+          } else if (result?.resubmitted_task_id) {
+            showMessage('Task resubmitted successfully.', 'success');
+          }
+
+          if (openTaskModalTaskId) {
+            const modalTaskId = action === 'resubmit' && result?.resubmitted_task_id
+              ? result.resubmitted_task_id
+              : openTaskModalTaskId;
+            await showTaskModal(modalTaskId, { silent: true });
+          }
+        } catch (err) {
+          console.error(`Failed to ${action} task:`, err);
+          taskActionErrors[taskId] = normalizeApiFetchError(err);
+          tasksStatus.textContent = '';
+        } finally {
+          taskActionBusyIds.delete(taskId);
+          if (Array.isArray(cachedTasks) && cachedTasks.length > 0) {
+            document.getElementById('task-list').innerHTML = cachedTasks.map((item) => renderTask(item)).join('');
+          }
+        }
+      }
+
       function renderWorkItemModalRows(rows) {
         return rows.map((row) => `
           <div class="task-modal-row">
@@ -7404,6 +7771,10 @@
       }
 
       function showWorkItemModal(title, rows) {
+        showWorkItemModalHtml(title, renderWorkItemModalRows(rows));
+      }
+
+      function showWorkItemModalHtml(title, html) {
         const modalTitle = document.getElementById('task-modal-title');
         const modalContent = document.getElementById('task-modal-content');
 
@@ -7411,7 +7782,7 @@
           modalTitle.textContent = title;
         }
 
-        modalContent.innerHTML = renderWorkItemModalRows(rows);
+        modalContent.innerHTML = html;
         document.getElementById('task-modal-overlay').classList.add('active');
       }
 
@@ -7421,14 +7792,64 @@
       }
 
       // Show task details modal
-      function showTaskModal(encodedTask) {
-        const task = JSON.parse(decodeURIComponent(encodedTask));
-        showWorkItemModal('Task Details', buildTaskModalRows(task));
+      async function showTaskModal(taskId, options = {}) {
+        const { silent = false } = options;
+        openTaskModalTaskId = taskId;
+        const fallbackTask = cachedTasks.find((task) => task.id === taskId);
+        showWorkItemModalHtml(
+          fallbackTask ? formatTaskTitle(fallbackTask) : 'Task Details',
+          renderTaskModalLoading(fallbackTask)
+        );
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          if (!silent) {
+            showMessage('Please sign in first.');
+          }
+          return;
+        }
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/api/account/tasks/${encodeURIComponent(taskId)}`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+
+          if (!res.ok) {
+            throw new Error(await readApiErrorMessage(res, `Failed to load task details (HTTP ${res.status}).`));
+          }
+
+          const detail = await res.json();
+          if (!detail?.task) {
+            throw new Error('Task detail response was empty.');
+          }
+
+          showWorkItemModalHtml(
+            formatTaskTitle(detail.task),
+            renderTaskModalContent(detail.task, Array.isArray(detail.executions) ? detail.executions : [])
+          );
+        } catch (err) {
+          console.error('Failed to load task detail:', err);
+          if (fallbackTask) {
+            showWorkItemModalHtml(
+              formatTaskTitle(fallbackTask),
+              renderTaskModalContent(fallbackTask, [])
+            );
+          } else {
+            showWorkItemModalHtml(
+              'Task Details',
+              `<div class="task-modal-section"><div class="task-modal-empty">${escapeHtml(normalizeApiFetchError(err))}</div></div>`
+            );
+          }
+          if (!silent) {
+            showMessage(normalizeApiFetchError(err));
+          }
+        }
       }
 
       // Close task details modal
       function closeTaskModal(event) {
         if (!event || event.target.id === 'task-modal-overlay') {
+          openTaskModalTaskId = null;
           document.getElementById('task-modal-overlay').classList.remove('active');
         }
       }
@@ -7436,6 +7857,7 @@
       // Expose modal functions globally for onclick handlers
       window.showTaskModal = showTaskModal;
       window.showRoutineModal = showRoutineModal;
+      window.handleTaskAction = handleTaskAction;
       window.handleRoutineAction = handleRoutineAction;
       window.closeTaskModal = closeTaskModal;
 

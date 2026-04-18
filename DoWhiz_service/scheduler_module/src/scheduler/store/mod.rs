@@ -136,8 +136,34 @@ impl SchedulerStore {
         Ok(())
     }
 
+    pub(crate) fn append_execution_event(
+        &self,
+        task_id: &str,
+        started_at: DateTime<Utc>,
+        finished_at: Option<DateTime<Utc>>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        self.mongo
+            .append_execution_event(task_id, started_at, finished_at, status, error_message)
+    }
+
     pub fn list_tasks_with_status(&self) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
         self.mongo.list_tasks_with_status()
+    }
+
+    pub fn load_task_with_status(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<TaskStatusSummary>, SchedulerError> {
+        self.mongo.load_task_with_status(task_id)
+    }
+
+    pub fn list_task_executions(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<TaskExecutionSummary>, SchedulerError> {
+        self.mongo.list_task_executions(task_id)
     }
 
     pub fn list_routines_with_status(&self) -> Result<Vec<RoutineSummary>, SchedulerError> {
@@ -164,6 +190,20 @@ pub struct TaskStatusSummary {
     pub execution_status: Option<String>,
     pub error_message: Option<String>,
     pub execution_started_at: Option<String>,
+    /// User-facing task state derived from schedule, enabled flag, and execution history.
+    pub status: String,
+    /// Optional explanation for the current task state.
+    pub status_reason: Option<String>,
+    /// When the current user-facing state last changed.
+    pub status_changed_at: Option<String>,
+    /// Current retry counter persisted with the task.
+    pub retry_count: u32,
+    /// Whether the task has been running long enough to warn that it may be stuck.
+    pub is_running_long: bool,
+    /// Whether the dashboard should offer a cancel action for this task.
+    pub can_cancel: bool,
+    /// Whether the dashboard should offer a resubmit action for this task.
+    pub can_resubmit: bool,
 }
 
 /// Summary of a user-visible scheduled run_task surfaced as a dashboard routine.
@@ -182,6 +222,17 @@ pub struct RoutineSummary {
     pub error_message: Option<String>,
     pub created_at: String,
     pub is_recurring: bool,
+}
+
+/// Execution history row for a task detail view.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TaskExecutionSummary {
+    pub execution_id: i64,
+    pub status: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub error_message: Option<String>,
+    pub duration_seconds: Option<i64>,
 }
 
 #[derive(Debug, Clone)]

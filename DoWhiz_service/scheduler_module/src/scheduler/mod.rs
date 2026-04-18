@@ -12,7 +12,7 @@ mod utils;
 
 pub use core::Scheduler;
 pub use executor::{ModuleExecutor, TaskExecutor};
-pub use store::{RoutineSummary, TaskStatusSummary};
+pub use store::{RoutineSummary, TaskExecutionSummary, TaskStatusSummary};
 pub use types::{
     RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskExecution, TaskKind,
 };
@@ -39,6 +39,37 @@ pub fn try_load_tasks_with_status(
 ) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
     let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
     store.list_tasks_with_status()
+}
+
+/// Load a single task status summary by ID from the owner scope derived from `tasks_db_path`.
+pub fn try_load_task_with_status(
+    tasks_db_path: &Path,
+    task_id: &str,
+) -> Result<Option<TaskStatusSummary>, SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.load_task_with_status(task_id)
+}
+
+/// Load execution history for a single task from the owner scope derived from `tasks_db_path`.
+pub fn try_load_task_executions(
+    tasks_db_path: &Path,
+    task_id: &str,
+) -> Result<Vec<TaskExecutionSummary>, SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.list_task_executions(task_id)
+}
+
+/// Append a synthetic execution history event for a task.
+pub fn append_task_execution_event(
+    tasks_db_path: &Path,
+    task_id: &str,
+    started_at: DateTime<Utc>,
+    finished_at: Option<DateTime<Utc>>,
+    status: &str,
+    error_message: Option<&str>,
+) -> Result<(), SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.append_execution_event(task_id, started_at, finished_at, status, error_message)
 }
 
 /// Load account/user-visible routine summaries for the owner scope derived from `tasks_db_path`.
@@ -72,6 +103,15 @@ pub fn persist_scheduled_task(
 ) -> Result<(), SchedulerError> {
     let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
     store.update_task(task)
+}
+
+/// Insert a new scheduled task into scheduler storage.
+pub fn insert_scheduled_task(
+    tasks_db_path: &Path,
+    task: &ScheduledTask,
+) -> Result<(), SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.insert_task(task)
 }
 
 /// MVP routine heuristic for the dashboard.
