@@ -375,7 +375,10 @@ pub fn trigger_tpm_sync(
         channel_metadata: ChannelMetadata::default(),
     };
 
-    // Load scheduler from email user's tasks.db (same path as email handler)
+    // Clone run_task for dual-write to account storage (for frontend visibility)
+    let run_task_for_account = run_task.clone();
+
+    // Load scheduler from email user's tasks.db (for worker execution)
     let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())
         .map_err(|e| TpmCronError::SchedulerLoad(e.to_string()))?;
 
@@ -383,7 +386,7 @@ pub fn trigger_tpm_sync(
         .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
         .map_err(|e| TpmCronError::OneShotTaskAdd(e.to_string()))?;
 
-    // Sync to index store using email user_id (same as email handler)
+    // Sync to index store using email user_id (worker finds tasks here)
     index_store
         .sync_user_tasks(&email_user.user_id, scheduler.tasks())
         .map_err(|e| TpmCronError::IndexStoreSync(e.to_string()))?;
@@ -392,6 +395,46 @@ pub fn trigger_tpm_sync(
         "trigger_tpm_sync: one-shot task added and synced, task_id={}, email_user_id={}",
         task_id, email_user.user_id
     );
+
+    // Dual-write: Also write to account-level storage for frontend visibility
+    // (same pattern as discord.rs, wechat.rs, etc.)
+    let account_tasks_dir = users_root_path.join(user_id.to_string()).join("state");
+    if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
+        tracing::warn!(
+            "failed to create account tasks dir for {}: {}",
+            user_id, err
+        );
+    } else {
+        let account_tasks_db_path = account_tasks_dir.join("tasks.db");
+        match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
+            Ok(mut account_scheduler) => {
+                match account_scheduler.add_one_shot_in_with_id(
+                    task_id,
+                    Duration::from_secs(0),
+                    TaskKind::RunTask(run_task_for_account),
+                ) {
+                    Ok(()) => {
+                        info!(
+                            "trigger_tpm_sync: also enqueued to account storage account_id={} task_id={}",
+                            user_id, task_id
+                        );
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            "failed to add task to account scheduler for {}: {}",
+                            user_id, err
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to load account scheduler for {}: {}",
+                    user_id, err
+                );
+            }
+        }
+    }
 
     Ok(TriggerTpmSyncResult {
         success: true,
