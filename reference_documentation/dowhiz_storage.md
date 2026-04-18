@@ -138,7 +138,20 @@ When a message arrives, the system creates a task. But there are **two different
 - If they DO have a linked account → task should also appear in their Task Center UI
 - These are two different scheduler paths, so we need two writes
 
-**Exception - TPM:** TPM mode works directly with accounts (users are already in an organization with a linked account). Since `user_id = account_id`, only ONE scheduler exists at the account path. No dual-write needed - just `add_one_shot_in` + `sync_user_tasks`.
+### When is Dual-Write Required?
+
+The frontend has **two different endpoints** for fetching tasks, and they check different paths:
+
+| Endpoint | What it checks | Dual-write needed? |
+|----------|----------------|-------------------|
+| `get_account_routines` | Account path + ALL legacy paths (via `load_unified_account_task_paths` → `legacy_routine_lookup_identifiers`) | **No** - cron jobs are found via legacy path lookup |
+| `get_account_tasks` | Account path + Slack legacy paths only | **Yes** - one-shot tasks from email/Discord/Lark/etc. need dual-write |
+
+**Summary:**
+- **Cron jobs (routines):** Queried by `get_account_routines`, no dual-write needed. `get_account_routines` already checks all verified identifier paths.
+- **One-shot tasks:** Dual-write required for channels other than Slack. `get_account_tasks` only checks the account path and Slack legacy paths.
+
+**TPM Note:** TPM mode uses `email_user_id` (not `account_id`) for worker execution to prevent the worker from loading a new scheduler with {account_id}.  But, because we are loading by `email_user_id`, and the frontend queries by `account_id`, one-shot tasks created by `trigger_tpm_sync` require dual-write to be visible on the frontend dashboard.
 
 The MongoDB `tasks` collection uses `owner_scope.id` to scope queries. The `owner_scope.id` is derived from the file path:
 
@@ -225,7 +238,7 @@ So:
 
 If we only wrote to account storage, the worker wouldn't find the task to execute because `task_index` references the legacy user ID.
 
-**Note:** Slack uses a workaround where `get_account_tasks` also fetches from legacy storage. This is less clean than the dual-write pattern.
+**Note:** Slack is special-cased in `get_account_tasks` - it fetches from both account storage AND Slack legacy storage. Other channels (email, Discord, Lark, etc.) require dual-write for one-shot task visibility.
 
 ---
 
