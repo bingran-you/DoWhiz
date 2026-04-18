@@ -29,19 +29,31 @@ const ROUTINE_ONE_SHOT_DELAY_THRESHOLD_MINUTES: i64 = 5;
 /// Load task status summaries for the owner scope derived from `tasks_db_path`.
 /// Returns an empty vector if the storage backend can't be reached.
 pub fn load_tasks_with_status(tasks_db_path: &Path) -> Vec<TaskStatusSummary> {
-    match store::SchedulerStore::new(tasks_db_path.to_path_buf()) {
-        Ok(store) => store.list_tasks_with_status().unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
+    try_load_tasks_with_status(tasks_db_path).unwrap_or_default()
+}
+
+/// Load task status summaries for the owner scope derived from `tasks_db_path`.
+/// Returns a storage error if the backend can't be reached.
+pub fn try_load_tasks_with_status(
+    tasks_db_path: &Path,
+) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.list_tasks_with_status()
 }
 
 /// Load account/user-visible routine summaries for the owner scope derived from `tasks_db_path`.
 /// Returns an empty vector if the storage backend can't be reached.
 pub fn load_routines_with_status(tasks_db_path: &Path) -> Vec<RoutineSummary> {
-    match store::SchedulerStore::new(tasks_db_path.to_path_buf()) {
-        Ok(store) => store.list_routines_with_status().unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
+    try_load_routines_with_status(tasks_db_path).unwrap_or_default()
+}
+
+/// Load account/user-visible routine summaries for the owner scope derived from `tasks_db_path`.
+/// Returns a storage error if the backend can't be reached.
+pub fn try_load_routines_with_status(
+    tasks_db_path: &Path,
+) -> Result<Vec<RoutineSummary>, SchedulerError> {
+    let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
+    store.list_routines_with_status()
 }
 
 /// Load a single scheduled task by ID from the owner scope derived from `tasks_db_path`.

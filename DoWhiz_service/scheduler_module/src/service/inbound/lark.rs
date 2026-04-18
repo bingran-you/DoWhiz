@@ -2,6 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::account_store::AccountStore;
 use crate::channel::Channel;
@@ -121,7 +122,22 @@ pub(crate) fn process_lark_event(
             err
         );
     }
-    let task_id = scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?;
+    let task_id = if let Some(stable_task_id) = lark_message_task_id(message) {
+        let inserted = scheduler.add_one_shot_in_if_absent_with_id(
+            stable_task_id,
+            Duration::from_secs(0),
+            TaskKind::RunTask(run_task),
+        )?;
+        if !inserted {
+            info!(
+                "skipping duplicate lark full-task enqueue user_id={} task_id={} message_id={:?}",
+                user.user_id, stable_task_id, message.message_id
+            );
+        }
+        stable_task_id
+    } else {
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?
+    };
     index_store.sync_user_tasks(&user.user_id, scheduler.tasks())?;
 
     info!(
@@ -147,14 +163,20 @@ pub(crate) fn process_lark_event(
             match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
                 Ok(mut account_scheduler) => {
                     // Use the same task_id so we can update status at completion
-                    match account_scheduler.add_one_shot_in_with_id(
+                    match account_scheduler.add_one_shot_in_if_absent_with_id(
                         task_id,
                         Duration::from_secs(0),
                         TaskKind::RunTask(run_task_for_account),
                     ) {
-                        Ok(()) => {
+                        Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={}",
+                                account.id, task_id
+                            );
+                        }
+                        Ok(false) => {
+                            info!(
+                                "skipping duplicate lark account-level enqueue account={} task_id={}",
                                 account.id, task_id
                             );
                         }
@@ -177,6 +199,29 @@ pub(crate) fn process_lark_event(
     }
 
     Ok(())
+}
+
+fn lark_message_task_id(message: &crate::channel::InboundMessage) -> Option<Uuid> {
+    let chat_id = message.metadata.lark_chat_id.as_deref()?.trim();
+    let message_id = message
+        .message_id
+        .as_deref()
+        .or(message.metadata.lark_message_id.as_deref())?
+        .trim();
+    let thread_id = message.thread_id.trim();
+    if chat_id.is_empty() || message_id.is_empty() || thread_id.is_empty() {
+        return None;
+    }
+
+    let tenant_key = message
+        .metadata
+        .lark_tenant_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unknown");
+    let dedupe_key = format!("lark:{tenant_key}:{chat_id}:{thread_id}:{message_id}");
+    Some(Uuid::from_bytes(md5::compute(dedupe_key.as_bytes()).0))
 }
 
 /// Append a Lark message to the workspace inbox.
@@ -322,5 +367,29 @@ mod tests {
 
         assert!(workspace.join("incoming_email/9999_lark.json").exists());
         assert!(workspace.join("incoming_email/9999_lark.txt").exists());
+    }
+
+    #[test]
+    fn lark_message_task_id_is_stable_for_duplicate_delivery() {
+        let mut first = make_test_message("ou_sender", Some("Hello"));
+        first.raw_payload = br#"{"event_id":"evt-1"}"#.to_vec();
+
+        let mut duplicate = make_test_message("ou_sender", Some("Hello"));
+        duplicate.raw_payload = br#"{"event_id":"evt-2"}"#.to_vec();
+
+        assert_eq!(
+            lark_message_task_id(&first),
+            lark_message_task_id(&duplicate)
+        );
+    }
+
+    #[test]
+    fn lark_message_task_id_changes_for_distinct_messages() {
+        let first = make_test_message("ou_sender", Some("Hello"));
+        let mut second = make_test_message("ou_sender", Some("Hello again"));
+        second.message_id = Some("msg_456".to_string());
+        second.metadata.lark_message_id = Some("msg_456".to_string());
+
+        assert_ne!(lark_message_task_id(&first), lark_message_task_id(&second));
     }
 }

@@ -16,16 +16,17 @@ use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::index_store::IndexStore;
 use crate::account_store::{
     AccountStore, AccountStoreError, AnalyticsEventInsert, ChannelInstallOnboardingState,
 };
 use crate::blob_store::BlobStore;
 use crate::google_auth::GoogleAuthConfig;
+use crate::index_store::IndexStore;
 use crate::notion_store::{NotionCredential, NotionStore};
 use crate::scheduler::{
-    is_user_visible_routine_task, load_routines_with_status, load_scheduled_task,
-    persist_scheduled_task, prepare_task_for_resume, RoutineSummary, ScheduledTask,
+    is_user_visible_routine_task, load_scheduled_task, persist_scheduled_task,
+    prepare_task_for_resume, try_load_routines_with_status, try_load_tasks_with_status,
+    RoutineSummary, ScheduledTask,
 };
 use crate::slack_store::{SlackInstallation, SlackStore};
 use crate::user_store::UserStore;
@@ -870,6 +871,34 @@ async fn try_load_unified_account_tasks(
     tasks
 }
 
+fn load_task_statuses_or_response(
+    tasks_db_path: &std::path::Path,
+    scope_label: &str,
+) -> Result<Vec<TaskStatusSummary>, Response> {
+    try_load_tasks_with_status(tasks_db_path).map_err(|err| {
+        error!(
+            "Failed to load {scope_label} tasks from {}: {}",
+            tasks_db_path.display(),
+            err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load tasks")
+    })
+}
+
+fn load_routine_summaries_or_response(
+    tasks_db_path: &std::path::Path,
+    scope_label: &str,
+) -> Result<Vec<RoutineSummary>, Response> {
+    try_load_routines_with_status(tasks_db_path).map_err(|err| {
+        error!(
+            "Failed to load {scope_label} routines from {}: {}",
+            tasks_db_path.display(),
+            err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+    })
+}
+
 async fn load_authenticated_account_from_headers(
     state: &AuthState,
     headers: &HeaderMap,
@@ -1030,7 +1059,8 @@ async fn try_load_unified_account_routines(
     let task_paths = load_unified_account_task_paths(state, account_id).await?;
     let mut routines = Vec::new();
     for task_path in task_paths {
-        routines = merge_routine_summaries(routines, load_routines_with_status(&task_path));
+        let loaded = load_routine_summaries_or_response(&task_path, "account-scoped")?;
+        routines = merge_routine_summaries(routines, loaded);
     }
     Ok(partition_routines(routines))
 }
@@ -1625,7 +1655,11 @@ pub async fn list_organizations(
                     })
                 })
                 .collect();
-            (StatusCode::OK, Json(serde_json::json!({ "organizations": items }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "organizations": items })),
+            )
+                .into_response()
         }
         Ok(Err(e)) => {
             error!("Failed to list organizations: {}", e);
@@ -1665,9 +1699,10 @@ pub async fn get_organization_member_count(
             })),
         )
             .into_response(),
-        Ok(Err(AccountStoreError::NotFound)) => {
-            json_error_response(StatusCode::NOT_FOUND, &format!("Organization '{}' not found", org_name))
-        }
+        Ok(Err(AccountStoreError::NotFound)) => json_error_response(
+            StatusCode::NOT_FOUND,
+            &format!("Organization '{}' not found", org_name),
+        ),
         Ok(Err(e)) => {
             error!("Failed to get organization member count: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
@@ -1751,7 +1786,14 @@ pub async fn setup_tpm_cron(
     let cron_result = task::spawn_blocking(move || {
         let index_store = IndexStore::new("/tmp/task_index.db")
             .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
-        crate::tpm_cron::setup_tpm_cron(&store_clone, &user_store, &index_store, account_id, &org_name_for_cron, None)
+        crate::tpm_cron::setup_tpm_cron(
+            &store_clone,
+            &user_store,
+            &index_store,
+            account_id,
+            &org_name_for_cron,
+            None,
+        )
     })
     .await
     .map_err(|e| {
@@ -1846,7 +1888,13 @@ pub async fn trigger_tpm_sync_endpoint(
     let sync_result = task::spawn_blocking(move || {
         let index_store = IndexStore::new("/tmp/task_index.db")
             .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
-        crate::tpm_cron::trigger_tpm_sync(&store_clone, &user_store, &index_store, account_id, &org_name_for_sync)
+        crate::tpm_cron::trigger_tpm_sync(
+            &store_clone,
+            &user_store,
+            &index_store,
+            account_id,
+            &org_name_for_sync,
+        )
     })
     .await
     .map_err(|e| {
@@ -6352,7 +6400,10 @@ pub async fn get_tasks(
 
     // Load tasks for this user
     let paths = user_store.user_paths(&users_root, &user_record.user_id);
-    let tasks = load_tasks_with_status(&paths.tasks_db_path);
+    let tasks = match load_task_statuses_or_response(&paths.tasks_db_path, "channel-scoped") {
+        Ok(tasks) => tasks,
+        Err(response) => return response,
+    };
 
     (StatusCode::OK, Json(TasksResponse { tasks })).into_response()
 }
@@ -6442,7 +6493,10 @@ pub async fn get_account_tasks(
         .join("state")
         .join("tasks.db");
 
-    let mut tasks = load_tasks_with_status(&account_tasks_db_path);
+    let mut tasks = match load_task_statuses_or_response(&account_tasks_db_path, "account-scoped") {
+        Ok(tasks) => tasks,
+        Err(response) => return response,
+    };
 
     // For Slack, also fetch from legacy user storage (where status updates go)
     // Get linked Slack identifiers for this account
@@ -6471,7 +6525,18 @@ pub async fn get_account_tasks(
                     if let Ok(Ok(Some(user_record))) = user_result {
                         // Load tasks from legacy user storage
                         let user_paths = user_store.user_paths(&users_root, &user_record.user_id);
-                        let legacy_tasks = load_tasks_with_status(&user_paths.tasks_db_path);
+                        let legacy_tasks =
+                            match try_load_tasks_with_status(&user_paths.tasks_db_path) {
+                                Ok(tasks) => tasks,
+                                Err(err) => {
+                                    warn!(
+                                        "failed to load legacy Slack tasks from {}: {}",
+                                        user_paths.tasks_db_path.display(),
+                                        err
+                                    );
+                                    continue;
+                                }
+                            };
 
                         // Merge legacy tasks, preferring ones with execution_status set
                         // (legacy storage has the updated status for Slack tasks)
@@ -6696,7 +6761,10 @@ pub fn auth_router(state: AuthState) -> Router {
         )
         .route("/auth/organization", post(create_organization))
         .route("/auth/organizations", get(list_organizations))
-        .route("/auth/organization/:name/member-count", get(get_organization_member_count))
+        .route(
+            "/auth/organization/:name/member-count",
+            get(get_organization_member_count),
+        )
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))
         .route("/auth/link", post(link_identifier))
