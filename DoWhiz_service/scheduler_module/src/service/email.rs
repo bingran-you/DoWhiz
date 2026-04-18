@@ -413,6 +413,9 @@ pub fn process_inbound_payload(
     let task_id = if let Some(stable_task_id) =
         email_message_task_id(&thread_key, message_id.as_deref())
     {
+        // This stable task id is only for full RunTask duplicate-delivery
+        // suppression. Quick-response dedupe is handled separately from
+        // scheduler task IDs.
         let inserted = scheduler
             .add_one_shot_in_if_absent_with_id(
                 stable_task_id,
