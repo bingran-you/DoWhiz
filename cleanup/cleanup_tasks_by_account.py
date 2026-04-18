@@ -2,6 +2,9 @@
 """
 Cleanup tasks for a specific account_id from MongoDB/CosmosDB.
 
+This script is a maintainer utility for existing deployments. It is not part of the supported
+open-source self-hosting or first-time contributor workflow.
+
 Usage:
     python cleanup_tasks_by_account.py <account_id> [--dry-run]
 

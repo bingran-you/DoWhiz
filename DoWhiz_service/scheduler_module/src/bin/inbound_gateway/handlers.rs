@@ -1235,7 +1235,7 @@ async fn rewrite_email_payload_attachments_to_blob_refs(
             continue;
         }
 
-        match raw_payload_store::upload_attachment_azure(
+        match raw_payload_store::upload_attachment(
             envelope_id,
             received_at,
             index,
@@ -1331,7 +1331,7 @@ fn rewrite_email_payload_attachments_to_blob_refs_blocking(
             continue;
         }
 
-        match raw_payload_store::upload_attachment_azure_blocking(
+        match raw_payload_store::upload_attachment_blocking(
             envelope_id,
             received_at,
             index,
@@ -1398,20 +1398,12 @@ pub(super) async fn build_envelope(
         // Email queue payloads are intentionally compact, so the archived raw payload
         // becomes the authoritative source for full body reconstruction and attachments.
         Some(
-            raw_payload_store::upload_raw_payload_azure(
-                envelope_id,
-                received_at,
-                &stored_payload_bytes,
-            )
-            .await?,
+            raw_payload_store::upload_raw_payload(envelope_id, received_at, &stored_payload_bytes)
+                .await?,
         )
     } else {
-        match raw_payload_store::upload_raw_payload_azure(
-            envelope_id,
-            received_at,
-            &stored_payload_bytes,
-        )
-        .await
+        match raw_payload_store::upload_raw_payload(envelope_id, received_at, &stored_payload_bytes)
+            .await
         {
             Ok(payload_ref) => Some(payload_ref),
             Err(err) => {
@@ -2608,7 +2600,7 @@ pub(super) fn build_envelope_blocking(
     let raw_payload_ref = if raw_payload.is_empty() {
         None
     } else {
-        Some(raw_payload_store::upload_raw_payload_azure_blocking(
+        Some(raw_payload_store::upload_raw_payload_blocking(
             envelope_id,
             received_at,
             &stored_payload_bytes,

@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an improvement to a supported open-source path.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion.
+
+        Please keep requests scoped to the public open-source contract described in `OPEN_SOURCE_SCOPE.md`.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user or contributor pain point does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the smallest useful version of the improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternatives exist today?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, mockups, or related issues.

@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use uuid::Uuid;
 
@@ -29,6 +30,8 @@ pub enum RawPayloadStoreError {
     Http(#[from] reqwest::Error),
     #[error("missing Azure blob storage configuration")]
     MissingAzureConfig,
+    #[error("local raw payload storage root is not configured")]
+    MissingLocalRoot,
 }
 
 pub fn resolve_storage_bucket() -> String {
@@ -121,6 +124,21 @@ fn resolve_raw_payload_path_prefix() -> String {
         .unwrap_or_else(|| DEFAULT_PREFIX.to_string())
 }
 
+fn resolve_local_root() -> Result<PathBuf, RawPayloadStoreError> {
+    std::env::var("RAW_PAYLOAD_LOCAL_ROOT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| Some(PathBuf::from(".workspace/local_payloads")))
+        .ok_or(RawPayloadStoreError::MissingLocalRoot)
+}
+
+fn local_object_path(root: &Path, path: &str) -> PathBuf {
+    let relative = path.trim_start_matches('/');
+    root.join(relative)
+}
+
 fn build_object_path(envelope_id: Uuid, received_at: DateTime<Utc>) -> String {
     let date = received_at.format("%Y/%m/%d");
     let prefix = resolve_raw_payload_path_prefix();
@@ -184,6 +202,10 @@ fn to_azure_ref(container: &str, path: &str) -> String {
     format!("azure://{}/{}", container, path)
 }
 
+fn to_local_ref(path: &str) -> String {
+    format!("local://{}", path)
+}
+
 fn parse_azure_ref(reference: &str) -> Result<(String, String), RawPayloadStoreError> {
     let Some(value) = reference.strip_prefix("azure://") else {
         return Err(RawPayloadStoreError::InvalidReference(
@@ -202,6 +224,21 @@ fn parse_azure_ref(reference: &str) -> Result<(String, String), RawPayloadStoreE
         .filter(|value| !value.is_empty())
         .ok_or_else(|| RawPayloadStoreError::InvalidReference(reference.to_string()))?;
     Ok((container.to_string(), path.to_string()))
+}
+
+fn parse_local_ref(reference: &str) -> Result<String, RawPayloadStoreError> {
+    let Some(value) = reference.strip_prefix("local://") else {
+        return Err(RawPayloadStoreError::InvalidReference(
+            reference.to_string(),
+        ));
+    };
+    let path = value.trim().trim_start_matches('/');
+    if path.is_empty() {
+        return Err(RawPayloadStoreError::InvalidReference(
+            reference.to_string(),
+        ));
+    }
+    Ok(path.to_string())
 }
 
 fn is_duplicate_bucket_response(status: StatusCode, body: &str) -> bool {
@@ -318,8 +355,10 @@ pub async fn upload_raw_payload(
     received_at: DateTime<Utc>,
     raw_payload: &[u8],
 ) -> Result<String, RawPayloadStoreError> {
-    if resolve_raw_payload_backend() == "azure" {
-        return upload_raw_payload_azure(envelope_id, received_at, raw_payload).await;
+    match resolve_raw_payload_backend().as_str() {
+        "azure" => return upload_raw_payload_azure(envelope_id, received_at, raw_payload).await,
+        "local" => return upload_raw_payload_local(envelope_id, received_at, raw_payload),
+        _ => {}
     }
     if raw_payload.is_empty() {
         return Err(RawPayloadStoreError::Storage(
@@ -362,8 +401,12 @@ pub fn upload_raw_payload_blocking(
     received_at: DateTime<Utc>,
     raw_payload: &[u8],
 ) -> Result<String, RawPayloadStoreError> {
-    if resolve_raw_payload_backend() == "azure" {
-        return upload_raw_payload_azure_blocking(envelope_id, received_at, raw_payload);
+    match resolve_raw_payload_backend().as_str() {
+        "azure" => {
+            return upload_raw_payload_azure_blocking(envelope_id, received_at, raw_payload);
+        }
+        "local" => return upload_raw_payload_local(envelope_id, received_at, raw_payload),
+        _ => {}
     }
     if raw_payload.is_empty() {
         return Err(RawPayloadStoreError::Storage(
@@ -422,6 +465,12 @@ pub fn download_raw_payload(reference: &str) -> Result<Vec<u8>, RawPayloadStoreE
             }
         }
         return download_raw_payload_azure_via_connection_string(&container, &path);
+    }
+    if reference.starts_with("local://") {
+        let relative = parse_local_ref(reference)?;
+        let root = resolve_local_root()?;
+        return std::fs::read(local_object_path(&root, &relative))
+            .map_err(|err| RawPayloadStoreError::Storage(err.to_string()));
     }
     let base = resolve_project_url()?;
     let key = resolve_service_key()?;
@@ -564,6 +613,18 @@ fn upload_azure_bytes_blocking(path: &str, payload: &[u8]) -> Result<String, Raw
     Ok(to_azure_ref(&container, path))
 }
 
+fn upload_local_bytes(path: &str, payload: &[u8]) -> Result<String, RawPayloadStoreError> {
+    let root = resolve_local_root()?;
+    let destination = local_object_path(&root, path);
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| RawPayloadStoreError::Storage(err.to_string()))?;
+    }
+    std::fs::write(&destination, payload)
+        .map_err(|err| RawPayloadStoreError::Storage(err.to_string()))?;
+    Ok(to_local_ref(path))
+}
+
 pub async fn upload_raw_payload_azure(
     envelope_id: Uuid,
     received_at: DateTime<Utc>,
@@ -590,6 +651,20 @@ pub fn upload_raw_payload_azure_blocking(
     }
     let path = build_object_path(envelope_id, received_at);
     upload_azure_bytes_blocking(&path, raw_payload)
+}
+
+pub fn upload_raw_payload_local(
+    envelope_id: Uuid,
+    received_at: DateTime<Utc>,
+    raw_payload: &[u8],
+) -> Result<String, RawPayloadStoreError> {
+    if raw_payload.is_empty() {
+        return Err(RawPayloadStoreError::Storage(
+            "raw payload is empty".to_string(),
+        ));
+    }
+    let path = build_object_path(envelope_id, received_at);
+    upload_local_bytes(&path, raw_payload)
 }
 
 pub async fn upload_attachment_azure(
@@ -622,6 +697,49 @@ pub fn upload_attachment_azure_blocking(
     }
     let path = build_attachment_object_path(envelope_id, received_at, attachment_index, file_name);
     upload_azure_bytes_blocking(&path, bytes)
+}
+
+pub async fn upload_attachment(
+    envelope_id: Uuid,
+    received_at: DateTime<Utc>,
+    attachment_index: usize,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<String, RawPayloadStoreError> {
+    if resolve_raw_payload_backend() == "azure" {
+        return upload_attachment_azure(
+            envelope_id,
+            received_at,
+            attachment_index,
+            file_name,
+            bytes,
+        )
+        .await;
+    }
+    upload_attachment_blocking(envelope_id, received_at, attachment_index, file_name, bytes)
+}
+
+pub fn upload_attachment_blocking(
+    envelope_id: Uuid,
+    received_at: DateTime<Utc>,
+    attachment_index: usize,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<String, RawPayloadStoreError> {
+    if bytes.is_empty() {
+        return Err(RawPayloadStoreError::Storage(
+            "attachment payload is empty".to_string(),
+        ));
+    }
+    let path = build_attachment_object_path(envelope_id, received_at, attachment_index, file_name);
+    match resolve_raw_payload_backend().as_str() {
+        "azure" => upload_azure_bytes_blocking(&path, bytes),
+        "local" => upload_local_bytes(&path, bytes),
+        backend => Err(RawPayloadStoreError::Storage(format!(
+            "attachment offload is not supported for RAW_PAYLOAD_STORAGE_BACKEND='{}'",
+            backend
+        ))),
+    }
 }
 
 #[cfg(test)]
@@ -657,6 +775,37 @@ mod tests {
             upload_raw_payload_blocking(envelope_id, received_at, payload).expect("upload");
         let downloaded = download_raw_payload(&reference).expect("download");
         assert_eq!(payload.to_vec(), downloaded);
+    }
+
+    #[test]
+    fn local_upload_download_roundtrip() {
+        let _guard = lock_env();
+        let original_backend = env::var("RAW_PAYLOAD_STORAGE_BACKEND").ok();
+        let original_root = env::var("RAW_PAYLOAD_LOCAL_ROOT").ok();
+        let temp_root =
+            std::env::temp_dir().join(format!("dowhiz-local-payloads-{}", Uuid::new_v4()));
+        env::set_var("RAW_PAYLOAD_STORAGE_BACKEND", "local");
+        env::set_var("RAW_PAYLOAD_LOCAL_ROOT", &temp_root);
+
+        let payload = b"local-roundtrip-test";
+        let envelope_id = Uuid::new_v4();
+        let received_at = Utc::now();
+        let reference =
+            upload_raw_payload_blocking(envelope_id, received_at, payload).expect("upload");
+        let downloaded = download_raw_payload(&reference).expect("download");
+        assert_eq!(payload.to_vec(), downloaded);
+
+        let _ = std::fs::remove_dir_all(temp_root);
+        if let Some(value) = original_backend {
+            env::set_var("RAW_PAYLOAD_STORAGE_BACKEND", value);
+        } else {
+            env::remove_var("RAW_PAYLOAD_STORAGE_BACKEND");
+        }
+        if let Some(value) = original_root {
+            env::set_var("RAW_PAYLOAD_LOCAL_ROOT", value);
+        } else {
+            env::remove_var("RAW_PAYLOAD_LOCAL_ROOT");
+        }
     }
 
     #[test]
