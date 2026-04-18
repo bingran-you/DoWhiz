@@ -63,6 +63,7 @@ Status legend:
 | MAN-BB-02 | Send a task to `dowhiz@deep-tutor.com` that signs into Google as `dowhiz@deep-tutor.com`, lets the agent use `GOOGLE_PASSWORD` if available, and uses HAG for any remaining 2FA/device/CAPTCHA blocker | Real Browserbase + HAG login handoff validation on staging |
 | MAN-GWS-01 | `DoWhiz_service/scheduler_module/tests/google_workspace_cli_test.sh` | Google Workspace CLI smoke test |
 | MAN-GWS-02 | `DoWhiz_service/scheduler_module/tests/google_workspace_e2e_test.sh` | Google Workspace comment workflow smoke |
+| MAN-DRIFT-01 | `cargo test -p run_task_module --test drift_audit -- --ignored --nocapture` | detection-only audit for prompt/skills/CLI contract drift; expected to fail when mismatches are present |
 
 ### 2.4 Browserbase handoff evidence
 
