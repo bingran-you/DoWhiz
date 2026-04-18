@@ -177,11 +177,12 @@ pub fn setup_tpm_cron(
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
     let workspace_dir = user_paths.workspaces_root.join("tpm_cron_placeholder");
-    let input_email_dir = workspace_dir.join("incoming_email");
 
-    // Create workspace directory
-    std::fs::create_dir_all(&input_email_dir)
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    // Create all workspace directories required by RunTaskTask validation
+    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+        std::fs::create_dir_all(workspace_dir.join(subdir))
+            .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    }
 
     // Write synthetic trigger file
     let now = Utc::now();
@@ -191,7 +192,7 @@ pub fn setup_tpm_cron(
         "TextBody": format!("This is a scheduled TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
-    let payload_path = input_email_dir.join("postmark_payload.json");
+    let payload_path = workspace_dir.join("incoming_email/postmark_payload.json");
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
@@ -330,11 +331,12 @@ pub fn trigger_tpm_sync(
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
     let workspace_dir = user_paths.workspaces_root.join("tpm_trigger_oneshot");
-    let input_email_dir = workspace_dir.join("incoming_email");
 
-    // Create workspace directory
-    std::fs::create_dir_all(&input_email_dir)
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    // Create all workspace directories required by RunTaskTask validation
+    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+        std::fs::create_dir_all(workspace_dir.join(subdir))
+            .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    }
 
     // Write synthetic trigger file
     let now = Utc::now();
@@ -344,7 +346,7 @@ pub fn trigger_tpm_sync(
         "TextBody": format!("This is a manually triggered TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
-    let payload_path = input_email_dir.join("postmark_payload.json");
+    let payload_path = workspace_dir.join("incoming_email/postmark_payload.json");
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
