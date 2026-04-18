@@ -195,13 +195,13 @@ pub fn setup_tpm_cron(
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
-    // Build the RunTaskTask struct
+    // Build the RunTaskTask struct (paths must be relative to workspace_dir)
     let run_task = RunTaskTask {
         workspace_dir: workspace_dir.clone(),
-        input_email_dir: input_email_dir.clone(),
-        input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: user_paths.memory_dir.clone(),
-        reference_dir: workspace_dir.join("references"),
+        input_email_dir: PathBuf::from("incoming_email"),
+        input_attachments_dir: PathBuf::from("incoming_attachments"),
+        memory_dir: PathBuf::from("memory"),
+        reference_dir: PathBuf::from("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
@@ -348,13 +348,13 @@ pub fn trigger_tpm_sync(
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
-    // Build the RunTaskTask struct
+    // Build the RunTaskTask struct (paths must be relative to workspace_dir)
     let run_task = RunTaskTask {
         workspace_dir: workspace_dir.clone(),
-        input_email_dir: input_email_dir.clone(),
-        input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: user_paths.memory_dir.clone(),
-        reference_dir: workspace_dir.join("references"),
+        input_email_dir: PathBuf::from("incoming_email"),
+        input_attachments_dir: PathBuf::from("incoming_attachments"),
+        memory_dir: PathBuf::from("memory"),
+        reference_dir: PathBuf::from("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
