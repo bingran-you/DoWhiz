@@ -6,6 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::account_store::AccountStore;
 use crate::channel::Channel;
@@ -228,7 +229,22 @@ pub(crate) fn process_notion_message(
 
     // Schedule the task
     let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())?;
-    let task_id = scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?;
+    let task_id = if let Some(stable_task_id) = notion_message_task_id(message) {
+        let inserted = scheduler.add_one_shot_in_if_absent_with_id(
+            stable_task_id,
+            Duration::from_secs(0),
+            TaskKind::RunTask(run_task),
+        )?;
+        if !inserted {
+            info!(
+                "skipping duplicate notion full-task enqueue user_id={} task_id={} message_id={:?}",
+                user.user_id, stable_task_id, message.message_id
+            );
+        }
+        stable_task_id
+    } else {
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?
+    };
     index_store.sync_user_tasks(&user.user_id, scheduler.tasks())?;
 
     info!(
@@ -272,14 +288,20 @@ pub(crate) fn process_notion_message(
             let account_tasks_db_path = account_tasks_dir.join("tasks.db");
             match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
                 Ok(mut account_scheduler) => {
-                    match account_scheduler.add_one_shot_in_with_id(
+                    match account_scheduler.add_one_shot_in_if_absent_with_id(
                         task_id,
                         Duration::from_secs(0),
                         TaskKind::RunTask(run_task_for_account),
                     ) {
-                        Ok(()) => {
+                        Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={} channel=Notion",
+                                account.id, task_id
+                            );
+                        }
+                        Ok(false) => {
+                            info!(
+                                "skipping duplicate notion account-level enqueue account={} task_id={}",
                                 account.id, task_id
                             );
                         }
@@ -307,6 +329,23 @@ pub(crate) fn process_notion_message(
     }
 
     Ok(())
+}
+
+fn notion_message_task_id(message: &crate::channel::InboundMessage) -> Option<Uuid> {
+    let workspace_id = message.metadata.notion_workspace_id.as_deref()?.trim();
+    let page_id = message.metadata.notion_page_id.as_deref()?.trim();
+    let message_id = message.message_id.as_deref()?.trim();
+    let thread_id = message.thread_id.trim();
+    if workspace_id.is_empty()
+        || page_id.is_empty()
+        || message_id.is_empty()
+        || thread_id.is_empty()
+    {
+        return None;
+    }
+
+    let dedupe_key = format!("notion:{workspace_id}:{page_id}:{thread_id}:{message_id}");
+    Some(Uuid::from_bytes(md5::compute(dedupe_key.as_bytes()).0))
 }
 
 /// Write Notion context file for agent to understand how to reply.
@@ -436,4 +475,57 @@ fn append_workspace_notion_comment(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channel::{Channel, ChannelMetadata, InboundMessage};
+
+    fn build_message(message_id: &str) -> InboundMessage {
+        InboundMessage {
+            channel: Channel::Notion,
+            sender: "notion-user".to_string(),
+            sender_name: Some("Notion User".to_string()),
+            recipient: "integration".to_string(),
+            subject: Some("Notion comment".to_string()),
+            text_body: Some("Please take a look".to_string()),
+            html_body: None,
+            thread_id: "notion:workspace-1:discussion-1".to_string(),
+            message_id: Some(message_id.to_string()),
+            attachments: Vec::new(),
+            reply_to: Vec::new(),
+            raw_payload: Vec::new(),
+            metadata: ChannelMetadata {
+                notion_workspace_id: Some("workspace-1".to_string()),
+                notion_page_id: Some("page-1".to_string()),
+                notion_comment_id: Some("comment-1".to_string()),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn notion_message_task_id_is_stable_for_duplicate_delivery() {
+        let mut first = build_message("notion-comment-comment-1");
+        first.raw_payload = br#"{"id":"notification-1"}"#.to_vec();
+        let mut duplicate = build_message("notion-comment-comment-1");
+        duplicate.raw_payload = br#"{"id":"notification-2"}"#.to_vec();
+
+        assert_eq!(
+            notion_message_task_id(&first),
+            notion_message_task_id(&duplicate)
+        );
+    }
+
+    #[test]
+    fn notion_message_task_id_changes_for_distinct_messages() {
+        let first = build_message("notion-comment-comment-1");
+        let second = build_message("notion-comment-comment-2");
+
+        assert_ne!(
+            notion_message_task_id(&first),
+            notion_message_task_id(&second)
+        );
+    }
 }

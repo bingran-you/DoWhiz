@@ -2853,6 +2853,8 @@
       let workspaceRecommendationLastFetchedAt = null;
       let workspaceRecommendationDismissedForDay = false;
       let taskPollingInterval = null;
+      let taskLoadRequestNonce = 0;
+      let routineLoadRequestNonce = 0;
       let cachedIdentifiers = [];
       let cachedTasks = [];
       let cachedRoutines = { active: [], history: [] };
@@ -6763,12 +6765,18 @@
         const { refreshRecommendation = false } = options;
         const taskList = document.getElementById('task-list');
         const tasksStatus = document.getElementById('tasks-status');
+        const hadExistingData = Array.isArray(cachedTasks) && cachedTasks.length > 0;
+        const requestNonce = ++taskLoadRequestNonce;
 
         try {
           // Fetch all tasks for this account (aggregated from all channels)
           const res = await fetch(`${DOWHIZ_API_URL}/api/account/tasks`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
+
+          if (requestNonce !== taskLoadRequestNonce) {
+            return;
+          }
 
           if (!res.ok) {
             if (res.status === 404) {
@@ -6778,15 +6786,20 @@
                 className: 'task-item work-item',
                 message: 'No tasks yet. Send Oliver one request from a connected app and it will show up here.'
               });
+              tasksStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
               loadWorkspaceSummaryFromStorage();
               renderNextSteps(cachedIdentifiers);
               return;
             }
-            throw new Error(`HTTP ${res.status}`);
+            throw new Error(await readApiErrorMessage(res, `Failed to load tasks (HTTP ${res.status}).`));
           }
 
           const data = await res.json();
-          const allTasks = data.tasks || [];
+          if (requestNonce !== taskLoadRequestNonce) {
+            return;
+          }
+
+          const allTasks = Array.isArray(data.tasks) ? [...data.tasks] : [];
           cachedTasks = allTasks;
 
           // Sort by created_at descending (newest first)
@@ -6836,19 +6849,25 @@
           loadWorkspaceSummaryFromStorage();
           renderNextSteps(cachedIdentifiers);
         } catch (err) {
+          if (requestNonce !== taskLoadRequestNonce) {
+            return;
+          }
           const displayMessage = normalizeApiFetchError(err);
           console.error('Failed to load tasks:', err);
-          cachedTasks = [];
-          taskList.innerHTML = renderWorkListState({
-            tagName: 'li',
-            className: 'task-item work-item',
-            message: `Error loading tasks: ${displayMessage}`,
-            tone: 'danger'
-          });
+          if (!hadExistingData) {
+            cachedTasks = [];
+            taskList.innerHTML = renderWorkListState({
+              tagName: 'li',
+              className: 'task-item work-item',
+              message: `Error loading tasks: ${displayMessage}`,
+              tone: 'danger'
+            });
+          }
+          tasksStatus.textContent = `Error: ${displayMessage}`;
           loadWorkspaceSummaryFromStorage();
           renderNextSteps(cachedIdentifiers);
         } finally {
-          if (refreshRecommendation) {
+          if (refreshRecommendation && requestNonce === taskLoadRequestNonce) {
             await loadWorkspaceRecommendation(accessToken, { force: true });
           }
         }
@@ -7278,17 +7297,26 @@
           (Array.isArray(cachedRoutines.active) && cachedRoutines.active.length > 0) ||
           (Array.isArray(cachedRoutines.history) && cachedRoutines.history.length > 0)
         );
+        const requestNonce = ++routineLoadRequestNonce;
 
         try {
           const res = await fetch(`${DOWHIZ_API_URL}/api/account/routines`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
 
+          if (requestNonce !== routineLoadRequestNonce) {
+            return;
+          }
+
           if (!res.ok) {
             throw new Error(await readApiErrorMessage(res, `Failed to load routines (HTTP ${res.status}).`));
           }
 
           const data = await res.json();
+          if (requestNonce !== routineLoadRequestNonce) {
+            return;
+          }
+
           cachedRoutines = {
             active: Array.isArray(data.active) ? data.active : [],
             history: Array.isArray(data.history) ? data.history : []
@@ -7305,6 +7333,9 @@
           renderRoutineList();
           routinesStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
         } catch (err) {
+          if (requestNonce !== routineLoadRequestNonce) {
+            return;
+          }
           const displayMessage = normalizeApiFetchError(err);
           console.error('Failed to load routines:', err);
           setRoutineTabState();

@@ -410,15 +410,43 @@ pub fn process_inbound_payload(
             err
         );
     }
-    let task_id = scheduler
-        .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
-        .map_err(|err| {
-            io::Error::other(format!(
-                "scheduler_add_one_shot_in failed tasks_db_path={} error={}",
-                user_paths.tasks_db_path.display(),
-                err
-            ))
-        })?;
+    let task_id = if let Some(stable_task_id) =
+        email_message_task_id(&thread_key, message_id.as_deref())
+    {
+        let inserted = scheduler
+            .add_one_shot_in_if_absent_with_id(
+                stable_task_id,
+                Duration::from_secs(0),
+                TaskKind::RunTask(run_task),
+            )
+            .map_err(|err| {
+                io::Error::other(format!(
+                    "scheduler_add_one_shot_in_if_absent_with_id failed tasks_db_path={} task_id={} error={}",
+                    user_paths.tasks_db_path.display(),
+                    stable_task_id,
+                    err
+                ))
+            })?;
+        if !inserted {
+            info!(
+                "skipping duplicate email full-task enqueue user_id={} task_id={} message_id={}",
+                user.user_id,
+                stable_task_id,
+                message_id.as_deref().unwrap_or("-")
+            );
+        }
+        stable_task_id
+    } else {
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
+            .map_err(|err| {
+                io::Error::other(format!(
+                    "scheduler_add_one_shot_in failed tasks_db_path={} error={}",
+                    user_paths.tasks_db_path.display(),
+                    err
+                ))
+            })?
+    };
     index_store
         .sync_user_tasks(&user.user_id, scheduler.tasks())
         .map_err(|err| {
@@ -460,14 +488,20 @@ pub fn process_inbound_payload(
             match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
                 Ok(mut account_scheduler) => {
                     // Use the same task_id so we can update status at completion
-                    match account_scheduler.add_one_shot_in_with_id(
+                    match account_scheduler.add_one_shot_in_if_absent_with_id(
                         task_id,
                         Duration::from_secs(0),
                         TaskKind::RunTask(run_task_for_account),
                     ) {
-                        Ok(()) => {
+                        Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={}",
+                                acct_id, task_id
+                            );
+                        }
+                        Ok(false) => {
+                            info!(
+                                "skipping duplicate email account-level enqueue account={} task_id={}",
                                 acct_id, task_id
                             );
                         }
@@ -490,6 +524,17 @@ pub fn process_inbound_payload(
     }
 
     Ok(())
+}
+
+fn email_message_task_id(thread_key: &str, message_id: Option<&str>) -> Option<Uuid> {
+    let thread_key = thread_key.trim();
+    let message_id = message_id?.trim();
+    if thread_key.is_empty() || message_id.is_empty() {
+        return None;
+    }
+
+    let dedupe_key = format!("email:{thread_key}:{message_id}");
+    Some(Uuid::from_bytes(md5::compute(dedupe_key.as_bytes()).0))
 }
 
 pub(super) fn is_blacklisted_sender(sender: &str, service_addresses: &HashSet<String>) -> bool {
@@ -1085,6 +1130,22 @@ mod tests {
                 identifier: "alice@example.com".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn email_message_task_id_is_stable_for_duplicate_delivery() {
+        let first = email_message_task_id("thread:abc", Some("<msg-1@example.com>"));
+        let duplicate = email_message_task_id("thread:abc", Some("<msg-1@example.com>"));
+
+        assert_eq!(first, duplicate);
+    }
+
+    #[test]
+    fn email_message_task_id_changes_for_distinct_messages() {
+        let first = email_message_task_id("thread:abc", Some("<msg-1@example.com>"));
+        let second = email_message_task_id("thread:abc", Some("<msg-2@example.com>"));
+
+        assert_ne!(first, second);
     }
 
     #[test]

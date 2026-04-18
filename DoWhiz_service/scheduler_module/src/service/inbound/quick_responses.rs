@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -30,12 +30,9 @@ use super::discord_context::build_discord_router_context;
 use super::persist_discord_ingest_context;
 use super::slack::{build_slack_router_context, persist_slack_ingest_context};
 
-const DISCORD_QUICK_RESPONSE_DEDUPE_FILE: &str = "discord_quick_response_dedupe.json";
-const DISCORD_QUICK_RESPONSE_MAX_THREADS: usize = 512;
-const DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD: usize = 256;
-const SLACK_QUICK_RESPONSE_DEDUPE_FILE: &str = "slack_quick_response_dedupe.json";
-const SLACK_QUICK_RESPONSE_MAX_THREADS: usize = 512;
-const SLACK_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD: usize = 256;
+const QUICK_RESPONSE_CLAIMS_DIR: &str = "quick_response_claims";
+const QUICK_RESPONSE_INFLIGHT_STALE_SECS: i64 = 5 * 60;
+const QUICK_RESPONSE_SENT_TTL_SECS: i64 = 30 * 24 * 60 * 60;
 const WECHAT_MP_QUICK_RESPONSE_MAX_BYTES: usize = 1800;
 const WECHAT_MP_QUICK_RESPONSE_TRUNCATED_SUFFIX: &str = "\n\n[truncated]";
 const WECHAT_MP_QUICK_FALLBACK_RESPONSE: &str =
@@ -43,32 +40,40 @@ const WECHAT_MP_QUICK_FALLBACK_RESPONSE: &str =
 const WECHAT_MP_PROFILE_QUICK_RESPONSE: &str =
     "我是 DoWhiz 助手，可以帮你快速解答问题、梳理任务、制定执行计划，并持续跟进你的进展。你可以直接告诉我你现在想解决什么。";
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct SlackQuickResponseDedupeStore {
-    #[serde(default)]
-    threads: HashMap<String, SlackQuickResponseThreadStore>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum QuickResponseClaimStatus {
+    InFlight,
+    Sent,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct SlackQuickResponseThreadStore {
-    #[serde(default)]
-    message_ids: Vec<String>,
-    #[serde(default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct QuickResponseClaimRecord {
+    scope_key: String,
+    message_id: String,
+    status: QuickResponseClaimStatus,
     updated_at_unix_secs: i64,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct DiscordQuickResponseDedupeStore {
-    #[serde(default)]
-    threads: HashMap<String, DiscordQuickResponseThreadStore>,
+#[derive(Debug)]
+struct QuickResponseClaim {
+    path: PathBuf,
+    scope_dir: PathBuf,
+    record: QuickResponseClaimRecord,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct DiscordQuickResponseThreadStore {
-    #[serde(default)]
-    message_ids: Vec<String>,
-    #[serde(default)]
-    updated_at_unix_secs: i64,
+#[derive(Debug)]
+enum QuickResponseClaimResult {
+    Acquired(QuickResponseClaim),
+    AlreadySent,
+    InFlight,
+}
+
+#[derive(Debug)]
+enum QuickResponseSendGate {
+    Untracked,
+    Acquired(QuickResponseClaim),
+    Suppressed,
 }
 
 /// Read memo.md from a user's memory directory (local file)
@@ -133,8 +138,268 @@ fn write_memory_update(
         .map_err(|e| e.to_string())
 }
 
-fn slack_quick_response_dedupe_path(state_dir: &Path) -> std::path::PathBuf {
-    state_dir.join(SLACK_QUICK_RESPONSE_DEDUPE_FILE)
+fn quick_response_claims_root(state_dir: &Path) -> PathBuf {
+    state_dir.join(QUICK_RESPONSE_CLAIMS_DIR)
+}
+
+fn quick_response_claim_hash(input: &str) -> String {
+    format!("{:x}", md5::compute(input.as_bytes()))
+}
+
+fn quick_response_scope_dir(state_dir: &Path, scope_key: &str) -> PathBuf {
+    quick_response_claims_root(state_dir).join(quick_response_claim_hash(scope_key))
+}
+
+fn quick_response_claim_path(state_dir: &Path, scope_key: &str, message_id: &str) -> PathBuf {
+    quick_response_scope_dir(state_dir, scope_key)
+        .join(format!("{}.json", quick_response_claim_hash(message_id)))
+}
+
+fn quick_response_claim_record(
+    scope_key: &str,
+    message_id: &str,
+    status: QuickResponseClaimStatus,
+) -> QuickResponseClaimRecord {
+    QuickResponseClaimRecord {
+        scope_key: scope_key.to_string(),
+        message_id: message_id.to_string(),
+        status,
+        updated_at_unix_secs: now_unix_secs(),
+    }
+}
+
+fn quick_response_claim_file_age_secs(path: &Path, now_unix_secs: i64) -> Option<i64> {
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+    let modified_unix_secs = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    Some(now_unix_secs.saturating_sub(modified_unix_secs))
+}
+
+fn quick_response_claim_record_expired(
+    record: &QuickResponseClaimRecord,
+    now_unix_secs: i64,
+) -> bool {
+    let age_secs = now_unix_secs.saturating_sub(record.updated_at_unix_secs);
+    match record.status {
+        QuickResponseClaimStatus::InFlight => age_secs > QUICK_RESPONSE_INFLIGHT_STALE_SECS,
+        QuickResponseClaimStatus::Sent => age_secs > QUICK_RESPONSE_SENT_TTL_SECS,
+    }
+}
+
+fn load_quick_response_claim_record(
+    path: &Path,
+) -> Result<Option<QuickResponseClaimRecord>, BoxError> {
+    match std::fs::read(path) {
+        Ok(raw) => Ok(Some(serde_json::from_slice::<QuickResponseClaimRecord>(
+            &raw,
+        )?)),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn try_create_quick_response_claim(
+    path: &Path,
+    record: &QuickResponseClaimRecord,
+) -> Result<bool, BoxError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let serialized = serde_json::to_vec_pretty(record)?;
+    match std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path)
+    {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(&serialized) {
+                let _ = std::fs::remove_file(path);
+                return Err(err.into());
+            }
+            Ok(true)
+        }
+        Err(err) if err.kind() == ErrorKind::AlreadyExists => Ok(false),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn write_quick_response_claim_record(
+    path: &Path,
+    record: &QuickResponseClaimRecord,
+) -> Result<(), BoxError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!("tmp-{}", Uuid::new_v4()));
+    let serialized = serde_json::to_vec_pretty(record)?;
+    std::fs::write(&tmp, serialized)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+fn remove_quick_response_claim_file(path: &Path) -> Result<(), BoxError> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn prune_quick_response_scope_dir(scope_dir: &Path, now_unix_secs: i64) -> Result<(), BoxError> {
+    let entries = match std::fs::read_dir(scope_dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err.into()),
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                warn!(
+                    "failed to enumerate quick response scope dir {}: {}",
+                    scope_dir.display(),
+                    err
+                );
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let should_remove = match load_quick_response_claim_record(&path) {
+            Ok(Some(record)) => quick_response_claim_record_expired(&record, now_unix_secs),
+            Ok(None) => false,
+            Err(err) => {
+                warn!(
+                    "failed to inspect quick response claim {} during prune: {}",
+                    path.display(),
+                    err
+                );
+                quick_response_claim_file_age_secs(&path, now_unix_secs)
+                    .map(|age_secs| age_secs > QUICK_RESPONSE_INFLIGHT_STALE_SECS)
+                    .unwrap_or(false)
+            }
+        };
+
+        if should_remove {
+            remove_quick_response_claim_file(&path)?;
+        }
+    }
+
+    if let Ok(mut remaining) = std::fs::read_dir(scope_dir) {
+        if remaining.next().is_none() {
+            let _ = std::fs::remove_dir(scope_dir);
+        }
+    }
+
+    Ok(())
+}
+
+fn claim_quick_response_send(
+    state_dir: &Path,
+    scope_key: &str,
+    message_id: &str,
+) -> Result<QuickResponseClaimResult, BoxError> {
+    let scope_dir = quick_response_scope_dir(state_dir, scope_key);
+    let path = quick_response_claim_path(state_dir, scope_key, message_id);
+    let record =
+        quick_response_claim_record(scope_key, message_id, QuickResponseClaimStatus::InFlight);
+
+    loop {
+        let now = now_unix_secs();
+        prune_quick_response_scope_dir(&scope_dir, now)?;
+
+        if try_create_quick_response_claim(&path, &record)? {
+            return Ok(QuickResponseClaimResult::Acquired(QuickResponseClaim {
+                path,
+                scope_dir,
+                record,
+            }));
+        }
+
+        match load_quick_response_claim_record(&path) {
+            Ok(Some(existing)) => {
+                if quick_response_claim_record_expired(&existing, now) {
+                    remove_quick_response_claim_file(&path)?;
+                    continue;
+                }
+                return Ok(match existing.status {
+                    QuickResponseClaimStatus::Sent => QuickResponseClaimResult::AlreadySent,
+                    QuickResponseClaimStatus::InFlight => QuickResponseClaimResult::InFlight,
+                });
+            }
+            Ok(None) => continue,
+            Err(err) => {
+                warn!(
+                    "failed to read quick response claim {}: {}",
+                    path.display(),
+                    err
+                );
+                if quick_response_claim_file_age_secs(&path, now)
+                    .map(|age_secs| age_secs > QUICK_RESPONSE_INFLIGHT_STALE_SECS)
+                    .unwrap_or(false)
+                {
+                    remove_quick_response_claim_file(&path)?;
+                    continue;
+                }
+                return Ok(QuickResponseClaimResult::InFlight);
+            }
+        }
+    }
+}
+
+fn mark_quick_response_sent(claim: &QuickResponseClaim) -> Result<(), BoxError> {
+    let record = quick_response_claim_record(
+        &claim.record.scope_key,
+        &claim.record.message_id,
+        QuickResponseClaimStatus::Sent,
+    );
+    write_quick_response_claim_record(&claim.path, &record)?;
+    prune_quick_response_scope_dir(&claim.scope_dir, record.updated_at_unix_secs)?;
+    Ok(())
+}
+
+fn release_quick_response_claim(claim: &QuickResponseClaim) -> Result<(), BoxError> {
+    remove_quick_response_claim_file(&claim.path)?;
+    prune_quick_response_scope_dir(&claim.scope_dir, now_unix_secs())?;
+    Ok(())
+}
+
+fn start_quick_response_send(
+    state_dir: &Path,
+    scope_key: Option<&str>,
+    message_id: Option<&str>,
+    channel_label: &str,
+    employee_id: &str,
+    sender: &str,
+) -> Result<QuickResponseSendGate, BoxError> {
+    let (Some(scope_key), Some(message_id)) = (scope_key, message_id) else {
+        return Ok(QuickResponseSendGate::Untracked);
+    };
+
+    match claim_quick_response_send(state_dir, scope_key, message_id)? {
+        QuickResponseClaimResult::Acquired(claim) => Ok(QuickResponseSendGate::Acquired(claim)),
+        QuickResponseClaimResult::AlreadySent => {
+            info!(
+                "{} quick response dedupe hit employee={} sender={} scope={} message_id={}",
+                channel_label, employee_id, sender, scope_key, message_id
+            );
+            Ok(QuickResponseSendGate::Suppressed)
+        }
+        QuickResponseClaimResult::InFlight => {
+            info!(
+                "{} quick response send already in flight employee={} sender={} scope={} message_id={}",
+                channel_label, employee_id, sender, scope_key, message_id
+            );
+            Ok(QuickResponseSendGate::Suppressed)
+        }
+    }
 }
 
 fn slack_quick_response_scope_key(message: &crate::channel::InboundMessage) -> Option<String> {
@@ -152,96 +417,6 @@ fn slack_quick_response_scope_key(message: &crate::channel::InboundMessage) -> O
 
 fn slack_inbound_message_id(message: &crate::channel::InboundMessage) -> Option<&str> {
     message.message_id.as_deref()
-}
-
-fn slack_quick_response_already_sent(state_dir: &Path, scope_key: &str, message_id: &str) -> bool {
-    let path = slack_quick_response_dedupe_path(state_dir);
-    let store = load_slack_quick_response_dedupe_store(&path);
-    store
-        .threads
-        .get(scope_key)
-        .map(|thread| thread.message_ids.iter().any(|entry| entry == message_id))
-        .unwrap_or(false)
-}
-
-fn record_slack_quick_response_sent(
-    state_dir: &Path,
-    scope_key: &str,
-    message_id: &str,
-) -> Result<(), BoxError> {
-    let path = slack_quick_response_dedupe_path(state_dir);
-    let mut store = load_slack_quick_response_dedupe_store(&path);
-
-    let thread = store.threads.entry(scope_key.to_string()).or_default();
-    if !thread.message_ids.iter().any(|entry| entry == message_id) {
-        thread.message_ids.push(message_id.to_string());
-    }
-    let overflow = thread
-        .message_ids
-        .len()
-        .saturating_sub(SLACK_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD);
-    if overflow > 0 {
-        thread.message_ids.drain(0..overflow);
-    }
-    thread.updated_at_unix_secs = now_unix_secs();
-
-    prune_slack_quick_response_store(&mut store);
-    write_slack_quick_response_dedupe_store(&path, &store)?;
-    Ok(())
-}
-
-fn load_slack_quick_response_dedupe_store(path: &Path) -> SlackQuickResponseDedupeStore {
-    let Ok(raw) = std::fs::read(path) else {
-        return SlackQuickResponseDedupeStore::default();
-    };
-    match serde_json::from_slice::<SlackQuickResponseDedupeStore>(&raw) {
-        Ok(store) => store,
-        Err(err) => {
-            warn!(
-                "failed to parse slack quick response dedupe store at {}: {}",
-                path.display(),
-                err
-            );
-            SlackQuickResponseDedupeStore::default()
-        }
-    }
-}
-
-fn write_slack_quick_response_dedupe_store(
-    path: &Path,
-    store: &SlackQuickResponseDedupeStore,
-) -> Result<(), BoxError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension(format!("tmp-{}", Uuid::new_v4()));
-    let serialized = serde_json::to_vec_pretty(store)?;
-    std::fs::write(&tmp, serialized)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
-}
-
-fn prune_slack_quick_response_store(store: &mut SlackQuickResponseDedupeStore) {
-    if store.threads.len() <= SLACK_QUICK_RESPONSE_MAX_THREADS {
-        return;
-    }
-    let mut thread_by_age = store
-        .threads
-        .iter()
-        .map(|(key, value)| (key.clone(), value.updated_at_unix_secs))
-        .collect::<Vec<_>>();
-    thread_by_age.sort_by_key(|(_, updated_at)| *updated_at);
-    let overflow = store
-        .threads
-        .len()
-        .saturating_sub(SLACK_QUICK_RESPONSE_MAX_THREADS);
-    for (key, _) in thread_by_age.into_iter().take(overflow) {
-        store.threads.remove(&key);
-    }
-}
-
-fn discord_quick_response_dedupe_path(state_dir: &Path) -> std::path::PathBuf {
-    state_dir.join(DISCORD_QUICK_RESPONSE_DEDUPE_FILE)
 }
 
 fn discord_quick_response_scope_key(message: &crate::channel::InboundMessage) -> Option<String> {
@@ -264,94 +439,33 @@ fn discord_inbound_message_id(message: &crate::channel::InboundMessage) -> Optio
         .or(message.metadata.discord_message_id.as_deref())
 }
 
-fn discord_quick_response_already_sent(
-    state_dir: &Path,
-    scope_key: &str,
-    message_id: &str,
-) -> bool {
-    let path = discord_quick_response_dedupe_path(state_dir);
-    let store = load_discord_quick_response_dedupe_store(&path);
-    store
-        .threads
-        .get(scope_key)
-        .map(|thread| thread.message_ids.iter().any(|entry| entry == message_id))
-        .unwrap_or(false)
+fn lark_quick_response_scope_key(message: &crate::channel::InboundMessage) -> Option<String> {
+    let chat_id = message.metadata.lark_chat_id.as_deref()?;
+    let tenant_key = message
+        .metadata
+        .lark_tenant_key
+        .as_deref()
+        .unwrap_or("unknown");
+    Some(format!(
+        "lark:{}:{}:{}",
+        tenant_key, chat_id, message.thread_id
+    ))
 }
 
-fn record_discord_quick_response_sent(
-    state_dir: &Path,
-    scope_key: &str,
-    message_id: &str,
-) -> Result<(), BoxError> {
-    let path = discord_quick_response_dedupe_path(state_dir);
-    let mut store = load_discord_quick_response_dedupe_store(&path);
-
-    let thread = store.threads.entry(scope_key.to_string()).or_default();
-    if !thread.message_ids.iter().any(|entry| entry == message_id) {
-        thread.message_ids.push(message_id.to_string());
-    }
-    let overflow = thread
-        .message_ids
-        .len()
-        .saturating_sub(DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD);
-    if overflow > 0 {
-        thread.message_ids.drain(0..overflow);
-    }
-    thread.updated_at_unix_secs = now_unix_secs();
-
-    prune_discord_quick_response_store(&mut store);
-    write_discord_quick_response_dedupe_store(&path, &store)?;
-    Ok(())
+fn lark_inbound_message_id(message: &crate::channel::InboundMessage) -> Option<&str> {
+    message
+        .message_id
+        .as_deref()
+        .or(message.metadata.lark_message_id.as_deref())
 }
 
-fn load_discord_quick_response_dedupe_store(path: &Path) -> DiscordQuickResponseDedupeStore {
-    let Ok(raw) = std::fs::read(path) else {
-        return DiscordQuickResponseDedupeStore::default();
-    };
-    match serde_json::from_slice::<DiscordQuickResponseDedupeStore>(&raw) {
-        Ok(store) => store,
-        Err(err) => {
-            warn!(
-                "failed to parse discord quick response dedupe store at {}: {}",
-                path.display(),
-                err
-            );
-            DiscordQuickResponseDedupeStore::default()
-        }
-    }
+fn wechat_quick_response_scope_key(message: &crate::channel::InboundMessage) -> Option<String> {
+    let corp_id = message.metadata.wechat_corp_id.as_deref()?;
+    Some(format!("wechat:{}:{}", corp_id, message.thread_id))
 }
 
-fn write_discord_quick_response_dedupe_store(
-    path: &Path,
-    store: &DiscordQuickResponseDedupeStore,
-) -> Result<(), BoxError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension(format!("tmp-{}", Uuid::new_v4()));
-    let serialized = serde_json::to_vec_pretty(store)?;
-    std::fs::write(&tmp, serialized)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
-}
-
-fn prune_discord_quick_response_store(store: &mut DiscordQuickResponseDedupeStore) {
-    if store.threads.len() <= DISCORD_QUICK_RESPONSE_MAX_THREADS {
-        return;
-    }
-    let mut thread_by_age = store
-        .threads
-        .iter()
-        .map(|(key, value)| (key.clone(), value.updated_at_unix_secs))
-        .collect::<Vec<_>>();
-    thread_by_age.sort_by_key(|(_, updated_at)| *updated_at);
-    let overflow = store
-        .threads
-        .len()
-        .saturating_sub(DISCORD_QUICK_RESPONSE_MAX_THREADS);
-    for (key, _) in thread_by_age.into_iter().take(overflow) {
-        store.threads.remove(&key);
-    }
+fn wechat_inbound_message_id(message: &crate::channel::InboundMessage) -> Option<&str> {
+    message.message_id.as_deref()
 }
 
 fn now_unix_secs() -> i64 {
@@ -385,16 +499,6 @@ pub(crate) fn try_quick_response_slack(
     let dedupe_scope = slack_quick_response_scope_key(message);
     let inbound_message_id = slack_inbound_message_id(message);
 
-    if let (Some(scope), Some(inbound_id)) = (dedupe_scope.as_deref(), inbound_message_id) {
-        if slack_quick_response_already_sent(&user_paths.state_dir, scope, inbound_id) {
-            info!(
-                "slack quick response dedupe hit employee={} sender={} scope={} message_id={}",
-                config.employee_profile.id, message.sender, scope, inbound_id
-            );
-            return Ok(true);
-        }
-    }
-
     let cleaned_text = text
         .split_whitespace()
         .filter(|word| !(word.starts_with("<@") && word.ends_with(">")))
@@ -420,6 +524,19 @@ pub(crate) fn try_quick_response_slack(
             response,
             memory_update,
         } => {
+            let quick_response_claim = match start_quick_response_send(
+                &user_paths.state_dir,
+                dedupe_scope.as_deref(),
+                inbound_message_id,
+                "slack",
+                &config.employee_profile.id,
+                &message.sender,
+            )? {
+                QuickResponseSendGate::Untracked => None,
+                QuickResponseSendGate::Acquired(claim) => Some(claim),
+                QuickResponseSendGate::Suppressed => return Ok(true),
+            };
+
             // Write memory update if present (to blob storage if account linked)
             if let Some(update) = memory_update {
                 if let Err(e) =
@@ -438,9 +555,9 @@ pub(crate) fn try_quick_response_slack(
                 slack_store,
                 message.metadata.slack_team_id.as_deref(),
             );
-            if let Some(token) = token {
+            let sent = if let Some(token) = token {
                 let thread_ts = Some(message.thread_id.as_str());
-                if runtime
+                runtime
                     .block_on(send_quick_slack_response(
                         &token,
                         channel_id,
@@ -450,30 +567,33 @@ pub(crate) fn try_quick_response_slack(
                         &response,
                     ))
                     .is_ok()
+            } else {
+                false
+            };
+
+            if sent {
+                if let Some(claim) = quick_response_claim.as_ref() {
+                    if let Err(err) = mark_quick_response_sent(claim) {
+                        warn!(
+                            "failed to mark slack quick response claim sent scope={} message_id={}: {}",
+                            claim.record.scope_key, claim.record.message_id, err
+                        );
+                    }
+                }
+                if let Err(err) =
+                    persist_slack_ingest_context(config, user_store, message, &message.raw_payload)
                 {
-                    if let Err(err) = persist_slack_ingest_context(
-                        config,
-                        user_store,
-                        message,
-                        &message.raw_payload,
-                    ) {
-                        warn!("Failed to persist Slack context after quick reply: {}", err);
-                    }
-                    if let (Some(scope), Some(inbound_id)) =
-                        (dedupe_scope.as_deref(), inbound_message_id)
-                    {
-                        if let Err(err) = record_slack_quick_response_sent(
-                            &user_paths.state_dir,
-                            scope,
-                            inbound_id,
-                        ) {
-                            warn!(
-                                "failed to record slack quick response dedupe key scope={} message_id={}: {}",
-                                scope, inbound_id, err
-                            );
-                        }
-                    }
-                    return Ok(true);
+                    warn!("Failed to persist Slack context after quick reply: {}", err);
+                }
+                return Ok(true);
+            }
+
+            if let Some(claim) = quick_response_claim.as_ref() {
+                if let Err(err) = release_quick_response_claim(claim) {
+                    warn!(
+                        "failed to release slack quick response claim scope={} message_id={}: {}",
+                        claim.record.scope_key, claim.record.message_id, err
+                    );
                 }
             }
             Ok(false)
@@ -624,16 +744,6 @@ pub(crate) fn try_quick_response_discord(
     let dedupe_scope = discord_quick_response_scope_key(message);
     let inbound_message_id = discord_inbound_message_id(message);
 
-    if let (Some(scope), Some(inbound_id)) = (dedupe_scope.as_deref(), inbound_message_id) {
-        if discord_quick_response_already_sent(&user_paths.state_dir, scope, inbound_id) {
-            info!(
-                "discord quick response dedupe hit employee={} sender={} scope={} message_id={}",
-                config.employee_profile.id, message.sender, scope, inbound_id
-            );
-            return Ok(true);
-        }
-    }
-
     let router_context = match build_discord_router_context(config, message, raw_payload) {
         Ok(context) => Some(context),
         Err(err) => {
@@ -661,6 +771,19 @@ pub(crate) fn try_quick_response_discord(
             response,
             memory_update,
         } => {
+            let quick_response_claim = match start_quick_response_send(
+                &user_paths.state_dir,
+                dedupe_scope.as_deref(),
+                inbound_message_id,
+                "discord",
+                &config.employee_profile.id,
+                &message.sender,
+            )? {
+                QuickResponseSendGate::Untracked => None,
+                QuickResponseSendGate::Acquired(claim) => Some(claim),
+                QuickResponseSendGate::Suppressed => return Ok(true),
+            };
+
             // Write memory update if present (to blob storage if account linked)
             if let Some(update) = memory_update {
                 if let Err(e) =
@@ -678,15 +801,11 @@ pub(crate) fn try_quick_response_discord(
                 send_quick_discord_response_simple(&token, channel_id, message_id, &response)
                     .is_ok();
             if sent {
-                if let (Some(scope), Some(inbound_id)) =
-                    (dedupe_scope.as_deref(), inbound_message_id)
-                {
-                    if let Err(err) =
-                        record_discord_quick_response_sent(&user_paths.state_dir, scope, inbound_id)
-                    {
+                if let Some(claim) = quick_response_claim.as_ref() {
+                    if let Err(err) = mark_quick_response_sent(claim) {
                         warn!(
-                            "failed to record discord quick response dedupe key scope={} message_id={}: {}",
-                            scope, inbound_id, err
+                            "failed to mark discord quick response claim sent scope={} message_id={}: {}",
+                            claim.record.scope_key, claim.record.message_id, err
                         );
                     }
                 }
@@ -703,6 +822,14 @@ pub(crate) fn try_quick_response_discord(
                     );
                 }
                 return Ok(true);
+            }
+            if let Some(claim) = quick_response_claim.as_ref() {
+                if let Err(err) = release_quick_response_claim(claim) {
+                    warn!(
+                        "failed to release discord quick response claim scope={} message_id={}: {}",
+                        claim.record.scope_key, claim.record.message_id, err
+                    );
+                }
             }
             Ok(false)
         }
@@ -1069,6 +1196,8 @@ pub(crate) fn try_quick_response_wechat(
     let user = user_store.get_or_create_user("wechat", user_id)?;
     let user_paths = user_store.user_paths(&config.users_root, &user.user_id);
     let memory = read_user_memo(runtime, account_id, &user_paths.memory_dir);
+    let dedupe_scope = wechat_quick_response_scope_key(message);
+    let inbound_message_id = wechat_inbound_message_id(message);
 
     let employee_name = config.employee_profile.display_name.as_deref();
     let decision =
@@ -1079,6 +1208,19 @@ pub(crate) fn try_quick_response_wechat(
             response,
             memory_update,
         } => {
+            let quick_response_claim = match start_quick_response_send(
+                &user_paths.state_dir,
+                dedupe_scope.as_deref(),
+                inbound_message_id,
+                "wechat",
+                &config.employee_profile.id,
+                user_id,
+            )? {
+                QuickResponseSendGate::Untracked => None,
+                QuickResponseSendGate::Acquired(claim) => Some(claim),
+                QuickResponseSendGate::Suppressed => return Ok(true),
+            };
+
             // Write memory update if present
             if let Some(update) = memory_update {
                 if let Err(e) =
@@ -1090,8 +1232,24 @@ pub(crate) fn try_quick_response_wechat(
 
             // Send quick response via WeChat API
             if send_quick_wechat_response(user_id, &response).is_ok() {
+                if let Some(claim) = quick_response_claim.as_ref() {
+                    if let Err(err) = mark_quick_response_sent(claim) {
+                        warn!(
+                            "failed to mark wechat quick response claim sent scope={} message_id={}: {}",
+                            claim.record.scope_key, claim.record.message_id, err
+                        );
+                    }
+                }
                 info!("wechat quick response sent: user_id={}", user_id);
                 return Ok(true);
+            }
+            if let Some(claim) = quick_response_claim.as_ref() {
+                if let Err(err) = release_quick_response_claim(claim) {
+                    warn!(
+                        "failed to release wechat quick response claim scope={} message_id={}: {}",
+                        claim.record.scope_key, claim.record.message_id, err
+                    );
+                }
             }
             Ok(false)
         }
@@ -1336,6 +1494,8 @@ pub(crate) fn try_quick_response_lark(
     let user = user_store.get_or_create_user("lark", open_id)?;
     let user_paths = user_store.user_paths(&config.users_root, &user.user_id);
     let memory = read_user_memo(runtime, account_id, &user_paths.memory_dir);
+    let dedupe_scope = lark_quick_response_scope_key(message);
+    let inbound_message_id = lark_inbound_message_id(message);
 
     let employee_name = config.employee_profile.display_name.as_deref();
     let decision =
@@ -1346,6 +1506,19 @@ pub(crate) fn try_quick_response_lark(
             response,
             memory_update,
         } => {
+            let quick_response_claim = match start_quick_response_send(
+                &user_paths.state_dir,
+                dedupe_scope.as_deref(),
+                inbound_message_id,
+                "lark",
+                &config.employee_profile.id,
+                open_id,
+            )? {
+                QuickResponseSendGate::Untracked => None,
+                QuickResponseSendGate::Acquired(claim) => Some(claim),
+                QuickResponseSendGate::Suppressed => return Ok(true),
+            };
+
             // Write memory update if present
             if let Some(update) = memory_update {
                 if let Err(e) =
@@ -1361,8 +1534,24 @@ pub(crate) fn try_quick_response_lark(
 
             // Send quick response via Lark API
             if send_quick_lark_response(open_id, &response).is_ok() {
+                if let Some(claim) = quick_response_claim.as_ref() {
+                    if let Err(err) = mark_quick_response_sent(claim) {
+                        warn!(
+                            "failed to mark lark quick response claim sent scope={} message_id={}: {}",
+                            claim.record.scope_key, claim.record.message_id, err
+                        );
+                    }
+                }
                 info!("lark quick response sent: open_id={}", open_id);
                 return Ok(true);
+            }
+            if let Some(claim) = quick_response_claim.as_ref() {
+                if let Err(err) = release_quick_response_claim(claim) {
+                    warn!(
+                        "failed to release lark quick response claim scope={} message_id={}: {}",
+                        claim.record.scope_key, claim.record.message_id, err
+                    );
+                }
             }
             Ok(false)
         }
@@ -1466,57 +1655,168 @@ mod tests {
         }
     }
 
+    fn build_lark_message(
+        thread_id: &str,
+        message_id: Option<&str>,
+        metadata_message_id: Option<&str>,
+        tenant_key: Option<&str>,
+        chat_id: Option<&str>,
+    ) -> InboundMessage {
+        InboundMessage {
+            channel: Channel::Lark,
+            sender: "ou_test_user".to_string(),
+            sender_name: Some("Bingran".to_string()),
+            recipient: "oc_test_chat".to_string(),
+            subject: None,
+            text_body: Some("Hi".to_string()),
+            html_body: None,
+            thread_id: thread_id.to_string(),
+            message_id: message_id.map(str::to_string),
+            attachments: Vec::new(),
+            reply_to: Vec::new(),
+            raw_payload: Vec::new(),
+            metadata: ChannelMetadata {
+                lark_tenant_key: tenant_key.map(str::to_string),
+                lark_chat_id: chat_id.map(str::to_string),
+                lark_message_id: metadata_message_id.map(str::to_string),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn build_wechat_scope_message(
+        thread_id: &str,
+        message_id: Option<&str>,
+        corp_id: Option<&str>,
+    ) -> InboundMessage {
+        InboundMessage {
+            channel: Channel::WeChat,
+            sender: "zhangsan".to_string(),
+            sender_name: Some("张三".to_string()),
+            recipient: "wwcorp".to_string(),
+            subject: None,
+            text_body: Some("你好".to_string()),
+            html_body: None,
+            thread_id: thread_id.to_string(),
+            message_id: message_id.map(str::to_string),
+            attachments: Vec::new(),
+            reply_to: Vec::new(),
+            raw_payload: Vec::new(),
+            metadata: ChannelMetadata {
+                wechat_corp_id: corp_id.map(str::to_string),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn write_test_quick_response_claim_record(
+        path: &Path,
+        scope_key: &str,
+        message_id: &str,
+        status: QuickResponseClaimStatus,
+        updated_at_unix_secs: i64,
+    ) -> Result<(), BoxError> {
+        let record = QuickResponseClaimRecord {
+            scope_key: scope_key.to_string(),
+            message_id: message_id.to_string(),
+            status,
+            updated_at_unix_secs,
+        };
+        write_quick_response_claim_record(path, &record)
+    }
+
     #[test]
-    fn discord_quick_response_dedupe_records_and_matches() -> Result<(), BoxError> {
+    fn quick_response_claim_transitions_from_inflight_to_sent() -> Result<(), BoxError> {
         let temp = TempDir::new()?;
         let state_dir = temp.path().join("state");
         let scope = "discord:guild-1:42:thread-1";
         let message_id = "msg-1";
 
-        assert!(!discord_quick_response_already_sent(
-            &state_dir, scope, message_id
+        let claim = match claim_quick_response_send(&state_dir, scope, message_id)? {
+            QuickResponseClaimResult::Acquired(claim) => claim,
+            other => panic!("expected acquired claim, got {:?}", other),
+        };
+
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, message_id)?,
+            QuickResponseClaimResult::InFlight
         ));
 
-        record_discord_quick_response_sent(&state_dir, scope, message_id)?;
+        mark_quick_response_sent(&claim)?;
 
-        assert!(discord_quick_response_already_sent(
-            &state_dir, scope, message_id
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, message_id)?,
+            QuickResponseClaimResult::AlreadySent
         ));
 
-        let path = discord_quick_response_dedupe_path(&state_dir);
-        let store = load_discord_quick_response_dedupe_store(&path);
-        let entries = &store.threads.get(scope).expect("thread entry").message_ids;
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0], "msg-1");
+        let path = quick_response_claim_path(&state_dir, scope, message_id);
+        let record = load_quick_response_claim_record(&path)?
+            .expect("quick response claim record should exist");
+        assert_eq!(record.status, QuickResponseClaimStatus::Sent);
 
         Ok(())
     }
 
     #[test]
-    fn discord_quick_response_dedupe_prunes_old_message_ids() -> Result<(), BoxError> {
+    fn quick_response_claim_release_allows_retry() -> Result<(), BoxError> {
         let temp = TempDir::new()?;
         let state_dir = temp.path().join("state");
         let scope = "discord:guild-1:42:thread-1";
+        let message_id = "msg-2";
 
-        for index in 0..(DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD + 5) {
-            let message_id = format!("msg-{}", index);
-            record_discord_quick_response_sent(&state_dir, scope, &message_id)?;
-        }
+        let claim = match claim_quick_response_send(&state_dir, scope, message_id)? {
+            QuickResponseClaimResult::Acquired(claim) => claim,
+            other => panic!("expected acquired claim, got {:?}", other),
+        };
 
-        let path = discord_quick_response_dedupe_path(&state_dir);
-        let store = load_discord_quick_response_dedupe_store(&path);
-        let entries = &store.threads.get(scope).expect("thread entry").message_ids;
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, message_id)?,
+            QuickResponseClaimResult::InFlight
+        ));
 
-        assert_eq!(
-            entries.len(),
-            DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD
-        );
-        assert!(!entries.iter().any(|entry| entry == "msg-0"));
-        assert!(entries.iter().any(|entry| entry
-            == &format!(
-                "msg-{}",
-                DISCORD_QUICK_RESPONSE_MAX_MESSAGE_IDS_PER_THREAD + 4
-            )));
+        release_quick_response_claim(&claim)?;
+
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, message_id)?,
+            QuickResponseClaimResult::Acquired(_)
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn quick_response_claim_reclaims_expired_records() -> Result<(), BoxError> {
+        let temp = TempDir::new()?;
+        let state_dir = temp.path().join("state");
+        let scope = "slack:T123:C123:thread-1";
+
+        let stale_inflight_path = quick_response_claim_path(&state_dir, scope, "msg-stale");
+        write_test_quick_response_claim_record(
+            &stale_inflight_path,
+            scope,
+            "msg-stale",
+            QuickResponseClaimStatus::InFlight,
+            now_unix_secs() - QUICK_RESPONSE_INFLIGHT_STALE_SECS - 1,
+        )?;
+
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, "msg-stale")?,
+            QuickResponseClaimResult::Acquired(_)
+        ));
+
+        let expired_sent_path = quick_response_claim_path(&state_dir, scope, "msg-sent");
+        write_test_quick_response_claim_record(
+            &expired_sent_path,
+            scope,
+            "msg-sent",
+            QuickResponseClaimStatus::Sent,
+            now_unix_secs() - QUICK_RESPONSE_SENT_TTL_SECS - 1,
+        )?;
+
+        assert!(matches!(
+            claim_quick_response_send(&state_dir, scope, "msg-sent")?,
+            QuickResponseClaimResult::Acquired(_)
+        ));
 
         Ok(())
     }
@@ -1533,26 +1833,6 @@ mod tests {
     }
 
     #[test]
-    fn slack_quick_response_dedupe_records_and_matches() -> Result<(), BoxError> {
-        let temp = TempDir::new()?;
-        let state_dir = temp.path().join("state");
-        let scope = "slack:T123:C123:thread-1";
-        let message_id = "1712345678.000100";
-
-        assert!(!slack_quick_response_already_sent(
-            &state_dir, scope, message_id
-        ));
-
-        record_slack_quick_response_sent(&state_dir, scope, message_id)?;
-
-        assert!(slack_quick_response_already_sent(
-            &state_dir, scope, message_id
-        ));
-
-        Ok(())
-    }
-
-    #[test]
     fn slack_scope_key_uses_team_channel_thread() {
         let message = build_slack_message(
             "1712345678.000100",
@@ -1566,6 +1846,41 @@ mod tests {
 
         let message_id = slack_inbound_message_id(&message).expect("message id");
         assert_eq!(message_id, "1712345678.000100");
+    }
+
+    #[test]
+    fn lark_scope_key_and_message_id_fallback_work() {
+        let message = build_lark_message(
+            "lark:oc_test_chat:ou_test_user",
+            None,
+            Some("om_message"),
+            Some("tenant-1"),
+            Some("oc_test_chat"),
+        );
+
+        let scope = lark_quick_response_scope_key(&message).expect("scope key");
+        assert_eq!(
+            scope,
+            "lark:tenant-1:oc_test_chat:lark:oc_test_chat:ou_test_user"
+        );
+
+        let message_id = lark_inbound_message_id(&message).expect("message id");
+        assert_eq!(message_id, "om_message");
+    }
+
+    #[test]
+    fn wechat_scope_key_and_message_id_work() {
+        let message = build_wechat_scope_message(
+            "wechat:wwcorp:zhangsan",
+            Some("wechat-msg-1"),
+            Some("wwcorp"),
+        );
+
+        let scope = wechat_quick_response_scope_key(&message).expect("scope key");
+        assert_eq!(scope, "wechat:wwcorp:wechat:wwcorp:zhangsan");
+
+        let message_id = wechat_inbound_message_id(&message).expect("message id");
+        assert_eq!(message_id, "wechat-msg-1");
     }
 
     #[test]

@@ -141,6 +141,23 @@ impl<E: TaskExecutor> Scheduler<E> {
         Ok(())
     }
 
+    /// Add a one-shot task with a specific task ID unless it already exists.
+    ///
+    /// Returns `true` when a new task is inserted and `false` when an existing
+    /// task with the same ID is already present in this scheduler.
+    pub fn add_one_shot_in_if_absent_with_id(
+        &mut self,
+        id: Uuid,
+        delay: Duration,
+        kind: TaskKind,
+    ) -> Result<bool, SchedulerError> {
+        if self.tasks.iter().any(|task| task.id == id) {
+            return Ok(false);
+        }
+        self.add_one_shot_in_with_id(id, delay, kind)?;
+        Ok(true)
+    }
+
     pub fn add_one_shot_at(
         &mut self,
         run_at: DateTime<Utc>,
