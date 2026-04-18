@@ -924,25 +924,6 @@
         flex: 0 0 auto;
       }
 
-      .polling-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-        font-size: 0.75rem;
-        color: var(--text-muted, #888);
-      }
-      .polling-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #22c55e;
-        animation: pulse 2s infinite;
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
-      }
-
       @media (max-width: 900px) {
         .auth-container {
           padding: 1rem 0;
@@ -2443,10 +2424,6 @@
                         <button id="refresh-tasks-btn" class="auth-btn auth-btn-oauth">
                           Refresh
                         </button>
-                        <div class="polling-indicator">
-                          <span class="polling-dot"></span>
-                          <span>Auto-updating</span>
-                        </div>
                       </div>
                       <span id="tasks-status" class="tasks-status work-section-status"></span>
                     </div>
@@ -2467,10 +2444,6 @@
                         <button id="refresh-routines-btn" class="auth-btn auth-btn-oauth">
                           Refresh
                         </button>
-                        <div class="polling-indicator">
-                          <span class="polling-dot"></span>
-                          <span>Auto-updating</span>
-                        </div>
                       </div>
                       <span id="routines-status" class="tasks-status work-section-status"></span>
                     </div>
@@ -5743,8 +5716,6 @@
         loadWorkspaceSummaryFromStorage();
         await loadWorkspaceRecommendation(session.access_token);
 
-        // Start polling for task updates
-        startTaskPolling();
         updateSidebarNavigation();
         window.setTimeout(scrollToDashboardHashTarget, 80);
       }
@@ -6863,7 +6834,7 @@
 
       // Load tasks from the unified account-level storage
       async function loadTasks(accessToken, options = {}) {
-        const { refreshRecommendation = false } = options;
+        const { refreshRecommendation = false, refreshOpenTaskModal = false } = options;
         const taskList = document.getElementById('task-list');
         const tasksStatus = document.getElementById('tasks-status');
         const hadExistingData = Array.isArray(cachedTasks) && cachedTasks.length > 0;
@@ -6955,7 +6926,7 @@
           tasksStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
           loadWorkspaceSummaryFromStorage();
           renderNextSteps(cachedIdentifiers);
-          if (openTaskModalTaskId && allTasks.some((task) => task.id === openTaskModalTaskId)) {
+          if (refreshOpenTaskModal && openTaskModalTaskId && allTasks.some((task) => task.id === openTaskModalTaskId)) {
             await showTaskModal(openTaskModalTaskId, { silent: true });
           }
         } catch (err) {
@@ -7861,29 +7832,7 @@
       window.handleRoutineAction = handleRoutineAction;
       window.closeTaskModal = closeTaskModal;
 
-      // Start polling for task updates
-      function startTaskPolling() {
-        // Clear any existing interval
-        if (taskPollingInterval) {
-          clearInterval(taskPollingInterval);
-        }
-
-        // Poll every 30 seconds, fetching fresh session each time
-        taskPollingInterval = setInterval(async () => {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            await Promise.all([
-              loadTasks(session.access_token),
-              loadRoutines(session.access_token)
-            ]);
-          } else {
-            // Session expired completely, stop polling
-            stopTaskPolling();
-          }
-        }, 30000);
-      }
-
-      // Stop polling (e.g., on sign out)
+      // Clear any leftover polling interval from older sessions/configurations.
       function stopTaskPolling() {
         if (taskPollingInterval) {
           clearInterval(taskPollingInterval);
@@ -7896,7 +7845,7 @@
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           document.getElementById('tasks-status').textContent = 'Refreshing...';
-          await loadTasks(session.access_token);
+          await loadTasks(session.access_token, { refreshOpenTaskModal: true });
         }
       });
 
