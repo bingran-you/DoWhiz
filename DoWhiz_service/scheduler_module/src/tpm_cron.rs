@@ -177,31 +177,32 @@ pub fn setup_tpm_cron(
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
     let workspace_dir = user_paths.workspaces_root.join("tpm_cron_placeholder");
-    let input_email_dir = workspace_dir.join("incoming_email");
 
-    // Create workspace directory
-    std::fs::create_dir_all(&input_email_dir)
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    // Create all workspace directories required by RunTaskTask validation
+    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+        std::fs::create_dir_all(workspace_dir.join(subdir))
+            .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    }
 
     // Write synthetic trigger file
     let now = Utc::now();
     let synthetic_payload = json!({
         "From": "TPM Cron <cron@dowhiz.com>",
-        "Subject": "TPM Sync",
-        "TextBody": "This is a scheduled TPM sync. Run the daily TPM sync workflow.",
+        "Subject": format!("TPM Sync for {}", organization),
+        "TextBody": format!("This is a scheduled TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
-    let payload_path = input_email_dir.join("postmark_payload.json");
+    let payload_path = workspace_dir.join("incoming_email/postmark_payload.json");
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
-    // Build the RunTaskTask struct
+    // Build the RunTaskTask struct (paths must be relative to workspace_dir)
     let run_task = RunTaskTask {
         workspace_dir: workspace_dir.clone(),
-        input_email_dir: input_email_dir.clone(),
-        input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: user_paths.memory_dir.clone(),
-        reference_dir: workspace_dir.join("references"),
+        input_email_dir: PathBuf::from("incoming_email"),
+        input_attachments_dir: PathBuf::from("incoming_attachments"),
+        memory_dir: PathBuf::from("memory"),
+        reference_dir: PathBuf::from("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
@@ -329,32 +330,35 @@ pub fn trigger_tpm_sync(
         .ensure_user_dirs(&user_paths)
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
-    let workspace_dir = user_paths.workspaces_root.join("tpm_trigger_oneshot");
-    let input_email_dir = workspace_dir.join("incoming_email");
+    // Use unique workspace per trigger to avoid blocking on concurrent executions
+    let trigger_id = Uuid::new_v4();
+    let workspace_dir = user_paths.workspaces_root.join(format!("tpm_trigger_{}", trigger_id));
 
-    // Create workspace directory
-    std::fs::create_dir_all(&input_email_dir)
-        .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    // Create all workspace directories required by RunTaskTask validation
+    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+        std::fs::create_dir_all(workspace_dir.join(subdir))
+            .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    }
 
     // Write synthetic trigger file
     let now = Utc::now();
     let synthetic_payload = json!({
         "From": "TPM Trigger <trigger@dowhiz.com>",
-        "Subject": "TPM Sync (Manual Trigger)",
-        "TextBody": "This is a manually triggered TPM sync. Run the daily TPM sync workflow.",
+        "Subject": format!("TPM Sync for {} (Manual Trigger)", organization),
+        "TextBody": format!("This is a manually triggered TPM sync for organization '{}'. Run the daily TPM sync workflow for this organization.", organization),
         "Date": now.to_rfc3339()
     });
-    let payload_path = input_email_dir.join("postmark_payload.json");
+    let payload_path = workspace_dir.join("incoming_email/postmark_payload.json");
     std::fs::write(&payload_path, synthetic_payload.to_string())
         .map_err(|e| TpmCronError::TriggerFileWrite(e.to_string()))?;
 
-    // Build the RunTaskTask struct
+    // Build the RunTaskTask struct (paths must be relative to workspace_dir)
     let run_task = RunTaskTask {
         workspace_dir: workspace_dir.clone(),
-        input_email_dir: input_email_dir.clone(),
-        input_attachments_dir: workspace_dir.join("incoming_attachments"),
-        memory_dir: user_paths.memory_dir.clone(),
-        reference_dir: workspace_dir.join("references"),
+        input_email_dir: PathBuf::from("incoming_email"),
+        input_attachments_dir: PathBuf::from("incoming_attachments"),
+        memory_dir: PathBuf::from("memory"),
+        reference_dir: PathBuf::from("references"),
         model_name: "claude-sonnet-4-20250514".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
@@ -373,7 +377,10 @@ pub fn trigger_tpm_sync(
         channel_metadata: ChannelMetadata::default(),
     };
 
-    // Load scheduler from email user's tasks.db (same path as email handler)
+    // Clone run_task for dual-write to account storage (for frontend visibility)
+    let run_task_for_account = run_task.clone();
+
+    // Load scheduler from email user's tasks.db (for worker execution)
     let mut scheduler = Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default())
         .map_err(|e| TpmCronError::SchedulerLoad(e.to_string()))?;
 
@@ -381,7 +388,7 @@ pub fn trigger_tpm_sync(
         .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
         .map_err(|e| TpmCronError::OneShotTaskAdd(e.to_string()))?;
 
-    // Sync to index store using email user_id (same as email handler)
+    // Sync to index store using email user_id (worker finds tasks here)
     index_store
         .sync_user_tasks(&email_user.user_id, scheduler.tasks())
         .map_err(|e| TpmCronError::IndexStoreSync(e.to_string()))?;
@@ -390,6 +397,46 @@ pub fn trigger_tpm_sync(
         "trigger_tpm_sync: one-shot task added and synced, task_id={}, email_user_id={}",
         task_id, email_user.user_id
     );
+
+    // Dual-write: Also write to account-level storage for frontend visibility
+    // (same pattern as discord.rs, wechat.rs, etc.)
+    let account_tasks_dir = users_root_path.join(user_id.to_string()).join("state");
+    if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
+        tracing::warn!(
+            "failed to create account tasks dir for {}: {}",
+            user_id, err
+        );
+    } else {
+        let account_tasks_db_path = account_tasks_dir.join("tasks.db");
+        match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
+            Ok(mut account_scheduler) => {
+                match account_scheduler.add_one_shot_in_with_id(
+                    task_id,
+                    Duration::from_secs(0),
+                    TaskKind::RunTask(run_task_for_account),
+                ) {
+                    Ok(()) => {
+                        info!(
+                            "trigger_tpm_sync: also enqueued to account storage account_id={} task_id={}",
+                            user_id, task_id
+                        );
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            "failed to add task to account scheduler for {}: {}",
+                            user_id, err
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to load account scheduler for {}: {}",
+                    user_id, err
+                );
+            }
+        }
+    }
 
     Ok(TriggerTpmSyncResult {
         success: true,
