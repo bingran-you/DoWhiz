@@ -130,6 +130,9 @@ pub(crate) fn process_wechat_event(
         );
     }
     let task_id = if let Some(stable_task_id) = wechat_message_task_id(message) {
+        // This stable task id is only for full RunTask duplicate-delivery
+        // suppression. Quick responses are deduped separately via
+        // service/inbound/quick_responses.rs claim files.
         let inserted = scheduler.add_one_shot_in_if_absent_with_id(
             stable_task_id,
             Duration::from_secs(0),

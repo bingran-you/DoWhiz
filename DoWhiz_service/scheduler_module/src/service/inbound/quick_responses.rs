@@ -76,6 +76,11 @@ enum QuickResponseSendGate {
     Suppressed,
 }
 
+// Quick-response dedupe is handled outside the scheduler via claim files keyed
+// by (scope_key, message_id). This keeps "send Working on it" suppression
+// separate from the stable scheduler task IDs used for full RunTask
+// duplicate-delivery handling.
+
 /// Read memo.md from a user's memory directory (local file)
 fn read_user_memo_local(memory_dir: &Path) -> Option<String> {
     let memo_path = memory_dir.join("memo.md");

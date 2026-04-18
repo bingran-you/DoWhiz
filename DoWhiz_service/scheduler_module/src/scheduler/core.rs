@@ -113,8 +113,11 @@ impl<E: TaskExecutor> Scheduler<E> {
         Ok(self.tasks.last().unwrap().id)
     }
 
-    /// Add a one-shot task with a specific task ID.
-    /// Used when syncing a task to user storage with the same ID as the workspace task.
+    /// Add a one-shot task with a caller-provided task ID.
+    ///
+    /// This is used when the caller needs a stable scheduler task identity, for
+    /// example to mirror the same task across workspace/account storage or to
+    /// reuse a transport-derived ID for full-task duplicate-delivery handling.
     pub fn add_one_shot_in_with_id(
         &mut self,
         id: Uuid,
@@ -141,10 +144,15 @@ impl<E: TaskExecutor> Scheduler<E> {
         Ok(())
     }
 
-    /// Add a one-shot task with a specific task ID unless it already exists.
+    /// Add a one-shot task with a caller-provided task ID unless it already exists.
     ///
     /// Returns `true` when a new task is inserted and `false` when an existing
     /// task with the same ID is already present in this scheduler.
+    ///
+    /// This is intended for full `RunTask` duplicate-delivery suppression when
+    /// callers derive a stable task ID from message identity. It is separate
+    /// from quick-response dedupe, which uses claim files instead of scheduler
+    /// task IDs.
     pub fn add_one_shot_in_if_absent_with_id(
         &mut self,
         id: Uuid,
