@@ -1,6 +1,7 @@
 mod actions;
 mod core;
 mod debug_archive;
+mod email_attachments;
 mod executor;
 mod outbound;
 mod reply;
