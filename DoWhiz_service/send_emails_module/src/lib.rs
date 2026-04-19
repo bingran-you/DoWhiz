@@ -508,7 +508,7 @@ fn extract_email_address(value: &str) -> Option<String> {
             return normalize_email(&remainder[..end]);
         }
     }
-    for token in value.split(|ch| matches!(ch, ',' | ';' | ' ' | '\t' | '\n' | '\r')) {
+    for token in value.split([',', ';', ' ', '\t', '\n', '\r']) {
         if let Some(email) = normalize_email(token) {
             return Some(email);
         }

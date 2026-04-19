@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support expectations
+    url: https://github.com/KnoWhiz/DoWhiz/blob/main/SUPPORT.md
+    about: Read this before opening operational or setup questions.
+  - name: Security reporting
+    url: https://github.com/KnoWhiz/DoWhiz/blob/main/SECURITY.md
+    about: Do not file public issues for vulnerabilities.

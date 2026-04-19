@@ -34,7 +34,7 @@ use scheduler_module::employee_config::load_employee_directory;
 use scheduler_module::google_auth::GoogleAuth;
 use scheduler_module::google_drive_changes::{GoogleDriveChangesConfig, GoogleDriveChangesManager};
 use scheduler_module::ingestion_queue::{
-    build_servicebus_queue_from_env, resolve_ingestion_queue_backend, IngestionQueue,
+    build_queue_from_env, resolve_ingestion_queue_backend, IngestionQueue,
 };
 use scheduler_module::service::agent_market::{agent_market_router, AgentMarketState};
 use scheduler_module::service::auth::{auth_router, AuthState};
@@ -85,17 +85,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|| config_file.server.port.unwrap_or(9100));
 
     let backend = resolve_ingestion_queue_backend();
-    if backend != "servicebus" && backend != "service_bus" {
-        return Err(format!(
-            "inbound gateway requires SCALE_OLIVER_INGESTION_QUEUE_BACKEND (or INGESTION_QUEUE_BACKEND)=servicebus (got '{}')",
-            backend
-        )
-        .into());
+    if backend != "servicebus" && backend != "service_bus" && backend != "postgres" {
+        return Err(format!("unsupported ingestion queue backend '{}'", backend).into());
     }
 
     let (routes, channel_defaults) = normalize_routes(&config_file.routes)?;
 
-    let queue: Arc<dyn IngestionQueue> = task::spawn_blocking(build_servicebus_queue_from_env)
+    let queue: Arc<dyn IngestionQueue> = task::spawn_blocking(|| build_queue_from_env(None))
         .await
         .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> { err.into() })??;
 

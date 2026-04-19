@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible problem in a supported open-source path.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug.
+
+        Please use this template for reproducible issues in the public open-source paths documented in `README.md` and `OPEN_SOURCE_SCOPE.md`.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide exact steps, commands, URLs, and inputs.
+      placeholder: |
+        1. Clone the repo
+        2. Run ...
+        3. Open ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or branch
+      description: Which revision did you test?
+      placeholder: dev, main, or a commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, Rust version, browser, and any local services involved.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste the shortest useful evidence.
+      render: shell

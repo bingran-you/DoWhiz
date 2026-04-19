@@ -442,6 +442,9 @@ cargo test -p send_emails_module
 cargo test -p scheduler_module
 ```
 
+`cargo test -p send_emails_module` skips live Postmark coverage by default. To run those tests
+intentionally, use `POSTMARK_LIVE_TEST=1 cargo test -p send_emails_module -- --ignored --nocapture`.
+
 Module-targeted examples:
 
 ```bash

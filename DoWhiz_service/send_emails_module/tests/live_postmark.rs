@@ -32,10 +32,6 @@ fn require_live_config() -> (String, String) {
     (token, recipient)
 }
 
-fn should_run_live_tests() -> bool {
-    env::var("POSTMARK_LIVE_TEST").unwrap_or_default() == "1"
-}
-
 fn unique_subject(prefix: &str) -> String {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -175,12 +171,9 @@ fn build_html_file(dir: &Path, name: &str) -> PathBuf {
 }
 
 #[test]
+#[ignore = "requires POSTMARK_LIVE_TEST=1 and Postmark credentials"]
 fn send_email_with_attachments_and_delivery() {
     load_env_from_repo();
-    if !should_run_live_tests() {
-        eprintln!("Skipping live Postmark test. Set POSTMARK_LIVE_TEST=1 to run.");
-        return;
-    }
     let (token, recipient) = require_live_config();
     let from = env::var("POSTMARK_TEST_FROM").unwrap_or_else(|_| "oliver@dowhiz.com".to_string());
 
@@ -226,12 +219,9 @@ fn send_email_with_attachments_and_delivery() {
 }
 
 #[test]
+#[ignore = "requires POSTMARK_LIVE_TEST=1 and Postmark credentials"]
 fn send_multiple_emails_batch() {
     load_env_from_repo();
-    if !should_run_live_tests() {
-        eprintln!("Skipping live Postmark batch test. Set POSTMARK_LIVE_TEST=1 to run.");
-        return;
-    }
     let (token, recipient) = require_live_config();
     let from = env::var("POSTMARK_TEST_FROM").unwrap_or_else(|_| "oliver@dowhiz.com".to_string());
 
