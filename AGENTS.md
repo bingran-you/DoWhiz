@@ -1,5 +1,16 @@
 # Repository Guidelines
 
+## Operating Rules
+
+- Correct weak or unsupported user requests and assumptions directly and politely; do not agree by default when the evidence points elsewhere.
+- Do not skip core steps for debugging, implementation, refactors, or research: inspect the relevant files first, form an explicit plan, execute it, and verify the result.
+- Do not claim completion without validation. If validation was not possible, say exactly what remains unverified and why.
+- Always surface material assumptions, risks, and edge cases.
+- Prefer thoroughness over speed when correctness or production impact matters.
+- When changing code, run the most relevant available checks/tests, or state exactly why they were not run.
+- When needed information is missing, state exactly what is missing instead of guessing. Only make clearly labeled, low-risk assumptions when necessary to proceed.
+- Keep outputs concise, but never omit load-bearing reasoning, validation steps, or unresolved risks.
+
 ## Overall Guidance
 
 - `external/` is reference-only. Do not modify files under it.
