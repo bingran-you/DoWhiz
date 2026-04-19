@@ -502,7 +502,9 @@ mod tests {
             )
         );
         // Links must end up inside the shell, not after </html>.
-        assert!(content.contains("<p>Attachments</p></body>")
-            || content.contains("<p>Attachments</p><!--"));
+        assert!(
+            content.contains("<p>Attachments</p></body>")
+                || content.contains("<p>Attachments</p><!--")
+        );
     }
 }
