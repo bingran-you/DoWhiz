@@ -2,6 +2,51 @@
 
 DoWhiz is an open-source foundation for building AI operators that work across email, documents, chat, and repository workflows.
 
+<p align="center"><strong>Product Shorts</strong></p>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <a href="https://www.youtube.com/shorts/SI9mxW_Top0">
+        <img src="assets/readme-shorts/short-1.gif" alt="DoWhiz short 1 preview" width="170" />
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://www.youtube.com/shorts/PSsJ7WBk71w">
+        <img src="assets/readme-shorts/short-2.gif" alt="DoWhiz short 2 preview" width="170" />
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://www.youtube.com/shorts/5H9g3LOGkMc">
+        <img src="assets/readme-shorts/short-3.gif" alt="DoWhiz short 3 preview" width="170" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub><a href="https://www.youtube.com/shorts/SI9mxW_Top0">DoWhiz employee in Notion</a></sub></td>
+    <td align="center"><sub><a href="https://www.youtube.com/shorts/PSsJ7WBk71w">DoWhiz employee in Email</a></sub></td>
+    <td align="center"><sub><a href="https://www.youtube.com/shorts/5H9g3LOGkMc">DoWhiz employee in Discord</a></sub></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Tap any preview to watch the full Shorts video.</sub></p>
+
+## Product Snapshot
+
+DoWhiz is built around Oliver, a trusted AI operator that works in existing tools and brings back finished work.
+
+Current product model:
+- Oliver-first landing and onboarding for consumer adoption
+- Personal setup dashboard for connected apps, tasks, memory, and settings
+- Multi-channel execution across email, Slack/Discord, GitHub, Google Docs, and related surfaces
+- Legacy startup/workspace routes remain available for backward compatibility, but they are no longer the primary product journey
+
+Primary web routes:
+- `/`: public landing
+- `/auth/index.html`: Oliver setup dashboard
+- `/demo/workspace`: supported open-source no-cloud demo
+- `/start` and `/workspace`: legacy routes retained in the repo, but not the primary OSS onboarding path
+
 This repository contains:
 - `website/`: the public web app and local product demo routes
 - `DoWhiz_service/`: Rust services for routing, scheduling, and task execution
