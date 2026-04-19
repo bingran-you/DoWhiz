@@ -1,0 +1,84 @@
+name: Public PR
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Auth onboarding tests
+        run: npm run test:auth-onboarding
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: DoWhiz_service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            DoWhiz_service -> target
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy (send_emails_module)
+        run: cargo clippy --locked -p send_emails_module --all-targets --no-deps -- -D warnings
+
+      - name: Clippy (run_task_module public baseline)
+        run: >
+          cargo clippy --locked -p run_task_module --tests -- -D warnings
+          -A clippy::too_many_arguments
+          -A clippy::io_other_error
+          -A clippy::manual_contains
+          -A clippy::useless_vec
+          -A clippy::unnecessary_sort_by
+
+      - name: Build scheduler binaries
+        run: cargo build --locked -p scheduler_module --bin rust_service --bin inbound_gateway
+
+      - name: run_task_module tests
+        run: cargo test --locked -p run_task_module
+
+      - name: send_emails_module tests
+        run: cargo test --locked -p send_emails_module
+
+      - name: scheduler_module manifest test
+        run: cargo test --locked -p scheduler_module --test runtime_skills_manifest

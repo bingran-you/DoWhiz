@@ -3,6 +3,9 @@
 Quick E2E test for Service Account + DWD.
 Tests: create doc, add content, share with user.
 
+This is a legacy maintainer helper, not part of the supported open-source onboarding path.
+External contributors should start with README.md and docs/open-source/ instead.
+
 Usage:
     pip install google-auth google-api-python-client
     python test_google_e2e.py /path/to/service-account.json oliver@dowhiz.com ellen@dowhiz.com

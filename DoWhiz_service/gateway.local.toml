@@ -1,0 +1,21 @@
+[defaults]
+tenant_id = "local"
+employee_id = "sticky_octopus"
+
+[[routes]]
+channel = "email"
+key = "demo@local.dowhiz"
+employee_id = "sticky_octopus"
+tenant_id = "local"
+
+[[routes]]
+channel = "slack"
+key = "*"
+employee_id = "sticky_octopus"
+tenant_id = "local"
+
+[[routes]]
+channel = "discord"
+key = "*"
+employee_id = "sticky_octopus"
+tenant_id = "local"

@@ -938,7 +938,10 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
                 }
             });
             if let Err(e) = client.update_page(&workspace_id, &item.id, update_props) {
-                errors.push(format!("Failed to update Notion page with MongoDB ID: {}", e));
+                errors.push(format!(
+                    "Failed to update Notion page with MongoDB ID: {}",
+                    e
+                ));
             }
 
             created += 1;
@@ -1099,7 +1102,13 @@ fn cmd_trigger_sync(args: &[String]) -> ExitCode {
         }
     };
 
-    match trigger_tpm_sync(&account_store, &user_store, &index_store, user_id, &organization) {
+    match trigger_tpm_sync(
+        &account_store,
+        &user_store,
+        &index_store,
+        user_id,
+        &organization,
+    ) {
         Ok(result) => {
             let output = json!({
                 "success": result.success,
