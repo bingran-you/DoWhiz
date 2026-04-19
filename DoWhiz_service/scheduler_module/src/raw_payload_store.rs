@@ -13,6 +13,7 @@ use crate::env_alias::var_with_scale_oliver;
 
 const DEFAULT_BUCKET: &str = "ingestion-raw";
 const DEFAULT_PREFIX: &str = "ingestion_raw";
+const OUTBOUND_ATTACHMENT_PATH_PREFIX: &str = "outbound/attachments";
 
 static BUCKET_READY: OnceLock<()> = OnceLock::new();
 
@@ -742,6 +743,47 @@ pub fn upload_attachment_blocking(
     }
 }
 
+fn build_outbound_attachment_path(
+    attachment_id: Uuid,
+    uploaded_at: DateTime<Utc>,
+    file_name: &str,
+) -> String {
+    let date = uploaded_at.format("%Y/%m/%d");
+    let file_token = sanitize_blob_segment(file_name, "attachment");
+    format!(
+        "{}/{}/{}/{}",
+        OUTBOUND_ATTACHMENT_PATH_PREFIX, date, attachment_id, file_token
+    )
+}
+
+/// Upload an outbound email attachment that is too large to inline in the
+/// Postmark request. Uses the same storage backend as inbound raw payloads so
+/// that the container SAS token already configured for reading inbound data
+/// also signs the download link delivered to the recipient.
+///
+/// Returns a storage reference (e.g. `azure://<container>/<path>`) that can be
+/// converted to a signed URL via [`resolve_azure_blob_url`].
+pub fn upload_outbound_attachment_blocking(
+    attachment_id: Uuid,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<String, RawPayloadStoreError> {
+    if bytes.is_empty() {
+        return Err(RawPayloadStoreError::Storage(
+            "outbound attachment payload is empty".to_string(),
+        ));
+    }
+    let path = build_outbound_attachment_path(attachment_id, Utc::now(), file_name);
+    match resolve_raw_payload_backend().as_str() {
+        "azure" => upload_azure_bytes_blocking(&path, bytes),
+        "local" => upload_local_bytes(&path, bytes),
+        backend => Err(RawPayloadStoreError::Storage(format!(
+            "outbound attachment offload is not supported for RAW_PAYLOAD_STORAGE_BACKEND='{}'",
+            backend
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -999,6 +1041,32 @@ mod tests {
         let result = run_with_tokio_runtime(async { Ok::<_, RawPayloadStoreError>(123usize) })
             .expect("run_with_tokio_runtime should return value");
         assert_eq!(result, 123);
+    }
+
+    #[test]
+    fn outbound_attachment_path_includes_date_id_and_sanitized_name() {
+        let attachment_id = Uuid::parse_str("33333333-3333-3333-3333-333333333333").expect("uuid");
+        let uploaded_at = DateTime::parse_from_rfc3339("2026-04-19T16:35:18Z")
+            .expect("time")
+            .with_timezone(&Utc);
+        let path = build_outbound_attachment_path(attachment_id, uploaded_at, "第五部分_v2.pptx");
+        assert_eq!(
+            path,
+            "outbound/attachments/2026/04/19/33333333-3333-3333-3333-333333333333/v2.pptx"
+        );
+    }
+
+    #[test]
+    fn outbound_attachment_path_preserves_ascii_name() {
+        let attachment_id = Uuid::parse_str("44444444-4444-4444-4444-444444444444").expect("uuid");
+        let uploaded_at = DateTime::parse_from_rfc3339("2026-04-19T00:00:00Z")
+            .expect("time")
+            .with_timezone(&Utc);
+        let path = build_outbound_attachment_path(attachment_id, uploaded_at, "report-v3.pdf");
+        assert_eq!(
+            path,
+            "outbound/attachments/2026/04/19/44444444-4444-4444-4444-444444444444/report-v3.pdf"
+        );
     }
 
     #[test]

@@ -12,6 +12,11 @@ use super::types::{SchedulerError, SendReplyTask};
 
 /// Execute a SendReplyTask via email (Postmark).
 pub(crate) fn execute_email_send(task: &SendReplyTask) -> Result<(), SchedulerError> {
+    // Offload any attachments that would bust Postmark's 10 MiB request limit
+    // before we normalize the HTML (so the appended download-link block is
+    // wrapped by the same branded shell as the rest of the message).
+    super::email_attachments::prepare_email_attachments(&task.attachments_dir, &task.html_path);
+
     send_emails_module::normalize_email_html_file(&task.subject, &task.html_path)
         .map_err(|err| SchedulerError::TaskFailed(err.to_string()))?;
 
