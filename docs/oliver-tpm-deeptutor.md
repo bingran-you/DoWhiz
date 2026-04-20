@@ -533,6 +533,11 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 
 ## Progress Log
 
+###  4/20/26
+**Completed:**
+- ✅ Completed E2E debugging of manual trigger
+- ✅ Fixed incorrect `model` in RunTaskTask, and empty `reply_to` by reading from employee config.
+
 ### 4/17/26
 **Completed:**
 - ✅ Added `sync_user_tasks` to `setup_tpm_cron` — cron tasks now sync to `task_index` immediately so the worker can discover them (previously cron tasks were only in `tasks` collection and would never fire unless another sync happened for the user)
@@ -639,13 +644,15 @@ Cron stores **setup user's account_id** → uses **their Notion token** for sche
 
 ---
 
-## Error Debugging: Task Index Sync User ID Mismatch
+## Error Debugging
 
-### Problem Summary
+### Issue 1: Task Index Sync User ID Mismatch
+
+#### Problem Summary
 
 On 4/16/26, clicking "trigger-sync" caused a 429 rate limit error from CosmosDB due to an explosion of ~170 stale tasks being synced at once.
 
-### Root Cause: Dual Identity System Mismatch
+#### Root Cause: Dual Identity System Mismatch
 
 DoWhiz uses two identity systems:
 
@@ -664,13 +671,13 @@ The **original TPM cron** mistakenly used `account_id` (account UUID) for:
 - Index sync: `index_store.sync_user_tasks(&account_uuid, tasks)`
 - Tasks collection: `owner_scope.id = account_uuid` (extracted from path)
 
-### Why Tasks Accumulated
+#### Why Tasks Accumulated
 
 1. **setup_tpm_cron** added cron tasks to `{account_uuid}/state/tasks.db` but never synced to `task_index`
 2. Each cron fire added more tasks to SQLite (under `account_uuid` path)
 3. **trigger_tpm_sync** was first to call `index_store.sync_user_tasks(&account_uuid, tasks)`
 
-### What Happens When Index Sync Uses a "New" User ID
+#### What Happens When Index Sync Uses a "New" User ID
 
 `sync_user_tasks(user_id, tasks)` performs:
 ```rust
@@ -687,7 +694,7 @@ When `user_id = account_uuid`:
 
 Since the account_uuid path had 170+ accumulated tasks from cron runs, all were synced at once → CosmosDB 429 rate limit.
 
-### Why Frontend Showed the Tasks
+#### Why Frontend Showed the Tasks
 
 The `tasks` collection uses `owner_scope.id` derived from the path via `resolve_owner_scope()`:
 
@@ -700,7 +707,7 @@ fn resolve_owner_scope(path: &Path) -> (String, String) {
 
 Tasks written under `/tmp/users/{account_uuid}/...` had `owner_scope.id = account_uuid`. The frontend queries by `owner_scope.id`, so it found and displayed these tasks.
 
-### The Fix
+#### The Fix
 
 Updated `tpm_cron.rs` to use `UserStore` for path resolution (same as email handler):
 
@@ -720,3 +727,28 @@ This ensures:
 2. `tasks` collection's `owner_scope.id` is `email_user_id` (extracted from path)
 3. No "new" user_id accumulation → sync cleans up properly
 4. Choose email as the user_id source since the channel in RunTaskTask was set to "email".
+
+### Issue 2: Credentials not inserted correctly into ACI container
+
+```
+Oliver's response from manual trigger:
+What I checked: 
+
+I confirmed the inbound request was a manual TPM sync trigger.
+I tried to read the deeptutor task board through tpm_cli.
+I tried the Notion CLI and then a direct Notion API fallback using the token already present in the workspace.
+
+Blockers
+
+tpm_cli failed with: mongo config error: MONGODB_URI must be set
+notion_api_cli failed with: EMPLOYEE_ID environment variable is required
+The direct Notion API fallback did respond, but the linked integration did not have access to any deeptutor task database. The only visible page was the example page The Notion Basics.
+
+
+What could not be completed
+
+Sync task updates from Notion into the TPM store
+List blocked tasks from the synced deeptutor board
+Identify stale tasks with no updates in 3+ days
+Post the TPM summary to a team Discord/Slack channel
+```
