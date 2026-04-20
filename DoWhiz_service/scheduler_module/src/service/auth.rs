@@ -1030,7 +1030,12 @@ async fn try_load_unified_account_routines(
     let task_paths = load_unified_account_task_paths(state, account_id).await?;
     let mut routines = Vec::new();
     for task_path in task_paths {
-        routines = merge_routine_summaries(routines, load_routines_with_status(&task_path));
+        // Run sync MongoDB I/O on blocking thread
+        let path = task_path.clone();
+        let path_routines = task::spawn_blocking(move || load_routines_with_status(&path))
+            .await
+            .unwrap_or_else(|_| Vec::new());
+        routines = merge_routine_summaries(routines, path_routines);
     }
     Ok(partition_routines(routines))
 }
@@ -6454,13 +6459,19 @@ pub async fn get_account_tasks(
         }
     };
 
-    // Load tasks from account-level tasks.db
+    // Load tasks from account-level tasks.db (uses sync MongoDB, run on blocking thread)
     let account_tasks_db_path = users_root
         .join(account_id_for_identifiers.to_string())
         .join("state")
         .join("tasks.db");
 
-    let mut tasks = load_tasks_with_status(&account_tasks_db_path);
+    let tasks_path = account_tasks_db_path.clone();
+    let mut tasks = task::spawn_blocking(move || load_tasks_with_status(&tasks_path))
+        .await
+        .unwrap_or_else(|e| {
+            error!("spawn_blocking for load_tasks_with_status panicked: {}", e);
+            Vec::new()
+        });
 
     // For Slack, also fetch from legacy user storage (where status updates go)
     // Get linked Slack identifiers for this account
@@ -6487,9 +6498,13 @@ pub async fn get_account_tasks(
                     .await;
 
                     if let Ok(Ok(Some(user_record))) = user_result {
-                        // Load tasks from legacy user storage
+                        // Load tasks from legacy user storage (uses sync MongoDB, run on blocking thread)
                         let user_paths = user_store.user_paths(&users_root, &user_record.user_id);
-                        let legacy_tasks = load_tasks_with_status(&user_paths.tasks_db_path);
+                        let legacy_path = user_paths.tasks_db_path.clone();
+                        let legacy_tasks =
+                            task::spawn_blocking(move || load_tasks_with_status(&legacy_path))
+                                .await
+                                .unwrap_or_else(|_| Vec::new());
 
                         // Merge legacy tasks, preferring ones with execution_status set
                         // (legacy storage has the updated status for Slack tasks)
