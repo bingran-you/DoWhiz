@@ -16,12 +16,12 @@ use tokio::task;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::index_store::IndexStore;
 use crate::account_store::{
     AccountStore, AccountStoreError, AnalyticsEventInsert, ChannelInstallOnboardingState,
 };
 use crate::blob_store::BlobStore;
 use crate::google_auth::GoogleAuthConfig;
+use crate::index_store::IndexStore;
 use crate::notion_store::{NotionCredential, NotionStore};
 use crate::scheduler::{
     is_user_visible_routine_task, load_routines_with_status, load_scheduled_task,
@@ -1625,7 +1625,11 @@ pub async fn list_organizations(
                     })
                 })
                 .collect();
-            (StatusCode::OK, Json(serde_json::json!({ "organizations": items }))).into_response()
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "organizations": items })),
+            )
+                .into_response()
         }
         Ok(Err(e)) => {
             error!("Failed to list organizations: {}", e);
@@ -1665,9 +1669,10 @@ pub async fn get_organization_member_count(
             })),
         )
             .into_response(),
-        Ok(Err(AccountStoreError::NotFound)) => {
-            json_error_response(StatusCode::NOT_FOUND, &format!("Organization '{}' not found", org_name))
-        }
+        Ok(Err(AccountStoreError::NotFound)) => json_error_response(
+            StatusCode::NOT_FOUND,
+            &format!("Organization '{}' not found", org_name),
+        ),
         Ok(Err(e)) => {
             error!("Failed to get organization member count: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
@@ -1751,7 +1756,14 @@ pub async fn setup_tpm_cron(
     let cron_result = task::spawn_blocking(move || {
         let index_store = IndexStore::new("/tmp/task_index.db")
             .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
-        crate::tpm_cron::setup_tpm_cron(&store_clone, &user_store, &index_store, account_id, &org_name_for_cron, None)
+        crate::tpm_cron::setup_tpm_cron(
+            &store_clone,
+            &user_store,
+            &index_store,
+            account_id,
+            &org_name_for_cron,
+            None,
+        )
     })
     .await
     .map_err(|e| {
@@ -1846,7 +1858,13 @@ pub async fn trigger_tpm_sync_endpoint(
     let sync_result = task::spawn_blocking(move || {
         let index_store = IndexStore::new("/tmp/task_index.db")
             .map_err(|e| crate::tpm_cron::TpmCronError::IndexStoreSync(e.to_string()))?;
-        crate::tpm_cron::trigger_tpm_sync(&store_clone, &user_store, &index_store, account_id, &org_name_for_sync)
+        crate::tpm_cron::trigger_tpm_sync(
+            &store_clone,
+            &user_store,
+            &index_store,
+            account_id,
+            &org_name_for_sync,
+        )
     })
     .await
     .map_err(|e| {
@@ -6696,7 +6714,10 @@ pub fn auth_router(state: AuthState) -> Router {
         )
         .route("/auth/organization", post(create_organization))
         .route("/auth/organizations", get(list_organizations))
-        .route("/auth/organization/:name/member-count", get(get_organization_member_count))
+        .route(
+            "/auth/organization/:name/member-count",
+            get(get_organization_member_count),
+        )
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))
         .route("/auth/link", post(link_identifier))

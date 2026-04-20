@@ -1686,10 +1686,7 @@ impl AccountStore {
         let mut conn = self.conn()?;
 
         // Check if organization already exists
-        let existing = conn.query_opt(
-            "SELECT id FROM organizations WHERE name = $1",
-            &[&name],
-        )?;
+        let existing = conn.query_opt("SELECT id FROM organizations WHERE name = $1", &[&name])?;
 
         if existing.is_some() {
             return Err(AccountStoreError::AlreadyExists(format!(

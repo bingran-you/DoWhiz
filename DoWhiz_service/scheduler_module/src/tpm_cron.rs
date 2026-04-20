@@ -190,7 +190,12 @@ pub fn setup_tpm_cron(
     let workspace_dir = user_paths.workspaces_root.join("tpm_cron_placeholder");
 
     // Create all workspace directories required by RunTaskTask validation
-    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+    for subdir in [
+        "incoming_email",
+        "incoming_attachments",
+        "memory",
+        "references",
+    ] {
         std::fs::create_dir_all(workspace_dir.join(subdir))
             .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
     }
@@ -361,10 +366,17 @@ pub fn trigger_tpm_sync(
 
     // Use unique workspace per trigger to avoid blocking on concurrent executions
     let trigger_id = Uuid::new_v4();
-    let workspace_dir = user_paths.workspaces_root.join(format!("tpm_trigger_{}", trigger_id));
+    let workspace_dir = user_paths
+        .workspaces_root
+        .join(format!("tpm_trigger_{}", trigger_id));
 
     // Create all workspace directories required by RunTaskTask validation
-    for subdir in ["incoming_email", "incoming_attachments", "memory", "references"] {
+    for subdir in [
+        "incoming_email",
+        "incoming_attachments",
+        "memory",
+        "references",
+    ] {
         std::fs::create_dir_all(workspace_dir.join(subdir))
             .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
     }
@@ -451,7 +463,8 @@ pub fn trigger_tpm_sync(
     if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
         tracing::warn!(
             "failed to create account tasks dir for {}: {}",
-            user_id, err
+            user_id,
+            err
         );
     } else {
         let account_tasks_db_path = account_tasks_dir.join("tasks.db");
@@ -471,16 +484,14 @@ pub fn trigger_tpm_sync(
                     Err(err) => {
                         tracing::warn!(
                             "failed to add task to account scheduler for {}: {}",
-                            user_id, err
+                            user_id,
+                            err
                         );
                     }
                 }
             }
             Err(err) => {
-                tracing::warn!(
-                    "failed to load account scheduler for {}: {}",
-                    user_id, err
-                );
+                tracing::warn!("failed to load account scheduler for {}: {}", user_id, err);
             }
         }
     }
