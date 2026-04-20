@@ -153,6 +153,13 @@ where
     retry_mongo_operation(operation, op, |duration| thread::sleep(duration))
 }
 
+pub(crate) fn retry_mongo_read<T, F>(operation: &str, op: F) -> Result<T, mongodb::error::Error>
+where
+    F: FnMut() -> Result<T, mongodb::error::Error>,
+{
+    retry_mongo_operation(operation, op, |duration| thread::sleep(duration))
+}
+
 fn is_ignorable_index_conflict(err: &mongodb::error::Error) -> bool {
     let ErrorKind::Command(command_error) = err.kind.as_ref() else {
         return false;
@@ -354,6 +361,17 @@ fn ensure_task_executions_indexes(db: &Database) -> Result<(), mongodb::error::E
                 "owner_scope.kind": 1,
                 "owner_scope.id": 1,
                 "task_id": 1,
+                "started_at": -1
+            })
+            .build(),
+    )?;
+    ensure_index_compatible(
+        &collection,
+        IndexModel::builder()
+            .keys(doc! {
+                "owner_scope.kind": 1,
+                "status": 1,
+                "owner_scope.id": 1,
                 "started_at": -1
             })
             .build(),
