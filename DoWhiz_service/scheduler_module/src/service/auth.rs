@@ -1074,18 +1074,20 @@ async fn try_load_unified_account_routines(
     for task_path in task_paths {
         // Run sync MongoDB I/O on blocking thread to avoid blocking async runtime
         let path = task_path.clone();
-        let loaded = task::spawn_blocking(move || {
-            try_load_routines_with_status(&path)
-        })
-        .await
-        .map_err(|e| {
-            error!("spawn_blocking panicked loading routines: {}", e);
-            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
-        })?
-        .map_err(|err| {
-            error!("Failed to load account-scoped routines from {}: {}", task_path.display(), err);
-            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
-        })?;
+        let loaded = task::spawn_blocking(move || try_load_routines_with_status(&path))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked loading routines: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+            })?
+            .map_err(|err| {
+                error!(
+                    "Failed to load account-scoped routines from {}: {}",
+                    task_path.display(),
+                    err
+                );
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+            })?;
         routines = merge_routine_summaries(routines, loaded);
     }
     Ok(partition_routines(routines))
