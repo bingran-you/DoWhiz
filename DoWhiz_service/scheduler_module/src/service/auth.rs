@@ -1072,7 +1072,22 @@ async fn try_load_unified_account_routines(
     let task_paths = load_unified_account_task_paths(state, account_id).await?;
     let mut routines = Vec::new();
     for task_path in task_paths {
-        let loaded = load_routine_summaries_or_response(&task_path, "account-scoped")?;
+        // Run sync MongoDB I/O on blocking thread to avoid blocking async runtime
+        let path = task_path.clone();
+        let loaded = task::spawn_blocking(move || try_load_routines_with_status(&path))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked loading routines: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+            })?
+            .map_err(|err| {
+                error!(
+                    "Failed to load account-scoped routines from {}: {}",
+                    task_path.display(),
+                    err
+                );
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+            })?;
         routines = merge_routine_summaries(routines, loaded);
     }
     Ok(partition_routines(routines))
@@ -6467,17 +6482,27 @@ pub async fn get_account_tasks(
         Err(response) => return response,
     };
 
-    let mut tasks = Vec::new();
-    for task_path in task_paths {
-        let loaded = match load_task_statuses_or_response(&task_path, "account-scoped") {
-            Ok(tasks) => tasks,
-            Err(response) => return response,
-        };
-        tasks = merge_task_summaries(tasks, loaded);
-    }
-    sort_task_summaries(&mut tasks);
+    // Clone paths for the blocking closure
+    let paths_for_blocking = task_paths.clone();
+    let load_result = task::spawn_blocking(move || {
+        let mut tasks = Vec::new();
+        for task_path in paths_for_blocking {
+            let loaded = load_task_statuses_or_response(&task_path, "account-scoped")?;
+            tasks = merge_task_summaries(tasks, loaded);
+        }
+        sort_task_summaries(&mut tasks);
+        Ok::<_, Response>(tasks)
+    })
+    .await;
 
-    (StatusCode::OK, Json(TasksResponse { tasks })).into_response()
+    match load_result {
+        Ok(Ok(tasks)) => (StatusCode::OK, Json(TasksResponse { tasks })).into_response(),
+        Ok(Err(response)) => response,
+        Err(err) => {
+            error!("spawn_blocking panicked loading account tasks: {}", err);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load tasks")
+        }
+    }
 }
 
 /// GET /api/account/tasks/:task_id
