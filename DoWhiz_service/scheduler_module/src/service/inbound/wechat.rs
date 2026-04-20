@@ -2,6 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::account_store::AccountStore;
 use crate::channel::Channel;
@@ -128,7 +129,25 @@ pub(crate) fn process_wechat_event(
             err
         );
     }
-    let task_id = scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?;
+    let task_id = if let Some(stable_task_id) = wechat_message_task_id(message) {
+        // This stable task id is only for full RunTask duplicate-delivery
+        // suppression. Quick responses are deduped separately via
+        // service/inbound/quick_responses.rs claim files.
+        let inserted = scheduler.add_one_shot_in_if_absent_with_id(
+            stable_task_id,
+            Duration::from_secs(0),
+            TaskKind::RunTask(run_task),
+        )?;
+        if !inserted {
+            info!(
+                "skipping duplicate wechat full-task enqueue user_id={} task_id={} message_id={:?}",
+                user.user_id, stable_task_id, message.message_id
+            );
+        }
+        stable_task_id
+    } else {
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))?
+    };
     index_store.sync_user_tasks(&user.user_id, scheduler.tasks())?;
 
     info!(
@@ -156,14 +175,20 @@ pub(crate) fn process_wechat_event(
             match Scheduler::load(&account_tasks_db_path, ModuleExecutor::default()) {
                 Ok(mut account_scheduler) => {
                     // Use the same task_id so we can update status at completion
-                    match account_scheduler.add_one_shot_in_with_id(
+                    match account_scheduler.add_one_shot_in_if_absent_with_id(
                         task_id,
                         Duration::from_secs(0),
                         TaskKind::RunTask(run_task_for_account),
                     ) {
-                        Ok(()) => {
+                        Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={}",
+                                account.id, task_id
+                            );
+                        }
+                        Ok(false) => {
+                            info!(
+                                "skipping duplicate wechat account-level enqueue account={} task_id={}",
                                 account.id, task_id
                             );
                         }
@@ -186,6 +211,18 @@ pub(crate) fn process_wechat_event(
     }
 
     Ok(())
+}
+
+fn wechat_message_task_id(message: &crate::channel::InboundMessage) -> Option<Uuid> {
+    let corp_id = message.metadata.wechat_corp_id.as_deref()?.trim();
+    let message_id = message.message_id.as_deref()?.trim();
+    let thread_id = message.thread_id.trim();
+    if corp_id.is_empty() || message_id.is_empty() || thread_id.is_empty() {
+        return None;
+    }
+
+    let dedupe_key = format!("wechat:{corp_id}:{thread_id}:{message_id}");
+    Some(Uuid::from_bytes(md5::compute(dedupe_key.as_bytes()).0))
 }
 
 /// Append a WeChat message to the workspace inbox.
@@ -215,4 +252,56 @@ pub(super) fn append_wechat_message(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channel::{Channel, ChannelMetadata, InboundMessage};
+
+    fn build_message(message_id: &str) -> InboundMessage {
+        InboundMessage {
+            channel: Channel::WeChat,
+            sender: "wechat-user".to_string(),
+            sender_name: None,
+            recipient: "corp-1".to_string(),
+            subject: None,
+            text_body: Some("hello".to_string()),
+            html_body: None,
+            thread_id: "wechat:corp-1:wechat-user".to_string(),
+            message_id: Some(message_id.to_string()),
+            attachments: Vec::new(),
+            reply_to: vec!["wechat-user".to_string()],
+            raw_payload: Vec::new(),
+            metadata: ChannelMetadata {
+                wechat_corp_id: Some("corp-1".to_string()),
+                wechat_user_id: Some("wechat-user".to_string()),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn wechat_message_task_id_is_stable_for_duplicate_delivery() {
+        let mut first = build_message("msg-1");
+        first.raw_payload = br#"<xml><MsgId>msg-1</MsgId></xml>"#.to_vec();
+        let mut duplicate = build_message("msg-1");
+        duplicate.raw_payload = br#"<xml><MsgId>msg-1</MsgId><Retry>1</Retry></xml>"#.to_vec();
+
+        assert_eq!(
+            wechat_message_task_id(&first),
+            wechat_message_task_id(&duplicate)
+        );
+    }
+
+    #[test]
+    fn wechat_message_task_id_changes_for_distinct_messages() {
+        let first = build_message("msg-1");
+        let second = build_message("msg-2");
+
+        assert_ne!(
+            wechat_message_task_id(&first),
+            wechat_message_task_id(&second)
+        );
+    }
 }

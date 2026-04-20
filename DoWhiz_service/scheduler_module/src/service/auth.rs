@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use base64::Engine;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -24,10 +24,16 @@ use crate::google_auth::GoogleAuthConfig;
 use crate::index_store::IndexStore;
 use crate::notion_store::{NotionCredential, NotionStore};
 use crate::scheduler::{
-    is_user_visible_routine_task, load_routines_with_status, load_scheduled_task,
-    persist_scheduled_task, prepare_task_for_resume, RoutineSummary, ScheduledTask,
+    append_task_execution_event, insert_scheduled_task, is_user_visible_routine_task,
+    load_scheduled_task, persist_scheduled_task, prepare_task_for_resume,
+    try_load_routines_with_status, try_load_task_executions, try_load_task_with_status,
+    try_load_tasks_with_status, RoutineSummary, Schedule, ScheduledTask, TaskExecutionSummary,
+    TaskKind,
 };
 use crate::slack_store::{SlackInstallation, SlackStore};
+use crate::thread_state::{
+    default_thread_state_path, load_thread_state, write_thread_state, ThreadState,
+};
 use crate::user_store::UserStore;
 use crate::{load_tasks_with_status, TaskStatusSummary};
 
@@ -805,69 +811,105 @@ async fn try_load_unified_account_tasks(
     state: &AuthState,
     account_id: Uuid,
 ) -> Vec<TaskStatusSummary> {
-    let (Some(user_store), Some(users_root)) = (&state.user_store, &state.users_root) else {
-        return Vec::new();
+    let task_paths = match load_unified_account_task_paths(state, account_id).await {
+        Ok(paths) => paths,
+        Err(_) => return Vec::new(),
     };
 
-    let account_tasks_db_path = users_root
-        .join(account_id.to_string())
-        .join("state")
-        .join("tasks.db");
+    let mut tasks = Vec::new();
+    for task_path in task_paths {
+        tasks = merge_task_summaries(tasks, load_tasks_with_status(&task_path));
+    }
+    sort_task_summaries(&mut tasks);
+    tasks
+}
 
-    let mut tasks = load_tasks_with_status(&account_tasks_db_path);
+fn sort_task_summaries(tasks: &mut [TaskStatusSummary]) {
+    tasks.sort_by(|left, right| {
+        parse_rfc3339_utc(Some(right.created_at.as_str()))
+            .cmp(&parse_rfc3339_utc(Some(left.created_at.as_str())))
+            .then_with(|| task_latest_activity_at(right).cmp(&task_latest_activity_at(left)))
+    });
+}
 
-    let store_for_identifiers = state.account_store.clone();
-    let identifiers_result =
-        task::spawn_blocking(move || store_for_identifiers.list_identifiers(account_id)).await;
-
-    if let Ok(Ok(identifiers)) = identifiers_result {
-        let slack_identifiers: Vec<_> = identifiers
-            .iter()
-            .filter(|id| id.identifier_type == "slack" && id.verified)
-            .collect();
-
-        for slack_identifier in slack_identifiers {
-            let user_store_clone = user_store.clone();
-            let identifier = slack_identifier.identifier.clone();
-            let user_result = task::spawn_blocking(move || {
-                user_store_clone.get_user_by_identifier("slack", &identifier)
-            })
-            .await;
-
-            if let Ok(Ok(Some(user_record))) = user_result {
-                let user_paths = user_store.user_paths(users_root, &user_record.user_id);
-                let legacy_tasks = load_tasks_with_status(&user_paths.tasks_db_path);
-
-                for legacy_task in legacy_tasks {
-                    if let Some(existing_idx) =
-                        tasks.iter().position(|task| task.id == legacy_task.id)
-                    {
-                        if legacy_task.execution_status.is_some()
-                            && tasks[existing_idx].execution_status.is_none()
-                        {
-                            tasks[existing_idx] = legacy_task;
-                        } else if legacy_task.execution_status.is_some() {
-                            let legacy_status =
-                                legacy_task.execution_status.as_deref().unwrap_or("");
-                            let existing_status = tasks[existing_idx]
-                                .execution_status
-                                .as_deref()
-                                .unwrap_or("");
-                            if (existing_status == "pending" || existing_status == "running")
-                                && (legacy_status == "success" || legacy_status == "failed")
-                            {
-                                tasks[existing_idx] = legacy_task;
-                            }
-                        }
-                    } else {
-                        tasks.push(legacy_task);
-                    }
-                }
+fn merge_task_summaries(
+    mut base: Vec<TaskStatusSummary>,
+    incoming: Vec<TaskStatusSummary>,
+) -> Vec<TaskStatusSummary> {
+    for candidate in incoming {
+        if let Some(existing_idx) = base.iter().position(|task| task.id == candidate.id) {
+            if should_prefer_task_summary(&candidate, &base[existing_idx]) {
+                base[existing_idx] = candidate;
             }
+        } else {
+            base.push(candidate);
         }
     }
+    base
+}
 
-    tasks
+fn should_prefer_task_summary(candidate: &TaskStatusSummary, existing: &TaskStatusSummary) -> bool {
+    let candidate_rank = task_status_rank(candidate.status.as_str());
+    let existing_rank = task_status_rank(existing.status.as_str());
+    if candidate_rank != existing_rank {
+        return candidate_rank > existing_rank;
+    }
+
+    let candidate_error = candidate.error_message.as_deref().unwrap_or("").trim();
+    let existing_error = existing.error_message.as_deref().unwrap_or("").trim();
+    if !candidate_error.is_empty() && existing_error.is_empty() {
+        return true;
+    }
+
+    task_latest_activity_at(candidate) > task_latest_activity_at(existing)
+}
+
+fn task_status_rank(status: &str) -> i32 {
+    match status {
+        "failed" | "success" | "cancelled" | "expired" | "superseded" => 5,
+        "cancellation_requested" => 4,
+        "running" | "retry_scheduled" => 3,
+        "queued" => 2,
+        "scheduled" | "paused" => 1,
+        _ => 0,
+    }
+}
+
+fn task_latest_activity_at(task: &TaskStatusSummary) -> Option<DateTime<Utc>> {
+    parse_rfc3339_utc(task.status_changed_at.as_deref())
+        .or_else(|| parse_rfc3339_utc(task.execution_started_at.as_deref()))
+        .or_else(|| parse_rfc3339_utc(task.last_run.as_deref()))
+        .or_else(|| parse_rfc3339_utc(task.run_at.as_deref()))
+        .or_else(|| parse_rfc3339_utc(task.next_run.as_deref()))
+        .or_else(|| parse_rfc3339_utc(Some(task.created_at.as_str())))
+}
+
+fn load_task_statuses_or_response(
+    tasks_db_path: &std::path::Path,
+    scope_label: &str,
+) -> Result<Vec<TaskStatusSummary>, Response> {
+    try_load_tasks_with_status(tasks_db_path).map_err(|err| {
+        error!(
+            "Failed to load {scope_label} tasks from {}: {}",
+            tasks_db_path.display(),
+            err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load tasks")
+    })
+}
+
+fn load_routine_summaries_or_response(
+    tasks_db_path: &std::path::Path,
+    scope_label: &str,
+) -> Result<Vec<RoutineSummary>, Response> {
+    try_load_routines_with_status(tasks_db_path).map_err(|err| {
+        error!(
+            "Failed to load {scope_label} routines from {}: {}",
+            tasks_db_path.display(),
+            err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+    })
 }
 
 async fn load_authenticated_account_from_headers(
@@ -1030,12 +1072,21 @@ async fn try_load_unified_account_routines(
     let task_paths = load_unified_account_task_paths(state, account_id).await?;
     let mut routines = Vec::new();
     for task_path in task_paths {
-        // Run sync MongoDB I/O on blocking thread
+        // Run sync MongoDB I/O on blocking thread to avoid blocking async runtime
         let path = task_path.clone();
-        let path_routines = task::spawn_blocking(move || load_routines_with_status(&path))
-            .await
-            .unwrap_or_else(|_| Vec::new());
-        routines = merge_routine_summaries(routines, path_routines);
+        let loaded = task::spawn_blocking(move || {
+            try_load_routines_with_status(&path)
+        })
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked loading routines: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+        })?
+        .map_err(|err| {
+            error!("Failed to load account-scoped routines from {}: {}", task_path.display(), err);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load routines")
+        })?;
+        routines = merge_routine_summaries(routines, loaded);
     }
     Ok(partition_routines(routines))
 }
@@ -6283,6 +6334,33 @@ struct RoutineMutationResponse {
     task_id: String,
 }
 
+#[derive(Debug, Serialize)]
+struct TaskDetailResponse {
+    task: TaskStatusSummary,
+    executions: Vec<TaskExecutionSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct TaskMutationResponse {
+    ok: bool,
+    task_id: String,
+    resubmitted_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct TaskStorageMatch {
+    path: PathBuf,
+    task: ScheduledTask,
+    summary: TaskStatusSummary,
+    executions: Vec<TaskExecutionSummary>,
+}
+
+#[derive(Debug, Clone)]
+struct TaskMutationOutcome {
+    task_id: String,
+    resubmitted_task_id: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TasksQuery {
     pub channel: Option<String>,
@@ -6375,7 +6453,10 @@ pub async fn get_tasks(
 
     // Load tasks for this user
     let paths = user_store.user_paths(&users_root, &user_record.user_id);
-    let tasks = load_tasks_with_status(&paths.tasks_db_path);
+    let tasks = match load_task_statuses_or_response(&paths.tasks_db_path, "channel-scoped") {
+        Ok(tasks) => tasks,
+        Err(response) => return response,
+    };
 
     (StatusCode::OK, Json(TasksResponse { tasks })).into_response()
 }
@@ -6389,162 +6470,476 @@ pub async fn get_account_tasks(
     State(state): State<AuthState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    // Validate auth token
-    let token = match extract_bearer_token(&headers) {
-        Some(t) => t,
-        None => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(serde_json::json!({
-                    "error": "Missing Authorization header"
-                })),
-            )
-                .into_response();
-        }
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
     };
 
-    let auth_user_id = match validate_supabase_token(&state.supabase_url, &token).await {
-        Ok(user) => user.id,
-        Err((status, msg)) => {
-            return (status, Json(serde_json::json!({ "error": msg }))).into_response();
-        }
+    let task_paths = match load_unified_account_task_paths(&state, account.id).await {
+        Ok(paths) => paths,
+        Err(response) => return response,
     };
 
-    // Check if users_root is configured
-    let users_root = match &state.users_root {
-        Some(root) => root.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({
-                    "error": "Task storage not configured"
-                })),
-            )
-                .into_response();
+    // Clone paths for the blocking closure
+    let paths_for_blocking = task_paths.clone();
+    let load_result = task::spawn_blocking(move || {
+        let mut tasks = Vec::new();
+        for task_path in paths_for_blocking {
+            let loaded = load_task_statuses_or_response(&task_path, "account-scoped")?;
+            tasks = merge_task_summaries(tasks, loaded);
         }
+        sort_task_summaries(&mut tasks);
+        Ok::<_, Response>(tasks)
+    })
+    .await;
+
+    match load_result {
+        Ok(Ok(tasks)) => (StatusCode::OK, Json(TasksResponse { tasks })).into_response(),
+        Ok(Err(response)) => response,
+        Err(err) => {
+            error!("spawn_blocking panicked loading account tasks: {}", err);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load tasks")
+        }
+    }
+}
+
+/// GET /api/account/tasks/:task_id
+/// Returns the current task summary together with execution history for one task.
+pub async fn get_account_task_detail(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
     };
 
-    // Get account by auth_user_id
-    let account_id_for_identifiers = {
-        let store_clone = state.account_store.clone();
-        let account_result =
-            task::spawn_blocking(move || store_clone.get_account_by_auth_user(auth_user_id))
-                .await
-                .map_err(|e| {
-                    error!("spawn_blocking panicked: {}", e);
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(serde_json::json!({ "error": "Internal error" })),
-                    )
-                });
+    let task_paths = match load_unified_account_task_paths(&state, account.id).await {
+        Ok(paths) => paths,
+        Err(response) => return response,
+    };
+    let task_id_for_log = task_id.clone();
 
-        match account_result {
-            Ok(Ok(Some(acc))) => acc.id,
-            Ok(Ok(None)) => {
-                return (
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({ "error": "Account not found" })),
-                )
-                    .into_response();
-            }
-            Ok(Err(e)) => {
-                error!("Failed to get account: {}", e);
-                return (
+    let detail_result =
+        task::spawn_blocking(move || load_account_task_detail_blocking(&task_paths, &task_id))
+            .await;
+
+    match detail_result {
+        Ok(Ok(Some(detail))) => (StatusCode::OK, Json(detail)).into_response(),
+        Ok(Ok(None)) => json_error_response(StatusCode::NOT_FOUND, "Task not found"),
+        Ok(Err(response)) => response,
+        Err(err) => {
+            error!(
+                "spawn_blocking panicked while loading task detail {}: {}",
+                task_id_for_log, err
+            );
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        }
+    }
+}
+
+/// POST /api/account/tasks/:task_id/cancel
+pub async fn cancel_account_task(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    mutate_account_task_endpoint(state, headers, task_id, TaskMutationAction::Cancel).await
+}
+
+/// POST /api/account/tasks/:task_id/resubmit
+pub async fn resubmit_account_task(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> impl IntoResponse {
+    mutate_account_task_endpoint(state, headers, task_id, TaskMutationAction::Resubmit).await
+}
+
+fn load_account_task_detail_blocking(
+    task_paths: &[PathBuf],
+    task_id: &str,
+) -> Result<Option<TaskDetailResponse>, Response> {
+    let matches = load_task_storage_matches_blocking(task_paths, task_id)?;
+    let Some(selected_idx) = preferred_task_match_index(&matches) else {
+        return Ok(None);
+    };
+    let executions = merge_task_execution_summaries(&matches);
+    let selected = matches[selected_idx].clone();
+    Ok(Some(TaskDetailResponse {
+        task: selected.summary,
+        executions,
+    }))
+}
+
+fn load_task_storage_matches_blocking(
+    task_paths: &[PathBuf],
+    task_id: &str,
+) -> Result<Vec<TaskStorageMatch>, Response> {
+    let mut matches = Vec::new();
+    for task_path in task_paths {
+        let task = load_scheduled_task(task_path, task_id).map_err(|err| {
+            error!(
+                "failed to load task {} from {}: {}",
+                task_id,
+                task_path.display(),
+                err
+            );
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to load task")
+        })?;
+        let Some(task) = task else {
+            continue;
+        };
+
+        let summary = try_load_task_with_status(task_path, task_id)
+            .map_err(|err| {
+                error!(
+                    "failed to load task status {} from {}: {}",
+                    task_id,
+                    task_path.display(),
+                    err
+                );
+                json_error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": "Failed to get account" })),
+                    "Failed to load task status",
                 )
-                    .into_response();
-            }
-            Err(resp) => return resp.into_response(),
-        }
-    };
+            })?
+            .ok_or_else(|| {
+                json_error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to load task status",
+                )
+            })?;
 
-    // Load tasks from account-level tasks.db (uses sync MongoDB, run on blocking thread)
-    let account_tasks_db_path = users_root
-        .join(account_id_for_identifiers.to_string())
-        .join("state")
-        .join("tasks.db");
+        let executions = try_load_task_executions(task_path, task_id).map_err(|err| {
+            error!(
+                "failed to load task executions {} from {}: {}",
+                task_id,
+                task_path.display(),
+                err
+            );
+            json_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load task history",
+            )
+        })?;
 
-    let tasks_path = account_tasks_db_path.clone();
-    let mut tasks = task::spawn_blocking(move || load_tasks_with_status(&tasks_path))
-        .await
-        .unwrap_or_else(|e| {
-            error!("spawn_blocking for load_tasks_with_status panicked: {}", e);
-            Vec::new()
+        matches.push(TaskStorageMatch {
+            path: task_path.clone(),
+            task,
+            summary,
+            executions,
         });
+    }
+    Ok(matches)
+}
 
-    // For Slack, also fetch from legacy user storage (where status updates go)
-    // Get linked Slack identifiers for this account
-    let account_id = account_id_for_identifiers;
-    let store_for_identifiers = state.account_store.clone();
-    let identifiers_result =
-        task::spawn_blocking(move || store_for_identifiers.list_identifiers(account_id)).await;
+fn preferred_task_match_index(matches: &[TaskStorageMatch]) -> Option<usize> {
+    let mut best_idx = 0usize;
+    let mut found = false;
+    for (idx, candidate) in matches.iter().enumerate() {
+        if !found {
+            best_idx = idx;
+            found = true;
+            continue;
+        }
+        if should_prefer_task_summary(&candidate.summary, &matches[best_idx].summary) {
+            best_idx = idx;
+        }
+    }
+    found.then_some(best_idx)
+}
 
-    if let Ok(Ok(identifiers)) = identifiers_result {
-        let slack_identifiers: Vec<_> = identifiers
-            .iter()
-            .filter(|id| id.identifier_type == "slack" && id.verified)
-            .collect();
+fn merge_task_execution_summaries(matches: &[TaskStorageMatch]) -> Vec<TaskExecutionSummary> {
+    let mut seen = HashSet::new();
+    let mut executions = Vec::new();
 
-        if !slack_identifiers.is_empty() {
-            if let Some(user_store) = &state.user_store {
-                for slack_id in slack_identifiers {
-                    // Look up the legacy user for this Slack identifier
-                    let user_store_clone = user_store.clone();
-                    let identifier = slack_id.identifier.clone();
-                    let user_result = task::spawn_blocking(move || {
-                        user_store_clone.get_user_by_identifier("slack", &identifier)
-                    })
-                    .await;
-
-                    if let Ok(Ok(Some(user_record))) = user_result {
-                        // Load tasks from legacy user storage (uses sync MongoDB, run on blocking thread)
-                        let user_paths = user_store.user_paths(&users_root, &user_record.user_id);
-                        let legacy_path = user_paths.tasks_db_path.clone();
-                        let legacy_tasks =
-                            task::spawn_blocking(move || load_tasks_with_status(&legacy_path))
-                                .await
-                                .unwrap_or_else(|_| Vec::new());
-
-                        // Merge legacy tasks, preferring ones with execution_status set
-                        // (legacy storage has the updated status for Slack tasks)
-                        for legacy_task in legacy_tasks {
-                            if let Some(existing_idx) =
-                                tasks.iter().position(|t| t.id == legacy_task.id)
-                            {
-                                // If legacy task has status and existing doesn't, use legacy
-                                if legacy_task.execution_status.is_some()
-                                    && tasks[existing_idx].execution_status.is_none()
-                                {
-                                    tasks[existing_idx] = legacy_task;
-                                }
-                                // If both have status, prefer the one that's not "pending"/"running"
-                                else if legacy_task.execution_status.is_some() {
-                                    let legacy_status =
-                                        legacy_task.execution_status.as_deref().unwrap_or("");
-                                    let existing_status = tasks[existing_idx]
-                                        .execution_status
-                                        .as_deref()
-                                        .unwrap_or("");
-                                    if (existing_status == "pending"
-                                        || existing_status == "running")
-                                        && (legacy_status == "success" || legacy_status == "failed")
-                                    {
-                                        tasks[existing_idx] = legacy_task;
-                                    }
-                                }
-                            } else {
-                                // Task only exists in legacy storage, add it
-                                tasks.push(legacy_task);
-                            }
-                        }
-                    }
-                }
+    for task_match in matches {
+        for execution in &task_match.executions {
+            let dedupe_key = format!(
+                "{}|{}|{}|{}|{}",
+                execution.status,
+                execution.started_at,
+                execution.finished_at.as_deref().unwrap_or(""),
+                execution.error_message.as_deref().unwrap_or(""),
+                execution.duration_seconds.unwrap_or_default()
+            );
+            if seen.insert(dedupe_key) {
+                executions.push(execution.clone());
             }
         }
     }
 
-    (StatusCode::OK, Json(TasksResponse { tasks })).into_response()
+    executions.sort_by(|left, right| {
+        parse_rfc3339_utc(Some(right.started_at.as_str()))
+            .cmp(&parse_rfc3339_utc(Some(left.started_at.as_str())))
+            .then_with(|| right.execution_id.cmp(&left.execution_id))
+    });
+    executions
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TaskMutationAction {
+    Cancel,
+    Resubmit,
+}
+
+async fn mutate_account_task_endpoint(
+    state: AuthState,
+    headers: HeaderMap,
+    task_id: String,
+    action: TaskMutationAction,
+) -> Response {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(account) => account,
+        Err(response) => return response,
+    };
+
+    match mutate_unified_account_task(&state, account.id, &task_id, action).await {
+        Ok(Some(outcome)) => (
+            StatusCode::OK,
+            Json(TaskMutationResponse {
+                ok: true,
+                task_id: outcome.task_id,
+                resubmitted_task_id: outcome.resubmitted_task_id,
+            }),
+        )
+            .into_response(),
+        Ok(None) => json_error_response(StatusCode::NOT_FOUND, "Task not found"),
+        Err(response) => response,
+    }
+}
+
+async fn mutate_unified_account_task(
+    state: &AuthState,
+    account_id: Uuid,
+    task_id: &str,
+    action: TaskMutationAction,
+) -> Result<Option<TaskMutationOutcome>, Response> {
+    let task_paths = load_unified_account_task_paths(state, account_id).await?;
+    let task_id = task_id.to_string();
+    let action_name = match action {
+        TaskMutationAction::Cancel => "cancel",
+        TaskMutationAction::Resubmit => "resubmit",
+    }
+    .to_string();
+    let task_id_for_log = task_id.clone();
+    let action_name_for_log = action_name.clone();
+
+    task::spawn_blocking(move || {
+        mutate_unified_account_task_blocking(&task_paths, &task_id, action, &action_name)
+    })
+    .await
+    .map_err(|err| {
+        error!(
+            "spawn_blocking panicked while applying task action {} to {}: {}",
+            action_name_for_log, task_id_for_log, err
+        );
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    })?
+}
+
+fn mutate_unified_account_task_blocking(
+    task_paths: &[PathBuf],
+    task_id: &str,
+    action: TaskMutationAction,
+    action_name: &str,
+) -> Result<Option<TaskMutationOutcome>, Response> {
+    let matches = load_task_storage_matches_blocking(task_paths, task_id)?;
+    let Some(selected_idx) = preferred_task_match_index(&matches) else {
+        return Ok(None);
+    };
+    let selected = matches[selected_idx].clone();
+
+    match action {
+        TaskMutationAction::Cancel => {
+            cancel_task_matches(&matches, &selected, action_name)?;
+            Ok(Some(TaskMutationOutcome {
+                task_id: task_id.to_string(),
+                resubmitted_task_id: None,
+            }))
+        }
+        TaskMutationAction::Resubmit => {
+            if !selected.summary.can_resubmit {
+                return Err(json_error_response(
+                    StatusCode::CONFLICT,
+                    "Only failed or expired workflow tasks can be resubmitted safely.",
+                ));
+            }
+            let resubmitted_task = build_resubmitted_task(&selected.task, Utc::now())
+                .map_err(|message| json_error_response(StatusCode::CONFLICT, &message))?;
+            insert_scheduled_task(&selected.path, &resubmitted_task).map_err(|err| {
+                error!(
+                    "failed to insert resubmitted task {} into {}: {}",
+                    resubmitted_task.id,
+                    selected.path.display(),
+                    err
+                );
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to resubmit task")
+            })?;
+            Ok(Some(TaskMutationOutcome {
+                task_id: task_id.to_string(),
+                resubmitted_task_id: Some(resubmitted_task.id.to_string()),
+            }))
+        }
+    }
+}
+
+fn cancel_task_matches(
+    matches: &[TaskStorageMatch],
+    selected: &TaskStorageMatch,
+    action_name: &str,
+) -> Result<(), Response> {
+    if !selected.summary.can_cancel {
+        return Err(json_error_response(
+            StatusCode::CONFLICT,
+            "Task cannot be cancelled in its current state.",
+        ));
+    }
+
+    if selected.summary.status == "running" {
+        let TaskKind::RunTask(run_task) = &selected.task.kind else {
+            return Err(json_error_response(
+                StatusCode::CONFLICT,
+                "Only running workflow tasks support cancellation right now.",
+            ));
+        };
+        request_running_task_cancellation(run_task)
+            .map_err(|message| json_error_response(StatusCode::CONFLICT, &message))?;
+    }
+
+    let cancelled_at = Utc::now();
+    for task_match in matches {
+        let mut updated_task = task_match.task.clone();
+        updated_task.enabled = false;
+        persist_scheduled_task(&task_match.path, &updated_task).map_err(|err| {
+            error!(
+                "failed to persist task {} to {} during {}: {}",
+                updated_task.id,
+                task_match.path.display(),
+                action_name,
+                err
+            );
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update task")
+        })?;
+
+        if selected.summary.status != "running" {
+            append_task_execution_event(
+                &task_match.path,
+                &updated_task.id.to_string(),
+                cancelled_at,
+                Some(cancelled_at),
+                "cancelled",
+                Some("Cancelled from the dashboard."),
+            )
+            .map_err(|err| {
+                error!(
+                    "failed to append cancelled event for task {} in {}: {}",
+                    updated_task.id,
+                    task_match.path.display(),
+                    err
+                );
+                json_error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to record task cancellation",
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn request_running_task_cancellation(task: &crate::RunTaskTask) -> Result<(), String> {
+    let state_path = task
+        .thread_state_path
+        .clone()
+        .unwrap_or_else(|| default_thread_state_path(&task.workspace_dir));
+    let expected_epoch = task.thread_epoch.unwrap_or(0);
+    let now = Utc::now().to_rfc3339();
+
+    if let Some(mut state) = load_thread_state(&state_path) {
+        if state.epoch <= expected_epoch {
+            let next_epoch = state.epoch.max(expected_epoch).saturating_add(1).max(1);
+            state.epoch = next_epoch;
+            state.last_email_seq = state.last_email_seq.max(next_epoch);
+            state.updated_at = now;
+            write_thread_state(&state_path, &state).map_err(|err| {
+                format!(
+                    "Failed to write thread state for cancellation at {}: {}",
+                    state_path.display(),
+                    err
+                )
+            })?;
+        }
+        return Ok(());
+    }
+
+    let Some(thread_id) = task
+        .thread_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(
+            "Task is already running, but its thread state is unavailable for cancellation."
+                .to_string(),
+        );
+    };
+
+    let next_epoch = expected_epoch.saturating_add(1).max(1);
+    let state = ThreadState {
+        thread_id: thread_id.to_string(),
+        epoch: next_epoch,
+        last_email_seq: next_epoch,
+        last_message_id: None,
+        updated_at: now,
+    };
+    write_thread_state(&state_path, &state).map_err(|err| {
+        format!(
+            "Failed to create thread state for cancellation at {}: {}",
+            state_path.display(),
+            err
+        )
+    })
+}
+
+fn build_resubmitted_task(
+    task: &ScheduledTask,
+    now: DateTime<Utc>,
+) -> Result<ScheduledTask, String> {
+    let TaskKind::RunTask(run_task) = &task.kind else {
+        return Err("Only workflow tasks can be resubmitted safely.".to_string());
+    };
+    if !matches!(&task.schedule, Schedule::OneShot { .. }) {
+        return Err("Recurring tasks should be managed from the routines dashboard.".to_string());
+    }
+
+    if let Some(expected_epoch) = run_task.thread_epoch {
+        let state_path = run_task
+            .thread_state_path
+            .clone()
+            .unwrap_or_else(|| default_thread_state_path(&run_task.workspace_dir));
+        if let Some(state) = load_thread_state(&state_path) {
+            if state.epoch > expected_epoch {
+                return Err(
+                    "This task belongs to an older thread state. Send a fresh message instead of resubmitting it."
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    let mut resubmitted = task.clone();
+    resubmitted.id = Uuid::new_v4();
+    resubmitted.enabled = true;
+    resubmitted.created_at = now;
+    resubmitted.last_run = None;
+    resubmitted.schedule = Schedule::OneShot {
+        run_at: now + ChronoDuration::seconds(1),
+    };
+    Ok(resubmitted)
 }
 
 /// GET /api/account/routines
@@ -6781,6 +7176,15 @@ pub fn auth_router(state: AuthState) -> Router {
         )
         .route("/api/tasks", get(get_tasks))
         .route("/api/account/tasks", get(get_account_tasks))
+        .route("/api/account/tasks/:task_id", get(get_account_task_detail))
+        .route(
+            "/api/account/tasks/:task_id/cancel",
+            post(cancel_account_task),
+        )
+        .route(
+            "/api/account/tasks/:task_id/resubmit",
+            post(resubmit_account_task),
+        )
         .route("/api/account/routines", get(get_account_routines))
         .route(
             "/api/account/routines/:task_id/pause",
@@ -6806,8 +7210,10 @@ mod tests {
     use super::*;
     use chrono::{Duration as ChronoDuration, TimeZone};
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     use crate::channel::Channel;
+    use crate::thread_state::{write_thread_state, ThreadState};
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
 
     // Unit tests for GitHub OAuth structs and encoding logic
@@ -7453,6 +7859,67 @@ mod tests {
         let error = mutate_routine_task(&task, RoutineMutationAction::Resume, now)
             .expect_err("stale one-shot");
         assert!(error.contains("run_at is in the past"));
+    }
+
+    #[test]
+    fn task_resubmit_clones_failed_workflow_safely() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot {
+                run_at: now - ChronoDuration::minutes(5),
+            },
+            enabled: false,
+            created_at: now - ChronoDuration::hours(1),
+            last_run: Some(now - ChronoDuration::minutes(4)),
+        };
+
+        let resubmitted = build_resubmitted_task(&task, now).expect("resubmit task");
+        assert_ne!(resubmitted.id, task.id);
+        assert!(resubmitted.enabled);
+        assert_eq!(resubmitted.created_at, now);
+        assert_eq!(resubmitted.last_run, None);
+        match resubmitted.schedule {
+            Schedule::OneShot { run_at } => {
+                assert_eq!(run_at, now + ChronoDuration::seconds(1));
+            }
+            _ => panic!("expected one-shot schedule"),
+        }
+    }
+
+    #[test]
+    fn task_resubmit_rejects_stale_thread_epoch() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let temp = TempDir::new().expect("tempdir");
+        let thread_state_path = temp.path().join("thread_state.json");
+        let thread_state = ThreadState {
+            thread_id: "slack:C123:1234.5678".to_string(),
+            epoch: 2,
+            last_email_seq: 2,
+            last_message_id: None,
+            updated_at: now.to_rfc3339(),
+        };
+        write_thread_state(&thread_state_path, &thread_state).expect("write thread state");
+
+        let mut run_task = sample_run_task_task();
+        run_task.workspace_dir = temp.path().to_path_buf();
+        run_task.thread_state_path = Some(thread_state_path);
+        run_task.thread_epoch = Some(1);
+
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(run_task),
+            schedule: Schedule::OneShot {
+                run_at: now - ChronoDuration::minutes(5),
+            },
+            enabled: false,
+            created_at: now - ChronoDuration::hours(1),
+            last_run: Some(now - ChronoDuration::minutes(4)),
+        };
+
+        let error = build_resubmitted_task(&task, now).expect_err("stale thread epoch");
+        assert!(error.contains("older thread state"));
     }
 
     // ==================== WeCom OAuth Tests ====================

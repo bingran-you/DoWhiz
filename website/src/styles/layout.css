@@ -400,6 +400,29 @@
   color: var(--text-secondary);
 }
 
+.workspace-demo-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.workspace-demo-hero-copy {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.workspace-demo-summary {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.workspace-demo-hero-aside {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .workspace-health-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -574,6 +597,7 @@
     flex: 1 1 100%;
   }
 
+  .workspace-demo-hero,
   .workspace-health-row,
   .workspace-grid,
   .workspace-quick-grid {

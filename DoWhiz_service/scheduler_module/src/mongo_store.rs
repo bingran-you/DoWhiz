@@ -114,7 +114,7 @@ pub fn ensure_index_compatible(
                 return Ok(());
             }
             Err(err) => {
-                let Some(retry_after_ms) = retry_after_ms_for_index_create(&err) else {
+                let Some(retry_after_ms) = retry_after_ms_for_throttled_request(&err) else {
                     return Err(err);
                 };
                 if attempt >= 7 {
@@ -133,6 +133,13 @@ pub fn ensure_index_compatible(
             }
         }
     }
+}
+
+pub(crate) fn retry_mongo_write<T, F>(operation: &str, op: F) -> Result<T, mongodb::error::Error>
+where
+    F: FnMut() -> Result<T, mongodb::error::Error>,
+{
+    retry_mongo_operation(operation, op, |duration| thread::sleep(duration))
 }
 
 fn is_ignorable_index_conflict(err: &mongodb::error::Error) -> bool {
@@ -161,21 +168,101 @@ fn is_ignorable_index_conflict(err: &mongodb::error::Error) -> bool {
         .contains("already exists with different options")
 }
 
-fn retry_after_ms_for_index_create(err: &mongodb::error::Error) -> Option<u64> {
-    let ErrorKind::Command(command_error) = err.kind.as_ref() else {
-        return None;
-    };
-    if command_error.code != 16500 && command_error.code_name != "RequestRateTooLarge" {
-        return None;
-    }
-    if let Some(position) = command_error.message.find("RetryAfterMs=") {
-        let value = &command_error.message[position + "RetryAfterMs=".len()..];
-        let digits: String = value.chars().take_while(|ch| ch.is_ascii_digit()).collect();
-        if let Ok(parsed) = digits.parse::<u64>() {
-            return Some(parsed);
+fn retry_mongo_operation<T, F, S>(
+    operation: &str,
+    mut op: F,
+    mut sleeper: S,
+) -> Result<T, mongodb::error::Error>
+where
+    F: FnMut() -> Result<T, mongodb::error::Error>,
+    S: FnMut(Duration),
+{
+    let mut attempt = 0usize;
+    loop {
+        match op() {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                let Some(retry_after_ms) = retry_after_ms_for_throttled_request(&err) else {
+                    return Err(err);
+                };
+                if attempt >= 9 {
+                    return Err(err);
+                }
+                attempt += 1;
+                let sleep_ms = retry_after_ms.clamp(25, 2_000) + (attempt as u64 * 25);
+                warn!(
+                    error = %err,
+                    operation,
+                    attempt,
+                    sleep_ms,
+                    "mongodb write throttled by Cosmos; retrying"
+                );
+                sleeper(Duration::from_millis(sleep_ms));
+            }
         }
     }
-    Some(250)
+}
+
+fn retry_after_ms_for_throttled_request(err: &mongodb::error::Error) -> Option<u64> {
+    match err.kind.as_ref() {
+        ErrorKind::Command(command_error) => {
+            if is_request_rate_too_large(command_error.code, Some(command_error.code_name.as_str()))
+            {
+                parse_retry_after_ms(&command_error.message).or(Some(250))
+            } else {
+                None
+            }
+        }
+        ErrorKind::Write(write_failure) => retry_after_ms_for_write_failure(write_failure),
+        ErrorKind::BulkWrite(failure) => {
+            if let Some(write_error) = failure.write_errors.as_ref().and_then(|errors| {
+                errors
+                    .iter()
+                    .find(|error| is_request_rate_too_large(error.code, error.code_name.as_deref()))
+            }) {
+                return parse_retry_after_ms(&write_error.message).or(Some(250));
+            }
+            failure.write_concern_error.as_ref().and_then(|error| {
+                if is_request_rate_too_large(error.code, Some(error.code_name.as_str())) {
+                    parse_retry_after_ms(&error.message).or(Some(250))
+                } else {
+                    None
+                }
+            })
+        }
+        _ => None,
+    }
+}
+
+fn retry_after_ms_for_write_failure(write_failure: &mongodb::error::WriteFailure) -> Option<u64> {
+    match write_failure {
+        mongodb::error::WriteFailure::WriteError(write_error) => {
+            if is_request_rate_too_large(write_error.code, write_error.code_name.as_deref()) {
+                parse_retry_after_ms(&write_error.message).or(Some(250))
+            } else {
+                None
+            }
+        }
+        mongodb::error::WriteFailure::WriteConcernError(write_error) => {
+            if is_request_rate_too_large(write_error.code, Some(write_error.code_name.as_str())) {
+                parse_retry_after_ms(&write_error.message).or(Some(250))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn is_request_rate_too_large(code: i32, code_name: Option<&str>) -> bool {
+    code == 16500 || code_name == Some("RequestRateTooLarge")
+}
+
+fn parse_retry_after_ms(message: &str) -> Option<u64> {
+    let position = message.find("RetryAfterMs=")?;
+    let value = &message[position + "RetryAfterMs=".len()..];
+    let digits: String = value.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+    digits.parse::<u64>().ok()
 }
 
 fn ensured_indexes() -> &'static Mutex<HashSet<String>> {
@@ -393,7 +480,23 @@ fn sanitize_fragment(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_fragment;
+    use mongodb::error::{WriteError, WriteFailure};
+
+    use super::{parse_retry_after_ms, retry_after_ms_for_write_failure, sanitize_fragment};
+
+    fn throttled_write_failure(retry_after_ms: u64) -> WriteFailure {
+        WriteFailure::WriteError(
+            serde_json::from_value::<WriteError>(serde_json::json!({
+                "code": 16500,
+                "codeName": "RequestRateTooLarge",
+                "errmsg": format!(
+                    "Error=16500, RetryAfterMs={retry_after_ms}, Details='Response status code does not indicate success: TooManyRequests (429);'"
+                ),
+                "errInfo": null,
+            }))
+            .expect("deserialize write error"),
+        )
+    }
 
     #[test]
     fn sanitize_fragment_normalizes_separators() {
@@ -402,5 +505,20 @@ mod tests {
             "little_bear_dowhiz_com"
         );
         assert_eq!(sanitize_fragment("prod--west"), "prod_west");
+    }
+
+    #[test]
+    fn parse_retry_after_ms_extracts_value() {
+        assert_eq!(
+            parse_retry_after_ms("Error=16500, RetryAfterMs=3122, Details='TooManyRequests'"),
+            Some(3122)
+        );
+        assert_eq!(parse_retry_after_ms("no retry hint"), None);
+    }
+
+    #[test]
+    fn throttled_write_failure_is_retryable() {
+        let failure = throttled_write_failure(750);
+        assert_eq!(retry_after_ms_for_write_failure(&failure), Some(750));
     }
 }

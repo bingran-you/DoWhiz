@@ -56,5 +56,5 @@ Live Postmark tests are opt-in and require env credentials:
 
 ```bash
 cd DoWhiz_service
-POSTMARK_LIVE_TEST=1 cargo test -p send_emails_module -- --nocapture
+POSTMARK_LIVE_TEST=1 cargo test -p send_emails_module -- --ignored --nocapture
 ```

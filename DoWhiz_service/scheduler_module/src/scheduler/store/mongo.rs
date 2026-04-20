@@ -9,25 +9,30 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use uuid::Uuid;
 
-use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
+use crate::mongo_store::{
+    create_client_from_env, database_from_env, ensure_index_compatible, retry_mongo_write,
+};
 
-use super::super::types::{Schedule, ScheduledTask, SchedulerError};
+use super::super::types::{Schedule, ScheduledTask, SchedulerError, TaskKind};
 use super::super::utils::{task_kind_channel, task_kind_label};
 use super::super::{is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task};
 use super::{
     ExecutionReconciliationSummary, ExecutionRecordHandle, RoutineSummary, TaskDebugArchiveRecord,
-    TaskStatusSummary,
+    TaskExecutionSummary, TaskStatusSummary,
 };
 
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
 const REQUEST_SUMMARY_MAX_CHARS: usize = 72;
+const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 
 #[derive(Debug, Clone)]
 struct ExecutionRow {
     doc_id: Bson,
+    execution_id: i64,
     started_at: chrono::DateTime<Utc>,
     finished_at: Option<chrono::DateTime<Utc>>,
     status: String,
+    error_message: Option<String>,
 }
 
 fn next_execution_id(started_at: chrono::DateTime<Utc>) -> i64 {
@@ -176,28 +181,28 @@ impl MongoSchedulerStore {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
         let filter = self.task_filter(&task.id.to_string());
-        let result = self.tasks
-            .update_one(
-                filter.clone(),
-                doc! {
-                    "$set": {
-                        "owner_scope": self.owner_scope_doc(),
-                        "task_id": task.id.to_string(),
-                        "kind": task_kind_label(&task.kind),
-                        "channel": task_kind_channel(&task.kind).to_string(),
-                        "enabled": task.enabled,
-                        "created_at": BsonDateTime::from_chrono(task.created_at),
-                        "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
-                        "schedule": schedule_doc(&task.schedule),
-                        "task_json": task_json,
-                    },
-                    "$setOnInsert": {
-                        "retry_count": 0i32,
-                    },
-                },
-                UpdateOptions::builder().upsert(Some(true)).build(),
-            )
-            .map_err(mongo_err)?;
+        let update = doc! {
+            "$set": {
+                "owner_scope": self.owner_scope_doc(),
+                "task_id": task.id.to_string(),
+                "kind": task_kind_label(&task.kind),
+                "channel": task_kind_channel(&task.kind).to_string(),
+                "enabled": task.enabled,
+                "created_at": BsonDateTime::from_chrono(task.created_at),
+                "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
+                "schedule": schedule_doc(&task.schedule),
+                "task_json": task_json,
+            },
+            "$setOnInsert": {
+                "retry_count": 0i32,
+            },
+        };
+        let options = UpdateOptions::builder().upsert(Some(true)).build();
+        let result = retry_mongo_write("tasks.insert_task", || {
+            self.tasks
+                .update_one(filter.clone(), update.clone(), options.clone())
+        })
+        .map_err(mongo_err)?;
 
         tracing::info!(
             "insert_task: task_id={} owner_scope=({}, {}) upserted={} matched={}",
@@ -214,20 +219,18 @@ impl MongoSchedulerStore {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
         let filter = self.task_filter(&task.id.to_string());
-        let result = self.tasks
-            .update_one(
-                filter.clone(),
-                doc! {
-                    "$set": {
-                        "enabled": task.enabled,
-                        "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
-                        "schedule": schedule_doc(&task.schedule),
-                        "task_json": task_json,
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let update = doc! {
+            "$set": {
+                "enabled": task.enabled,
+                "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
+                "schedule": schedule_doc(&task.schedule),
+                "task_json": task_json,
+            }
+        };
+        let result = retry_mongo_write("tasks.update_task", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
 
         // Log warning if no document was matched - this indicates a bug
         if result.matched_count == 0 {
@@ -279,20 +282,19 @@ impl MongoSchedulerStore {
             execution_id: next_execution_id(started_at),
             started_at,
         };
-        self.executions
-            .insert_one(
-                doc! {
-                    "owner_scope": self.owner_scope_doc(),
-                    "execution_id": execution.execution_id,
-                    "task_id": task_id.to_string(),
-                    "started_at": BsonDateTime::from_chrono(started_at),
-                    "finished_at": Bson::Null,
-                    "status": "running",
-                    "error_message": Bson::Null,
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let document = doc! {
+            "owner_scope": self.owner_scope_doc(),
+            "execution_id": execution.execution_id,
+            "task_id": task_id.to_string(),
+            "started_at": BsonDateTime::from_chrono(started_at),
+            "finished_at": Bson::Null,
+            "status": "running",
+            "error_message": Bson::Null,
+        };
+        retry_mongo_write("task_executions.record_execution_start", || {
+            self.executions.insert_one(document.clone(), None)
+        })
+        .map_err(mongo_err)?;
         Ok(execution)
     }
 
@@ -304,27 +306,26 @@ impl MongoSchedulerStore {
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        let result = self
-            .executions
-            .update_one(
-                doc! {
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "task_id": task_id.to_string(),
-                    "execution_id": execution.execution_id,
-                    "started_at": BsonDateTime::from_chrono(execution.started_at),
-                    "status": "running",
-                },
-                doc! {
-                    "$set": {
-                        "finished_at": BsonDateTime::from_chrono(finished_at),
-                        "status": status,
-                        "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": task_id.to_string(),
+            "execution_id": execution.execution_id,
+            "started_at": BsonDateTime::from_chrono(execution.started_at),
+            "status": "running",
+        };
+        let update = doc! {
+            "$set": {
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        let result = retry_mongo_write("task_executions.record_execution_finish", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         if result.matched_count == 0 {
             return Err(SchedulerError::Storage(format!(
                 "missing running execution row for task {} execution_id={} started_at={}",
@@ -444,51 +445,77 @@ impl MongoSchedulerStore {
         &self,
         archive: &TaskDebugArchiveRecord,
     ) -> Result<(), SchedulerError> {
-        self.debug_archives
-            .update_one(
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": &archive.task_id,
+            "execution_id": archive.execution_id,
+        };
+        let update = doc! {
+            "$set": {
+                "owner_scope": self.owner_scope_doc(),
+                "task_id": &archive.task_id,
+                "execution_id": archive.execution_id,
+                "archive_type": &archive.archive_type,
+                "archive_version": archive.archive_version,
+                "status": &archive.status,
+                "storage_backend": &archive.storage_backend,
+                "storage_account": archive.storage_account.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_container": archive.blob_container.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_path": archive.blob_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "blob_reference": archive.blob_reference.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "local_fallback_path": archive.local_fallback_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "sha256": &archive.sha256,
+                "size_bytes": archive.size_bytes,
+                "runner": &archive.runner,
+                "model": &archive.model,
+                "deploy_target": &archive.deploy_target,
+                "started_at": BsonDateTime::from_chrono(archive.started_at),
+                "finished_at": BsonDateTime::from_chrono(archive.finished_at),
+                "duration_ms": archive.duration_ms,
+                "archive_build_duration_ms": archive.archive_build_duration_ms,
+                "upload_duration_ms": archive.upload_duration_ms,
+                "workspace_before_file_count": archive.workspace_before_file_count,
+                "workspace_after_file_count": archive.workspace_after_file_count,
+                "redacted_file_count": archive.redacted_file_count,
+                "skipped_file_count": archive.skipped_file_count,
+                "has_workspace_before": archive.has_workspace_before,
+                "has_workspace_after": archive.has_workspace_after,
+                "has_run_task_trace": archive.has_run_task_trace,
+                "has_aci_logs": archive.has_aci_logs,
+                "error_summary": archive.error_summary.as_deref().map(Bson::from).unwrap_or(Bson::Null),
+                "created_at": BsonDateTime::from_chrono(archive.created_at),
+            }
+        };
+        let options = UpdateOptions::builder().upsert(Some(true)).build();
+        retry_mongo_write("task_debug_archives.record_task_debug_archive", || {
+            self.debug_archives
+                .update_one(filter.clone(), update.clone(), options.clone())
+        })
+        .map_err(mongo_err)?;
+        Ok(())
+    }
+
+    pub(crate) fn append_execution_event(
+        &self,
+        task_id: &str,
+        started_at: chrono::DateTime<Utc>,
+        finished_at: Option<chrono::DateTime<Utc>>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        self.executions
+            .insert_one(
                 doc! {
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "task_id": &archive.task_id,
-                    "execution_id": archive.execution_id,
+                    "owner_scope": self.owner_scope_doc(),
+                    "execution_id": next_execution_id(started_at),
+                    "task_id": task_id,
+                    "started_at": BsonDateTime::from_chrono(started_at),
+                    "finished_at": finished_at.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
+                    "status": status,
+                    "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
                 },
-                doc! {
-                    "$set": {
-                        "owner_scope": self.owner_scope_doc(),
-                        "task_id": &archive.task_id,
-                        "execution_id": archive.execution_id,
-                        "archive_type": &archive.archive_type,
-                        "archive_version": archive.archive_version,
-                        "status": &archive.status,
-                        "storage_backend": &archive.storage_backend,
-                        "storage_account": archive.storage_account.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_container": archive.blob_container.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_path": archive.blob_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "blob_reference": archive.blob_reference.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "local_fallback_path": archive.local_fallback_path.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "sha256": &archive.sha256,
-                        "size_bytes": archive.size_bytes,
-                        "runner": &archive.runner,
-                        "model": &archive.model,
-                        "deploy_target": &archive.deploy_target,
-                        "started_at": BsonDateTime::from_chrono(archive.started_at),
-                        "finished_at": BsonDateTime::from_chrono(archive.finished_at),
-                        "duration_ms": archive.duration_ms,
-                        "archive_build_duration_ms": archive.archive_build_duration_ms,
-                        "upload_duration_ms": archive.upload_duration_ms,
-                        "workspace_before_file_count": archive.workspace_before_file_count,
-                        "workspace_after_file_count": archive.workspace_after_file_count,
-                        "redacted_file_count": archive.redacted_file_count,
-                        "skipped_file_count": archive.skipped_file_count,
-                        "has_workspace_before": archive.has_workspace_before,
-                        "has_workspace_after": archive.has_workspace_after,
-                        "has_run_task_trace": archive.has_run_task_trace,
-                        "has_aci_logs": archive.has_aci_logs,
-                        "error_summary": archive.error_summary.as_deref().map(Bson::from).unwrap_or(Bson::Null),
-                        "created_at": BsonDateTime::from_chrono(archive.created_at),
-                    }
-                },
-                UpdateOptions::builder().upsert(Some(true)).build(),
+                None,
             )
             .map_err(mongo_err)?;
         Ok(())
@@ -526,25 +553,24 @@ impl MongoSchedulerStore {
         status: &str,
         error_message: Option<&str>,
     ) -> Result<(), SchedulerError> {
-        let result = self
-            .executions
-            .update_one(
-                doc! {
-                    "_id": doc_id.clone(),
-                    "owner_scope.kind": &self.owner_kind,
-                    "owner_scope.id": &self.owner_id,
-                    "status": "running",
-                },
-                doc! {
-                    "$set": {
-                        "finished_at": BsonDateTime::from_chrono(finished_at),
-                        "status": status,
-                        "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
-                    }
-                },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = doc! {
+            "_id": doc_id.clone(),
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "status": "running",
+        };
+        let update = doc! {
+            "$set": {
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        let result = retry_mongo_write("task_executions.finish_execution_row", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         if result.matched_count == 0 {
             return Err(SchedulerError::Storage(
                 "missing running execution row while reconciling stale execution".to_string(),
@@ -565,24 +591,22 @@ impl MongoSchedulerStore {
     }
 
     pub(crate) fn increment_retry_count(&self, task_id: &str) -> Result<u32, SchedulerError> {
-        self.tasks
-            .update_one(
-                self.task_filter(task_id),
-                doc! { "$inc": { "retry_count": 1i32 } },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = self.task_filter(task_id);
+        let update = doc! { "$inc": { "retry_count": 1i32 } };
+        retry_mongo_write("tasks.increment_retry_count", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         self.get_retry_count(task_id)
     }
 
     pub(crate) fn reset_retry_count(&self, task_id: &str) -> Result<(), SchedulerError> {
-        self.tasks
-            .update_one(
-                self.task_filter(task_id),
-                doc! { "$set": { "retry_count": 0i32 } },
-                None,
-            )
-            .map_err(mongo_err)?;
+        let filter = self.task_filter(task_id);
+        let update = doc! { "$set": { "retry_count": 0i32 } };
+        retry_mongo_write("tasks.reset_retry_count", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         Ok(())
     }
 
@@ -617,7 +641,8 @@ impl MongoSchedulerStore {
                 self.update_task(&task)?;
             }
             let request_summary = derive_request_summary(&task_doc);
-            let execution = self.latest_execution_for_task(task_id)?;
+            let executions = self.load_execution_rows_for_task(task_id)?;
+            let retry_count = numeric_field_to_u32(&task_doc, "retry_count").unwrap_or(0);
             let (schedule_type, next_run, run_at) = match &task.schedule {
                 Schedule::Cron { next_run, .. } => {
                     ("cron".to_string(), Some(next_run.to_rfc3339()), None)
@@ -626,32 +651,92 @@ impl MongoSchedulerStore {
                     ("one_shot".to_string(), None, Some(run_at.to_rfc3339()))
                 }
             };
-            summaries.push(TaskStatusSummary {
-                id: task_id.to_string(),
-                kind: task_doc.get_str("kind").unwrap_or("unknown").to_string(),
-                channel: task_doc.get_str("channel").unwrap_or("email").to_string(),
+            summaries.push(build_task_status_summary(
+                task_id,
+                task_doc.get_str("kind").unwrap_or("unknown"),
+                task_doc.get_str("channel").unwrap_or("email"),
                 request_summary,
-                enabled: task.enabled,
-                created_at: task.created_at.to_rfc3339(),
-                last_run: task.last_run.map(|value| value.to_rfc3339()),
+                &task,
                 schedule_type,
                 next_run,
                 run_at,
-                execution_status: execution
-                    .as_ref()
-                    .and_then(|doc| doc.get_str("status").ok())
-                    .map(|value| value.to_string()),
-                error_message: execution.as_ref().and_then(|doc| {
-                    doc.get_str("error_message")
-                        .ok()
-                        .map(|value| value.to_string())
-                }),
-                execution_started_at: execution
-                    .as_ref()
-                    .and_then(|doc| datetime_field_to_rfc3339(doc, "started_at")),
-            });
+                &executions,
+                retry_count,
+                now,
+            ));
         }
         Ok(summaries)
+    }
+
+    pub fn load_task_with_status(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<TaskStatusSummary>, SchedulerError> {
+        let Some(task_doc) = self
+            .tasks
+            .find_one(
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "task_id": task_id,
+                },
+                None,
+            )
+            .map_err(mongo_err)?
+        else {
+            return Ok(None);
+        };
+
+        let now = Utc::now();
+        let mut task = deserialize_task_document(&task_doc)?;
+        if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
+            self.update_task(&task)?;
+        }
+        let request_summary = derive_request_summary(&task_doc);
+        let executions = self.load_execution_rows_for_task(task_id)?;
+        let retry_count = numeric_field_to_u32(&task_doc, "retry_count").unwrap_or(0);
+        let (schedule_type, next_run, run_at) = match &task.schedule {
+            Schedule::Cron { next_run, .. } => {
+                ("cron".to_string(), Some(next_run.to_rfc3339()), None)
+            }
+            Schedule::OneShot { run_at } => {
+                ("one_shot".to_string(), None, Some(run_at.to_rfc3339()))
+            }
+        };
+
+        Ok(Some(build_task_status_summary(
+            task_id,
+            task_doc.get_str("kind").unwrap_or("unknown"),
+            task_doc.get_str("channel").unwrap_or("email"),
+            request_summary,
+            &task,
+            schedule_type,
+            next_run,
+            run_at,
+            &executions,
+            retry_count,
+            now,
+        )))
+    }
+
+    pub fn list_task_executions(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<TaskExecutionSummary>, SchedulerError> {
+        let rows = self.load_execution_rows_for_task(task_id)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| TaskExecutionSummary {
+                execution_id: row.execution_id,
+                status: row.status,
+                started_at: row.started_at.to_rfc3339(),
+                finished_at: row.finished_at.map(|value| value.to_rfc3339()),
+                error_message: row.error_message,
+                duration_seconds: row
+                    .finished_at
+                    .map(|value| value.signed_duration_since(row.started_at).num_seconds()),
+            })
+            .collect())
     }
 
     pub(crate) fn list_routines_with_status(&self) -> Result<Vec<RoutineSummary>, SchedulerError> {
@@ -762,7 +847,7 @@ fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerErro
         .get("_id")
         .cloned()
         .ok_or_else(|| SchedulerError::Storage("missing _id for execution row".to_string()))?;
-    bson_i64(document.get("execution_id"), "execution_id")?;
+    let execution_id = bson_i64(document.get("execution_id"), "execution_id")?;
     document.get_str("task_id").map_err(|err| {
         SchedulerError::Storage(format!("missing task_id for execution row: {err}"))
     })?;
@@ -780,13 +865,210 @@ fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerErro
         .get_str("status")
         .map_err(|err| SchedulerError::Storage(format!("missing status for execution row: {err}")))?
         .to_string();
+    let error_message = document
+        .get_str("error_message")
+        .ok()
+        .map(|value| value.to_string());
 
     Ok(ExecutionRow {
         doc_id,
+        execution_id,
         started_at,
         finished_at,
         status,
+        error_message,
     })
+}
+
+fn build_task_status_summary(
+    task_id: &str,
+    kind: &str,
+    channel: &str,
+    request_summary: Option<String>,
+    task: &ScheduledTask,
+    schedule_type: String,
+    next_run: Option<String>,
+    run_at: Option<String>,
+    executions: &[ExecutionRow],
+    retry_count: u32,
+    now: chrono::DateTime<Utc>,
+) -> TaskStatusSummary {
+    let latest_execution = executions.first();
+    let derived_status = derive_user_task_status(task, latest_execution, retry_count, now);
+
+    TaskStatusSummary {
+        id: task_id.to_string(),
+        kind: kind.to_string(),
+        channel: channel.to_string(),
+        request_summary,
+        enabled: task.enabled,
+        created_at: task.created_at.to_rfc3339(),
+        last_run: task.last_run.map(|value| value.to_rfc3339()),
+        schedule_type,
+        next_run,
+        run_at,
+        execution_status: latest_execution.map(|row| row.status.clone()),
+        error_message: latest_execution.and_then(|row| row.error_message.clone()),
+        execution_started_at: latest_execution.map(|row| row.started_at.to_rfc3339()),
+        status: derived_status.status.to_string(),
+        status_reason: derived_status.status_reason,
+        status_changed_at: derived_status.status_changed_at,
+        retry_count,
+        is_running_long: derived_status.is_running_long,
+        can_cancel: derived_status.can_cancel,
+        can_resubmit: derived_status.can_resubmit,
+    }
+}
+
+#[derive(Debug)]
+struct DerivedTaskStatus {
+    status: &'static str,
+    status_reason: Option<String>,
+    status_changed_at: Option<String>,
+    is_running_long: bool,
+    can_cancel: bool,
+    can_resubmit: bool,
+}
+
+fn derive_user_task_status(
+    task: &ScheduledTask,
+    latest_execution: Option<&ExecutionRow>,
+    retry_count: u32,
+    now: chrono::DateTime<Utc>,
+) -> DerivedTaskStatus {
+    let is_one_shot = matches!(&task.schedule, Schedule::OneShot { .. });
+    let is_run_task = matches!(&task.kind, TaskKind::RunTask(_));
+
+    let mut status_reason = None;
+    let mut is_running_long = false;
+    let (status, status_changed_at) = if let Some(row) = latest_execution {
+        let mut status = "scheduled";
+        let status_changed_at = Some(row.finished_at.unwrap_or(row.started_at).to_rfc3339());
+        match row.status.as_str() {
+            "running" => {
+                let running_secs = now.signed_duration_since(row.started_at).num_seconds();
+                is_running_long = running_secs >= LONG_RUNNING_WARNING_SECS;
+                if task.enabled {
+                    status = "running";
+                    if is_running_long {
+                        status_reason = Some(
+                            "Running for over an hour. It may be waiting on a worker or external tool."
+                                .to_string(),
+                        );
+                    }
+                } else {
+                    status = "cancellation_requested";
+                    status_reason = Some(
+                        "Cancellation requested. Waiting for the running worker to stop."
+                            .to_string(),
+                    );
+                }
+            }
+            "failed" => {
+                if task.enabled && is_one_shot {
+                    match &task.schedule {
+                        Schedule::OneShot { run_at } if *run_at > now => {
+                            status = "retry_scheduled";
+                            let retry_prefix = if retry_count > 0 {
+                                format!("Retry {retry_count} scheduled")
+                            } else {
+                                "Retry scheduled".to_string()
+                            };
+                            status_reason =
+                                Some(format!("{retry_prefix} for {}", run_at.to_rfc3339()));
+                        }
+                        Schedule::OneShot { .. } => {
+                            status = "queued";
+                            status_reason = Some(
+                                "Retry is due and waiting for a worker to pick it up.".to_string(),
+                            );
+                        }
+                        Schedule::Cron { .. } => {
+                            status = "failed";
+                        }
+                    }
+                } else {
+                    status = "failed";
+                }
+            }
+            "success" => {
+                status = "success";
+            }
+            "superseded" => {
+                status = "superseded";
+            }
+            "cancelled" => {
+                status = "cancelled";
+                status_reason = row
+                    .error_message
+                    .clone()
+                    .or_else(|| Some("Cancelled from the dashboard.".to_string()));
+            }
+            other => {
+                status = match other {
+                    "" => "scheduled",
+                    _ => "scheduled",
+                };
+            }
+        }
+        (status, status_changed_at)
+    } else {
+        let status;
+        let status_changed_at;
+        match &task.schedule {
+            Schedule::OneShot { run_at } => {
+                if task.enabled {
+                    if *run_at <= now {
+                        status = "queued";
+                        status_reason =
+                            Some("Waiting for a worker to pick up this task.".to_string());
+                        status_changed_at = Some(run_at.to_rfc3339());
+                    } else {
+                        status = "scheduled";
+                        status_changed_at = Some(task.created_at.to_rfc3339());
+                    }
+                } else if *run_at <= now {
+                    status = "expired";
+                    status_reason = Some(
+                        "This one-time task passed its scheduled run time without completing."
+                            .to_string(),
+                    );
+                    status_changed_at = Some(run_at.to_rfc3339());
+                } else {
+                    status = "cancelled";
+                    status_reason = Some("Cancelled before the task started running.".to_string());
+                    status_changed_at = Some(task.created_at.to_rfc3339());
+                }
+            }
+            Schedule::Cron { next_run, .. } => {
+                if task.enabled {
+                    status = "scheduled";
+                    status_changed_at = Some(next_run.to_rfc3339());
+                } else {
+                    status = "paused";
+                    status_reason = Some("This recurring task is paused.".to_string());
+                    status_changed_at = Some(task.created_at.to_rfc3339());
+                }
+            }
+        }
+        (status, status_changed_at)
+    };
+
+    let can_cancel = match status {
+        "scheduled" | "queued" | "retry_scheduled" => is_one_shot,
+        "running" => is_one_shot && is_run_task,
+        _ => false,
+    };
+    let can_resubmit = is_run_task && is_one_shot && matches!(status, "failed" | "expired");
+
+    DerivedTaskStatus {
+        status,
+        status_reason,
+        status_changed_at,
+        is_running_long,
+        can_cancel,
+        can_resubmit,
+    }
 }
 
 fn bson_i64(value: Option<&Bson>, field: &str) -> Result<i64, SchedulerError> {
@@ -1231,13 +1513,54 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use chrono::{Duration as ChronoDuration, TimeZone, Utc};
     use mongodb::bson::doc;
+    use mongodb::bson::Bson;
     use tempfile::TempDir;
 
     use super::{
-        derive_request_summary, normalize_discord_summary_text, resolve_owner_scope,
-        strip_discord_mentions,
+        build_task_status_summary, derive_request_summary, normalize_discord_summary_text,
+        resolve_owner_scope, strip_discord_mentions, ExecutionRow,
     };
+    use crate::channel::Channel;
+    use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
+
+    fn sample_run_task_task() -> RunTaskTask {
+        RunTaskTask {
+            workspace_dir: PathBuf::from("/tmp/task-workspace"),
+            input_email_dir: PathBuf::from("incoming_email"),
+            input_attachments_dir: PathBuf::from("incoming_attachments"),
+            memory_dir: PathBuf::from("memory"),
+            reference_dir: PathBuf::from("references"),
+            model_name: "gpt-test".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: false,
+            reply_to: vec!["thread".to_string()],
+            reply_from: None,
+            archive_root: None,
+            thread_id: Some("slack:C123:1234.5678".to_string()),
+            thread_epoch: Some(1),
+            thread_state_path: None,
+            channel: Channel::Slack,
+            slack_team_id: Some("T123".to_string()),
+            employee_id: None,
+            requester_identifier_type: None,
+            requester_identifier: None,
+            account_id: None,
+            channel_metadata: Default::default(),
+        }
+    }
+
+    fn sample_one_shot_task(run_at: chrono::DateTime<Utc>) -> ScheduledTask {
+        ScheduledTask {
+            id: uuid::Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at },
+            enabled: true,
+            created_at: run_at - ChronoDuration::minutes(30),
+            last_run: None,
+        }
+    }
 
     #[test]
     fn resolve_owner_scope_extracts_user_id() {
@@ -1302,6 +1625,100 @@ mod tests {
             summary.as_deref(),
             Some("Please draft a concise project update for the team.")
         );
+    }
+
+    #[test]
+    fn task_status_summary_marks_future_one_shot_as_scheduled_not_running() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let task = sample_one_shot_task(now + ChronoDuration::minutes(15));
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((now + ChronoDuration::minutes(15)).to_rfc3339()),
+            &[],
+            0,
+            now,
+        );
+
+        assert_eq!(summary.execution_status, None);
+        assert_eq!(summary.status, "scheduled");
+        assert!(summary.can_cancel);
+        assert!(!summary.can_resubmit);
+    }
+
+    #[test]
+    fn task_status_summary_marks_long_running_task_and_allows_cancel() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let started_at = now - ChronoDuration::hours(2);
+        let task = sample_one_shot_task(started_at - ChronoDuration::minutes(5));
+        let execution = ExecutionRow {
+            doc_id: Bson::Null,
+            execution_id: 42,
+            started_at,
+            finished_at: None,
+            status: "running".to_string(),
+            error_message: None,
+        };
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((started_at - ChronoDuration::minutes(5)).to_rfc3339()),
+            &[execution],
+            0,
+            now,
+        );
+
+        assert_eq!(summary.status, "running");
+        assert!(summary.is_running_long);
+        assert!(summary.can_cancel);
+        assert_eq!(summary.execution_status.as_deref(), Some("running"));
+    }
+
+    #[test]
+    fn task_status_summary_marks_disabled_failed_run_task_as_resubmittable() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let started_at = now - ChronoDuration::minutes(10);
+        let mut task = sample_one_shot_task(started_at - ChronoDuration::minutes(5));
+        task.enabled = false;
+        task.last_run = Some(now - ChronoDuration::minutes(9));
+        let execution = ExecutionRow {
+            doc_id: Bson::Null,
+            execution_id: 7,
+            started_at,
+            finished_at: Some(now - ChronoDuration::minutes(9)),
+            status: "failed".to_string(),
+            error_message: Some("worker died".to_string()),
+        };
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((started_at - ChronoDuration::minutes(5)).to_rfc3339()),
+            &[execution],
+            3,
+            now,
+        );
+
+        assert_eq!(summary.status, "failed");
+        assert!(!summary.can_cancel);
+        assert!(summary.can_resubmit);
     }
 
     #[test]

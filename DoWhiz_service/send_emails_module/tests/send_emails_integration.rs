@@ -317,6 +317,7 @@ fn send_payload_sanitizes_attachment_names_to_ascii() -> Result<(), Box<dyn std:
 }
 
 #[test]
+#[ignore = "requires POSTMARK_LIVE_TEST=1 and Postmark credentials"]
 fn live_postmark_delivery_with_attachments() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
     let root_env = repo_root().join(".env");
@@ -325,11 +326,6 @@ fn live_postmark_delivery_with_attachments() -> Result<(), Box<dyn std::error::E
         load_env_file(&root_env);
     } else {
         load_env_file(&service_env);
-    }
-
-    if env::var("POSTMARK_LIVE_TEST").unwrap_or_default() != "1" {
-        eprintln!("Skipping live Postmark test. Set POSTMARK_LIVE_TEST=1 to run it.");
-        return Ok(());
     }
 
     let token = env::var("POSTMARK_SERVER_TOKEN")

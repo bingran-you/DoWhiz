@@ -1,4 +1,6 @@
-# DoWhiz - Oliver, a trusted AI operator for work and life.
+# DoWhiz
+
+DoWhiz is an open-source foundation for building AI operators that work across email, documents, chat, and repository workflows.
 
 <p align="center"><strong>Product Shorts</strong></p>
 
@@ -29,100 +31,95 @@
 
 <p align="center"><sub>Tap any preview to watch the full Shorts video.</sub></p>
 
-DoWhiz is an agent-native product built around Oliver, the trusted AI operator that works in your existing tools and brings back finished work.
+## Product Snapshot
+
+DoWhiz is built around Oliver, a trusted AI operator that works in existing tools and brings back finished work.
 
 Current product model:
-- Oliver-first landing and onboarding for consumer adoption.
-- Personal setup dashboard for connected apps, tasks, memory, and settings.
-- Multi-channel execution across email, Slack/Discord, GitHub, Google Docs, and related surfaces.
-- Legacy startup/workspace routes remain available for backward compatibility, but they are no longer the primary product journey.
+- Oliver-first landing and onboarding for consumer adoption
+- Personal setup dashboard for connected apps, tasks, memory, and settings
+- Multi-channel execution across email, Slack/Discord, GitHub, Google Docs, and related surfaces
+- Legacy startup/workspace routes remain available for backward compatibility, but they are no longer the primary product journey
 
 Primary web routes:
 - `/`: public landing
 - `/auth/index.html`: Oliver setup dashboard
-- `/start`: legacy startup intake flow
-- `/workspace`: legacy workspace route, softened away from the main journey
-- `/dashboard`: internal analytics/supporting page
+- `/demo/workspace`: supported open-source no-cloud demo
+- `/start` and `/workspace`: legacy routes retained in the repo, but not the primary OSS onboarding path
 
-Startup workspace legacy backend layer:
-- `DoWhiz_service/scheduler_module/src/domain/*`
-- `DoWhiz_service/scheduler_module/src/service/startup_workspace/*`
-- `DoWhiz_service/scheduler_module/src/service/workspace.rs` (persist bootstrap artifacts in workspace)
+This repository contains:
+- `website/`: the public web app and local product demo routes
+- `DoWhiz_service/`: Rust services for routing, scheduling, and task execution
+- `DoWhiz_service/skills/`: runtime skills copied into task workspaces
 
-Current production model:
-- `inbound_gateway` handles ingress (email/webhooks/chat events) and enqueue.
-- `rust_service` workers consume queue items and execute tasks.
-- Task state is Mongo-backed; account/auth/billing data is in Supabase Postgres.
+## Start Here
 
-## Quick Start (Local)
+If you are new to the repo, use this order:
 
-Prerequisites:
-- Rust toolchain
-- Node.js 20+
-- MongoDB available at the `MONGODB_URI` configured in `DoWhiz_service/.env`
-- `ngrok` (only for local public webhook testing)
+1. Read [OPEN_SOURCE_SCOPE.md](OPEN_SOURCE_SCOPE.md) to understand what is and is not supported.
+2. Run the fastest local demo:
+   ```bash
+   cd website
+   npm ci
+   npm run dev
+   ```
+   Then open `http://localhost:5173/demo/workspace`.
+3. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the public contributor workflow.
+4. Use [docs/README.md](docs/README.md) for deeper local-development, self-hosting, integration, and troubleshooting docs.
 
-1. Configure env:
-```bash
-cp .env.example DoWhiz_service/.env
-# fill required keys in DoWhiz_service/.env
-```
+## Open-Source Scope
 
-2. Start one worker:
-```bash
-./DoWhiz_service/scripts/run_employee.sh little_bear 9001 --skip-hook --skip-ngrok
-```
+DoWhiz is now documented as an open-source project, but not every production path in the repository is packaged as turnkey self-hosting.
 
-3. Start inbound gateway:
-```bash
-./DoWhiz_service/scripts/run_gateway_local.sh
-```
+| Area | Status |
+|---|---|
+| Website local demo and contributor workflow | Supported |
+| Rust service code, local development, and public CI | Supported |
+| Self-hosting with local dependencies and selective integrations | Best effort |
+| Internal staging/production deployment workflows and private cloud setup | Out of scope |
 
-4. (Optional local webhook) expose gateway + update Postmark hook:
-```bash
-ngrok http 9100
-cd DoWhiz_service
-cargo run -p scheduler_module --bin set_postmark_inbound_hook -- \
-  --hook-url https://YOUR-NGROK-DOMAIN/postmark/inbound
-```
+The full support matrix lives in [OPEN_SOURCE_SCOPE.md](OPEN_SOURCE_SCOPE.md).
 
-5. Test the personal dashboard locally:
-```bash
-cd website
-npm install
-npm run dev
-```
+## Repository Map
 
-Open `http://localhost:5173/auth/index.html` after the Rust service is up. If the auth page shows a network error, confirm MongoDB is running first, then re-run the worker command above.
+| Path | Purpose |
+|---|---|
+| `website/` | React 19 + Vite frontend |
+| `DoWhiz_service/` | Rust backend binaries, scheduler, gateway, adapters, runtime skills |
+| `docs/open-source/` | Public-facing development and self-hosting docs |
+| `reference_documentation/` | Historical architecture notes, API references, and internal research material |
+| `external/` | Reference-only third-party material; do not modify |
 
-## Runtime Flow
+## Public Docs
 
-```text
-Inbound message
-  -> inbound_gateway (route + dedupe + raw payload storage)
-  -> ingestion queue (Service Bus in gateway path)
-  -> rust_service worker (consume + schedule)
-  -> run_task_module (Codex/Claude)
-  -> outbound reply (email/slack/discord/sms/telegram/whatsapp/google workspace)
-```
+- [docs/open-source/local-development.md](docs/open-source/local-development.md)
+- [docs/open-source/self-hosting.md](docs/open-source/self-hosting.md)
+- [docs/open-source/architecture.md](docs/open-source/architecture.md)
+- [docs/open-source/integrations.md](docs/open-source/integrations.md)
+- [docs/open-source/skills-and-plugins.md](docs/open-source/skills-and-plugins.md)
+- [docs/open-source/troubleshooting.md](docs/open-source/troubleshooting.md)
 
-## Repository Layout
+## Contributing
 
-- `DoWhiz_service/`: Rust backend and operations scripts
-- `website/`: React/Vite web frontend
-- `reference_documentation/`: architecture notes, test plans, product vision
-- `assets/`, `example_files/`: supporting assets and fixtures
+External contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Read Next
+The public PR path is designed to work without private deployment secrets:
+- website lint/build/tests
+- Rust formatting, scoped public clippy checks, scheduler build validation, and selected public tests
 
-- Service docs: [`DoWhiz_service/README.md`](DoWhiz_service/README.md)
-- Operations runbook: [`DoWhiz_service/OPERATIONS.md`](DoWhiz_service/OPERATIONS.md)
-- Deployment policy: [`DoWhiz_service/docs/staging_production_deploy.md`](DoWhiz_service/docs/staging_production_deploy.md)
-- Product spec: [`docs/proactive-chief-of-staff-v1.md`](docs/proactive-chief-of-staff-v1.md)
-- Test checklist: [`reference_documentation/test_plans/DoWhiz_service_tests.md`](reference_documentation/test_plans/DoWhiz_service_tests.md)
-- Vision: [`reference_documentation/vision.md`](reference_documentation/vision.md)
+## Support And Security
 
-## Branch / Deploy Policy
+- Support expectations: [SUPPORT.md](SUPPORT.md)
+- Security reporting: [SECURITY.md](SECURITY.md)
+- Release process: [RELEASING.md](RELEASING.md)
+- Community expectations: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
-- Staging deploy branch: `dev` (automatic deploy on push to `dev`)
-- Production deploy branch: `main`
+## Internal/Historical Material
+
+This repository still contains operational notes, product-history docs, and deployment workflows that were written for the original team. They are kept for transparency, but they are not the primary onboarding path for external developers.
+
+Use the open-source docs first. Treat `reference_documentation/`, `DoWhiz_service/OPERATIONS.md`, and branch-coupled deploy workflows as secondary/internal context unless a public doc points you there.
+
+Legacy maintainer helpers such as `env.example.least`, `cleanup/`, and `test_google_e2e.py`
+remain in the repo for transparency, but they are not part of the supported first-time
+onboarding path.

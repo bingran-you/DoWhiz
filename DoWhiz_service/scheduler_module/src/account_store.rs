@@ -326,6 +326,7 @@ impl AccountStore {
             fallback_pool,
             prefer_fallback: Arc::new(AtomicBool::new(false)),
         };
+        store.ensure_core_schema()?;
         store.ensure_analytics_schema()?;
         Ok(store)
     }
@@ -337,6 +338,7 @@ impl AccountStore {
             fallback_pool: None,
             prefer_fallback: Arc::new(AtomicBool::new(false)),
         };
+        store.ensure_core_schema()?;
         store.ensure_analytics_schema()?;
         Ok(store)
     }
@@ -419,6 +421,71 @@ impl AccountStore {
         Err(AccountStoreError::Config(
             "account store pools dropped".to_string(),
         ))
+    }
+
+    fn ensure_core_schema(&self) -> Result<(), AccountStoreError> {
+        let mut conn = self.conn()?;
+        conn.batch_execute(
+            "
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+            CREATE TABLE IF NOT EXISTS organizations (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL UNIQUE,
+                notion_database_id TEXT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS accounts (
+                id UUID PRIMARY KEY,
+                auth_user_id UUID NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                tokens_to_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
+                purchased_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
+                organization_id UUID NULL REFERENCES organizations(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS account_identifiers (
+                id UUID PRIMARY KEY,
+                account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                identifier_type TEXT NOT NULL,
+                identifier TEXT NOT NULL,
+                verified BOOLEAN NOT NULL DEFAULT false,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (identifier_type, identifier)
+            );
+
+            CREATE INDEX IF NOT EXISTS account_identifiers_account_idx
+                ON account_identifiers (account_id);
+            CREATE INDEX IF NOT EXISTS account_identifiers_lookup_idx
+                ON account_identifiers (identifier_type, identifier, verified);
+
+            CREATE TABLE IF NOT EXISTS payments (
+                stripe_session_id TEXT PRIMARY KEY,
+                account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                amount_cents INTEGER NOT NULL,
+                hours_purchased DOUBLE PRECISION NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE INDEX IF NOT EXISTS payments_account_time_idx
+                ON payments (account_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                token TEXT PRIMARY KEY,
+                account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS email_verification_tokens_email_idx
+                ON email_verification_tokens (email);
+            CREATE INDEX IF NOT EXISTS email_verification_tokens_expiry_idx
+                ON email_verification_tokens (expires_at);
+            ",
+        )?;
+        Ok(())
     }
 
     fn ensure_analytics_schema(&self) -> Result<(), AccountStoreError> {

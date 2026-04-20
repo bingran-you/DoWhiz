@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LandingPage from '../pages/LandingPage';
 import StartupIntakePage from '../pages/StartupIntakePage';
+import WorkspaceDemoPage from '../pages/WorkspaceDemoPage';
 import WorkspaceHomePage from '../pages/WorkspaceHomePage';
 import DashboardPage from '../pages/internal/DashboardPage';
 import GroceryOnboardingPage from '../pages/GroceryOnboardingPage';
@@ -13,6 +14,7 @@ function AppRouter() {
         <Route path="/cn" element={<LandingPage locale="zh-CN" />} />
         <Route path="/cn/*" element={<LandingPage locale="zh-CN" />} />
         <Route path="/start" element={<StartupIntakePage />} />
+        <Route path="/demo/workspace" element={<WorkspaceDemoPage />} />
         <Route path="/workspace" element={<WorkspaceHomePage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/grocery/onboarding" element={<GroceryOnboardingPage />} />
