@@ -728,7 +728,7 @@ This ensures:
 3. No "new" user_id accumulation → sync cleans up properly
 4. Choose email as the user_id source since the channel in RunTaskTask was set to "email".
 
-### Issue 2: Credentials not inserted correctly into ACI container
+### Issue 2: Credentials not used correctly by TPM Commands in ACI Container
 
 ```
 Oliver's response from manual trigger:
