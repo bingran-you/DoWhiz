@@ -419,8 +419,7 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                     { "name": "Manual", "color": "gray" }
                 ]
             }
-        },
-        "MongoDB ID": { "rich_text": {} }
+        }
     });
 
     let client = match NotionApiClient::from_env(&employee_id) {
@@ -1006,17 +1005,17 @@ mod tests {
     #[test]
     fn test_extract_rich_text_property() {
         let props = json!({
-            "MongoDB ID": {
+            "Description": {
                 "rich_text": [{
-                    "plain_text": "507f1f77bcf86cd799439011",
+                    "plain_text": "Task description text",
                     "type": "text"
                 }]
             }
         });
 
         assert_eq!(
-            extract_rich_text_property(&props, "MongoDB ID"),
-            Some("507f1f77bcf86cd799439011".to_string())
+            extract_rich_text_property(&props, "Description"),
+            Some("Task description text".to_string())
         );
         assert_eq!(extract_rich_text_property(&props, "NonExistent"), None);
     }
@@ -1024,12 +1023,12 @@ mod tests {
     #[test]
     fn test_extract_rich_text_property_empty() {
         let props = json!({
-            "MongoDB ID": {
+            "Description": {
                 "rich_text": []
             }
         });
 
-        assert_eq!(extract_rich_text_property(&props, "MongoDB ID"), None);
+        assert_eq!(extract_rich_text_property(&props, "Description"), None);
     }
 
     #[test]
@@ -1089,8 +1088,7 @@ mod tests {
                         { "name": "P2", "color": "yellow" }
                     ]
                 }
-            },
-            "MongoDB ID": { "rich_text": {} }
+            }
         });
 
         // Create database
