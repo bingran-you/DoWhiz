@@ -12,7 +12,9 @@ use uuid::Uuid;
 
 use crate::account_store::AccountStore;
 use crate::channel::{Channel, ChannelMetadata};
+use crate::employee_config::load_employee_directory;
 use crate::index_store::IndexStore;
+use crate::service::default_employee_config_path;
 use crate::user_store::UserStore;
 use crate::{ModuleExecutor, RunTaskTask, Scheduler, TaskKind};
 
@@ -92,6 +94,15 @@ pub enum TpmCronError {
 
     #[error("Failed to ensure user directories: {0}")]
     UserDirsCreation(String),
+
+    #[error("Failed to load employee config: {0}")]
+    EmployeeConfigLoad(String),
+
+    #[error("No default employee configured")]
+    NoDefaultEmployee,
+
+    #[error("No reply-from address configured for employee")]
+    NoReplyFromAddress,
 }
 
 /// Set up a TPM cron job for a user in an organization.
@@ -184,6 +195,24 @@ pub fn setup_tpm_cron(
             .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
     }
 
+    // Load employee config to get reply_from address
+    let employee_config_path = default_employee_config_path();
+    let employee_directory = load_employee_directory(&employee_config_path)
+        .map_err(|e| TpmCronError::EmployeeConfigLoad(e.to_string()))?;
+    let default_employee_id = employee_directory
+        .default_employee_id
+        .as_ref()
+        .or_else(|| employee_directory.employees.first().map(|e| &e.id))
+        .ok_or(TpmCronError::NoDefaultEmployee)?;
+    let employee_profile = employee_directory
+        .employee(default_employee_id)
+        .ok_or(TpmCronError::NoDefaultEmployee)?;
+    let reply_from = employee_profile
+        .addresses
+        .first()
+        .cloned()
+        .ok_or(TpmCronError::NoReplyFromAddress)?;
+
     // Write synthetic trigger file
     let now = Utc::now();
     let synthetic_payload = json!({
@@ -207,14 +236,14 @@ pub fn setup_tpm_cron(
         runner: "codex".to_string(),
         codex_disabled: false,
         reply_to: vec![email.clone()],
-        reply_from: None,
+        reply_from: Some(reply_from),
         archive_root: None,
         thread_id: None,
         thread_epoch: None,
         thread_state_path: None,
         channel: Channel::Email,
         slack_team_id: None,
-        employee_id: None,
+        employee_id: Some(employee_profile.id.clone()),
         requester_identifier_type: Some("email".to_string()),
         requester_identifier: Some(email.clone()),
         account_id: Some(user_id),
@@ -340,6 +369,24 @@ pub fn trigger_tpm_sync(
             .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
     }
 
+    // Load employee config to get reply_from address
+    let employee_config_path = default_employee_config_path();
+    let employee_directory = load_employee_directory(&employee_config_path)
+        .map_err(|e| TpmCronError::EmployeeConfigLoad(e.to_string()))?;
+    let default_employee_id = employee_directory
+        .default_employee_id
+        .as_ref()
+        .or_else(|| employee_directory.employees.first().map(|e| &e.id))
+        .ok_or(TpmCronError::NoDefaultEmployee)?;
+    let employee_profile = employee_directory
+        .employee(default_employee_id)
+        .ok_or(TpmCronError::NoDefaultEmployee)?;
+    let reply_from = employee_profile
+        .addresses
+        .first()
+        .cloned()
+        .ok_or(TpmCronError::NoReplyFromAddress)?;
+
     // Write synthetic trigger file
     let now = Utc::now();
     let synthetic_payload = json!({
@@ -363,14 +410,14 @@ pub fn trigger_tpm_sync(
         runner: "codex".to_string(),
         codex_disabled: false,
         reply_to: vec![email.clone()],
-        reply_from: None,
+        reply_from: Some(reply_from),
         archive_root: None,
         thread_id: None,
         thread_epoch: None,
         thread_state_path: None,
         channel: Channel::Email,
         slack_team_id: None,
-        employee_id: None,
+        employee_id: Some(employee_profile.id.clone()),
         requester_identifier_type: Some("email".to_string()),
         requester_identifier: Some(email.clone()),
         account_id: Some(user_id),
