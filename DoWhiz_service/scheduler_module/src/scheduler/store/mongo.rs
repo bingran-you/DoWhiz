@@ -3,7 +3,7 @@ use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
 use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
 use mongodb::sync::Collection;
 use mongodb::IndexModel;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -28,6 +28,7 @@ const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 #[derive(Debug, Clone)]
 struct ExecutionRow {
     doc_id: Bson,
+    task_id: String,
     execution_id: i64,
     started_at: chrono::DateTime<Utc>,
     finished_at: Option<chrono::DateTime<Utc>>,
@@ -546,6 +547,40 @@ impl MongoSchedulerStore {
         Ok(rows)
     }
 
+    /// Batch fetch executions for multiple task_ids in one query.
+    /// Returns a HashMap keyed by task_id for O(1) lookup.
+    fn load_execution_rows_for_tasks(
+        &self,
+        task_ids: &[&str],
+    ) -> Result<HashMap<String, Vec<ExecutionRow>>, SchedulerError> {
+        if task_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let cursor = self
+            .executions
+            .find(
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "task_id": { "$in": task_ids },
+                },
+                FindOptions::builder()
+                    .sort(doc! { "started_at": -1 })
+                    .build(),
+            )
+            .map_err(mongo_err)?;
+
+        let mut map: HashMap<String, Vec<ExecutionRow>> = HashMap::new();
+        for row in cursor {
+            let exec_row = parse_execution_row(row.map_err(mongo_err)?)?;
+            map.entry(exec_row.task_id.clone())
+                .or_default()
+                .push(exec_row);
+        }
+        Ok(map)
+    }
+
     fn finish_execution_row(
         &self,
         doc_id: &Bson,
@@ -625,7 +660,9 @@ impl MongoSchedulerStore {
                     .build(),
             )
             .map_err(mongo_err)?;
-        let mut summaries = Vec::new();
+
+        // First pass: collect task docs and deduplicate task_ids
+        let mut task_docs = Vec::new();
         let mut seen_task_ids = HashSet::new();
         let now = Utc::now();
         for row in cursor {
@@ -636,12 +673,26 @@ impl MongoSchedulerStore {
             if !seen_task_ids.insert(task_id.to_string()) {
                 continue;
             }
+            task_docs.push(task_doc);
+        }
+
+        // Batch fetch all executions for these task_ids in one query
+        let task_ids: Vec<&str> = seen_task_ids.iter().map(|s| s.as_str()).collect();
+        let executions_map = self.load_execution_rows_for_tasks(&task_ids)?;
+
+        // Second pass: build summaries using the pre-fetched executions
+        let mut summaries = Vec::new();
+        for task_doc in task_docs {
+            let task_id = task_doc.get_str("task_id").unwrap();
             let mut task = deserialize_task_document(&task_doc)?;
             if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
                 self.update_task(&task)?;
             }
             let request_summary = derive_request_summary(&task_doc);
-            let executions = self.load_execution_rows_for_task(task_id)?;
+            let executions = executions_map
+                .get(task_id)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
             let retry_count = numeric_field_to_u32(&task_doc, "retry_count").unwrap_or(0);
             let (schedule_type, next_run, run_at) = match &task.schedule {
                 Schedule::Cron { next_run, .. } => {
@@ -660,7 +711,7 @@ impl MongoSchedulerStore {
                 schedule_type,
                 next_run,
                 run_at,
-                &executions,
+                executions,
                 retry_count,
                 now,
             ));
@@ -848,9 +899,12 @@ fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerErro
         .cloned()
         .ok_or_else(|| SchedulerError::Storage("missing _id for execution row".to_string()))?;
     let execution_id = bson_i64(document.get("execution_id"), "execution_id")?;
-    document.get_str("task_id").map_err(|err| {
-        SchedulerError::Storage(format!("missing task_id for execution row: {err}"))
-    })?;
+    let task_id = document
+        .get_str("task_id")
+        .map_err(|err| {
+            SchedulerError::Storage(format!("missing task_id for execution row: {err}"))
+        })?
+        .to_string();
     let started_at = document
         .get_datetime("started_at")
         .map_err(|err| {
@@ -872,6 +926,7 @@ fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerErro
 
     Ok(ExecutionRow {
         doc_id,
+        task_id,
         execution_id,
         started_at,
         finished_at,
