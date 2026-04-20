@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use mongodb::bson::{doc, Bson, Document};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -120,6 +121,41 @@ fn thread_busy_defer_secs(task_epoch: u64, running_epoch: u64) -> i64 {
     } else {
         THREAD_BUSY_DEFER_SECS
     }
+}
+
+fn merge_reconciliation_owner_ids<I>(user_ids: Vec<String>, running_owner_ids: I) -> Vec<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut owner_ids = HashSet::new();
+    owner_ids.extend(user_ids);
+    owner_ids.extend(running_owner_ids);
+    let mut merged = owner_ids.into_iter().collect::<Vec<_>>();
+    merged.sort();
+    merged
+}
+
+fn list_running_execution_owner_ids() -> Result<Vec<String>, BoxError> {
+    let client = crate::mongo_store::create_client_from_env()?;
+    let db = crate::mongo_store::database_from_env(&client);
+    let executions = db.collection::<Document>("task_executions");
+    let distinct = executions.distinct(
+        "owner_scope.id",
+        doc! {
+            "owner_scope.kind": "user",
+            "status": "running",
+        },
+        None,
+    )?;
+
+    let owner_ids = distinct
+        .into_iter()
+        .filter_map(|value| match value {
+            Bson::String(value) if !value.trim().is_empty() => Some(value),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    Ok(owner_ids)
 }
 
 fn claim_thread_execution_slot<E: crate::TaskExecutor>(
@@ -553,7 +589,28 @@ fn reconcile_stale_executions_after_worker_restart(
     scheduler_stop: &AtomicBool,
     stale_after: ChronoDuration,
 ) -> Result<(), BoxError> {
-    let user_ids = user_store.list_user_ids()?;
+    let known_user_ids = user_store.list_user_ids()?;
+    let running_owner_ids = match list_running_execution_owner_ids() {
+        Ok(owner_ids) => owner_ids,
+        Err(err) => {
+            warn!(
+                "worker startup could not list running execution owner ids from MongoDB: {}",
+                err
+            );
+            Vec::new()
+        }
+    };
+    let orphaned_owner_count = running_owner_ids
+        .iter()
+        .filter(|owner_id| !known_user_ids.iter().any(|known| known == *owner_id))
+        .count();
+    if orphaned_owner_count > 0 {
+        info!(
+            "worker startup found {} orphaned owner id(s) with running execution rows; including them in stale reconciliation",
+            orphaned_owner_count
+        );
+    }
+    let user_ids = merge_reconciliation_owner_ids(known_user_ids, running_owner_ids);
     let stale_after_secs = stale_after.num_seconds();
     let mut users_changed = 0usize;
     let mut total_superseded = 0usize;
@@ -1104,6 +1161,23 @@ mod tests {
             thread_busy_defer_secs(0, 1),
             THREAD_BUSY_DEFER_SECS,
             "older epochs should not take the supersede fast path"
+        );
+    }
+
+    #[test]
+    fn merge_reconciliation_owner_ids_dedupes_and_sorts_orphaned_ids() {
+        let merged = merge_reconciliation_owner_ids(
+            vec!["user-b".to_string(), "user-a".to_string()],
+            vec!["user-c".to_string(), "user-a".to_string()],
+        );
+
+        assert_eq!(
+            merged,
+            vec![
+                "user-a".to_string(),
+                "user-b".to_string(),
+                "user-c".to_string()
+            ]
         );
     }
 
