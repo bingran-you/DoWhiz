@@ -1726,6 +1726,7 @@ mod tests {
         let task = sample_one_shot_task(started_at - ChronoDuration::minutes(5));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 42,
             started_at,
             finished_at: None,
@@ -1762,6 +1763,7 @@ mod tests {
         task.last_run = Some(now - ChronoDuration::minutes(9));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 7,
             started_at,
             finished_at: Some(now - ChronoDuration::minutes(9)),

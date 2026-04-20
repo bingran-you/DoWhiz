@@ -338,3 +338,102 @@ fn inbound_email_falls_back_to_text_when_html_is_removed(
 
     Ok(())
 }
+
+#[test]
+fn inbound_email_followup_prefers_stripped_reply_in_thread_request(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let Some((_temp, config, user_store, index_store, account_store)) =
+        setup_service_for_test("inbound_email_followup_prefers_stripped_reply_in_thread_request")?
+    else {
+        return Ok(());
+    };
+
+    let original_payload = serde_json::json!({
+        "From": "Logan <logan@example.com>",
+        "To": "Service <service@example.com>",
+        "Subject": "Nvidia stock",
+        "TextBody": "Give me a deep research about the Nvidia stock, and tell me whether it is a good time to buy",
+        "Headers": [{"Name": "Message-ID", "Value": "<msg-1@example.com>"}]
+    });
+    let original_raw = serde_json::to_string(&original_payload)?;
+    let original: PostmarkInbound = serde_json::from_str(&original_raw)?;
+    process_inbound_payload(
+        &config,
+        &user_store,
+        &index_store,
+        &account_store,
+        &original,
+        original_raw.as_bytes(),
+        None,
+    )?;
+
+    let followup_text = "Can you help me do some deep research for the competitors, and the upstream/downstream for Nvidia. Give me suggestion to some of the investment options among those companies";
+    let followup_payload = serde_json::json!({
+        "From": "Logan <logan@example.com>",
+        "To": "Service <service@example.com>",
+        "Subject": "Re: Nvidia stock",
+        "TextBody": format!(
+            "{followup_text}\n\nOn Sat, Apr 18, 2026 at 1:14 PM Logan wrote:\n> Give me a deep research about the Nvidia stock, and tell me whether it is a good time to buy"
+        ),
+        "StrippedTextReply": followup_text,
+        "Headers": [
+            {"Name": "Message-ID", "Value": "<msg-2@example.com>"},
+            {"Name": "In-Reply-To", "Value": "<msg-1@example.com>"}
+        ]
+    });
+    let followup_raw = serde_json::to_string(&followup_payload)?;
+    let followup: PostmarkInbound = serde_json::from_str(&followup_raw)?;
+    process_inbound_payload(
+        &config,
+        &user_store,
+        &index_store,
+        &account_store,
+        &followup,
+        followup_raw.as_bytes(),
+        None,
+    )?;
+
+    let user = user_store.get_or_create_user("email", "logan@example.com")?;
+    let user_paths = user_store.user_paths(&config.users_root, &user.user_id);
+    let workspace = first_dir(&user_paths.workspaces_root);
+
+    let thread_request =
+        fs::read_to_string(workspace.join("incoming_email").join("thread_request.md"))?;
+    let latest_section = thread_request
+        .split("## Latest inbound message\n")
+        .nth(1)
+        .and_then(|section| section.split("\n## Thread timeline\n").next())
+        .expect("latest inbound section");
+    assert!(
+        latest_section.contains("competitors"),
+        "latest section should use follow-up request"
+    );
+    assert!(
+        !latest_section.contains("Give me a deep research about the Nvidia stock"),
+        "latest section should not fall back to quoted original request"
+    );
+
+    let workspace_payload: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+        workspace
+            .join("incoming_email")
+            .join("postmark_payload.json"),
+    )?)?;
+    assert_eq!(workspace_payload["TextBody"].as_str(), Some(followup_text));
+
+    let workspace_html = fs::read_to_string(workspace.join("incoming_email").join("email.html"))?;
+    assert!(
+        workspace_html.contains("competitors"),
+        "workspace html should reflect follow-up request"
+    );
+    assert!(
+        !workspace_html.contains("Give me a deep research about the Nvidia stock"),
+        "workspace html should not contain the quoted original request"
+    );
+
+    let entry_count = fs::read_dir(workspace.join("incoming_email").join("entries"))?
+        .filter_map(Result::ok)
+        .count();
+    assert_eq!(entry_count, 2, "thread should retain both inbound entries");
+
+    Ok(())
+}
