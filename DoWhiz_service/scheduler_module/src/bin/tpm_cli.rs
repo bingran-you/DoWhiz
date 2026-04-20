@@ -75,7 +75,8 @@ Task Board Commands:
     --workspace-id <ws>      Notion workspace ID
 
   create-task       Create a task in Notion
-    --organization <org>     Organization name (database_id auto-fetched from Supabase)
+    --organization <org>     Organization name (required)
+    --database-id <id>       Notion database ID (required)
     --title <text>           Task title (required)
     --description <text>     Task description (optional)
     --priority <p0|p1|p2|p3> Priority level (default: p2)
@@ -84,7 +85,8 @@ Task Board Commands:
     --assignee <email>       Assignee email (optional)
 
   list-tasks        List tasks from Notion
-    --organization <org>     Organization name (database_id auto-fetched from Supabase)
+    --organization <org>     Organization name (required)
+    --database-id <id>       Notion database ID (required)
     --status <status>        Filter by status (optional)
     --assignee <email>       Filter by assignee (optional)
 
@@ -94,7 +96,7 @@ Task Board Commands:
 
 
 Environment:
-  SUPABASE_DB_URL        Required for organization database access
+  SUPABASE_DB_URL        Required for setup-board (to save database ID)
   ACCOUNT_ID             Account UUID (from .notion_context.json or env)
   EMPLOYEE_ID            Employee ID for Notion OAuth lookup
 
@@ -493,6 +495,7 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
     let mut source_str: Option<String> = None;
     let mut tags_str: Option<String> = None;
     let mut assignee: Option<String> = None;
+    let mut database_id_arg: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -525,6 +528,10 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
                 i += 1;
                 assignee = args.get(i).cloned();
             }
+            "--database-id" => {
+                i += 1;
+                database_id_arg = args.get(i).cloned();
+            }
             _ => {}
         }
         i += 1;
@@ -535,32 +542,9 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // Auto-fetch database_id from Supabase
-    let database_id = match AccountStore::from_env() {
-        Ok(store) => match store.get_organization_by_name(&organization) {
-            Ok(Some(org)) => match org.notion_database_id {
-                Some(id) => id,
-                None => {
-                    eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
-                    return ExitCode::FAILURE;
-                }
-            },
-            Ok(None) => {
-                eprintln!(
-                    "Error: Organization '{}' not found in Supabase",
-                    organization
-                );
-                return ExitCode::FAILURE;
-            }
-            Err(e) => {
-                eprintln!("Error: Failed to query organization: {}", e);
-                return ExitCode::FAILURE;
-            }
-        },
-        Err(e) => {
-            eprintln!("Error: Could not connect to Supabase: {}", e);
-            return ExitCode::FAILURE;
-        }
+    let Some(database_id) = database_id_arg else {
+        eprintln!("Error: --database-id is required");
+        return ExitCode::FAILURE;
     };
 
     let workspace_id = get_workspace_id();
@@ -663,6 +647,7 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
 
     let output = json!({
         "success": true,
+        "organization": organization,
         "page_id": page.id,
         "page_url": page.url,
         "title": title,
@@ -678,6 +663,7 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
     let mut organization: Option<String> = None;
     let mut status_str: Option<String> = None;
     let mut assignee: Option<String> = None;
+    let mut database_id_arg: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -694,6 +680,10 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
                 i += 1;
                 assignee = args.get(i).cloned();
             }
+            "--database-id" => {
+                i += 1;
+                database_id_arg = args.get(i).cloned();
+            }
             _ => {}
         }
         i += 1;
@@ -704,32 +694,9 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // Auto-fetch database_id from Supabase
-    let database_id = match AccountStore::from_env() {
-        Ok(store) => match store.get_organization_by_name(&organization) {
-            Ok(Some(org)) => match org.notion_database_id {
-                Some(id) => id,
-                None => {
-                    eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
-                    return ExitCode::FAILURE;
-                }
-            },
-            Ok(None) => {
-                eprintln!(
-                    "Error: Organization '{}' not found in Supabase",
-                    organization
-                );
-                return ExitCode::FAILURE;
-            }
-            Err(e) => {
-                eprintln!("Error: Failed to query organization: {}", e);
-                return ExitCode::FAILURE;
-            }
-        },
-        Err(e) => {
-            eprintln!("Error: Could not connect to Supabase: {}", e);
-            return ExitCode::FAILURE;
-        }
+    let Some(database_id) = database_id_arg else {
+        eprintln!("Error: --database-id is required");
+        return ExitCode::FAILURE;
     };
 
     let workspace_id = get_workspace_id();

@@ -759,6 +759,12 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         .as_deref()
         .unwrap_or("<UNKNOWN_ACCOUNT_ID>");
 
+    let db_flag = identities
+        .notion_database_id
+        .as_ref()
+        .map(|id| format!(" --database-id {}", id))
+        .unwrap_or_default();
+
     format!(
         r#"
 === TPM MODE ACTIVE for {org_name} ===
@@ -778,10 +784,10 @@ You are operating as a Technical Program Manager (TPM) for the {org_name} organi
 
 **TPM CLI Commands (tpm_cli):**
 - `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>` - Create a new task database in Notion
-- `tpm_cli list-tasks --organization {org_name}` - List all tasks from Notion
-- `tpm_cli list-tasks --organization {org_name} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
-- `tpm_cli list-tasks --organization {org_name} --assignee dev@example.com` - Filter by assignee
-- `tpm_cli create-task --organization {org_name} --title "..." --description "..." --priority p1 --source user_feedback` - Create new task in Notion
+- `tpm_cli list-tasks --organization {org_name}{db_flag}` - List all tasks from Notion
+- `tpm_cli list-tasks --organization {org_name}{db_flag} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
+- `tpm_cli list-tasks --organization {org_name}{db_flag} --assignee dev@example.com` - Filter by assignee
+- `tpm_cli create-task --organization {org_name}{db_flag} --title "..." --description "..." --priority p1 --source user_feedback` - Create new task in Notion
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
@@ -796,18 +802,18 @@ Include the database URL in your reply and these sharing instructions.
 - `notion_api_cli create-comment --page-id <TASK_ID> --content "..."` - Add comment to task
 
 **Daily TPM Check-in Workflow:**
-1. First, check if a task board exists: `tpm_cli list-tasks --organization {org_name}`
+1. First, check if a task board exists: `tpm_cli list-tasks --organization {org_name}{db_flag}`
    - If you get "No notion_database_id configured" error, you MUST create the board first:
      a. Find a suitable parent page in Notion: `notion_api_cli search "workspace"` or use the workspace root
      b. Create the board: `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>`
      c. Note: The workspace-id is in .notion_context.json or from the Notion OAuth connection
    - If board exists, proceed to step 2
-2. Run `tpm_cli list-tasks --organization {org_name} --status blocked` to find blocked tasks
+2. Run `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked` to find blocked tasks
 3. Identify stale tasks (no updates in 3+ days) by reviewing the full task list
 4. Post summary to team channel (Discord/Slack)
 
 **Before Creating New Tasks:**
-ALWAYS run `tpm_cli list-tasks --organization {org_name}` first to:
+ALWAYS run `tpm_cli list-tasks --organization {org_name}{db_flag}` first to:
 1. Understand what the org is currently working on
 2. Check for existing tasks that might be duplicates or related
 3. See current priorities and workload distribution
@@ -827,7 +833,8 @@ When creating a task, reference related existing tasks if applicable. Do not cre
 - `tpm_cli trigger-sync --user-id {account_id} --organization {org_name}` - Queue immediate TPM sync task
 "#,
         org_name = org_name,
-        account_id = account_id
+        account_id = account_id,
+        db_flag = db_flag
     )
 }
 
