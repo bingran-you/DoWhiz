@@ -151,8 +151,9 @@ The frontend has **two different endpoints** for fetching tasks, and they check 
 - **Cron jobs (routines):** Queried by `get_account_routines`, no dual-write needed. `get_account_routines` already checks all verified identifier paths.
 - **One-shot tasks:** Dual-write required for channels other than Slack. `get_account_tasks` only checks the account path and Slack legacy paths.
 
-**TPM Note:** TPM mode uses `email_user_id` (not `account_id`) for worker execution to prevent the worker from loading a new scheduler with {account_id}.  But, because we are loading by `email_user_id`, and the frontend queries by `account_id`, one-shot tasks created by `trigger_tpm_sync` require dual-write to be visible on the frontend dashboard.
+**TPM Note:** TPM mode uses `email_user_id` (not `account_id`) for worker execution to prevent the worker from loading a new scheduler with {account_id}. But, because we are loading with owner-scope `email_user_id`, and the frontend queries by owner-scope `account_id`, one-shot tasks created by `trigger_tpm_sync` require dual-write to be visible on the frontend dashboard.
 
+**What is owner scope?***
 The MongoDB `tasks` collection uses `owner_scope.id` to scope queries. The `owner_scope.id` is derived from the file path:
 
 ```rust
