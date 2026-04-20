@@ -560,34 +560,38 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
     // Auto-fetch database_id from Supabase if not provided
     let database_id = match database_id {
         Some(id) => id,
-        None => {
-            match AccountStore::from_env() {
-                Ok(store) => match store.get_organization_by_name(&organization) {
-                    Ok(Some(org)) => match org.notion_database_id {
-                        Some(id) => {
-                            eprintln!("Info: Using database_id from organizations table: {}", id);
-                            id
-                        }
-                        None => {
-                            eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
-                            return ExitCode::FAILURE;
-                        }
-                    },
-                    Ok(None) => {
-                        eprintln!("Error: Organization '{}' not found in Supabase", organization);
-                        return ExitCode::FAILURE;
+        None => match AccountStore::from_env() {
+            Ok(store) => match store.get_organization_by_name(&organization) {
+                Ok(Some(org)) => match org.notion_database_id {
+                    Some(id) => {
+                        eprintln!("Info: Using database_id from organizations table: {}", id);
+                        id
                     }
-                    Err(e) => {
-                        eprintln!("Error: Failed to query organization: {}", e);
+                    None => {
+                        eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
                         return ExitCode::FAILURE;
                     }
                 },
-                Err(e) => {
-                    eprintln!("Error: --database-id is required (could not connect to Supabase: {})", e);
+                Ok(None) => {
+                    eprintln!(
+                        "Error: Organization '{}' not found in Supabase",
+                        organization
+                    );
                     return ExitCode::FAILURE;
                 }
+                Err(e) => {
+                    eprintln!("Error: Failed to query organization: {}", e);
+                    return ExitCode::FAILURE;
+                }
+            },
+            Err(e) => {
+                eprintln!(
+                    "Error: --database-id is required (could not connect to Supabase: {})",
+                    e
+                );
+                return ExitCode::FAILURE;
             }
-        }
+        },
     };
 
     let workspace_id = workspace_id.or_else(get_workspace_id);
@@ -861,7 +865,10 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
                         }
                     },
                     Ok(None) => {
-                        eprintln!("Error: Organization '{}' not found in Supabase", organization);
+                        eprintln!(
+                            "Error: Organization '{}' not found in Supabase",
+                            organization
+                        );
                         return ExitCode::FAILURE;
                     }
                     Err(e) => {
@@ -870,7 +877,10 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
                     }
                 },
                 Err(e) => {
-                    eprintln!("Error: --database-id is required (could not connect to Supabase: {})", e);
+                    eprintln!(
+                        "Error: --database-id is required (could not connect to Supabase: {})",
+                        e
+                    );
                     return ExitCode::FAILURE;
                 }
             }
