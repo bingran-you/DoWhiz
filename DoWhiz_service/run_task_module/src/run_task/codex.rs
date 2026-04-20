@@ -78,6 +78,7 @@ const HUMAN_APPROVAL_GATE_REQUIRE_MCP_ENV_KEY: &str = "HUMAN_APPROVAL_GATE_REQUI
 const HUMAN_APPROVAL_GATE_MCP_SERVER_NAME: &str = "human-approval-gate";
 const HUMAN_APPROVAL_GATE_MCP_TOOL_TIMEOUT_SECONDS: u32 = 31 * 60;
 const LARK_ENV_KEYS: &[&str] = &["LARK_APP_ID", "LARK_APP_SECRET"];
+const TPM_ENV_KEYS: &[&str] = &["MONGODB_URI", "EMPLOYEE_ID"];
 const HUMAN_APPROVAL_FROM_ENV_KEY: &str = "HUMAN_APPROVAL_FROM";
 const HUMAN_APPROVAL_REPLY_TO_ENV_KEY: &str = "HUMAN_APPROVAL_REPLY_TO";
 const EMPLOYEE_CONFIG_PATH_ENV_KEY: &str = "EMPLOYEE_CONFIG_PATH";
@@ -509,6 +510,7 @@ pub(super) fn run_codex_task(
     let browserbase_env_overrides = collect_browserbase_env_overrides(&browserbase_workspace_dir);
     let human_approval_gate_env_overrides = collect_human_approval_gate_env_overrides();
     let lark_env_overrides = collect_lark_env_overrides();
+    let tpm_env_overrides = collect_tpm_env_overrides();
 
     let memory_context = load_memory_context(request.workspace_dir, request.memory_dir)?;
     let prompt = build_prompt(
@@ -692,6 +694,9 @@ pub(super) fn run_codex_task(
         for (key, value) in &lark_env_overrides {
             cmd.arg("-e").arg(format!("{}={}", key, value));
         }
+        for (key, value) in &tpm_env_overrides {
+            cmd.arg("-e").arg(format!("{}={}", key, value));
+        }
         cmd.arg("-e")
             .arg(format!("{}=1", HUMAN_APPROVAL_GATE_REQUIRE_MCP_ENV_KEY));
         for (key, value) in &github_auth.env_overrides {
@@ -840,6 +845,9 @@ pub(super) fn run_codex_task(
             cmd.env(key, value);
         }
         for (key, value) in &lark_env_overrides {
+            cmd.env(key, value);
+        }
+        for (key, value) in &tpm_env_overrides {
             cmd.env(key, value);
         }
         cmd.env(HUMAN_APPROVAL_GATE_REQUIRE_MCP_ENV_KEY, "1");
@@ -1126,6 +1134,7 @@ fn run_codex_task_azure_aci(
     let browserbase_env_overrides = collect_browserbase_env_overrides(&container_workspace_dir);
     let human_approval_gate_env_overrides = collect_human_approval_gate_env_overrides();
     let lark_env_overrides = collect_lark_env_overrides();
+    let tpm_env_overrides = collect_tpm_env_overrides();
 
     let memory_context = load_memory_context(request.workspace_dir, request.memory_dir)?;
     let prompt = build_prompt(
@@ -1231,6 +1240,9 @@ fn run_codex_task_azure_aci(
         env_overrides.push((key, value));
     }
     for (key, value) in lark_env_overrides {
+        env_overrides.push((key, value));
+    }
+    for (key, value) in tpm_env_overrides {
         env_overrides.push((key, value));
     }
     env_overrides.push((
@@ -2666,6 +2678,13 @@ fn collect_human_approval_gate_env_overrides() -> Vec<(String, String)> {
 
 fn collect_lark_env_overrides() -> Vec<(String, String)> {
     LARK_ENV_KEYS
+        .iter()
+        .filter_map(|key| read_env_trimmed(key).map(|value| ((*key).to_string(), value)))
+        .collect()
+}
+
+fn collect_tpm_env_overrides() -> Vec<(String, String)> {
+    TPM_ENV_KEYS
         .iter()
         .filter_map(|key| read_env_trimmed(key).map(|value| ((*key).to_string(), value)))
         .collect()
