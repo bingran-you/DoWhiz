@@ -1,7 +1,6 @@
 pub mod adapters;
 pub mod artifact_extractor;
 pub mod channel;
-pub mod dev_task_store;
 pub mod discord_gateway;
 pub mod domain;
 pub mod employee_config;
@@ -47,8 +46,4 @@ pub use scheduler::{
     load_google_access_token_from_service_env, load_notion_access_token_for_account,
     load_tasks_with_status, ModuleExecutor, RunTaskTask, Schedule, ScheduledTask, Scheduler,
     SchedulerError, SendReplyTask, TaskExecution, TaskExecutor, TaskKind, TaskStatusSummary,
-};
-
-pub use dev_task_store::{
-    DevTask, DevTaskStore, DevTaskStoreError, Priority, TaskSource, TaskStatus,
 };

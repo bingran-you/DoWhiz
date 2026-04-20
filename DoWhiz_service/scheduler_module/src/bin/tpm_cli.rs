@@ -10,9 +10,7 @@
 //!   tpm_cli list-contacts [--workspace-id <ws>]
 //!   tpm_cli update-contacted --contact-id <id>
 
-use mongodb::bson::oid::ObjectId;
 use scheduler_module::account_store::{AccountStore, UserContact};
-use scheduler_module::dev_task_store::{DevTask, DevTaskStore, Priority, TaskSource, TaskStatus};
 use scheduler_module::index_store::IndexStore;
 use scheduler_module::notion_browser::NotionApiClient;
 use scheduler_module::tpm_cron::trigger_tpm_sync;
@@ -39,7 +37,6 @@ fn main() -> ExitCode {
         "setup-board" => cmd_setup_board(&args[2..]),
         "create-task" => cmd_create_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
-        "sync-tasks" => cmd_sync_tasks(&args[2..]),
         "trigger-sync" => cmd_trigger_sync(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
@@ -77,35 +74,27 @@ Task Board Commands:
     --parent-page-id <id>    Notion page to create database under
     --workspace-id <ws>      Notion workspace ID
 
-  create-task       Create a task in MongoDB and Notion
-    --organization <org>     Organization name
-    --database-id <id>       Notion database ID (from setup-board)
-    --workspace-id <ws>      Notion workspace ID
+  create-task       Create a task in Notion
+    --organization <org>     Organization name (database_id auto-fetched from Supabase)
     --title <text>           Task title (required)
-    --description <text>     Task description (required)
+    --description <text>     Task description (optional)
     --priority <p0|p1|p2|p3> Priority level (default: p2)
     --source <src>           Source: manual|user_feedback|notetaker|market_research
     --tags <tag1,tag2>       Comma-separated tags (optional)
     --assignee <email>       Assignee email (optional)
 
-  list-tasks        List tasks from MongoDB
-    --organization <org>     Organization name (required)
+  list-tasks        List tasks from Notion
+    --organization <org>     Organization name (database_id auto-fetched from Supabase)
     --status <status>        Filter by status (optional)
     --assignee <email>       Filter by assignee (optional)
 
-  sync-tasks        Sync task status from Notion to MongoDB
-    --organization <org>     Organization name (required)
-    --database-id <id>       Notion database ID
-    --workspace-id <ws>      Notion workspace ID
-
-  trigger-sync      Trigger immediate TPM sync (one-shot task)
+  trigger-sync      Trigger immediate TPM check-in (one-shot task)
     --user-id <uuid>         Account UUID (required)
     --organization <org>     Organization name (required)
 
 
 Environment:
-  SUPABASE_DB_URL        Required for contact database access
-  MONGODB_URI            Required for task database access
+  SUPABASE_DB_URL        Required for organization database access
   ACCOUNT_ID             Account UUID (from .notion_context.json or env)
   EMPLOYEE_ID            Employee ID for Notion OAuth lookup
 
@@ -496,11 +485,9 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
     }
 }
 
-/// Create a task in MongoDB and Notion.
+/// Create a task in Notion.
 fn cmd_create_task(args: &[String]) -> ExitCode {
     let mut organization: Option<String> = None;
-    let mut database_id: Option<String> = None;
-    let mut workspace_id: Option<String> = None;
     let mut title: Option<String> = None;
     let mut description: Option<String> = None;
     let mut priority_str: Option<String> = None;
@@ -514,14 +501,6 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
             "--organization" => {
                 i += 1;
                 organization = args.get(i).cloned();
-            }
-            "--database-id" => {
-                i += 1;
-                database_id = args.get(i).cloned();
-            }
-            "--workspace-id" => {
-                i += 1;
-                workspace_id = args.get(i).cloned();
             }
             "--title" => {
                 i += 1;
@@ -557,46 +536,37 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // Auto-fetch database_id from Supabase if not provided
-    let database_id = match database_id {
-        Some(id) => id,
-        None => match AccountStore::from_env() {
-            Ok(store) => match store.get_organization_by_name(&organization) {
-                Ok(Some(org)) => match org.notion_database_id {
-                    Some(id) => {
-                        eprintln!("Info: Using database_id from organizations table: {}", id);
-                        id
-                    }
-                    None => {
-                        eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
-                        return ExitCode::FAILURE;
-                    }
-                },
-                Ok(None) => {
-                    eprintln!(
-                        "Error: Organization '{}' not found in Supabase",
-                        organization
-                    );
-                    return ExitCode::FAILURE;
-                }
-                Err(e) => {
-                    eprintln!("Error: Failed to query organization: {}", e);
+    // Auto-fetch database_id from Supabase
+    let database_id = match AccountStore::from_env() {
+        Ok(store) => match store.get_organization_by_name(&organization) {
+            Ok(Some(org)) => match org.notion_database_id {
+                Some(id) => id,
+                None => {
+                    eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
                     return ExitCode::FAILURE;
                 }
             },
-            Err(e) => {
+            Ok(None) => {
                 eprintln!(
-                    "Error: --database-id is required (could not connect to Supabase: {})",
-                    e
+                    "Error: Organization '{}' not found in Supabase",
+                    organization
                 );
                 return ExitCode::FAILURE;
             }
+            Err(e) => {
+                eprintln!("Error: Failed to query organization: {}", e);
+                return ExitCode::FAILURE;
+            }
         },
+        Err(e) => {
+            eprintln!("Error: Could not connect to Supabase: {}", e);
+            return ExitCode::FAILURE;
+        }
     };
 
-    let workspace_id = workspace_id.or_else(get_workspace_id);
+    let workspace_id = get_workspace_id();
     let Some(workspace_id) = workspace_id else {
-        eprintln!("Error: --workspace-id is required");
+        eprintln!("Error: workspace_id is required (set via .notion_context.json)");
         return ExitCode::FAILURE;
     };
 
@@ -605,20 +575,21 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let Some(description) = description else {
-        eprintln!("Error: --description is required");
-        return ExitCode::FAILURE;
+    let description = description.unwrap_or_default();
+
+    let priority_name = match priority_str.as_deref() {
+        Some("p0") | Some("P0") => "P0",
+        Some("p1") | Some("P1") => "P1",
+        Some("p3") | Some("P3") => "P3",
+        _ => "P2",
     };
 
-    let priority = priority_str
-        .as_deref()
-        .and_then(Priority::from_str)
-        .unwrap_or(Priority::P2);
-
-    let source = source_str
-        .as_deref()
-        .and_then(TaskSource::from_str)
-        .unwrap_or(TaskSource::Manual);
+    let source_name = match source_str.as_deref() {
+        Some("user_feedback") => "User Feedback",
+        Some("notetaker") => "Notetaker",
+        Some("market_research") => "Market Research",
+        _ => "Manual",
+    };
 
     let tags: Vec<String> = tags_str
         .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
@@ -632,62 +603,16 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         }
     };
 
-    // 1. Create DevTask in MongoDB
-    let store = match DevTaskStore::new(&organization) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error: Failed to create task store: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let mut task = DevTask::new(
-        organization.clone(),
-        title.clone(),
-        description.clone(),
-        source,
-    )
-    .with_priority(priority)
-    .with_tags(tags.clone());
-
-    if let Some(ref a) = assignee {
-        task = task.with_assignee(a.clone());
-    }
-
-    let task_id = match store.insert_task(&task) {
-        Ok(id) => id,
-        Err(e) => {
-            eprintln!("Error: Failed to insert task: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // 2. Create page in Notion database
     let client = match NotionApiClient::from_env(&employee_id) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error: Failed to create Notion client: {}", e);
-            // Clean up MongoDB entry
-            let _ = store.delete_task(&task_id);
             return ExitCode::FAILURE;
         }
     };
 
-    let priority_name = match priority {
-        Priority::P0 => "P0",
-        Priority::P1 => "P1",
-        Priority::P2 => "P2",
-        Priority::P3 => "P3",
-    };
-
-    let source_name = match source {
-        TaskSource::UserFeedback => "User Feedback",
-        TaskSource::Notetaker => "Notetaker",
-        TaskSource::MarketResearch => "Market Research",
-        TaskSource::Manual => "Manual",
-    };
-
-    let notion_properties = json!({
+    // Build Notion properties
+    let mut notion_properties = json!({
         "Name": {
             "title": [{
                 "text": { "content": title }
@@ -701,35 +626,46 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         },
         "Source": {
             "select": { "name": source_name }
-        },
-        "MongoDB ID": {
-            "rich_text": [{
-                "text": { "content": task_id.to_string() }
-            }]
         }
     });
+
+    // Add description if provided
+    if !description.is_empty() {
+        notion_properties["Description"] = json!({
+            "rich_text": [{
+                "text": { "content": description }
+            }]
+        });
+    }
+
+    // Add assignee if provided
+    if let Some(ref a) = assignee {
+        notion_properties["Assignee"] = json!({
+            "rich_text": [{
+                "text": { "content": a }
+            }]
+        });
+    }
+
+    // Add tags if provided
+    if !tags.is_empty() {
+        notion_properties["Tags"] = json!({
+            "multi_select": tags.iter().map(|t| json!({"name": t})).collect::<Vec<_>>()
+        });
+    }
 
     let page = match client.create_database_page(&workspace_id, &database_id, notion_properties) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Error: Failed to create Notion page: {}", e);
-            // Clean up MongoDB entry
-            let _ = store.delete_task(&task_id);
             return ExitCode::FAILURE;
         }
     };
 
-    // 3. Link Notion page back to MongoDB
-    if let Err(e) = store.link_notion_page(&task_id, &page.id) {
-        eprintln!("Warning: Failed to link Notion page to MongoDB: {}", e);
-        // Don't fail - the task was created, just not linked
-    }
-
     let output = json!({
         "success": true,
-        "task_id": task_id.to_string(),
-        "notion_page_id": page.id,
-        "notion_url": page.url,
+        "page_id": page.id,
+        "page_url": page.url,
         "title": title,
         "priority": priority_name,
         "status": "Backlog"
@@ -738,7 +674,7 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// List tasks from MongoDB.
+/// List tasks from Notion.
 fn cmd_list_tasks(args: &[String]) -> ExitCode {
     let mut organization: Option<String> = None;
     let mut status_str: Option<String> = None;
@@ -769,127 +705,37 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    let store = match DevTaskStore::new(&organization) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error: Failed to create task store: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let status = status_str.as_deref().and_then(TaskStatus::from_str);
-
-    let tasks = match (status, assignee.as_deref()) {
-        (Some(s), _) => store.list_tasks_by_status(s),
-        (_, Some(a)) => store.list_tasks_by_assignee(a),
-        _ => store.list_all_tasks(),
-    };
-
-    let tasks = match tasks {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("Error: Failed to list tasks: {}", e);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let output: Vec<Value> = tasks
-        .iter()
-        .map(|t| {
-            json!({
-                "id": t.id.map(|id| id.to_string()),
-                "title": t.title,
-                "description": t.description,
-                "status": t.status.as_str(),
-                "priority": t.priority.as_str(),
-                "assignee": t.assignee,
-                "source": t.source.as_str(),
-                "tags": t.tags,
-                "notion_page_id": t.notion_page_id,
-                "created_at": t.created_at.to_rfc3339(),
-                "updated_at": t.updated_at.to_rfc3339(),
-            })
-        })
-        .collect();
-
-    println!("{}", serde_json::to_string_pretty(&output).unwrap());
-    ExitCode::SUCCESS
-}
-
-/// Sync task status from Notion to MongoDB.
-fn cmd_sync_tasks(args: &[String]) -> ExitCode {
-    let mut organization: Option<String> = None;
-    let mut database_id: Option<String> = None;
-    let mut workspace_id: Option<String> = None;
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--organization" => {
-                i += 1;
-                organization = args.get(i).cloned();
-            }
-            "--database-id" => {
-                i += 1;
-                database_id = args.get(i).cloned();
-            }
-            "--workspace-id" => {
-                i += 1;
-                workspace_id = args.get(i).cloned();
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-
-    let Some(organization) = organization else {
-        eprintln!("Error: --organization is required");
-        return ExitCode::FAILURE;
-    };
-
-    // Auto-fetch database_id from Supabase if not provided
-    let database_id = match database_id {
-        Some(id) => id,
-        None => {
-            // Try to fetch from Supabase organizations table
-            match AccountStore::from_env() {
-                Ok(store) => match store.get_organization_by_name(&organization) {
-                    Ok(Some(org)) => match org.notion_database_id {
-                        Some(id) => {
-                            eprintln!("Info: Using database_id from organizations table: {}", id);
-                            id
-                        }
-                        None => {
-                            eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
-                            return ExitCode::FAILURE;
-                        }
-                    },
-                    Ok(None) => {
-                        eprintln!(
-                            "Error: Organization '{}' not found in Supabase",
-                            organization
-                        );
-                        return ExitCode::FAILURE;
-                    }
-                    Err(e) => {
-                        eprintln!("Error: Failed to query organization: {}", e);
-                        return ExitCode::FAILURE;
-                    }
-                },
-                Err(e) => {
-                    eprintln!(
-                        "Error: --database-id is required (could not connect to Supabase: {})",
-                        e
-                    );
+    // Auto-fetch database_id from Supabase
+    let database_id = match AccountStore::from_env() {
+        Ok(store) => match store.get_organization_by_name(&organization) {
+            Ok(Some(org)) => match org.notion_database_id {
+                Some(id) => id,
+                None => {
+                    eprintln!("Error: No notion_database_id configured for organization '{}'. Run setup-board first.", organization);
                     return ExitCode::FAILURE;
                 }
+            },
+            Ok(None) => {
+                eprintln!(
+                    "Error: Organization '{}' not found in Supabase",
+                    organization
+                );
+                return ExitCode::FAILURE;
             }
+            Err(e) => {
+                eprintln!("Error: Failed to query organization: {}", e);
+                return ExitCode::FAILURE;
+            }
+        },
+        Err(e) => {
+            eprintln!("Error: Could not connect to Supabase: {}", e);
+            return ExitCode::FAILURE;
         }
     };
 
-    let workspace_id = workspace_id.or_else(get_workspace_id);
+    let workspace_id = get_workspace_id();
     let Some(workspace_id) = workspace_id else {
-        eprintln!("Error: --workspace-id is required");
+        eprintln!("Error: workspace_id is required (set via .notion_context.json)");
         return ExitCode::FAILURE;
     };
 
@@ -897,14 +743,6 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         Ok(v) => v,
         Err(_) => {
             eprintln!("Error: EMPLOYEE_ID environment variable is required");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let store = match DevTaskStore::new(&organization) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error: Failed to create task store: {}", e);
             return ExitCode::FAILURE;
         }
     };
@@ -917,196 +755,71 @@ fn cmd_sync_tasks(args: &[String]) -> ExitCode {
         }
     };
 
-    // Query all items from Notion database
-    let items = match client.query_database(&workspace_id, &database_id, None, None, Some(500)) {
-        Ok(items) => items,
+    // Build filter based on status/assignee
+    let filter = match (status_str.as_deref(), assignee.as_deref()) {
+        (Some(status), Some(assignee)) => Some(json!({
+            "and": [
+                {"property": "Status", "select": {"equals": normalize_status(status)}},
+                {"property": "Assignee", "rich_text": {"contains": assignee}}
+            ]
+        })),
+        (Some(status), None) => Some(json!({
+            "property": "Status",
+            "select": {"equals": normalize_status(status)}
+        })),
+        (None, Some(assignee)) => Some(json!({
+            "property": "Assignee",
+            "rich_text": {"contains": assignee}
+        })),
+        (None, None) => None,
+    };
+
+    let pages = match client.query_database(&workspace_id, &database_id, filter, None, Some(500)) {
+        Ok(p) => p,
         Err(e) => {
-            eprintln!("Error: Failed to query Notion database: {}", e);
+            eprintln!("Error: Failed to query Notion: {}", e);
             return ExitCode::FAILURE;
         }
     };
 
-    let mut synced = 0;
-    let mut created = 0;
-    let mut skipped = 0;
-    let mut errors: Vec<String> = Vec::new();
-    let mut notion_page_ids: Vec<String> = Vec::new();
-
-    for item in items {
-        // Collect all Notion page IDs for orphan cleanup
-        notion_page_ids.push(item.id.clone());
-
-        // Extract MongoDB ID from Notion page properties
-        let mongo_id_str = extract_rich_text_property(&item.properties, "MongoDB ID");
-
-        // If no MongoDB ID, create task in MongoDB from Notion data
-        if mongo_id_str.is_none() || mongo_id_str.as_ref().map(|s| s.is_empty()).unwrap_or(false) {
-            let title = match extract_title_property(&item.properties, "Name") {
-                Some(t) => t,
-                None => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-
-            let status = match extract_select_property(&item.properties, "Status").as_deref() {
-                Some("Backlog") => TaskStatus::Backlog,
-                Some("In Progress") => TaskStatus::InProgress,
-                Some("Review") => TaskStatus::Review,
-                Some("Done") => TaskStatus::Done,
-                Some("Blocked") => TaskStatus::Blocked,
-                _ => TaskStatus::Backlog,
-            };
-
-            let priority = match extract_select_property(&item.properties, "Priority").as_deref() {
-                Some("P0") => Priority::P0,
-                Some("P1") => Priority::P1,
-                Some("P2") => Priority::P2,
-                Some("P3") => Priority::P3,
-                _ => Priority::P2,
-            };
-
-            let source = match extract_select_property(&item.properties, "Source").as_deref() {
-                Some("User Feedback") => TaskSource::UserFeedback,
-                Some("Notetaker") => TaskSource::Notetaker,
-                Some("Market Research") => TaskSource::MarketResearch,
-                _ => TaskSource::Manual,
-            };
-
-            // Create task in MongoDB
-            let task = DevTask::new(
-                organization.clone(),
-                title,
-                String::new(), // No description in table view
-                source,
-            )
-            .with_priority(priority)
-            .with_status(status);
-
-            let task_id = match store.insert_task(&task) {
-                Ok(id) => id,
-                Err(e) => {
-                    errors.push(format!("Failed to create task from Notion: {}", e));
-                    continue;
-                }
-            };
-
-            // Link notion_page_id to MongoDB
-            if let Err(e) = store.link_notion_page(&task_id, &item.id) {
-                errors.push(format!("Failed to link Notion page {}: {}", item.id, e));
-            }
-
-            // Update Notion page with MongoDB ID
-            let update_props = json!({
-                "MongoDB ID": {
-                    "rich_text": [{
-                        "text": { "content": task_id.to_string() }
-                    }]
-                }
-            });
-            if let Err(e) = client.update_page(&workspace_id, &item.id, update_props) {
-                errors.push(format!(
-                    "Failed to update Notion page with MongoDB ID: {}",
-                    e
-                ));
-            }
-
-            created += 1;
-            continue;
-        }
-
-        let mongo_id_str = mongo_id_str.unwrap();
-
-        let Ok(object_id) = ObjectId::parse_str(&mongo_id_str) else {
-            errors.push(format!("Invalid ObjectId: {}", mongo_id_str));
-            continue;
-        };
-
-        // Get current task from MongoDB
-        let task = match store.get_task(&object_id) {
-            Ok(Some(t)) => t,
-            Ok(None) => {
-                errors.push(format!("Task not found: {}", mongo_id_str));
-                continue;
-            }
-            Err(e) => {
-                errors.push(format!("Failed to get task {}: {}", mongo_id_str, e));
-                continue;
-            }
-        };
-
-        // Extract status from Notion
-        let notion_status = extract_select_property(&item.properties, "Status");
-        let new_status = match notion_status.as_deref() {
-            Some("Backlog") => TaskStatus::Backlog,
-            Some("In Progress") => TaskStatus::InProgress,
-            Some("Review") => TaskStatus::Review,
-            Some("Done") => TaskStatus::Done,
-            Some("Blocked") => TaskStatus::Blocked,
-            _ => {
-                skipped += 1;
-                continue;
-            }
-        };
-
-        // Update MongoDB if status changed
-        if task.status != new_status {
-            if let Err(e) = store.update_status(&object_id, new_status) {
-                errors.push(format!("Failed to update task {}: {}", mongo_id_str, e));
-                continue;
-            }
-            synced += 1;
-        }
-
-        // Also sync priority if changed
-        let notion_priority = extract_select_property(&item.properties, "Priority");
-        let new_priority = match notion_priority.as_deref() {
-            Some("P0") => Some(Priority::P0),
-            Some("P1") => Some(Priority::P1),
-            Some("P2") => Some(Priority::P2),
-            Some("P3") => Some(Priority::P3),
-            _ => None,
-        };
-
-        if let Some(new_priority) = new_priority {
-            if task.priority != new_priority {
-                if let Err(e) = store.update_priority(&object_id, new_priority) {
-                    errors.push(format!(
-                        "Failed to update priority for {}: {}",
-                        mongo_id_str, e
-                    ));
-                }
-            }
-        }
-    }
-
-    // Delete orphaned tasks (linked to Notion pages that no longer exist)
-    let orphans_deleted = match store.delete_orphaned_tasks(&notion_page_ids) {
-        Ok(count) => count,
-        Err(e) => {
-            errors.push(format!("Failed to delete orphaned tasks: {}", e));
-            0
-        }
-    };
+    let tasks: Vec<Value> = pages
+        .iter()
+        .map(|p| {
+            json!({
+                "page_id": p.id,
+                "url": p.url,
+                "title": extract_title_property(&p.properties, "Name").unwrap_or_default(),
+                "status": extract_select_property(&p.properties, "Status").unwrap_or_default(),
+                "priority": extract_select_property(&p.properties, "Priority").unwrap_or_default(),
+                "assignee": extract_rich_text_property(&p.properties, "Assignee").unwrap_or_default(),
+                "source": extract_select_property(&p.properties, "Source").unwrap_or_default(),
+            })
+        })
+        .collect();
 
     let output = json!({
-        "success": errors.is_empty(),
-        "synced": synced,
-        "created": created,
-        "skipped": skipped,
-        "orphans_deleted": orphans_deleted,
-        "errors": errors
+        "success": true,
+        "organization": organization,
+        "count": tasks.len(),
+        "tasks": tasks
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
+}
 
-    if errors.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
+/// Normalize status string to match Notion select options.
+fn normalize_status(status: &str) -> &'static str {
+    match status.to_lowercase().as_str() {
+        "backlog" => "Backlog",
+        "in_progress" | "in-progress" | "inprogress" => "In Progress",
+        "review" => "Review",
+        "done" => "Done",
+        "blocked" => "Blocked",
+        _ => "Backlog",
     }
 }
 
-/// Trigger an immediate TPM sync (one-shot task).
+/// Trigger an immediate TPM check-in (one-shot task).
 fn cmd_trigger_sync(args: &[String]) -> ExitCode {
     let mut user_id: Option<String> = None;
     let mut organization: Option<String> = None;
@@ -1237,16 +950,6 @@ mod tests {
     // Environment check helpers
     // -------------------------------------------------------------------------
 
-    fn require_mongodb_uri(test_name: &str) -> bool {
-        match env::var("MONGODB_URI") {
-            Ok(value) if !value.trim().is_empty() => true,
-            _ => {
-                eprintln!("Skipping {test_name}; MONGODB_URI not set.");
-                false
-            }
-        }
-    }
-
     fn require_notion_token(test_name: &str) -> bool {
         match env::var("NOTION_API_TOKEN") {
             Ok(value) if !value.trim().is_empty() => true,
@@ -1348,65 +1051,11 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // Integration tests (require MONGODB_URI)
-    // -------------------------------------------------------------------------
-
-    const TEST_ORG: &str = "tpm_cli_test_org";
-
-    #[test]
-    fn integration_list_tasks_empty() {
-        if !require_mongodb_uri("integration_list_tasks_empty") {
-            return;
-        }
-
-        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
-
-        // List tasks (may or may not be empty, but should not error)
-        let tasks = store.list_all_tasks().expect("failed to list tasks");
-        // Just verify it returns a valid Vec
-        let _ = tasks.len();
-    }
-
-    #[test]
-    fn integration_create_and_list_task() {
-        if !require_mongodb_uri("integration_create_and_list_task") {
-            return;
-        }
-
-        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
-
-        // Create a task
-        let task = DevTask::new(
-            TEST_ORG.to_string(),
-            "TPM CLI Test Task".to_string(),
-            "Created by tpm_cli integration test".to_string(),
-            TaskSource::Manual,
-        )
-        .with_priority(Priority::P1)
-        .with_tags(vec!["test".to_string(), "cli".to_string()]);
-
-        let task_id = store.insert_task(&task).expect("failed to insert task");
-
-        // List by status
-        let backlog_tasks = store
-            .list_tasks_by_status(TaskStatus::Backlog)
-            .expect("failed to list by status");
-
-        assert!(backlog_tasks.iter().any(|t| t.title == "TPM CLI Test Task"));
-
-        // Clean up
-        store.delete_task(&task_id).expect("failed to delete task");
-    }
-
-    // -------------------------------------------------------------------------
-    // Integration tests (require MONGODB_URI + NOTION_API_TOKEN)
+    // Integration tests (require NOTION_API_TOKEN)
     // -------------------------------------------------------------------------
 
     #[test]
     fn integration_setup_board() {
-        if !require_mongodb_uri("integration_setup_board") {
-            return;
-        }
         if !require_notion_token("integration_setup_board") {
             return;
         }
@@ -1456,87 +1105,5 @@ mod tests {
 
         eprintln!("Created test database: {} ({})", db.title, db.id);
         eprintln!("NOTE: Manually delete this database after test: {}", db.url);
-    }
-
-    #[test]
-    fn integration_full_task_flow() {
-        if !require_mongodb_uri("integration_full_task_flow") {
-            return;
-        }
-        if !require_notion_token("integration_full_task_flow") {
-            return;
-        }
-
-        // This test requires a pre-existing Notion database
-        let database_id = match env::var("NOTION_TEST_DATABASE_ID") {
-            Ok(value) if !value.trim().is_empty() => value,
-            _ => {
-                eprintln!("Skipping integration_full_task_flow; NOTION_TEST_DATABASE_ID not set.");
-                eprintln!("Run integration_setup_board first and set the database ID.");
-                return;
-            }
-        };
-
-        env::set_var("EMPLOYEE_ID", "test_employee");
-
-        let store = DevTaskStore::new(TEST_ORG).expect("failed to create store");
-        let client =
-            NotionApiClient::from_env("test_employee").expect("failed to create Notion client");
-
-        // 1. Create task in MongoDB
-        let task = DevTask::new(
-            TEST_ORG.to_string(),
-            "Full Flow Test Task".to_string(),
-            "Testing create-task flow".to_string(),
-            TaskSource::Manual,
-        )
-        .with_priority(Priority::P1);
-
-        let task_id = store.insert_task(&task).expect("failed to insert task");
-
-        // 2. Create page in Notion
-        let notion_properties = json!({
-            "Name": {
-                "title": [{
-                    "text": { "content": "Full Flow Test Task" }
-                }]
-            },
-            "Status": {
-                "select": { "name": "Backlog" }
-            },
-            "Priority": {
-                "select": { "name": "P1" }
-            },
-            "MongoDB ID": {
-                "rich_text": [{
-                    "text": { "content": task_id.to_string() }
-                }]
-            }
-        });
-
-        let page = client
-            .create_database_page("default", &database_id, notion_properties)
-            .expect("failed to create Notion page");
-
-        assert!(!page.id.is_empty());
-
-        // 3. Link back to MongoDB
-        store
-            .link_notion_page(&task_id, &page.id)
-            .expect("failed to link notion page");
-
-        // 4. Verify link
-        let updated_task = store
-            .get_task(&task_id)
-            .expect("failed to get task")
-            .expect("task not found");
-
-        assert_eq!(updated_task.notion_page_id, Some(page.id.clone()));
-
-        // 5. Clean up MongoDB (leave Notion page for manual inspection)
-        store.delete_task(&task_id).expect("failed to delete task");
-
-        eprintln!("Created Notion page: {}", page.url);
-        eprintln!("NOTE: Manually delete this page after inspection.");
     }
 }
