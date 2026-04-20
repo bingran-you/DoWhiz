@@ -42,6 +42,15 @@ pub fn try_load_tasks_with_status(
     store.list_tasks_with_status()
 }
 
+/// Load task status summaries using the shared MongoDB client.
+/// Use this for API request handlers to avoid connection pool exhaustion.
+pub fn try_load_tasks_with_status_shared(
+    tasks_db_path: &Path,
+) -> Result<Vec<TaskStatusSummary>, SchedulerError> {
+    let store = store::SchedulerStore::with_shared_client(tasks_db_path.to_path_buf())?;
+    store.list_tasks_with_status()
+}
+
 /// Load a single task status summary by ID from the owner scope derived from `tasks_db_path`.
 pub fn try_load_task_with_status(
     tasks_db_path: &Path,

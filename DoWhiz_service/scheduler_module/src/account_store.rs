@@ -1245,16 +1245,16 @@ impl AccountStore {
         event: AnalyticsEventInsert,
         context: &'static str,
     ) {
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            let store = Arc::clone(self);
-            std::mem::drop(handle.spawn_blocking(move || {
-                if let Err(err) = store.record_analytics_event(&event) {
-                    log_record_analytics_event_error(context, &event, &err);
-                }
-            }));
-            return;
-        }
-
+        // NOTE: always use std::thread::spawn here, never tokio::spawn_blocking.
+        // `record_analytics_event` ends up calling r2d2, which on connection
+        // recycling drops a sync `postgres::Client`. That Drop impl calls
+        // `Runtime::block_on(close_rendezvous())`, which tries to create its
+        // own current-thread runtime. If the worker thread still carries a
+        // tokio runtime context (as spawn_blocking threads can, via the
+        // captured Handle), constructing that inner runtime panics with
+        // "Cannot start a runtime from within a runtime" and, because it
+        // happens in a destructor, aborts the whole process.
+        // See issue #1451 for full evidence.
         let store = Arc::clone(self);
         std::mem::drop(std::thread::spawn(move || {
             if let Err(err) = store.record_analytics_event(&event) {

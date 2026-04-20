@@ -27,8 +27,8 @@ use crate::scheduler::{
     append_task_execution_event, insert_scheduled_task, is_user_visible_routine_task,
     load_scheduled_task, persist_scheduled_task, prepare_task_for_resume,
     try_load_routines_with_status, try_load_task_executions, try_load_task_with_status,
-    try_load_tasks_with_status, RoutineSummary, Schedule, ScheduledTask, TaskExecutionSummary,
-    TaskKind,
+    try_load_tasks_with_status, try_load_tasks_with_status_shared, RoutineSummary, Schedule,
+    ScheduledTask, TaskExecutionSummary, TaskKind,
 };
 use crate::slack_store::{SlackInstallation, SlackStore};
 use crate::thread_state::{
@@ -888,7 +888,7 @@ fn load_task_statuses_or_response(
     tasks_db_path: &std::path::Path,
     scope_label: &str,
 ) -> Result<Vec<TaskStatusSummary>, Response> {
-    try_load_tasks_with_status(tasks_db_path).map_err(|err| {
+    try_load_tasks_with_status_shared(tasks_db_path).map_err(|err| {
         error!(
             "Failed to load {scope_label} tasks from {}: {}",
             tasks_db_path.display(),
