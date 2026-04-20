@@ -43,6 +43,14 @@ impl SchedulerStore {
         })
     }
 
+    /// Create a store using the shared MongoDB client singleton.
+    /// Use this for hot paths like API request handlers.
+    pub fn with_shared_client(path: PathBuf) -> Result<Self, SchedulerError> {
+        Ok(Self {
+            mongo: MongoSchedulerStore::with_shared_client(&path)?,
+        })
+    }
+
     pub(crate) fn load_tasks(&self) -> Result<Vec<ScheduledTask>, SchedulerError> {
         self.mongo.load_tasks()
     }
