@@ -1452,6 +1452,7 @@ mod tests {
             allowed_user_ids: vec![],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
         let section = build_user_identities_section(&identities);
 
@@ -1711,6 +1712,7 @@ mod tests {
             allowed_user_ids: vec![],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1755,6 +1757,7 @@ mod tests {
             allowed_user_ids: vec![user_uuid.to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1808,6 +1811,7 @@ mod tests {
             ],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1853,6 +1857,7 @@ mod tests {
             allowed_user_ids: vec![], // Empty even though account exists
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1993,6 +1998,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2046,6 +2052,7 @@ mod tests {
             ],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2103,6 +2110,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-charlie-shared".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2148,6 +2156,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
