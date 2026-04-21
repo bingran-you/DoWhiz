@@ -804,10 +804,18 @@ Before running TPM commands, gather context about {org_name}:
 
 **TPM CLI Commands (tpm_cli):**
 - `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>` - Create a new task database in Notion
+- `tpm_cli list-users` - List all users in the Notion workspace (for task assignment)
 - `tpm_cli list-tasks --organization {org_name}{db_flag}` - List all tasks from Notion
-- `tpm_cli list-tasks --organization {org_name}{db_flag} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
-- `tpm_cli list-tasks --organization {org_name}{db_flag} --assignee dev@example.com` - Filter by assignee
-- `tpm_cli create-task --organization {org_name}{db_flag} --title "..." --description "..." --priority p1 --source user_feedback` - Create new task in Notion
+- `tpm_cli list-tasks --organization {org_name}{db_flag} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked, archived)
+- `tpm_cli create-task --organization {org_name}{db_flag} --title "..." --description "..." --priority p1 --source user_feedback --assignee <USER_ID>` - Create new task in Notion
+- `tpm_cli update-task --page-id <TASK_ID> --assignee <USER_ID> --status in_progress --priority p1` - Update existing task (assignee, status, priority)
+
+**Task Assignment Workflow:**
+1. First, run `tpm_cli list-users` to get available team members and their Notion user IDs
+2. When creating tasks, use `--assignee <USER_ID>` to assign the task
+3. Load balance: distribute tasks evenly across team members based on their current workload
+4. Check existing task counts per user with `list-tasks` before assigning new work
+5. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
@@ -823,15 +831,17 @@ Include the database URL in your reply and these sharing instructions.
 
 **Daily TPM Check-in Workflow:**
 1. **Context gathering** (Step 0 above) - check GitHub access first
-2. Check task board: `tpm_cli list-tasks --organization {org_name}{db_flag}`
+2. **Get team members**: `tpm_cli list-users` - get user IDs for task assignment
+3. Check task board: `tpm_cli list-tasks --organization {org_name}{db_flag}`
    - If "No notion_database_id configured" error, create board first via setup-board
-3. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
-4. Identify stale tasks (no updates in 3+ days)
-5. **Add new tasks** discovered from:
+4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
+5. Identify stale tasks (no updates in 3+ days)
+6. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
    - Recent PRs that need follow-up
    - Blockers mentioned in PR comments
-6. Compile summary report for {org_name}
+   - Assign tasks evenly across team members (use user IDs from step 2)
+7. Compile summary report for {org_name}
 
 **Proactive Task Creation:**
 You SHOULD add tasks when you discover:
