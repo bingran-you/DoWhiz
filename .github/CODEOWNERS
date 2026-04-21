@@ -1,9 +1,3 @@
-# Replace these owners if the public maintainer roster changes.
-* @Oliver-DoWhiz @Maggie-DoWhiz
-
-/.github/ @Oliver-DoWhiz @Maggie-DoWhiz
-/README.md @Oliver-DoWhiz @Maggie-DoWhiz
-/OPEN_SOURCE_SCOPE.md @Oliver-DoWhiz @Maggie-DoWhiz
-/docs/ @Oliver-DoWhiz @Maggie-DoWhiz
-/DoWhiz_service/ @Oliver-DoWhiz @Maggie-DoWhiz
-/website/ @Oliver-DoWhiz @Maggie-DoWhiz
+# CODEOWNERS is intentionally disabled for now.
+# Keeping the file makes it easy to restore explicit owners later
+# without recreating the repo-level GitHub configuration entry point.

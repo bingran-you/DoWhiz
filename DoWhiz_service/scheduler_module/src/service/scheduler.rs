@@ -38,6 +38,10 @@ const BUSY_LOG_THROTTLE_SECS: u64 = 10;
 const THREAD_BUSY_DEFER_SECS: i64 = 15;
 /// When a newer follow-up supersedes the currently running thread epoch, retry quickly.
 const THREAD_SUPERSEDE_DEFER_SECS: i64 = 1;
+/// Delay before re-checking a due task that already has a running Mongo execution row.
+const MONGO_RUNNING_DEFER_SECS: i64 = 30;
+/// Periodic stale execution reconciliation cadence in seconds.
+const STALE_EXECUTION_RECONCILE_INTERVAL_SECS: u64 = 10 * 60;
 
 fn parse_timeout_secs_env(key: &str) -> Option<u64> {
     std::env::var(key)
@@ -61,6 +65,12 @@ fn resolve_watchdog_task_timeout_secs() -> u64 {
 fn resolve_stale_execution_timeout() -> ChronoDuration {
     let timeout_secs = resolve_watchdog_task_timeout_secs();
     ChronoDuration::seconds(timeout_secs.min(i64::MAX as u64) as i64)
+}
+
+fn resolve_stale_reconcile_interval() -> Duration {
+    let interval_secs = parse_timeout_secs_env("STALE_EXECUTION_RECONCILE_INTERVAL_SECS")
+        .unwrap_or(STALE_EXECUTION_RECONCILE_INTERVAL_SECS);
+    Duration::from_secs(interval_secs)
 }
 
 #[derive(Clone, Copy)]
@@ -123,6 +133,49 @@ fn thread_busy_defer_secs(task_epoch: u64, running_epoch: u64) -> i64 {
     }
 }
 
+fn due_task_key(task_id: &str, user_id: &str) -> String {
+    format!("{task_id}@{user_id}")
+}
+
+fn mongo_running_defer_deadline(now: DateTime<Utc>) -> DateTime<Utc> {
+    now + ChronoDuration::seconds(MONGO_RUNNING_DEFER_SECS.max(1))
+}
+
+fn should_skip_mongo_running_backoff(
+    backoffs: &Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    task_key: &str,
+    now: DateTime<Utc>,
+) -> bool {
+    let mut backoffs = backoffs.lock().unwrap_or_else(|poison| poison.into_inner());
+    match backoffs.get(task_key).copied() {
+        Some(deadline) if deadline > now => true,
+        Some(_) => {
+            backoffs.remove(task_key);
+            false
+        }
+        None => false,
+    }
+}
+
+fn record_mongo_running_backoff(
+    backoffs: &Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    task_key: &str,
+    now: DateTime<Utc>,
+) -> DateTime<Utc> {
+    let deadline = mongo_running_defer_deadline(now);
+    let mut backoffs = backoffs.lock().unwrap_or_else(|poison| poison.into_inner());
+    backoffs.insert(task_key.to_string(), deadline);
+    deadline
+}
+
+fn clear_mongo_running_backoff(
+    backoffs: &Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    task_key: &str,
+) {
+    let mut backoffs = backoffs.lock().unwrap_or_else(|poison| poison.into_inner());
+    backoffs.remove(task_key);
+}
+
 fn merge_reconciliation_owner_ids<I>(user_ids: Vec<String>, running_owner_ids: I) -> Vec<String>
 where
     I: IntoIterator<Item = String>,
@@ -139,14 +192,17 @@ fn list_running_execution_owner_ids() -> Result<Vec<String>, BoxError> {
     let client = crate::mongo_store::create_client_from_env()?;
     let db = crate::mongo_store::database_from_env(&client);
     let executions = db.collection::<Document>("task_executions");
-    let distinct = executions.distinct(
-        "owner_scope.id",
-        doc! {
-            "owner_scope.kind": "user",
-            "status": "running",
-        },
-        None,
-    )?;
+    let distinct =
+        crate::mongo_store::retry_mongo_read("task_executions.distinct_running_owner_ids", || {
+            executions.distinct(
+                "owner_scope.id",
+                doc! {
+                    "owner_scope.kind": "user",
+                    "status": "running",
+                },
+                None,
+            )
+        })?;
 
     let owner_ids = distinct
         .into_iter()
@@ -156,6 +212,24 @@ fn list_running_execution_owner_ids() -> Result<Vec<String>, BoxError> {
         })
         .collect::<Vec<_>>();
     Ok(owner_ids)
+}
+
+fn wait_for_stop_or_interval(stop: &AtomicBool, interval: Duration) -> bool {
+    let chunk = Duration::from_millis(250);
+    let started = Instant::now();
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return false;
+        }
+
+        let elapsed = started.elapsed();
+        if elapsed >= interval {
+            return true;
+        }
+
+        let remaining = interval.saturating_sub(elapsed);
+        thread::sleep(remaining.min(chunk));
+    }
 }
 
 fn claim_thread_execution_slot<E: crate::TaskExecutor>(
@@ -240,8 +314,9 @@ pub(super) fn start_scheduler_threads(
     let claims = Arc::new(Mutex::new(SchedulerClaims::default()));
     let running_threads = Arc::new(Mutex::new(HashMap::new()));
     let limiter = Arc::new(ConcurrencyLimiter::new(scheduler_max_concurrency));
+    let mongo_running_backoffs = Arc::new(Mutex::new(HashMap::<String, DateTime<Utc>>::new()));
 
-    let mut handles = Vec::with_capacity(3);
+    let mut handles = Vec::with_capacity(4);
 
     {
         let config = config.clone();
@@ -251,6 +326,7 @@ pub(super) fn start_scheduler_threads(
         let claims = claims.clone();
         let running_threads = running_threads.clone();
         let limiter = limiter.clone();
+        let mongo_running_backoffs = mongo_running_backoffs.clone();
         let query_limit = scheduler_max_concurrency.saturating_mul(4).max(1);
         let handle = thread::spawn(move || {
             let mut last_due_tasks: HashSet<String> = HashSet::new();
@@ -286,6 +362,14 @@ pub(super) fn start_scheduler_threads(
                         }
                         let total_refs = task_refs.len();
                         for (idx, task_ref) in task_refs.into_iter().enumerate() {
+                            let task_key = due_task_key(&task_ref.task_id, &task_ref.user_id);
+                            if should_skip_mongo_running_backoff(
+                                &mongo_running_backoffs,
+                                &task_key,
+                                now,
+                            ) {
+                                continue;
+                            }
                             if !limiter.try_acquire() {
                                 let remaining = total_refs.saturating_sub(idx);
                                 if last_capacity_deferral != Some(remaining) {
@@ -298,7 +382,6 @@ pub(super) fn start_scheduler_threads(
                                 break;
                             }
                             last_capacity_deferral = None;
-                            let task_key = format!("{}@{}", task_ref.task_id, task_ref.user_id);
                             let claim_result = {
                                 let mut claims =
                                     claims.lock().unwrap_or_else(|poison| poison.into_inner());
@@ -307,6 +390,7 @@ pub(super) fn start_scheduler_threads(
                             };
                             match claim_result {
                                 ClaimResult::Claimed => {
+                                    clear_mongo_running_backoff(&mongo_running_backoffs, &task_key);
                                     logged_user_busy.remove(&task_key);
                                     logged_task_busy.remove(&task_key);
                                     info!(
@@ -348,6 +432,7 @@ pub(super) fn start_scheduler_threads(
                             let claims = claims.clone();
                             let limiter = limiter.clone();
                             let running_threads = running_threads.clone();
+                            let mongo_running_backoffs = mongo_running_backoffs.clone();
                             thread::spawn(move || {
                                 if let Err(err) = execute_due_task(
                                     &config,
@@ -355,6 +440,7 @@ pub(super) fn start_scheduler_threads(
                                     &index_store,
                                     &task_ref,
                                     &running_threads,
+                                    &mongo_running_backoffs,
                                 ) {
                                     error!(
                                         "scheduler task {} for user {} failed: {}",
@@ -385,7 +471,8 @@ pub(super) fn start_scheduler_threads(
         let stale_after = resolve_stale_execution_timeout();
 
         let handle = thread::spawn(move || {
-            if let Err(err) = reconcile_stale_executions_after_worker_restart(
+            if let Err(err) = reconcile_stale_executions_pass(
+                "startup",
                 &user_store,
                 &users_root,
                 &scheduler_stop,
@@ -395,6 +482,34 @@ pub(super) fn start_scheduler_threads(
                     "worker startup stale execution reconciliation failed: {}",
                     err
                 );
+            }
+        });
+        handles.push(handle);
+    }
+
+    {
+        let scheduler_stop = scheduler_stop.clone();
+        let user_store = user_store.clone();
+        let users_root = config.users_root.clone();
+        let stale_after = resolve_stale_execution_timeout();
+        let reconcile_interval = resolve_stale_reconcile_interval();
+
+        let handle = thread::spawn(move || {
+            info!(
+                "Periodic stale execution reconciliation started (interval={}s)",
+                reconcile_interval.as_secs()
+            );
+
+            while wait_for_stop_or_interval(&scheduler_stop, reconcile_interval) {
+                if let Err(err) = reconcile_stale_executions_pass(
+                    "periodic",
+                    &user_store,
+                    &users_root,
+                    &scheduler_stop,
+                    stale_after,
+                ) {
+                    warn!("periodic stale execution reconciliation failed: {}", err);
+                }
             }
         });
         handles.push(handle);
@@ -583,7 +698,8 @@ fn notify_task_failure(
     Ok(())
 }
 
-fn reconcile_stale_executions_after_worker_restart(
+fn reconcile_stale_executions_pass(
+    reason: &str,
     user_store: &UserStore,
     users_root: &Path,
     scheduler_stop: &AtomicBool,
@@ -594,8 +710,8 @@ fn reconcile_stale_executions_after_worker_restart(
         Ok(owner_ids) => owner_ids,
         Err(err) => {
             warn!(
-                "worker startup could not list running execution owner ids from MongoDB: {}",
-                err
+                "{} stale execution reconciliation could not list running owner ids from MongoDB: {}",
+                reason, err
             );
             Vec::new()
         }
@@ -606,8 +722,8 @@ fn reconcile_stale_executions_after_worker_restart(
         .count();
     if orphaned_owner_count > 0 {
         info!(
-            "worker startup found {} orphaned owner id(s) with running execution rows; including them in stale reconciliation",
-            orphaned_owner_count
+            "{} stale execution reconciliation found {} orphaned owner id(s) with running execution rows",
+            reason, orphaned_owner_count
         );
     }
     let user_ids = merge_reconciliation_owner_ids(known_user_ids, running_owner_ids);
@@ -627,8 +743,8 @@ fn reconcile_stale_executions_after_worker_restart(
             Ok(scheduler) => scheduler,
             Err(err) => {
                 warn!(
-                    "worker startup reconciliation failed to load scheduler for user {}: {}",
-                    user_id, err
+                    "{} stale execution reconciliation failed to load scheduler for owner {}: {}",
+                    reason, user_id, err
                 );
                 continue;
             }
@@ -638,8 +754,8 @@ fn reconcile_stale_executions_after_worker_restart(
             Ok(summary) => summary,
             Err(err) => {
                 warn!(
-                    "worker startup reconciliation failed for user {}: {}",
-                    user_id, err
+                    "{} stale execution reconciliation failed for owner {}: {}",
+                    reason, user_id, err
                 );
                 continue;
             }
@@ -652,7 +768,8 @@ fn reconcile_stale_executions_after_worker_restart(
         total_superseded += summary.superseded_count;
         total_failed += summary.failed_count;
         info!(
-            "worker startup reconciled stale execution rows user_id={} superseded={} failed={} stale_after_secs={}",
+            "{} stale execution reconciliation reconciled owner_id={} superseded={} failed={} stale_after_secs={}",
+            reason,
             user_id,
             summary.superseded_count,
             summary.failed_count,
@@ -661,7 +778,8 @@ fn reconcile_stale_executions_after_worker_restart(
     }
 
     info!(
-        "worker startup stale execution reconciliation completed users_changed={} superseded={} failed={} stale_after_secs={}",
+        "{} stale execution reconciliation completed owners_changed={} superseded={} failed={} stale_after_secs={}",
+        reason,
         users_changed,
         total_superseded,
         total_failed,
@@ -677,6 +795,7 @@ fn execute_due_task(
     index_store: &IndexStore,
     task_ref: &TaskRef,
     running_threads: &Arc<Mutex<HashMap<String, RunningThreadState>>>,
+    mongo_running_backoffs: &Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
 ) -> Result<(), BoxError> {
     let task_id = Uuid::parse_str(&task_ref.task_id)?;
 
@@ -723,10 +842,18 @@ fn execute_due_task(
     // Check for existing running execution in MongoDB.
     // This prevents duplicate executions when the worker restarts and loses in-memory claims.
     if let Ok(true) = scheduler.has_running_execution(&task_ref.task_id) {
-        info!(
-            "scheduler skipping task {} for user {} - already has running execution in MongoDB",
-            task_ref.task_id, task_ref.user_id
-        );
+        let task_key = due_task_key(&task_ref.task_id, &task_ref.user_id);
+        let deferred_until =
+            record_mongo_running_backoff(mongo_running_backoffs, &task_key, Utc::now());
+        let log_key = format!("mongo_running:{task_key}");
+        if should_log_busy(&log_key) {
+            info!(
+                "scheduler deferred task {} for user {} (existing Mongo running execution, next_attempt_at={})",
+                task_ref.task_id,
+                task_ref.user_id,
+                deferred_until.to_rfc3339()
+            );
+        }
         return Ok(());
     }
 
@@ -1182,8 +1309,50 @@ mod tests {
     }
 
     #[test]
+    fn mongo_running_backoff_skips_until_deadline_and_then_expires() {
+        let backoffs = Arc::new(Mutex::new(HashMap::new()));
+        let now = Utc::now();
+        let deadline = record_mongo_running_backoff(&backoffs, "task@user", now);
+
+        assert!(should_skip_mongo_running_backoff(
+            &backoffs,
+            "task@user",
+            now
+        ));
+        assert!(should_skip_mongo_running_backoff(
+            &backoffs,
+            "task@user",
+            deadline - ChronoDuration::milliseconds(1)
+        ));
+        assert!(!should_skip_mongo_running_backoff(
+            &backoffs,
+            "task@user",
+            deadline
+        ));
+        assert!(!backoffs
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .contains_key("task@user"));
+    }
+
+    #[test]
+    fn clear_mongo_running_backoff_removes_pending_entry() {
+        let backoffs = Arc::new(Mutex::new(HashMap::new()));
+        let now = Utc::now();
+        let _ = record_mongo_running_backoff(&backoffs, "task@user", now);
+        clear_mongo_running_backoff(&backoffs, "task@user");
+
+        assert!(!should_skip_mongo_running_backoff(
+            &backoffs,
+            "task@user",
+            now
+        ));
+    }
+
+    #[test]
     fn stop_and_join_returns_quickly_with_short_watchdog_interval() {
         let _guard = EnvGuard::set("WATCHDOG_INTERVAL_MS", "100");
+        let _reconcile_guard = EnvGuard::set("STALE_EXECUTION_RECONCILE_INTERVAL_SECS", "1");
         let temp = TempDir::new().expect("tempdir");
         let Some(config) = build_test_config(&temp) else {
             return;

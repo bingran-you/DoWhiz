@@ -419,6 +419,7 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
             result.organization_id = Some(org_id.to_string());
             if let Ok(Some(org)) = store.get_organization_by_id(org_id) {
                 result.organization_name = Some(org.name);
+                result.notion_database_id = org.notion_database_id;
             }
         }
     }

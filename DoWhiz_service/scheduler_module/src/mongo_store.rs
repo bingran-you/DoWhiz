@@ -32,6 +32,17 @@ pub fn create_client_from_env() -> Result<Client, MongoStoreError> {
     Ok(Client::with_options(options)?)
 }
 
+static SHARED_CLIENT: OnceLock<Client> = OnceLock::new();
+
+/// Returns a shared MongoDB client singleton. The client is created lazily
+/// on first access and reused for all subsequent calls.
+/// Panics if MONGODB_URI is not set (config errors should fail early).
+pub fn get_shared_client() -> &'static Client {
+    SHARED_CLIENT.get_or_init(|| {
+        create_client_from_env().expect("MONGODB_URI must be set for shared client")
+    })
+}
+
 pub fn mongo_database_name_from_env() -> String {
     let explicit = env::var("MONGODB_DATABASE")
         .ok()
@@ -136,6 +147,13 @@ pub fn ensure_index_compatible(
 }
 
 pub(crate) fn retry_mongo_write<T, F>(operation: &str, op: F) -> Result<T, mongodb::error::Error>
+where
+    F: FnMut() -> Result<T, mongodb::error::Error>,
+{
+    retry_mongo_operation(operation, op, |duration| thread::sleep(duration))
+}
+
+pub(crate) fn retry_mongo_read<T, F>(operation: &str, op: F) -> Result<T, mongodb::error::Error>
 where
     F: FnMut() -> Result<T, mongodb::error::Error>,
 {
@@ -343,6 +361,17 @@ fn ensure_task_executions_indexes(db: &Database) -> Result<(), mongodb::error::E
                 "owner_scope.kind": 1,
                 "owner_scope.id": 1,
                 "task_id": 1,
+                "started_at": -1
+            })
+            .build(),
+    )?;
+    ensure_index_compatible(
+        &collection,
+        IndexModel::builder()
+            .keys(doc! {
+                "owner_scope.kind": 1,
+                "status": 1,
+                "owner_scope.id": 1,
                 "started_at": -1
             })
             .build(),

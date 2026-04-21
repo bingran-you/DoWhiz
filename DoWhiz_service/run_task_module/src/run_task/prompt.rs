@@ -759,16 +759,44 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         .as_deref()
         .unwrap_or("<UNKNOWN_ACCOUNT_ID>");
 
+    let db_flag = identities
+        .notion_database_id
+        .as_ref()
+        .map(|id| format!(" --database-id {}", id))
+        .unwrap_or_default();
+
     format!(
         r#"
 === TPM MODE ACTIVE for {org_name} ===
 
-You are operating as a Technical Program Manager (TPM) for the {org_name} organization.
+You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
+IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
+
+See `.agents/skills/tpm/SKILL.md` for detailed workflows on task management, load balancing, competitive research, and daily syncs.
+
+**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
+Before running TPM commands, gather context about {org_name}:
+
+1. Check GitHub access:
+   - List your org memberships: `gh api user/memberships/orgs --jq '.[].organization.login'`
+   - If you find an org that matches or relates to {org_name}, explore its repos:
+     `gh repo list <ORG_NAME> --limit 20`
+   - Check recent PRs: `gh pr list --repo <org>/<repo> --state all --limit 10`
+   - Check open issues: `gh issue list --repo <org>/<repo> --limit 10`
+
+2. If you have GitHub access to relevant repos:
+   - Read README.md or docs/ to understand project structure
+   - Look for open issues not yet tracked as tasks
+   - Check for stale PRs needing review
+   - Use this context to identify potential new tasks
+
+3. If NO GitHub access to {org_name}'s repos: Fall back to the Notion task board only
 
 **IMPORTANT: When TPM mode is active, you MUST:**
 1. Use tpm_cli for ANY request involving bugs, features, tasks, tickets, or development work
 2. Track all actionable items in the task board - do not just respond without creating/updating tasks
-3. For scheduled TPM syncs (from cron): ALWAYS run the full sync workflow below
+3. For scheduled TPM syncs: ALWAYS run the full sync workflow below
+4. **Proactively add tasks** when you discover work items from GitHub issues, PRs, or code
 
 **Task Classification:**
 - Bugs, features, tasks, tickets, dev work → MUST use tpm_cli to create/update tasks
@@ -778,10 +806,18 @@ You are operating as a Technical Program Manager (TPM) for the {org_name} organi
 
 **TPM CLI Commands (tpm_cli):**
 - `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>` - Create a new task database in Notion
-- `tpm_cli list-tasks --organization {org_name}` - List all tasks from Notion
-- `tpm_cli list-tasks --organization {org_name} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked)
-- `tpm_cli list-tasks --organization {org_name} --assignee dev@example.com` - Filter by assignee
-- `tpm_cli create-task --organization {org_name} --title "..." --description "..." --priority p1 --source user_feedback` - Create new task in Notion
+- `tpm_cli list-users` - List all users in the Notion workspace (for task assignment)
+- `tpm_cli list-tasks --organization {org_name}{db_flag}` - List all tasks from Notion
+- `tpm_cli list-tasks --organization {org_name}{db_flag} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked, archived)
+- `tpm_cli create-task --organization {org_name}{db_flag} --title "..." --description "..." --priority p1 --source user_feedback --assignee <USER_ID>` - Create new task in Notion
+- `tpm_cli update-task --page-id <TASK_ID> --assignee <USER_ID> --status in_progress --priority p1` - Update existing task (assignee, status, priority)
+
+**Task Assignment Workflow:**
+1. First, run `tpm_cli list-users` to get available team members and their Notion user IDs
+2. When creating tasks, use `--assignee <USER_ID>` to assign the task
+3. Load balance: distribute tasks evenly across team members based on their current workload
+4. Check existing task counts per user with `list-tasks` before assigning new work
+5. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
@@ -796,30 +832,34 @@ Include the database URL in your reply and these sharing instructions.
 - `notion_api_cli create-comment --page-id <TASK_ID> --content "..."` - Add comment to task
 
 **Daily TPM Check-in Workflow:**
-1. First, check if a task board exists: `tpm_cli list-tasks --organization {org_name}`
-   - If you get "No notion_database_id configured" error, you MUST create the board first:
-     a. Find a suitable parent page in Notion: `notion_api_cli search "workspace"` or use the workspace root
-     b. Create the board: `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID> --workspace-id <WS_ID>`
-     c. Note: The workspace-id is in .notion_context.json or from the Notion OAuth connection
-   - If board exists, proceed to step 2
-2. Run `tpm_cli list-tasks --organization {org_name} --status blocked` to find blocked tasks
-3. Identify stale tasks (no updates in 3+ days) by reviewing the full task list
-4. Post summary to team channel (Discord/Slack)
+1. **Context gathering** (Step 0 above) - check GitHub access first
+2. **Get team members**: `tpm_cli list-users` - get user IDs for task assignment
+3. Check task board: `tpm_cli list-tasks --organization {org_name}{db_flag}`
+   - If "No notion_database_id configured" error, create board first via setup-board
+4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
+5. Identify stale tasks (no updates in 3+ days)
+6. **Add new tasks** discovered from:
+   - Open GitHub issues not yet tracked
+   - Recent PRs that need follow-up
+   - Blockers mentioned in PR comments
+   - Assign tasks evenly across team members (use user IDs from step 2)
+7. Compile summary report for {org_name}
 
-**Before Creating New Tasks:**
-ALWAYS run `tpm_cli list-tasks --organization {org_name}` first to:
-1. Understand what the org is currently working on
-2. Check for existing tasks that might be duplicates or related
-3. See current priorities and workload distribution
-4. Identify patterns in how tasks are structured
+**Proactive Task Creation:**
+You SHOULD add tasks when you discover:
+- GitHub issues not tracked in Notion
+- PRs open too long without review
+- Blockers or dependencies mentioned in discussions
+- Features or bugs from commit messages
 
-When creating a task, reference related existing tasks if applicable. Do not create duplicates.
+Do NOT create duplicate tasks - always check existing tasks first.
+When creating tasks, include context: link to GitHub issue/PR if available.
 
 **Task Sources:**
 - user_feedback: From user reports, Discord, support emails
 - notetaker: Extracted from meeting transcripts
 - market_research: From competitive analysis
-- manual: Manually created
+- manual: Manually created (including from GitHub discovery)
 
 **Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
 
@@ -827,7 +867,8 @@ When creating a task, reference related existing tasks if applicable. Do not cre
 - `tpm_cli trigger-sync --user-id {account_id} --organization {org_name}` - Queue immediate TPM sync task
 "#,
         org_name = org_name,
-        account_id = account_id
+        account_id = account_id,
+        db_flag = db_flag
     )
 }
 
@@ -1445,6 +1486,7 @@ mod tests {
             allowed_user_ids: vec![],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
         let section = build_user_identities_section(&identities);
 
@@ -1704,6 +1746,7 @@ mod tests {
             allowed_user_ids: vec![],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1748,6 +1791,7 @@ mod tests {
             allowed_user_ids: vec![user_uuid.to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1801,6 +1845,7 @@ mod tests {
             ],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1846,6 +1891,7 @@ mod tests {
             allowed_user_ids: vec![], // Empty even though account exists
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -1986,6 +2032,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-email-alice".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2039,6 +2086,7 @@ mod tests {
             ],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2096,6 +2144,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-charlie-shared".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(
@@ -2141,6 +2190,7 @@ mod tests {
             allowed_user_ids: vec!["uuid-email-dave".to_string(), "uuid-slack-dave".to_string()],
             organization_id: None,
             organization_name: None,
+            notion_database_id: None,
         };
 
         let prompt = build_prompt(

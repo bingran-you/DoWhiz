@@ -1,7 +1,7 @@
 use chrono::{Duration as ChronoDuration, Utc};
 use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
 use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
-use mongodb::sync::Collection;
+use mongodb::sync::{Client, Collection};
 use mongodb::IndexModel;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -10,7 +10,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use uuid::Uuid;
 
 use crate::mongo_store::{
-    create_client_from_env, database_from_env, ensure_index_compatible, retry_mongo_write,
+    create_client_from_env, database_from_env, ensure_index_compatible, get_shared_client,
+    retry_mongo_read, retry_mongo_write,
 };
 
 use super::super::types::{Schedule, ScheduledTask, SchedulerError, TaskKind};
@@ -60,7 +61,18 @@ pub(crate) struct MongoSchedulerStore {
 impl MongoSchedulerStore {
     pub(crate) fn new(tasks_db_path: &Path) -> Result<Self, SchedulerError> {
         let client = create_client_from_env().map_err(mongo_config_err)?;
-        let db = database_from_env(&client);
+        Self::with_client(&client, tasks_db_path)
+    }
+
+    /// Create a store using the shared MongoDB client singleton.
+    /// Use this for hot paths like API request handlers to avoid connection pool exhaustion.
+    pub(crate) fn with_shared_client(tasks_db_path: &Path) -> Result<Self, SchedulerError> {
+        let client = get_shared_client();
+        Self::with_client(client, tasks_db_path)
+    }
+
+    fn with_client(client: &Client, tasks_db_path: &Path) -> Result<Self, SchedulerError> {
+        let db = database_from_env(client);
         let (owner_kind, owner_id) = resolve_owner_scope(tasks_db_path);
         let tasks = db.collection::<Document>("tasks");
         ensure_index_compatible(
@@ -85,6 +97,18 @@ impl MongoSchedulerStore {
                     "owner_scope.kind": 1,
                     "owner_scope.id": 1,
                     "task_id": 1,
+                    "started_at": -1
+                })
+                .build(),
+        )
+        .map_err(mongo_err)?;
+        ensure_index_compatible(
+            &executions,
+            IndexModel::builder()
+                .keys(doc! {
+                    "owner_scope.kind": 1,
+                    "status": 1,
+                    "owner_scope.id": 1,
                     "started_at": -1
                 })
                 .build(),
@@ -259,9 +283,8 @@ impl MongoSchedulerStore {
     /// This prevents duplicate executions when the worker process restarts
     /// and loses its in-memory claims state.
     pub(crate) fn has_running_execution(&self, task_id: &str) -> Result<bool, SchedulerError> {
-        let count = self
-            .executions
-            .count_documents(
+        let count = retry_mongo_read("task_executions.has_running_execution", || {
+            self.executions.count_documents(
                 doc! {
                     "owner_scope.kind": &self.owner_kind,
                     "owner_scope.id": &self.owner_id,
@@ -270,7 +293,8 @@ impl MongoSchedulerStore {
                 },
                 None,
             )
-            .map_err(mongo_err)?;
+        })
+        .map_err(mongo_err)?;
         Ok(count > 0)
     }
 
@@ -343,9 +367,8 @@ impl MongoSchedulerStore {
         now: chrono::DateTime<Utc>,
         stale_after: ChronoDuration,
     ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
-        let task_ids = self
-            .executions
-            .distinct(
+        let task_ids = retry_mongo_read("task_executions.distinct_running_task_ids", || {
+            self.executions.distinct(
                 "task_id",
                 doc! {
                     "owner_scope.kind": &self.owner_kind,
@@ -354,7 +377,8 @@ impl MongoSchedulerStore {
                 },
                 None,
             )
-            .map_err(mongo_err)?;
+        })
+        .map_err(mongo_err)?;
 
         let mut summary = ExecutionReconciliationSummary::default();
         for task_id in task_ids {
@@ -1714,6 +1738,7 @@ mod tests {
         let task = sample_one_shot_task(started_at - ChronoDuration::minutes(5));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 42,
             started_at,
             finished_at: None,
@@ -1750,6 +1775,7 @@ mod tests {
         task.last_run = Some(now - ChronoDuration::minutes(9));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 7,
             started_at,
             finished_at: Some(now - ChronoDuration::minutes(9)),

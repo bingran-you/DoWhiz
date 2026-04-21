@@ -1650,6 +1650,119 @@ fn use_ephemeral_share() -> bool {
     env_enabled("RUN_TASK_AZURE_ACI_EPHEMERAL_SHARE")
 }
 
+const AZCOPY_RETRY_DELAYS_SECS: [u64; 2] = [2, 4];
+const REDACTED_SECRET_PLACEHOLDER: &str = "REDACTED";
+const SAS_QUERY_PARAM_KEYS: &[&str] = &[
+    "sig", "se", "sp", "sr", "ss", "srt", "st", "sv", "skoid", "sktid", "skt", "ske", "sks", "skv",
+];
+
+fn redact_query_param(input: &str, key: &str) -> String {
+    let pattern = format!("{key}=");
+    let mut redacted = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(idx) = remaining.find(&pattern) {
+        let value_start = idx + pattern.len();
+        redacted.push_str(&remaining[..value_start]);
+
+        let tail = &remaining[value_start..];
+        let value_end = tail
+            .char_indices()
+            .find_map(|(offset, ch)| match ch {
+                '&' | ' ' | '\n' | '\r' | '\t' | '"' | '\'' | '<' | '>' => Some(offset),
+                _ => None,
+            })
+            .unwrap_or(tail.len());
+
+        redacted.push_str(REDACTED_SECRET_PLACEHOLDER);
+        remaining = &tail[value_end..];
+    }
+
+    redacted.push_str(remaining);
+    redacted
+}
+
+fn redact_sensitive_text(input: &str, secrets: &[&str]) -> String {
+    let mut redacted = input.to_string();
+    for secret in secrets {
+        if !secret.is_empty() {
+            redacted = redacted.replace(secret, REDACTED_SECRET_PLACEHOLDER);
+        }
+    }
+    for key in SAS_QUERY_PARAM_KEYS {
+        redacted = redact_query_param(&redacted, key);
+    }
+    redacted
+}
+
+fn sanitize_command_output(output: &[u8], secrets: &[&str]) -> String {
+    redact_sensitive_text(&String::from_utf8_lossy(output), secrets)
+}
+
+fn format_command_failure_output(stdout: &[u8], stderr: &[u8], secrets: &[&str]) -> String {
+    let stderr = sanitize_command_output(stderr, secrets);
+    let stdout = sanitize_command_output(stdout, secrets);
+    format!(
+        "stderr:\n{}\nstdout:\n{}",
+        if stderr.trim().is_empty() {
+            "(empty)"
+        } else {
+            stderr.trim_end()
+        },
+        if stdout.trim().is_empty() {
+            "(empty)"
+        } else {
+            stdout.trim_end()
+        },
+    )
+}
+
+fn promote_downloaded_entry(source: &Path, dest: &Path) -> Result<(), RunTaskError> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.is_dir() {
+        fs::create_dir_all(dest)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            promote_downloaded_entry(&entry.path(), &dest.join(entry.file_name()))?;
+        }
+        let _ = fs::remove_dir(source);
+        return Ok(());
+    }
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    if let Ok(existing) = fs::symlink_metadata(dest) {
+        if existing.is_dir() {
+            fs::remove_dir_all(dest)?;
+        } else {
+            fs::remove_file(dest)?;
+        }
+    }
+
+    match fs::rename(source, dest) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(source, dest)?;
+            fs::remove_file(source)?;
+            Ok(())
+        }
+    }
+}
+
+fn promote_downloaded_workspace(
+    download_root: &Path,
+    workspace_dir: &Path,
+) -> Result<(), RunTaskError> {
+    fs::create_dir_all(workspace_dir)?;
+    for entry in fs::read_dir(download_root)? {
+        let entry = entry?;
+        promote_downloaded_entry(&entry.path(), &workspace_dir.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
 fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(), RunTaskError> {
     let output = Command::new("az")
         .arg("storage")
@@ -1663,12 +1776,13 @@ fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(
         .arg(&config.storage_key)
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share create --name {} failed:\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1690,12 +1804,13 @@ fn delete_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(
         .arg("include")
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share delete --name {} failed:\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1726,11 +1841,12 @@ fn generate_share_sas(config: &AzureAciConfig, share_name: &str) -> Result<Strin
         .arg("tsv")
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share generate-sas failed:\n{}",
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1742,29 +1858,54 @@ fn upload_workspace_to_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
-    // Generate SAS token for azcopy auth
-    let sas = generate_share_sas(config, share_name)?;
-    let dest_url = format!(
-        "https://{}.file.core.windows.net/{}?{}",
-        config.storage_account, share_name, sas
-    );
-    let output = Command::new("azcopy")
-        .arg("copy")
-        .arg(format!("{}/*", workspace_dir.display()))
-        .arg(&dest_url)
-        .arg("--recursive")
-        .output()?;
-    if !output.status.success() {
-        return Err(RunTaskError::CodexFailed {
+    let secrets = [config.storage_key.as_str()];
+    let source = format!("{}/*", workspace_dir.display());
+    let mut last_error = None;
+
+    for (attempt, delay_secs) in AZCOPY_RETRY_DELAYS_SECS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+        .enumerate()
+    {
+        let sas = generate_share_sas(config, share_name)?;
+        let dest_url = format!(
+            "https://{}.file.core.windows.net/{}?{}",
+            config.storage_account, share_name, sas
+        );
+        let output = Command::new("azcopy")
+            .arg("copy")
+            .arg(&source)
+            .arg(&dest_url)
+            .arg("--recursive")
+            .arg("--overwrite=true")
+            .output()?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let attempt_number = attempt + 1;
+        last_error = Some(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
-                "azcopy copy to share {} failed:\n{}",
+                "azcopy copy to share {} failed (attempt {}/{}):\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                attempt_number,
+                AZCOPY_RETRY_DELAYS_SECS.len() + 1,
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
+
+        if let Some(delay_secs) = delay_secs {
+            thread::sleep(Duration::from_secs(delay_secs));
+        }
     }
-    Ok(())
+
+    Err(last_error.unwrap_or(RunTaskError::CodexFailed {
+        status: None,
+        output: format!("azcopy copy to share {share_name} failed"),
+    }))
 }
 
 fn download_workspace_from_share(
@@ -1772,29 +1913,58 @@ fn download_workspace_from_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
-    // Generate SAS token for azcopy auth
-    let sas = generate_share_sas(config, share_name)?;
-    let source_url = format!(
-        "https://{}.file.core.windows.net/{}/*?{}",
-        config.storage_account, share_name, sas
-    );
-    let output = Command::new("azcopy")
-        .arg("copy")
-        .arg(&source_url)
-        .arg(workspace_dir)
-        .arg("--recursive")
-        .output()?;
-    if !output.status.success() {
-        return Err(RunTaskError::CodexFailed {
+    let secrets = [config.storage_key.as_str()];
+    let temp_parent = workspace_dir.parent().unwrap_or(workspace_dir);
+    let mut last_error = None;
+
+    for (attempt, delay_secs) in AZCOPY_RETRY_DELAYS_SECS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+        .enumerate()
+    {
+        let sas = generate_share_sas(config, share_name)?;
+        let source_url = format!(
+            "https://{}.file.core.windows.net/{}/*?{}",
+            config.storage_account, share_name, sas
+        );
+        let temp_download_dir = tempfile::Builder::new()
+            .prefix(".azcopy-download-")
+            .tempdir_in(temp_parent)?;
+        let output = Command::new("azcopy")
+            .arg("copy")
+            .arg(&source_url)
+            .arg(temp_download_dir.path())
+            .arg("--recursive")
+            .arg("--overwrite=true")
+            .output()?;
+        if output.status.success() {
+            promote_downloaded_workspace(temp_download_dir.path(), workspace_dir)?;
+            return Ok(());
+        }
+
+        let attempt_number = attempt + 1;
+        last_error = Some(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
-                "azcopy copy from share {} failed:\n{}",
+                "azcopy copy from share {} failed (attempt {}/{}):\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                attempt_number,
+                AZCOPY_RETRY_DELAYS_SECS.len() + 1,
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
+
+        if let Some(delay_secs) = delay_secs {
+            thread::sleep(Duration::from_secs(delay_secs));
+        }
     }
-    Ok(())
+
+    Err(last_error.unwrap_or(RunTaskError::CodexFailed {
+        status: None,
+        output: format!("azcopy copy from share {share_name} failed"),
+    }))
 }
 
 struct EphemeralShareGuard<'a> {
@@ -5024,6 +5194,59 @@ printf '%s\n' "$@" > "$capture_file"
     }
 
     #[test]
+    fn test_format_command_failure_output_redacts_sas_and_storage_key() {
+        let stdout = br#"INFO: Copying from https://acct.file.core.windows.net/share?sv=2022-11-02&sig=abc123&se=2099-01-01 to /tmp/out using key testkey123"#;
+        let stderr = br#"ERROR: auth failed for sig=abc123 and storage key testkey123"#;
+
+        let formatted = format_command_failure_output(stdout, stderr, &["testkey123"]);
+
+        assert!(formatted.contains("sig=REDACTED"));
+        assert!(formatted.contains("se=REDACTED"));
+        assert!(formatted.contains("REDACTED"));
+        assert!(!formatted.contains("abc123"));
+        assert!(!formatted.contains("testkey123"));
+    }
+
+    #[test]
+    fn test_promote_downloaded_workspace_overwrites_outputs_without_removing_unrelated_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let download_root = temp.path().join("download");
+        let workspace_dir = temp.path().join("workspace");
+
+        fs::create_dir_all(download_root.join("nested")).expect("create nested download dir");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::write(
+            download_root.join("reply_email_draft.html"),
+            "<html>new</html>",
+        )
+        .expect("write downloaded reply");
+        fs::write(download_root.join("nested").join("result.txt"), "fresh").expect("write nested");
+        fs::write(
+            workspace_dir.join("reply_email_draft.html"),
+            "<html>old</html>",
+        )
+        .expect("write old reply");
+        fs::write(workspace_dir.join("keep.txt"), "keep me").expect("write unrelated file");
+
+        promote_downloaded_workspace(&download_root, &workspace_dir).expect("promote workspace");
+
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("reply_email_draft.html"))
+                .expect("read promoted reply"),
+            "<html>new</html>"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("nested").join("result.txt"))
+                .expect("read nested result"),
+            "fresh"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("keep.txt")).expect("read unrelated file"),
+            "keep me"
+        );
+    }
+
+    #[test]
     fn test_maybe_recover_from_ready_reply_artifact_returns_note() {
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
@@ -5467,6 +5690,7 @@ printf '%s\n' "$@" > "$capture_file"
         let args = fs::read_to_string(&capture_path).expect("read captured args");
         assert!(args.contains("copy"));
         assert!(args.contains("--recursive"));
+        assert!(args.contains("--overwrite=true"));
         assert!(args.contains("teststorage.file.core.windows.net"));
         assert!(args.contains("task-test-123"));
         assert!(args.contains(&workspace_dir.to_string_lossy().to_string()));
@@ -5509,6 +5733,8 @@ fi
 set -e
 capture_file="${TEST_AZCOPY_CAPTURE_FILE:?}"
 printf '%s\n' "$@" > "$capture_file"
+mkdir -p "$3"
+printf 'downloaded result' > "$3/result.txt"
 "#,
         )
         .expect("write fake azcopy");
@@ -5547,9 +5773,13 @@ printf '%s\n' "$@" > "$capture_file"
         let args = fs::read_to_string(&capture_path).expect("read captured args");
         assert!(args.contains("copy"));
         assert!(args.contains("--recursive"));
+        assert!(args.contains("--overwrite=true"));
         assert!(args.contains("teststorage.file.core.windows.net"));
         assert!(args.contains("task-test-123"));
-        assert!(args.contains(&workspace_dir.to_string_lossy().to_string()));
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("result.txt")).expect("read promoted download"),
+            "downloaded result"
+        );
     }
 
     #[test]

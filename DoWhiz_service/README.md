@@ -75,6 +75,7 @@ Key binaries (from `scheduler_module/src/bin`):
 | `set_postmark_inbound_hook` | Utility to update Postmark inbound webhook |
 | `inbound_fanout` | Legacy fanout ingress helper |
 | `google-docs` / `google-sheets` / `google-slides` | Workspace integration CLI tools |
+| `task_status_cli` | DevOps monitoring CLI for task status (LOCAL SERVER USE ONLY) |
 | `browserbase_session_manager` | Helper CLI that creates/reuses Browserbase contexts and active sessions for browser tasks |
 | `human_approval_gate` / `human_approval_gate_mcp` | Human approval gate for CAPTCHA/password/2FA blockers; CLI for manual use and MCP server for blocking Codex runs |
 

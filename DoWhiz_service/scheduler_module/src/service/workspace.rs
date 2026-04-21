@@ -753,8 +753,8 @@ fn load_payload_summary(payload_path: &Path) -> Option<PayloadSummary> {
         message_id: json_string(&payload_json, "MessageID")
             .or_else(|| json_string(&payload_json, "MessageId"))
             .unwrap_or_default(),
-        text_body: json_string(&payload_json, "TextBody")
-            .or_else(|| json_string(&payload_json, "StrippedTextReply")),
+        text_body: json_string(&payload_json, "StrippedTextReply")
+            .or_else(|| json_string(&payload_json, "TextBody")),
         html_body: json_string(&payload_json, "HtmlBody"),
     })
 }

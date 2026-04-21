@@ -58,6 +58,9 @@ pub struct UserIdentities {
     /// Organization name (for TPM prompt injection)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organization_name: Option<String>,
+    /// Notion database ID for TPM task board (pre-fetched to avoid container Supabase queries)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notion_database_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
