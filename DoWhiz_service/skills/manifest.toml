@@ -33,6 +33,7 @@ shared_skill_dirs = [
   "slides",
   "spreadsheet",
   "theme-factory",
+  "tpm",
   "us-tax-filing-assistant",
   "vercel-deploy",
   "web-artifacts-builder",
