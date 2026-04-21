@@ -36,7 +36,9 @@ fn main() -> ExitCode {
         "update-contacted" => cmd_update_contacted(&args[2..]),
         "setup-board" => cmd_setup_board(&args[2..]),
         "create-task" => cmd_create_task(&args[2..]),
+        "update-task" => cmd_update_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
+        "list-users" => cmd_list_users(&args[2..]),
         "trigger-sync" => cmd_trigger_sync(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
@@ -82,13 +84,21 @@ Task Board Commands:
     --priority <p0|p1|p2|p3> Priority level (default: p2)
     --source <src>           Source: manual|user_feedback|notetaker|market_research
     --tags <tag1,tag2>       Comma-separated tags (optional)
-    --assignee <email>       Assignee email (optional)
+    --assignee <user-id>     Notion user ID to assign (use list-users to get IDs)
+
+  update-task       Update an existing task in Notion
+    --page-id <id>           Task page ID (required)
+    --assignee <user-id>     Notion user ID to assign (optional)
+    --status <status>        New status: backlog|in_progress|review|done|blocked|archived
+    --priority <p0|p1|p2|p3> New priority (optional)
 
   list-tasks        List tasks from Notion
     --organization <org>     Organization name (required)
     --database-id <id>       Notion database ID (required)
     --status <status>        Filter by status (optional)
-    --assignee <email>       Filter by assignee (optional)
+
+  list-users        List users in the Notion workspace
+    (No arguments - reads workspace from .notion_context.json)
 
   trigger-sync      Trigger immediate TPM check-in (one-shot task)
     --user-id <uuid>         Account UUID (required)
@@ -396,7 +406,8 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                     { "name": "In Progress", "color": "blue" },
                     { "name": "Review", "color": "yellow" },
                     { "name": "Done", "color": "green" },
-                    { "name": "Blocked", "color": "red" }
+                    { "name": "Blocked", "color": "red" },
+                    { "name": "Archived", "color": "default" }
                 ]
             }
         },
@@ -621,12 +632,10 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
         });
     }
 
-    // Add assignee if provided
-    if let Some(ref a) = assignee {
+    // Add assignee if provided (expects a Notion user ID)
+    if let Some(ref user_id) = assignee {
         notion_properties["Assignee"] = json!({
-            "rich_text": [{
-                "text": { "content": a }
-            }]
+            "people": [{ "id": user_id }]
         });
     }
 
@@ -656,6 +665,117 @@ fn cmd_create_task(args: &[String]) -> ExitCode {
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
     ExitCode::SUCCESS
+}
+
+/// Update an existing task in Notion.
+fn cmd_update_task(args: &[String]) -> ExitCode {
+    let mut page_id: Option<String> = None;
+    let mut assignee: Option<String> = None;
+    let mut status_str: Option<String> = None;
+    let mut priority_str: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--page-id" => {
+                i += 1;
+                page_id = args.get(i).cloned();
+            }
+            "--assignee" => {
+                i += 1;
+                assignee = args.get(i).cloned();
+            }
+            "--status" => {
+                i += 1;
+                status_str = args.get(i).cloned();
+            }
+            "--priority" => {
+                i += 1;
+                priority_str = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(page_id) = page_id else {
+        eprintln!("Error: --page-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    if assignee.is_none() && status_str.is_none() && priority_str.is_none() {
+        eprintln!("Error: at least one of --assignee, --status, or --priority is required");
+        return ExitCode::FAILURE;
+    }
+
+    let workspace_id = get_workspace_id();
+    let Some(workspace_id) = workspace_id else {
+        eprintln!("Error: workspace_id is required (set via .notion_context.json)");
+        return ExitCode::FAILURE;
+    };
+
+    let employee_id = match env::var("EMPLOYEE_ID") {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("Error: EMPLOYEE_ID environment variable is required");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let client = match NotionApiClient::from_env(&employee_id) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Failed to create Notion client: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let mut properties = json!({});
+
+    if let Some(ref user_id) = assignee {
+        properties["Assignee"] = json!({
+            "people": [{ "id": user_id }]
+        });
+    }
+
+    if let Some(ref status) = status_str {
+        properties["Status"] = json!({
+            "select": { "name": normalize_status(status) }
+        });
+    }
+
+    if let Some(ref priority) = priority_str {
+        let priority_name = match priority.to_lowercase().as_str() {
+            "p0" => "P0",
+            "p1" => "P1",
+            "p3" => "P3",
+            _ => "P2",
+        };
+        properties["Priority"] = json!({
+            "select": { "name": priority_name }
+        });
+    }
+
+    match client.update_page(&workspace_id, &page_id, properties) {
+        Ok(page) => {
+            let output = json!({
+                "success": true,
+                "page_id": page_id,
+                "page_url": page.url,
+                "updated": {
+                    "assignee": assignee,
+                    "status": status_str,
+                    "priority": priority_str
+                }
+            });
+            println!("{}", serde_json::to_string_pretty(&output).unwrap());
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("Error: Failed to update task: {}", e);
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// List tasks from Notion.
@@ -773,6 +893,51 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// List users in the Notion workspace.
+fn cmd_list_users(_args: &[String]) -> ExitCode {
+    let workspace_id = get_workspace_id();
+    let Some(workspace_id) = workspace_id else {
+        eprintln!("Error: workspace_id is required (set via .notion_context.json)");
+        return ExitCode::FAILURE;
+    };
+
+    let employee_id = match env::var("EMPLOYEE_ID") {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("Error: EMPLOYEE_ID environment variable is required");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let client = match NotionApiClient::from_env(&employee_id) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Failed to create Notion client: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let users = match client.list_users(&workspace_id) {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("Error: Failed to list users: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let output = json!({
+        "success": true,
+        "count": users.len(),
+        "users": users.iter().map(|u| json!({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email
+        })).collect::<Vec<_>>()
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
+}
+
 /// Normalize status string to match Notion select options.
 fn normalize_status(status: &str) -> &'static str {
     match status.to_lowercase().as_str() {
@@ -781,6 +946,7 @@ fn normalize_status(status: &str) -> &'static str {
         "review" => "Review",
         "done" => "Done",
         "blocked" => "Blocked",
+        "archived" => "Archived",
         _ => "Backlog",
     }
 }

@@ -162,6 +162,15 @@ pub struct DatabaseItem {
     pub last_edited_time: String,
 }
 
+/// A Notion user (person, not bot).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotionUser {
+    pub id: String,
+    pub name: String,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
 /// Input for creating blocks.
 #[derive(Debug, Clone)]
 pub enum BlockInput {
@@ -745,6 +754,34 @@ impl NotionApiClient {
             url: data["url"].as_str().unwrap_or("").to_string(),
             properties: props,
         })
+    }
+
+    /// List all users in the workspace visible to the integration.
+    ///
+    /// Returns only "person" type users (not bots).
+    pub fn list_users(&self, workspace_id: &str) -> Result<Vec<NotionUser>, NotionApiError> {
+        let data = self.api_get(workspace_id, "/users")?;
+
+        let users = data["results"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .filter_map(|u| {
+                let user_type = u["type"].as_str().unwrap_or("");
+                // Only return "person" type, skip "bot" users
+                if user_type != "person" {
+                    return None;
+                }
+                Some(NotionUser {
+                    id: u["id"].as_str()?.to_string(),
+                    name: u["name"].as_str().unwrap_or("").to_string(),
+                    email: u["person"]["email"].as_str().map(|s| s.to_string()),
+                    avatar_url: u["avatar_url"].as_str().map(|s| s.to_string()),
+                })
+            })
+            .collect();
+
+        Ok(users)
     }
 
     /// Create a new page in a database.

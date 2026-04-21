@@ -47,6 +47,17 @@ impl SlackInboundAdapter {
     }
 }
 
+fn normalized_slack_message_subtype(subtype: Option<&str>) -> Option<&str> {
+    subtype.map(str::trim).filter(|value| !value.is_empty())
+}
+
+pub fn slack_message_subtype_is_supported_for_inbound(subtype: Option<&str>) -> bool {
+    matches!(
+        normalized_slack_message_subtype(subtype),
+        None | Some("file_share")
+    )
+}
+
 impl InboundAdapter for SlackInboundAdapter {
     fn parse(&self, raw_payload: &[u8]) -> Result<InboundMessage, AdapterError> {
         let wrapper: SlackEventWrapper = serde_json::from_slice(raw_payload)
@@ -77,11 +88,15 @@ impl InboundAdapter for SlackInboundAdapter {
             )));
         }
 
-        // Ignore message subtypes (edits, deletes, etc.) - only process new messages
-        if event.subtype.is_some() {
-            return Err(AdapterError::ParseError(
-                "ignoring message with subtype".to_string(),
-            ));
+        // Most message subtypes are edits/deletes/system events and should be ignored.
+        // Keep `file_share`, which is how Slack represents a newly-sent message with files.
+        if !slack_message_subtype_is_supported_for_inbound(event.subtype.as_deref()) {
+            let subtype =
+                normalized_slack_message_subtype(event.subtype.as_deref()).unwrap_or("unknown");
+            return Err(AdapterError::ParseError(format!(
+                "ignoring message with unsupported subtype: {}",
+                subtype
+            )));
         }
 
         let sender = event
@@ -516,6 +531,51 @@ mod tests {
         let adapter = SlackInboundAdapter::default();
         let result = adapter.parse(payload.as_bytes());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_file_share_message_subtype() {
+        let payload = r#"{
+            "type": "event_callback",
+            "team_id": "T123ABC456",
+            "event": {
+                "type": "message",
+                "subtype": "file_share",
+                "channel": "D123ABC456",
+                "channel_type": "im",
+                "user": "U123ABC456",
+                "text": "Attached the project zip",
+                "ts": "1355517536.000003",
+                "files": [
+                    {
+                        "id": "F123ABC456",
+                        "name": "SkyShake.zip",
+                        "mimetype": "application/zip",
+                        "url_private_download": "https://files.example.test/SkyShake.zip"
+                    }
+                ]
+            },
+            "event_id": "Ev123ABC789"
+        }"#;
+
+        let adapter = SlackInboundAdapter::default();
+        let message = adapter
+            .parse(payload.as_bytes())
+            .expect("file_share parses");
+
+        assert_eq!(message.channel, Channel::Slack);
+        assert_eq!(message.sender, "U123ABC456");
+        assert_eq!(
+            message.text_body,
+            Some("Attached the project zip".to_string())
+        );
+        assert_eq!(message.attachments.len(), 1);
+        assert_eq!(message.attachments[0].name, "SkyShake.zip");
+        assert_eq!(message.attachments[0].content_type, "application/zip");
+        assert_eq!(
+            message.metadata.slack_channel_id,
+            Some("D123ABC456".to_string())
+        );
     }
 
     #[test]

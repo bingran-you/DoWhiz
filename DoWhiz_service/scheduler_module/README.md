@@ -65,6 +65,58 @@ Bootstrap output artifacts are persisted into each workspace under:
 - `startup_workspace/provisioning.json`
 - `startup_workspace/workspace_home_snapshot.json`
 
+## DevOps Task Status CLI
+
+`task_status_cli` is a LOCAL SERVER ONLY tool for DevOps monitoring of task execution status.
+
+**Security**: This CLI requires direct MongoDB access and performs security checks to prevent unauthorized remote execution. It must be run directly on the DoWhiz server.
+
+### Commands
+
+```bash
+# List all currently running tasks (highlights stale ones)
+task_status_cli list-running [--stale-minutes 60] [--limit 100]
+
+# List failed tasks in last N hours
+task_status_cli list-failed [--hours 24] [--limit 100]
+
+# List pending/queued tasks (due but not yet picked up)
+task_status_cli list-pending [--limit 100]
+
+# Get detailed task info
+task_status_cli get-task --task-id <uuid> --user-id <uuid>
+
+# List execution history for a task
+task_status_cli executions --task-id <uuid> --user-id <uuid> [--limit 20]
+
+# Show aggregate statistics with health indicators
+task_status_cli summary
+```
+
+### Required Environment
+
+- `MONGODB_URI` - MongoDB connection string
+- `DEPLOY_TARGET` - Required on server (staging/production)
+
+### Example Usage on Server
+
+```bash
+# SSH to server
+ssh xxxserver
+
+# Source environment
+source <DoWhiz Deploy Path>/DoWhiz_service/.env
+
+# Check running tasks
+<DoWhiz Deploy Path>/DoWhiz_service/target/release/task_status_cli list-running
+
+# Check for stale tasks (running > 2 hours)
+<DoWhiz Deploy Path>/DoWhiz_service/target/release/task_status_cli list-running --stale-minutes 120
+
+# Get summary stats
+<DoWhiz Deploy Path>/DoWhiz_service/target/release/task_status_cli summary
+```
+
 ## Test Commands
 
 ```bash
