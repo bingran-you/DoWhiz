@@ -6,6 +6,7 @@ Postmark outbound email sender used by scheduler `SendReply` tasks.
 
 - send HTML email from file (`html_path`)
 - wrap outbound HTML in a responsive DoWhiz-branded shell that uses the shared website light-theme colors
+- detect non-presentation data tables and wrap them in a horizontally scrollable container for narrow/mobile email clients
 - send attachments from flat directory (`attachments_dir`)
 - supports To/Cc/Bcc + threading headers (`In-Reply-To`, `References`)
 
@@ -41,7 +42,8 @@ println!("message id: {}", resp.message_id);
 
 `send_email` expects the draft file to contain the email content itself (paragraphs, headings,
 lists, tables, links). The module applies the shared DoWhiz shell at send time so replies stay
-responsive and avoid overly narrow centered layouts.
+responsive, avoid overly narrow centered layouts, and keep data tables readable on mobile instead
+of crushing columns into unreadable stacks.
 
 ## Tests
 
