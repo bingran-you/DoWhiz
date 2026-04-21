@@ -1,4 +1,4 @@
 interface:
   display_name: "Stock Investment Research"
-  short_description: "Analyze one U.S. stock or ETF with a Buy/Wait/Sell view"
-  default_prompt: "Use $us-equity-daily-monitor to analyze a single U.S. stock or ETF and return a structured Buy/Wait/Sell investment research answer."
+  short_description: "Decision memo for one U.S. stock or ETF"
+  default_prompt: "Use $us-equity-daily-monitor to analyze a single U.S. stock or ETF and return the exact structured investment memo with the exact section headers from the skill: request framing, verified facts, derived metrics, inference or judgment, scenario analysis, timing or execution, and a final Buy/Wait/Sell recommendation."

@@ -3,93 +3,84 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Analyze VRT and tell me if it is worth buying now. It is 9:00 AM America/Los_Angeles on a normal U.S. trading day. Use current public web sources and return the stock investment research format with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer. If the market is already open at that time, treat the price action as intraday rather than a completed close.",
-      "expected_output": "A structured single-stock research answer for VRT that handles 9:00 AM PT market timing correctly, keeps facts separate from interpretation, and ends with exactly one Buy, Wait, or Sell rating.",
+      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+      "expected_output": "A decision-useful NVDA investment memo that goes beyond a generic summary by producing a clear rating, explicit entry approach, explicit scenario analysis, and explicit invalidation logic.",
       "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, share volume 119,383,328, average volume 177,293,377, market cap about $4.91T, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, gross profit $153.463B, operating income $130.387B, pre-tax income $141.450B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B, cash and cash equivalents about $10.605B, remaining buyback authorization about $58.5B.",
+        "Nasdaq analyst earnings forecast for the Apr 2026 fiscal quarter: consensus EPS 1.70, high 1.88, low 1.63."
+      ],
       "expectations": [
-        "The answer identifies VRT correctly as a U.S. stock and does not describe it as an ETF.",
-        "The answer treats 9:00 AM America/Los_Angeles on a normal trading day as an intraday context and does not describe the current session as a completed daily close.",
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer keeps facts separate from interpretation inside the summary or surrounding explanation.",
-        "The answer names or cites the main public sources behind the key claims.",
-        "The answer includes a research-only disclaimer and does not imply trade execution or personalized regulated advice."
+        "The answer uses the required section structure with Request framing, Verified facts, Derived metrics, Inference / judgment, Scenario analysis, Timing / execution, Final recommendation, Sources, and Disclaimer.",
+        "The answer includes a final recommendation block with Rating, Horizon, Confidence, Entry approach, Add criteria, Invalidation criteria, Biggest near-term risk, and Biggest long-term strength.",
+        "The answer includes exactly one final rating from Buy, Wait, or Sell and one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now.",
+        "The answer separates verified facts, derived metrics, and inference rather than collapsing them into one blended summary.",
+        "The answer includes Bull case, Base case, and Bear case.",
+        "The answer includes explicit add criteria and invalidation criteria instead of only vague language.",
+        "Because the prompt does not state a horizon, the answer marks the horizon as inferred."
       ]
     },
     {
       "id": 2,
-      "prompt": "Give me an investment view on XLU. Keep it concise but evidence-based, use public information only, and return the same stock investment research format with exactly one rating: Buy, Wait, or Sell.",
-      "expected_output": "A structured ETF research answer for XLU that evaluates the fund as an ETF, uses the stable output contract, and does not drift into operating-company analysis.",
+      "prompt": "Is NVDA a buy this week for a 3-month position?",
+      "expected_output": "A tactical NVDA memo that recognizes a stated 3-month horizon, treats the question as medium-term or tactical rather than defaulting to long-term accumulation, and gives timing logic for this week.",
       "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, share volume 119,383,328, average volume 177,293,377, market cap about $4.91T, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, gross profit $153.463B, operating income $130.387B, pre-tax income $141.450B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B, cash and cash equivalents about $10.605B, remaining buyback authorization about $58.5B.",
+        "Nasdaq analyst earnings forecast for the Apr 2026 fiscal quarter: consensus EPS 1.70, high 1.88, low 1.63."
+      ],
       "expectations": [
-        "The answer identifies XLU correctly as an ETF rather than as an operating company.",
-        "The answer discusses ETF-relevant context such as fund objective, exposure, concentration, sector or rate sensitivity, or related public fund information when relevant.",
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer does not invent holdings weights, exposures, or other unavailable fund details.",
-        "The answer stays within the public-information research boundary and includes a disclaimer."
+        "The answer uses the required section structure with Request framing, Verified facts, Derived metrics, Inference / judgment, Scenario analysis, Timing / execution, Final recommendation, Sources, and Disclaimer.",
+        "The answer recognizes the stated 3-month holding period in the horizon framing rather than inferring a generic long-term horizon.",
+        "The answer classifies the question type as medium-term investment, short-term trade, or event-driven timing rather than long-term accumulation.",
+        "The answer includes explicit timing or execution logic for this week instead of only a broad long-term accumulation answer.",
+        "The answer includes exactly one final rating from Buy, Wait, or Sell and one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now."
       ]
     },
     {
       "id": 3,
-      "prompt": "A single U.S. stock has strong recent momentum and bullish price action, but the latest public headlines are negative and event risk is elevated. Produce the stock investment research answer and choose Buy, Wait, or Sell.",
-      "expected_output": "A mixed-signal research answer that acknowledges the conflict between technical strength and event risk, uses the stable structure, and chooses Wait rather than forcing a directional action.",
+      "prompt": "NVDA earnings are on May 27, right? Should I buy before them?",
+      "expected_output": "An event-driven NVDA memo that does not silently absorb the user's earnings-date premise. If trusted accessible sources conflict with May 27 or only show an estimated date, the answer explicitly corrects or qualifies the premise before giving a pre-earnings view.",
       "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "NVIDIA investor relations says the conference call for first quarter fiscal 2027 financial results is scheduled for Wednesday, May 20, 2026 at 2:00 PM Pacific time.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B."
+      ],
       "expectations": [
-        "The answer identifies the conflict between bullish technicals and negative or risky event context.",
-        "The answer selects Wait as the honest rating for the mixed-signal setup instead of forcing a bullish or bearish call.",
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer explains why the current evidence is not clean enough for Buy or Sell.",
-        "The answer includes explicit risks and thesis-break conditions.",
-        "The answer avoids hype, certainty theater, and any implication of auto-execution."
+        "The answer uses the required section structure with Request framing, Verified facts, Derived metrics, Inference / judgment, Scenario analysis, Timing / execution, Final recommendation, Sources, and Disclaimer.",
+        "The answer classifies the question as event-driven timing.",
+        "The answer does not uncritically accept the user's May 27 earnings-date premise. It either corrects the date with sourced conflicting information or explicitly marks the date as estimated or unconfirmed.",
+        "The answer gives a direct pre-earnings timing view with one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now.",
+        "The answer includes explicit add criteria and invalidation criteria rather than only a generic warning about volatility."
       ]
     },
     {
       "id": 4,
-      "prompt": "Deep research BE and include any relevant ownership or insider angle from public filings. If you mention Form 4, Schedule 13D or 13G, or Form 13F, explain in plain English what each filing means and which signals are timely versus lagged. Return the same structured stock investment answer with exactly one Buy, Wait, or Sell rating.",
-      "expected_output": "A deep-research answer on BE that correctly interprets ownership filings, distinguishes timely versus lagged signals, and keeps the final view grounded in broader evidence rather than filing labels alone.",
+      "prompt": "Analyze PLUG and tell me whether now is a good time to buy.",
+      "expected_output": "A weaker or messier-case investment memo that still stays structured, lowers confidence appropriately, and does not pretend certainty where the public evidence is noisy or incomplete.",
       "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $3.22, previous close $2.78, share volume 112,240,552, average volume 81,245,561, market cap about $4.49B, 52-week range $0.69 to $4.58, one-year target $2.25, market status Closed.",
+        "Plug Power annual financials from Nasdaq for FY2025: revenue $709.919M, gross profit -$242.040M, operating income -$1.467B, pre-tax income -$1.693B, net income from continuing operations roughly -$1.687B.",
+        "Nasdaq analyst earnings forecast: Mar 2026 quarter consensus EPS -0.10, FY2026 consensus EPS -0.32.",
+        "SEC filings show a 10-K filed on Mar. 2, 2026 and a heavy run of 8-K filings in early 2026, which supports a messy or event-driven context rather than a clean stable setup."
+      ],
       "expectations": [
-        "The answer distinguishes Form 4 insider activity from Schedule 13D or 13G major-holder disclosures and from Form 13F institutional holdings.",
-        "The answer explains that Form 13F data is materially lagged and should not be framed as live same-day positioning.",
-        "The answer does not turn a single filing into the entire thesis without broader context.",
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer stays within the public-information boundary and names or cites the relevant sources."
-      ]
-    },
-    {
-      "id": 5,
-      "prompt": "It is a U.S. market holiday. Analyze NVDA in the stock investment research format without pretending the market is open. Tell me what matters next and keep the response grounded in public information.",
-      "expected_output": "A market-closed stock research answer for NVDA that avoids fabricating live trading context, still provides a useful carry-forward view, and preserves the structured output contract.",
-      "files": [],
-      "expectations": [
-        "The answer explicitly states that the market is closed or not in a live regular session.",
-        "The answer does not fabricate intraday movement, live volume, or a completed session that did not happen.",
-        "The answer still provides useful next-watch items such as catalysts, risks, or key levels where relevant.",
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer avoids implying that an order will be placed or that the response is personalized investment advice."
-      ]
-    },
-    {
-      "id": 6,
-      "prompt": "Deep research BE. I want more than a quick note, but keep it usable. Synthesize current public information into a structured investment view rather than just listing headlines. Return Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-      "expected_output": "A deeper but still usable BE research answer that preserves the stable structure, goes beyond a headline recap, and ends with exactly one Buy, Wait, or Sell rating.",
-      "files": [],
-      "expectations": [
-        "The answer uses the required section structure with Asset identified, Summary, Rating, Why now, Bullish factors, Bearish factors, Risks, Key levels to watch, Sources, and Disclaimer.",
-        "The answer goes deeper than a headline summary by synthesizing public facts, interpretation, and current setup.",
-        "The answer remains concise enough to be usable rather than turning into a bloated long-form report.",
-        "The answer includes exactly one formal rating from Buy, Wait, or Sell and does not use legacy labels such as Strong Buy, Hold, Trim, No action, or Strong Sell.",
-        "The answer does not add a second formal action taxonomy such as Action or Final action and does not include a formal Confidence label by default.",
-        "The answer stays evidence-based, non-hyped, and inside the research-only boundary."
+        "The answer uses the required section structure with Request framing, Verified facts, Derived metrics, Inference / judgment, Scenario analysis, Timing / execution, Final recommendation, Sources, and Disclaimer.",
+        "The answer includes a final recommendation block with Rating, Horizon, Confidence, Entry approach, Add criteria, Invalidation criteria, Biggest near-term risk, and Biggest long-term strength.",
+        "The answer does not use High confidence for this weaker or messier case.",
+        "The answer explicitly acknowledges uncertainty, mixed evidence, missing inputs, or metrics that are not reliably derivable instead of pretending certainty.",
+        "The answer includes exactly one final rating from Buy, Wait, or Sell and one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now."
       ]
     }
   ]
