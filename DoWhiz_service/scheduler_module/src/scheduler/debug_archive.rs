@@ -779,13 +779,14 @@ fn upload_archive_bundle(
                             local_fallback_path: None,
                         });
                     }
-                    Err(_) => {
+                    Err(err) => {
                         eprintln!(
-                            "[task_debug_archive] upload attempt failed backend={} account={} container={} path={}",
+                            "[task_debug_archive] upload attempt failed backend={} account={} container={} path={} error={}",
                             target.storage_backend,
                             target.storage_account.as_deref().unwrap_or("unknown"),
                             target.container,
-                            blob_path
+                            blob_path,
+                            err
                         );
                     }
                 }
