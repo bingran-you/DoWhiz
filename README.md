@@ -1,6 +1,6 @@
 # DoWhiz
 
-DoWhiz is an open-source foundation for building AI operators that work across email, documents, chat, and repository workflows.
+DoWhiz - Oliver, a trusted AI operator for work and life. 🧸
 
 <p align="center"><strong>Product Shorts</strong></p>
 
