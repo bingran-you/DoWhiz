@@ -532,11 +532,12 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
-
 ###  4/20/26
 **Completed:**
 - ✅ Completed E2E debugging of manual trigger
 - ✅ Fixed incorrect `model` in RunTaskTask, and empty `reply_to` by reading from employee config.
+- ✅ Refactor TPM CLIs to only use notion API (no mongoDB bidirectional sync, which can get messy with many corner cases)
+- ✅ Pass in organization's `notion_database_id` via `UserIdentities` struct, upsert in TPM prompt in `prompt.rs`
 
 ### 4/17/26
 **Completed:**
