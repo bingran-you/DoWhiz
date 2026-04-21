@@ -833,7 +833,11 @@ fn upload_archive_bytes(
                 .header("x-ms-blob-type", "BlockBlob")
                 .body(bytes.to_vec())
                 .send()
-                .map_err(|err| SchedulerError::Storage(format!("blob upload failed: {}", err)))?;
+                .map_err(|err| {
+                    // `reqwest::Error` includes the full request URL by default, which would leak
+                    // the container SAS query params into logs.
+                    SchedulerError::Storage(format!("blob upload failed: {}", err.without_url()))
+                })?;
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().unwrap_or_default();
@@ -855,7 +859,11 @@ fn upload_archive_bytes(
                 .header("x-ms-blob-type", "BlockBlob")
                 .body(bytes.to_vec())
                 .send()
-                .map_err(|err| SchedulerError::Storage(format!("blob upload failed: {}", err)))?;
+                .map_err(|err| {
+                    // `reqwest::Error` includes the full request URL by default, which would leak
+                    // the account SAS query params into logs.
+                    SchedulerError::Storage(format!("blob upload failed: {}", err.without_url()))
+                })?;
             if !response.status().is_success() {
                 let status = response.status();
                 let body = response.text().unwrap_or_default();
