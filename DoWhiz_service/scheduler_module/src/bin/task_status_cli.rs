@@ -251,13 +251,8 @@ fn cmd_list_running(args: &[String]) -> ExitCode {
             Err(_) => continue,
         };
 
-        let started_at = doc
-            .get_datetime("started_at")
-            .map(|dt| dt.to_chrono())
-            .ok();
-        let is_stale = started_at
-            .map(|dt| dt < stale_threshold)
-            .unwrap_or(false);
+        let started_at = doc.get_datetime("started_at").map(|dt| dt.to_chrono()).ok();
+        let is_stale = started_at.map(|dt| dt < stale_threshold).unwrap_or(false);
         let is_long_running = started_at
             .map(|dt| dt < long_running_threshold)
             .unwrap_or(false);
@@ -356,10 +351,7 @@ fn cmd_list_failed(args: &[String]) -> ExitCode {
             Err(_) => continue,
         };
 
-        let started_at = doc
-            .get_datetime("started_at")
-            .map(|dt| dt.to_chrono())
-            .ok();
+        let started_at = doc.get_datetime("started_at").map(|dt| dt.to_chrono()).ok();
         let finished_at = match doc.get("finished_at") {
             Some(Bson::DateTime(dt)) => Some(dt.to_chrono()),
             _ => None,
@@ -665,10 +657,7 @@ fn cmd_executions(args: &[String]) -> ExitCode {
             Err(_) => continue,
         };
 
-        let started_at = doc
-            .get_datetime("started_at")
-            .map(|dt| dt.to_chrono())
-            .ok();
+        let started_at = doc.get_datetime("started_at").map(|dt| dt.to_chrono()).ok();
         let finished_at = match doc.get("finished_at") {
             Some(Bson::DateTime(dt)) => Some(dt.to_chrono()),
             _ => None,
@@ -916,7 +905,10 @@ mod tests {
         while i < args.len() {
             if args[i] == "--stale-minutes" {
                 i += 1;
-                stale_minutes = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_STALE_MINUTES);
+                stale_minutes = args
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(DEFAULT_STALE_MINUTES);
             }
             i += 1;
         }
@@ -946,7 +938,10 @@ mod tests {
         while i < args.len() {
             if args[i] == "--hours" {
                 i += 1;
-                hours = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_HOURS);
+                hours = args
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(DEFAULT_HOURS);
             }
             i += 1;
         }
@@ -961,7 +956,10 @@ mod tests {
         while i < args.len() {
             if args[i] == "--stale-minutes" {
                 i += 1;
-                stale_minutes = args.get(i).and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_STALE_MINUTES);
+                stale_minutes = args
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(DEFAULT_STALE_MINUTES);
             }
             i += 1;
         }
