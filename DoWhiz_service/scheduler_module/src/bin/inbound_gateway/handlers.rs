@@ -46,6 +46,7 @@ use super::verify::{
 const SLACK_ENGAGED_THREAD_TTL: StdDuration = StdDuration::from_secs(12 * 60 * 60);
 const WECHAT_MP_PASSIVE_ACK_BODY: &str = "success";
 const WECHAT_MP_PASSIVE_REPLY_TEXT_ENV: &str = "WECHAT_MP_PASSIVE_REPLY_TEXT";
+const WECHAT_MP_PASSIVE_REPLY_TEXT_DEFAULT: &str = "已收到消息，正在处理中，请稍候。";
 
 /// Request payload for creating a workspace brief document
 #[derive(Debug, Deserialize)]
@@ -932,17 +933,31 @@ async fn process_wechat_mp_async(
 fn wechat_mp_passive_ack_response(message: Option<&InboundMessage>) -> Response {
     if let (Some(reply_text), Some(message)) = (resolve_wechat_mp_passive_reply_text(), message) {
         if let Some(response) = build_wechat_mp_passive_text_response(message, &reply_text) {
+            info!(
+                "wechat_mp returning passive XML reply, text_len={}",
+                reply_text.len()
+            );
             return response;
         }
+        warn!(
+            "wechat_mp failed to build passive XML reply, falling back to 'success'. open_id={:?}, app_id={:?}",
+            message.metadata.wechat_mp_open_id,
+            message.metadata.wechat_mp_app_id
+        );
     }
+    info!("wechat_mp returning plain 'success' ack");
     (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response()
 }
 
 fn resolve_wechat_mp_passive_reply_text() -> Option<String> {
-    std::env::var(WECHAT_MP_PASSIVE_REPLY_TEXT_ENV)
+    let env_value = std::env::var(WECHAT_MP_PASSIVE_REPLY_TEXT_ENV)
         .ok()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+
+    // Use default passive reply text if env var is not set
+    // This ensures users always get immediate feedback when sending a message
+    Some(env_value.unwrap_or_else(|| WECHAT_MP_PASSIVE_REPLY_TEXT_DEFAULT.to_string()))
 }
 
 fn build_wechat_mp_passive_text_response(
