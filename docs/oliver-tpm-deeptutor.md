@@ -134,7 +134,9 @@ dev_tasks collection
 1. User searches for organization: `SELECT * FROM organizations WHERE name ILIKE '%query%'`
 2. User clicks to join: `UPDATE accounts SET organization_id = X WHERE id = Y`
 
-#### Task Storage (MongoDB)
+#### Task Storage (MongoDB) — LEGACY
+
+> **Note:** As of 4/20/26, we no longer use MongoDB for task storage. Tasks are stored directly in Notion. The DevTaskStore and bidirectional sync have been removed. This section is kept for historical reference.
 
 Extend existing `TaskKind` enum:
 
@@ -147,7 +149,7 @@ pub enum TaskKind {
 }
 
 enum Priority { P0, P1, P2, P3 }
-enum TaskStatus { Backlog, InProgress, Review, Done, Blocked }
+enum TaskStatus { Backlog, InProgress, Review, Done, Blocked, Archived }
 enum TaskSource { UserFeedback, Notetaker, MarketResearch, Manual }
 
 struct DevTask {
@@ -232,7 +234,9 @@ DeepTutor Development Board
 ├── Backlog (database view: status = Backlog, sorted by priority)
 ├── In Progress (status = InProgress)
 ├── Review (status = Review)
-└── Done (status = Done, last 2 weeks)
+├── Done (status = Done, last 2 weeks)
+├── Blocked (status = Blocked)
+└── Archived (status = Archived, soft-deleted tasks)
 ```
 
 **Sync Operations:**
@@ -285,12 +289,14 @@ DeepTutor Development Board
 
 ---
 
-## Data Model Additions
+## Data Model Additions — LEGACY
+
+> **Note:** MongoDB collections for tasks are no longer used. Tasks are stored in Notion only.
 
 ### MongoDB Collections
 
 ```
-deeptutor_tasks          — Task queue and metadata
+deeptutor_tasks          — Task queue and metadata (LEGACY)
 deeptutor_checkpoints    — Granular progress tracking (optional, can embed)
 deeptutor_feedback       — Raw user feedback before processing
 deeptutor_transcripts    — Notetaker transcript references
@@ -356,8 +362,10 @@ Task board commands for managing DevTasks across MongoDB and Notion:
 **Command purposes:**
 - ✅ `setup-board` — Create Notion database for an organization
 - ✅ `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
-- ✅ `list-tasks` — List tasks from MongoDB with filters
-- ✅ `sync-tasks` — Pull status/priority updates that developers made directly in Notion → MongoDB
+- ✅ `update-task` — Update existing task's assignee, status, or priority
+- ✅ `list-tasks` — List tasks from Notion with filters
+- ✅ `list-users` — List Notion workspace users (for task assignment)
+- ⚠️ `sync-tasks` — **LEGACY** (was for Notion ↔ MongoDB sync, no longer used)
 
 #### `setup-board` — Create Notion database for an organization
 
@@ -370,7 +378,7 @@ tpm_cli setup-board \
 
 Creates a Notion database with TPM schema:
 - **Name** (title)
-- **Status** (select: Backlog, In Progress, Review, Done, Blocked)
+- **Status** (select: Backlog, In Progress, Review, Done, Blocked, Archived)
 - **Priority** (select: P0, P1, P2, P3)
 - **Assignee** (people)
 - **Tags** (multi-select)
@@ -406,20 +414,58 @@ Flow:
 2. Create page in Notion database with `MongoDB ID` property
 3. Link `notion_page_id` back to MongoDB document with DevTaskStore's `link_notion_page`
 
-#### `list-tasks` — List tasks from MongoDB
+#### `list-tasks` — List tasks from Notion
 
 ```bash
 # List all tasks
-tpm_cli list-tasks --organization deeptutor
+tpm_cli list-tasks --organization deeptutor --database-id <DB_ID>
 
-# Filter by status
-tpm_cli list-tasks --organization deeptutor --status backlog
-
-# Filter by assignee
-tpm_cli list-tasks --organization deeptutor --assignee dev@example.com
+# Filter by status (backlog, in_progress, review, done, blocked, archived)
+tpm_cli list-tasks --organization deeptutor --database-id <DB_ID> --status backlog
 ```
 
-#### `sync-tasks` — Bidirectional sync between Notion and MongoDB
+#### `update-task` — Update existing task
+
+```bash
+# Assign task to a user (use list-users to get user IDs)
+tpm_cli update-task --page-id <TASK_PAGE_ID> --assignee <NOTION_USER_ID>
+
+# Change status
+tpm_cli update-task --page-id <TASK_PAGE_ID> --status in_progress
+
+# Change priority
+tpm_cli update-task --page-id <TASK_PAGE_ID> --priority p0
+
+# Update multiple fields
+tpm_cli update-task --page-id <TASK_PAGE_ID> --assignee <USER_ID> --status review --priority p1
+
+# Soft-delete (archive) a task
+tpm_cli update-task --page-id <TASK_PAGE_ID> --status archived
+```
+
+#### `list-users` — List Notion workspace users
+
+```bash
+tpm_cli list-users
+```
+
+Returns JSON with user IDs, names, and emails. Use these IDs for `--assignee` flags.
+
+**Output:**
+```json
+{
+  "success": true,
+  "count": 3,
+  "users": [
+    { "id": "abc-123", "name": "Alice", "email": "alice@example.com" },
+    { "id": "def-456", "name": "Bob", "email": "bob@example.com" }
+  ]
+}
+```
+
+#### `sync-tasks` — Bidirectional sync between Notion and MongoDB — LEGACY
+
+> **Note:** This command is no longer used. Tasks are now stored directly in Notion only.
 
 ```bash
 tpm_cli sync-tasks \
@@ -519,9 +565,10 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 | Component | Location | Reuse |
 |-----------|----------|-------|
 | MongoDB client | `scheduler_module/src/mongo_store.rs` | Connection + CRUD patterns |
-| **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **NEW** - DevTask CRUD for TPM |
+| **Dev Task Store** | `scheduler_module/src/dev_task_store.rs` | **LEGACY** - No longer used (was MongoDB CRUD for TPM) |
 | **TPM CLI** | `scheduler_module/src/bin/tpm_cli.rs` | **NEW** - Task board commands (setup-board, create-task, list-tasks, sync-tasks) |
 | **TPM Cron** | `scheduler_module/src/tpm_cron.rs` | **NEW** - `setup_tpm_cron` function for cron job setup |
+| **TPM Skill** | `skills/tpm/SKILL.md` | **NEW** - Detailed workflows for task mgmt, assignment, competitive research |
 | Notion CLI | `scheduler_module/src/bin/notion_api_cli.rs` | All page/database operations |
 | Notion API Client | `scheduler_module/src/notion_browser/api_client.rs` | `create_database`, `create_database_page`, `query_database` |
 | Account lookup | `scheduler_module/src/account_store.rs` | Developer identity + org lookup |
@@ -532,6 +579,21 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 4/21/26
+**Completed:**
+- ✅ Added `list-users` command — Lists all Notion workspace users (for task assignment)
+- ✅ Added `update-task` command — Update existing task's assignee, status, or priority
+- ✅ Added "Archived" status option — Soft-delete tasks by setting status to archived
+- ✅ Fixed `--assignee` flag — Now uses Notion `people` type (was incorrectly using `rich_text`)
+- ✅ Created TPM skill file (`skills/tpm/SKILL.md`) — Comprehensive guide covering:
+  - Task management rules (no duplicates, required fields, archive don't delete)
+  - Assignment & load balancing workflows
+  - Competitive research via web search
+  - GitHub → Notion sync patterns
+  - Daily TPM sync workflow with report template
+- ✅ Added skill reference in `prompt.rs` — Oliver reads `.agents/skills/tpm/SKILL.md` for detailed workflows
+- ✅ Fixed `.notion_context.json` and `.notion_env` injection — `tpm_cron.rs` now writes workspace_id and NOTION_API_TOKEN to workspace
+
 ###  4/20/26
 **Completed:**
 - ✅ Completed E2E debugging of manual trigger

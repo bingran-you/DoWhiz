@@ -772,6 +772,8 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
 
+See `.agents/skills/tpm/SKILL.md` for detailed workflows on task management, load balancing, competitive research, and daily syncs.
+
 **STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
 Before running TPM commands, gather context about {org_name}:
 
