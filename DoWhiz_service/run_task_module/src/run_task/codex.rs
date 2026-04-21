@@ -2259,8 +2259,6 @@ fn aci_show_indicates_container_started(show_json: &str) -> bool {
     let instance_state = instance_state.unwrap_or_default();
 
     if instance_state.eq_ignore_ascii_case("Failed")
-        || instance_state.eq_ignore_ascii_case("Terminated")
-        || instance_state.eq_ignore_ascii_case("Stopped")
         || provisioning_state.eq_ignore_ascii_case("Failed")
         || provisioning_state.eq_ignore_ascii_case("Canceled")
     {
@@ -2274,6 +2272,8 @@ fn aci_show_indicates_container_started(show_json: &str) -> bool {
         || instance_state.eq_ignore_ascii_case("Waiting")
         || instance_state.eq_ignore_ascii_case("Pending")
         || instance_state.eq_ignore_ascii_case("Succeeded")
+        || instance_state.eq_ignore_ascii_case("Terminated")
+        || instance_state.eq_ignore_ascii_case("Stopped")
 }
 
 fn create_aci_container(
@@ -5110,6 +5110,25 @@ printf '%s\n' "$@" > "$capture_file"
         }"#;
 
         assert!(!aci_show_indicates_container_started(show_json));
+    }
+
+    #[test]
+    fn test_aci_show_indicates_container_started_accepts_terminated_for_polling_recovery() {
+        let terminated = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Terminated"
+          }
+        }"#;
+        let stopped = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Stopped"
+          }
+        }"#;
+
+        assert!(aci_show_indicates_container_started(terminated));
+        assert!(aci_show_indicates_container_started(stopped));
     }
 
     #[test]
