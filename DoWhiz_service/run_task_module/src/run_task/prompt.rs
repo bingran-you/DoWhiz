@@ -815,9 +815,10 @@ Before running TPM commands, gather context about {org_name}:
 **Task Assignment Workflow:**
 1. First, run `tpm_cli list-users` to get available team members and their Notion user IDs
 2. When creating tasks, use `--assignee <USER_ID>` to assign the task
-3. Load balance: distribute tasks evenly across team members based on their current workload
-4. Check existing task counts per user with `list-tasks` before assigning new work
-5. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
+3. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
+4. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
+5. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
+6. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
@@ -837,13 +838,15 @@ Include the database URL in your reply and these sharing instructions.
 3. Check task board: `tpm_cli list-tasks --organization {org_name}{db_flag}`
    - If "No notion_database_id configured" error, create board first via setup-board
 4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
-5. Identify stale tasks (no updates in 3+ days)
+5. **Archive stale tasks** - tasks with no updates in 2+ weeks that are no longer relevant
 6. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
    - Recent PRs that need follow-up
    - Blockers mentioned in PR comments
-   - Assign tasks evenly across team members (use user IDs from step 2)
-7. Compile summary report for {org_name}
+   - Competitive research findings
+   - Your own ideas for product improvements
+7. **Assign all unassigned tasks** - aim for ~10 active tasks per person
+8. Compile summary report for {org_name}
 
 **Proactive Task Creation:**
 You SHOULD add tasks when you discover:
