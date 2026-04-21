@@ -753,3 +753,9 @@ List blocked tasks from the synced deeptutor board
 Identify stale tasks with no updates in 3+ days
 Post the TPM summary to a team Discord/Slack channel
 ```
+
+### Issue 3: `.notion_context.json` missing workspace_id, `NOTION_API_TOKEN` missing
+
+```
+2026-04-21 manual TPM sync reproduced the same runtime issue. In this run-task workspace, tpm_cli could only list the deeptutor board after manually adding .notion_context.json with workspace_id 104000d2-5179-81f2-88c1-0003e11173a9 and exporting NOTION_API_TOKEN from .notion_env. The board itself is reachable directly at database 348000d2-5179-81ee-b159-c1172ddabe29.
+```
