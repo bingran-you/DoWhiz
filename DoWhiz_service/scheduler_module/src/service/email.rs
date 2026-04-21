@@ -1299,6 +1299,52 @@ mod tests {
     }
 
     #[test]
+    fn append_inbound_payload_uses_stripped_reply_for_followup_thread_request() {
+        let temp = TempDir::new().expect("tempdir");
+
+        let original_raw = r#"{
+  "From": "Logan <logan@example.com>",
+  "To": "Oliver <oliver@dowhiz.com>",
+  "Subject": "Nvidia stock",
+  "TextBody": "Give me a deep research about the Nvidia stock, and tell me whether it is a good time to buy",
+  "MessageID": "<msg-1@example.com>"
+}"#;
+        let original_payload: PostmarkInbound =
+            serde_json::from_str(original_raw).expect("original payload");
+        append_inbound_payload(temp.path(), &original_payload, original_raw.as_bytes(), 1)
+            .expect("append original payload");
+
+        let followup_text =
+            "Can you help me do some deep research for the competitors, and the upstream/downstream for Nvidia. Give me suggestion to some of the investment options among those companies";
+        let followup_raw = format!(
+            r#"{{
+  "From": "Logan <logan@example.com>",
+  "To": "Oliver <oliver@dowhiz.com>",
+  "Subject": "Re: Nvidia stock",
+  "TextBody": "{followup_text}\n\nOn Sat, Apr 18, 2026 at 1:14 PM Logan wrote:\n> Give me a deep research about the Nvidia stock, and tell me whether it is a good time to buy",
+  "StrippedTextReply": "{followup_text}",
+  "MessageID": "<msg-2@example.com>"
+}}"#
+        );
+        let followup_payload: PostmarkInbound =
+            serde_json::from_str(&followup_raw).expect("followup payload");
+        append_inbound_payload(temp.path(), &followup_payload, followup_raw.as_bytes(), 2)
+            .expect("append followup payload");
+
+        let thread_request =
+            fs::read_to_string(temp.path().join("incoming_email/thread_request.md"))
+                .expect("thread_request");
+        let latest_section = thread_request
+            .split("## Latest inbound message\n")
+            .nth(1)
+            .and_then(|section| section.split("\n## Thread timeline\n").next())
+            .expect("latest inbound message section");
+
+        assert!(latest_section.contains("competitors"));
+        assert!(!latest_section.contains("Give me a deep research about the Nvidia stock"));
+    }
+
+    #[test]
     fn resolve_attachment_bytes_prefers_base64_content() {
         let attachment = super::super::postmark::PostmarkAttachment {
             name: "report.txt".to_string(),

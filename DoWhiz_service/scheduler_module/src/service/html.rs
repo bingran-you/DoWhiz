@@ -10,8 +10,8 @@ pub fn derive_inbound_email_text(
     stripped_text_reply: Option<&str>,
     html_body: Option<&str>,
 ) -> Option<String> {
-    if let Some(text) = normalize_plain_text_option(text_body)
-        .or_else(|| normalize_plain_text_option(stripped_text_reply))
+    if let Some(text) = normalize_plain_text_option(stripped_text_reply)
+        .or_else(|| normalize_plain_text_option(text_body))
     {
         return Some(append_missing_html_links(text, html_body));
     }
@@ -742,6 +742,23 @@ mod tests {
 
         assert!(text.starts_with("Reply body"));
         assert!(text.contains("Links:\n- https://example.com/doc"));
+    }
+
+    #[test]
+    fn derive_inbound_email_text_prefers_stripped_reply_over_full_text_body() {
+        let text = derive_inbound_email_text(
+            Some(
+                "Can you help me do some deep research for the competitors, and the upstream/downstream for Nvidia.\n\nOn Sat, Apr 18, 2026 at 1:14 PM Logan wrote:\n> Give me a deep research about the Nvidia stock, and tell me whether it is a good time to buy",
+            ),
+            Some(
+                "Can you help me do some deep research for the competitors, and the upstream/downstream for Nvidia.",
+            ),
+            Some("<p>Can you help me do some deep research for the competitors, and the upstream/downstream for Nvidia.</p>"),
+        )
+        .expect("text");
+
+        assert!(text.contains("competitors"));
+        assert!(!text.contains("Give me a deep research about the Nvidia stock"));
     }
 
     #[test]
