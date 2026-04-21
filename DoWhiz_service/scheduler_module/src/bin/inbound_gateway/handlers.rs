@@ -20,7 +20,8 @@ use scheduler_module::adapters::bluebubbles::BlueBubblesInboundAdapter;
 use scheduler_module::adapters::lark::LarkInboundAdapter;
 use scheduler_module::adapters::postmark::PostmarkInboundPayload;
 use scheduler_module::adapters::slack::{
-    is_url_verification, SlackChallengeResponse, SlackEventWrapper, SlackInboundAdapter,
+    is_url_verification, slack_message_subtype_is_supported_for_inbound, SlackChallengeResponse,
+    SlackEventWrapper, SlackInboundAdapter,
 };
 use scheduler_module::adapters::telegram::TelegramInboundAdapter;
 use scheduler_module::adapters::wechat::WeChatInboundAdapter;
@@ -328,7 +329,7 @@ fn should_enqueue_slack_message(wrapper: &SlackEventWrapper, bot_user_id: Option
     let Some(event) = wrapper.event.as_ref() else {
         return false;
     };
-    if event.subtype.is_some() {
+    if !slack_message_subtype_is_supported_for_inbound(event.subtype.as_deref()) {
         return false;
     }
     // Filter out bot messages to prevent self-loops
@@ -2188,6 +2189,35 @@ mod tests {
                 event_ts: None,
             }),
             event_id: Some("Ev3".to_string()),
+            event_time: None,
+        };
+
+        assert!(should_enqueue_slack_message(&wrapper, None));
+    }
+
+    #[test]
+    fn should_enqueue_slack_message_accepts_file_share_dm_message() {
+        let wrapper = SlackEventWrapper {
+            event_type: "event_callback".to_string(),
+            challenge: None,
+            token: None,
+            team_id: Some("T1".to_string()),
+            api_app_id: Some("A1".to_string()),
+            event: Some(SlackMessageEvent {
+                event_type: "message".to_string(),
+                subtype: Some("file_share".to_string()),
+                channel: Some("D1".to_string()),
+                user: Some("U1".to_string()),
+                text: Some("project zip attached".to_string()),
+                ts: "1.031".to_string(),
+                thread_ts: None,
+                bot_id: None,
+                app_id: None,
+                files: None,
+                channel_type: Some("im".to_string()),
+                event_ts: None,
+            }),
+            event_id: Some("Ev3_file_share".to_string()),
             event_time: None,
         };
 
