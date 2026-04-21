@@ -120,6 +120,6 @@ This repository still contains operational notes, product-history docs, and depl
 
 Use the open-source docs first. Treat `reference_documentation/`, `DoWhiz_service/OPERATIONS.md`, and branch-coupled deploy workflows as secondary/internal context unless a public doc points you there.
 
-Legacy maintainer helpers such as `env.example.least`, `cleanup/`, and `test_google_e2e.py`
+Legacy maintainer helpers such as `env.example.least` and `test_google_e2e.py`
 remain in the repo for transparency, but they are not part of the supported first-time
 onboarding path.
