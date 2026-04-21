@@ -75,6 +75,7 @@ fn resolve_stale_reconcile_interval() -> Duration {
 
 #[derive(Clone, Copy)]
 struct RunningThreadState {
+    task_id: Uuid,
     thread_epoch: u64,
 }
 
@@ -232,6 +233,66 @@ fn wait_for_stop_or_interval(stop: &AtomicBool, interval: Duration) -> bool {
     }
 }
 
+fn try_reclaim_orphaned_thread_claim<E: crate::TaskExecutor>(
+    scheduler: &mut Scheduler<E>,
+    running_threads: &Arc<Mutex<HashMap<String, RunningThreadState>>>,
+    key: &str,
+    running_state: RunningThreadState,
+) -> bool {
+    let stale_after = resolve_stale_execution_timeout();
+    match scheduler.reconcile_stale_running_executions_for_task(
+        &running_state.task_id.to_string(),
+        Utc::now(),
+        stale_after,
+    ) {
+        Ok(summary) if summary.total_reconciled() > 0 => {
+            info!(
+                "scheduler reconciled stale execution rows while checking busy workspace task_id={} superseded={} failed={}",
+                running_state.task_id,
+                summary.superseded_count,
+                summary.failed_count
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            warn!(
+                "scheduler failed to reconcile stale execution rows while checking busy workspace task_id={}: {}",
+                running_state.task_id, err
+            );
+        }
+    }
+
+    match scheduler.has_running_execution(&running_state.task_id.to_string()) {
+        Ok(true) => false,
+        Ok(false) => {
+            let mut running = running_threads
+                .lock()
+                .expect("running thread lock poisoned");
+            let matches_active_claim = running
+                .get(key)
+                .map(|active| active.task_id == running_state.task_id)
+                .unwrap_or(false);
+            if matches_active_claim {
+                running.remove(key);
+                info!(
+                    "scheduler reclaimed orphaned thread claim workspace={} task_id={} thread_epoch={}",
+                    key, running_state.task_id, running_state.thread_epoch
+                );
+                true
+            } else {
+                false
+            }
+        }
+        Err(err) => {
+            warn!(
+                "scheduler failed to verify busy workspace task_id={} still has a running execution: {}",
+                running_state.task_id, err
+            );
+            false
+        }
+    }
+}
+
 fn claim_thread_execution_slot<E: crate::TaskExecutor>(
     scheduler: &mut Scheduler<E>,
     task_id: Uuid,
@@ -259,8 +320,29 @@ fn claim_thread_execution_slot<E: crate::TaskExecutor>(
     let mut running = running_threads
         .lock()
         .expect("running thread lock poisoned");
-    if let Some(running_state) = running.get(&key).copied() {
+    if let Some(mut running_state) = running.get(&key).copied() {
         drop(running);
+        if try_reclaim_orphaned_thread_claim(scheduler, running_threads, &key, running_state) {
+            let mut running = running_threads
+                .lock()
+                .expect("running thread lock poisoned");
+            if let Some(active_state) = running.get(&key).copied() {
+                running_state = active_state;
+            } else {
+                running.insert(
+                    key.clone(),
+                    RunningThreadState {
+                        task_id,
+                        thread_epoch: task_epoch,
+                    },
+                );
+                return Ok(ThreadExecutionClaim {
+                    guard: Some(RunningThreadGuard::new(running_threads.clone(), key)),
+                    deferred: None,
+                });
+            }
+        }
+
         let defer_secs = thread_busy_defer_secs(task_epoch, running_state.thread_epoch);
         scheduler.defer_one_shot_task_by_id(task_id, chrono::Duration::seconds(defer_secs))?;
         return Ok(ThreadExecutionClaim {
@@ -275,6 +357,7 @@ fn claim_thread_execution_slot<E: crate::TaskExecutor>(
     running.insert(
         key.clone(),
         RunningThreadState {
+            task_id,
             thread_epoch: task_epoch,
         },
     );
@@ -1270,6 +1353,162 @@ mod tests {
             whatsapp_phone_number_id: None,
             whatsapp_verify_token: None,
         })
+    }
+
+    fn make_test_run_task(workspace: &std::path::Path, thread_epoch: u64) -> crate::RunTaskTask {
+        crate::RunTaskTask {
+            workspace_dir: workspace.to_path_buf(),
+            input_email_dir: workspace.join("incoming_email"),
+            input_attachments_dir: workspace.join("incoming_attachments"),
+            memory_dir: workspace.join("memory"),
+            reference_dir: workspace.join("references"),
+            model_name: "test-model".to_string(),
+            runner: "codex".to_string(),
+            codex_disabled: true,
+            reply_to: vec!["user@example.com".to_string()],
+            reply_from: Some("oliver@example.com".to_string()),
+            archive_root: Some(workspace.join("mail")),
+            thread_id: Some("thread-key".to_string()),
+            thread_epoch: Some(thread_epoch),
+            thread_state_path: Some(workspace.join("thread_state.json")),
+            channel: crate::channel::Channel::Email,
+            slack_team_id: None,
+            employee_id: Some("test-employee".to_string()),
+            requester_identifier_type: Some("email".to_string()),
+            requester_identifier: Some("user@example.com".to_string()),
+            account_id: None,
+            channel_metadata: Default::default(),
+        }
+    }
+
+    #[test]
+    fn claim_thread_execution_slot_reclaims_orphaned_workspace_claim() {
+        let temp = TempDir::new().expect("tempdir");
+        let Some(config) = build_test_config(&temp) else {
+            return;
+        };
+        let user_store = UserStore::new(&config.users_db_path).expect("user store");
+        let user_paths = user_store.user_paths(&config.users_root, "thread-claim-user");
+        user_store
+            .ensure_user_dirs(&user_paths)
+            .expect("ensure user dirs");
+        let workspace = user_paths.workspaces_root.join("thread_alpha");
+        fs::create_dir_all(&workspace).expect("create workspace");
+
+        let mut scheduler =
+            Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default()).expect("load");
+        let old_task_id = scheduler
+            .add_one_shot_at(
+                Utc::now() - ChronoDuration::minutes(2),
+                TaskKind::RunTask(make_test_run_task(&workspace, 1)),
+            )
+            .expect("old task");
+        let new_task_id = scheduler
+            .add_one_shot_at(
+                Utc::now() - ChronoDuration::minutes(1),
+                TaskKind::RunTask(make_test_run_task(&workspace, 2)),
+            )
+            .expect("new task");
+
+        let workspace_key = workspace.display().to_string();
+        let running_threads = Arc::new(Mutex::new(HashMap::from([(
+            workspace_key.clone(),
+            RunningThreadState {
+                task_id: old_task_id,
+                thread_epoch: 1,
+            },
+        )])));
+
+        assert!(
+            !scheduler
+                .has_running_execution(&old_task_id.to_string())
+                .expect("has running execution"),
+            "test setup expects the old task to have no running Mongo execution row"
+        );
+
+        let claim = claim_thread_execution_slot(&mut scheduler, new_task_id, &running_threads)
+            .expect("claim should succeed");
+        assert!(claim.deferred.is_none(), "orphaned claim should not defer");
+        assert!(claim.guard.is_some(), "orphaned claim should be reacquired");
+
+        let active = running_threads
+            .lock()
+            .expect("running threads lock")
+            .get(&workspace_key)
+            .copied()
+            .expect("active workspace claim");
+        assert_eq!(active.task_id, new_task_id);
+        assert_eq!(active.thread_epoch, 2);
+    }
+
+    #[test]
+    fn claim_thread_execution_slot_preserves_busy_workspace_when_execution_is_still_running() {
+        let temp = TempDir::new().expect("tempdir");
+        let Some(config) = build_test_config(&temp) else {
+            return;
+        };
+        let user_store = UserStore::new(&config.users_db_path).expect("user store");
+        let user_paths = user_store.user_paths(&config.users_root, "thread-busy-user");
+        user_store
+            .ensure_user_dirs(&user_paths)
+            .expect("ensure user dirs");
+        let workspace = user_paths.workspaces_root.join("thread_beta");
+        fs::create_dir_all(&workspace).expect("create workspace");
+
+        let mut scheduler =
+            Scheduler::load(&user_paths.tasks_db_path, ModuleExecutor::default()).expect("load");
+        let old_task_id = scheduler
+            .add_one_shot_at(
+                Utc::now() - ChronoDuration::minutes(2),
+                TaskKind::RunTask(make_test_run_task(&workspace, 1)),
+            )
+            .expect("old task");
+        let new_task_id = scheduler
+            .add_one_shot_at(
+                Utc::now() - ChronoDuration::minutes(1),
+                TaskKind::RunTask(make_test_run_task(&workspace, 2)),
+            )
+            .expect("new task");
+
+        crate::scheduler::append_task_execution_event(
+            &user_paths.tasks_db_path,
+            &old_task_id.to_string(),
+            Utc::now() - ChronoDuration::minutes(5),
+            None,
+            "running",
+            None,
+        )
+        .expect("record running execution");
+
+        let workspace_key = workspace.display().to_string();
+        let running_threads = Arc::new(Mutex::new(HashMap::from([(
+            workspace_key.clone(),
+            RunningThreadState {
+                task_id: old_task_id,
+                thread_epoch: 1,
+            },
+        )])));
+
+        let claim = claim_thread_execution_slot(&mut scheduler, new_task_id, &running_threads)
+            .expect("claim should succeed");
+        assert!(
+            claim.guard.is_none(),
+            "live execution should keep the slot busy"
+        );
+        let deferred = claim.deferred.expect("busy workspace should defer");
+        assert_eq!(
+            deferred.defer_secs, THREAD_SUPERSEDE_DEFER_SECS,
+            "newer epochs should still take the quick supersede retry path"
+        );
+
+        let active = running_threads
+            .lock()
+            .expect("running threads lock")
+            .get(&workspace_key)
+            .copied()
+            .expect("active workspace claim");
+        assert_eq!(active.task_id, old_task_id);
+        assert_eq!(active.thread_epoch, 1);
     }
 
     #[test]
