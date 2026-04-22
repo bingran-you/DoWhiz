@@ -611,6 +611,8 @@ pub fn build_params(workspace: &Path) -> RunTaskParams {
     }
 }
 
+// This helper is used only by the investment-focused integration test crate.
+#[allow(dead_code)]
 pub fn install_runtime_skills_and_employee_guidance(
     workspace: &Path,
     employee_id: &str,
@@ -633,6 +635,7 @@ pub fn install_runtime_skills_and_employee_guidance(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn copy_dir_recursive(src: &Path, dest: &Path) -> io::Result<()> {
     fs::create_dir_all(dest)?;
     for entry in fs::read_dir(src)? {
