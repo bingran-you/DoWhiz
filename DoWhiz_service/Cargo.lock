@@ -3718,11 +3718,15 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "mongodb",
+ "send_emails_module",
  "serde",
  "serde_json",
+ "std-semaphore",
  "tempfile",
  "tokio",
  "toml",
+ "tracing",
  "uuid 1.21.0",
 ]
 
@@ -4576,6 +4580,12 @@ dependencies = [
  "psm",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "std-semaphore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ae9eec00137a8eed469fb4148acd9fc6ac8c3f9b110f52cd34698c8b5bfa0e"
 
 [[package]]
 name = "string_cache"

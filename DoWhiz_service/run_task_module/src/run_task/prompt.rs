@@ -235,6 +235,7 @@ Do not pretend the job has been done without actually doing it."#
     let human_approval_gate_section = build_human_approval_gate_section();
     let chat_history_capabilities_section =
         build_chat_history_capabilities_section(workspace_dir, channel);
+    let investment_capabilities_section = build_investment_capabilities_section();
     let fast_completion_section = if prefer_fast_completion {
         r#"Claude fallback execution guidance:
 - This run is a recovery path after the primary runner failed. These recovery instructions take precedence over conflicting planning or artifact-building advice elsewhere in this prompt.
@@ -320,6 +321,7 @@ Scheduling:
 {human_approval_gate_section}
 {user_identities_section}
 {tpm_capabilities_section}
+{investment_capabilities_section}
 {fast_completion_section}
 Rules:
 - Each workspace includes a `.env` file at the workspace root. You may edit it to manage per-user secrets; updates are synced back after the task completes.
@@ -344,6 +346,7 @@ Rules:
         human_approval_gate_section = human_approval_gate_section,
         user_identities_section = user_identities_section,
         tpm_capabilities_section = tpm_capabilities_section,
+        investment_capabilities_section = investment_capabilities_section,
         fast_completion_section = fast_completion_section,
         filesystem_security_section = filesystem_security_section,
         registration_section = registration_section,
@@ -523,6 +526,29 @@ Example workflow for "create a Notion page about X":
 4. If no token: Reply to user asking them to link Notion at dowhiz.com
 
 See `.agents/skills/notion/SKILL.md` for detailed command reference.
+
+"#
+}
+
+fn build_investment_capabilities_section() -> &'static str {
+    r#"Investment research requests:
+- When the user asks about one U.S. stock or one U.S. ETF, asks whether now is a good time to buy, asks about buying before earnings, or wants a Buy / Wait / Sell investment view, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
+- Keep the final user-visible reply structured. Do not collapse it into generic commentary.
+- For email replies, preserve these exact visible labels in `reply_email_draft.html`:
+  - `Rating:`
+  - `Horizon:`
+  - `Confidence:`
+  - `Timing Verdict:`
+  - `Verified Facts`
+  - `Derived Metrics`
+  - `Bull Case`
+  - `Base Case`
+  - `Bear Case`
+  - `Add Criteria:`
+  - `Invalidation Criteria:`
+  - `Biggest Near-Term Risk:`
+  - `Biggest Long-Term Strength:`
+- If the user states a conflicting earnings date or similar factual premise, correct it explicitly in the final reply instead of silently accepting it.
 
 "#
 }
@@ -1581,6 +1607,30 @@ mod tests {
         assert!(prompt.contains("Never include raw credentials"));
         assert!(prompt.contains("persistent remote browser context"));
         assert!(prompt.contains("single browser tab"));
+    }
+
+    #[test]
+    fn build_prompt_includes_investment_skill_guidance() {
+        let temp = TempDir::new().expect("tempdir");
+
+        let prompt = build_prompt(
+            Path::new("incoming_email"),
+            Path::new("incoming_attachments"),
+            Path::new("memory"),
+            Path::new("references"),
+            temp.path(),
+            "codex",
+            "",
+            true,
+            "email",
+            true,
+            &UserIdentities::default(),
+        );
+
+        assert!(prompt.contains(".agents/skills/us-equity-daily-monitor/SKILL.md"));
+        assert!(prompt.contains("Timing Verdict"));
+        assert!(prompt.contains("Biggest Near-Term Risk"));
+        assert!(prompt.contains("final user-visible reply structured"));
     }
 
     #[test]

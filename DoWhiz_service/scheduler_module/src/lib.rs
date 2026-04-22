@@ -1,3 +1,4 @@
+pub mod aci_recovery;
 pub mod adapters;
 pub mod artifact_extractor;
 pub mod channel;

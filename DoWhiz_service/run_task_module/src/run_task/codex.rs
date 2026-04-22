@@ -9,9 +9,14 @@ use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use std_semaphore::Semaphore;
+
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
+use super::aci_container_store::{
+    deregister_aci_container_mongo, register_aci_container_mongo, write_aci_recovery_context,
+};
 use super::browserbase::{
     collect_browserbase_env_overrides, BrowserbaseSessionCleanupGuard,
     BROWSERBASE_ACTIVE_SESSION_PATH_ENV_KEY, BROWSERBASE_STATE_DIR_ENV_KEY,
@@ -28,6 +33,7 @@ use super::env::{
 use super::errors::RunTaskError;
 use super::github_auth::{ensure_github_cli_auth, resolve_github_auth};
 use super::prompt::{build_prompt, load_memory_context};
+use super::reply_contract::{ensure_expected_reply_artifact, reply_artifact_ready_for_workspace};
 use super::scheduled::{extract_scheduled_tasks, extract_scheduler_actions};
 use super::timing::{TaskTimingBuilder, TIMING_COLLECTOR};
 use super::trace::RunTaskTraceRecorder;
@@ -38,6 +44,11 @@ use super::utils::{
     ThreadSupersedeMonitor,
 };
 use super::workspace::{canonicalize_dir, workspace_path_in_container};
+
+/// Global semaphore to limit concurrent azcopy transfers.
+/// Prevents overloading the system when many tasks run in parallel.
+const AZCOPY_MAX_CONCURRENT: isize = 5;
+static AZCOPY_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(AZCOPY_MAX_CONCURRENT));
 
 const PAYMENT_ENV_KEYS: &[&str] = &[
     "GOATX402_API_URL",
@@ -107,6 +118,20 @@ const REMOTE_EXIT_CODE_FILENAME: &str = ".codex_remote_exit_code";
 const HAG_MCP_CONFIG_START_MARKER: &str = "# BEGIN DOWHIZ HUMAN APPROVAL GATE MCP";
 const HAG_MCP_CONFIG_END_MARKER: &str = "# END DOWHIZ HUMAN APPROVAL GATE MCP";
 const EPHEMERAL_SHARE_PREFIX: &str = "task-";
+const DEFAULT_AZCOPY_TIMEOUT_SECS: u64 = 900;
+const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
+    ".agents",
+    ".codex",
+    ".codex_remote_prompt.txt",
+    ".config",
+    ".discord_context.json",
+    ".env",
+    ".google_access_token",
+    ".secrets",
+    "incoming_attachments",
+    "incoming_email",
+    "references",
+];
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
@@ -190,6 +215,132 @@ pub fn cleanup_all_aci_containers() -> usize {
     cleaned
 }
 
+/// Result of querying an ACI container's status.
+#[derive(Debug, Clone)]
+pub enum AciContainerStatus {
+    /// Container is still running
+    Running,
+    /// Container reached a terminal state
+    Terminal(String),
+    /// Container not found (already deleted or never existed)
+    NotFound,
+    /// Error querying container status
+    Error(String),
+}
+
+/// Query the status of an ACI container.
+/// Returns the container's state or NotFound if it doesn't exist.
+pub fn query_aci_container_status(
+    container_name: &str,
+    resource_group: &str,
+) -> AciContainerStatus {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("show")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--query")
+        .arg("instanceView.state")
+        .arg("--output")
+        .arg("tsv")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return AciContainerStatus::Error(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return AciContainerStatus::NotFound;
+        }
+        return AciContainerStatus::Error(format!("az command failed: {}", stderr));
+    }
+
+    let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if state.eq_ignore_ascii_case("Succeeded")
+        || state.eq_ignore_ascii_case("Failed")
+        || state.eq_ignore_ascii_case("Terminated")
+        || state.eq_ignore_ascii_case("Stopped")
+    {
+        AciContainerStatus::Terminal(state)
+    } else if state.is_empty() {
+        AciContainerStatus::NotFound
+    } else {
+        AciContainerStatus::Running
+    }
+}
+
+/// Poll an ACI container until it reaches a terminal state.
+/// Returns the terminal state or an error.
+pub fn poll_aci_container_until_terminal(
+    container_name: &str,
+    resource_group: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    let start = Instant::now();
+
+    loop {
+        match query_aci_container_status(container_name, resource_group) {
+            AciContainerStatus::Terminal(state) => return Ok(state),
+            AciContainerStatus::NotFound => {
+                return Err("container not found".to_string());
+            }
+            AciContainerStatus::Error(err) => {
+                return Err(err);
+            }
+            AciContainerStatus::Running => {
+                if start.elapsed() >= timeout {
+                    return Err(format!(
+                        "timeout after {}s waiting for container to reach terminal state",
+                        timeout.as_secs()
+                    ));
+                }
+                thread::sleep(Duration::from_secs(10));
+            }
+        }
+    }
+}
+
+/// Delete an ACI container by name and resource group.
+/// Silently succeeds if container doesn't exist.
+pub fn delete_aci_container_by_name(
+    container_name: &str,
+    resource_group: &str,
+) -> Result<(), String> {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("delete")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--yes")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return Ok(()); // Already deleted
+        }
+        return Err(format!("az command failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecutionBackend {
     Local,
@@ -267,28 +418,14 @@ fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> P
     }
 }
 
-fn reply_artifact_ready(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    if path.file_name().and_then(|value| value.to_str()) == Some(".notion_api_replied") {
-        return true;
-    }
-    match fs::read_to_string(path) {
-        Ok(contents) => !contents.trim().is_empty(),
-        Err(_) => fs::metadata(path)
-            .map(|meta| meta.len() > 0)
-            .unwrap_or(false),
-    }
-}
-
 fn maybe_recover_from_ready_reply_artifact(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: Option<i32>,
     failure_output: &str,
 ) -> Option<String> {
-    if !reply_expected || !reply_artifact_ready(expected_reply_path) {
+    if !reply_expected || !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
         return None;
     }
 
@@ -328,6 +465,7 @@ fn record_codex_success(
 
 fn validate_warm_pool_codex_result(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: i32,
     codex_output: &str,
@@ -340,6 +478,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             Some(exit_status),
             &err.to_string(),
@@ -364,6 +503,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             status,
             &err.to_string(),
@@ -373,11 +513,8 @@ fn validate_warm_pool_codex_result(
         return Err(err);
     }
 
-    if reply_expected && !reply_artifact_ready(expected_reply_path) {
-        return Err(RunTaskError::OutputMissing {
-            path: expected_reply_path.to_path_buf(),
-            output: output_tail,
-        });
+    if reply_expected {
+        ensure_expected_reply_artifact(workspace_dir, expected_reply_path, &output_tail)?;
     }
 
     Ok(None)
@@ -906,6 +1043,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             output.status.code(),
             &err.to_string(),
@@ -962,6 +1100,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             status,
             &err.to_string(),
@@ -991,10 +1130,34 @@ pub(super) fn run_codex_task(
 
     // Only check for reply file if a reply was expected
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail.clone(),
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    output.status.code(),
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             output.status.code(),
@@ -1298,6 +1461,13 @@ fn run_codex_task_azure_aci(
     let env_override_keys: Vec<&str> = env_overrides.iter().map(|(key, _)| key.as_str()).collect();
     let _ = trace.record_json("aci/env_override_keys.json", &env_override_keys);
     register_aci_container(&container_name);
+    register_aci_container_mongo(&container_name, &host_workspace_dir, &config.resource_group);
+    write_aci_recovery_context(
+        &host_workspace_dir,
+        request.channel,
+        request.reply_to,
+        request.thread_epoch,
+    );
 
     let ephemeral_guard = if use_ephemeral_share() {
         eprintln!(
@@ -1388,6 +1558,7 @@ fn run_codex_task_azure_aci(
         );
     }
     deregister_aci_container(&container_name);
+    deregister_aci_container_mongo(&container_name);
 
     if let Some(ref guard) = ephemeral_guard {
         timing.start_stage();
@@ -1463,6 +1634,7 @@ fn run_codex_task_azure_aci(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             exit_status,
             &err.to_string(),
@@ -1497,10 +1669,35 @@ fn run_codex_task_azure_aci(
     }
 
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail,
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    exit_status,
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+                TIMING_COLLECTOR.record(timing.finish());
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             exit_status,
@@ -1758,9 +1955,29 @@ fn promote_downloaded_workspace(
     fs::create_dir_all(workspace_dir)?;
     for entry in fs::read_dir(download_root)? {
         let entry = entry?;
-        promote_downloaded_entry(&entry.path(), &workspace_dir.join(entry.file_name()))?;
+        let file_name = entry.file_name();
+        if should_skip_downloaded_workspace_entry(&file_name) {
+            continue;
+        }
+        promote_downloaded_entry(&entry.path(), &workspace_dir.join(file_name))?;
     }
     Ok(())
+}
+
+fn should_skip_downloaded_workspace_entry(file_name: &std::ffi::OsStr) -> bool {
+    let name = file_name.to_string_lossy();
+    DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES
+        .iter()
+        .any(|candidate| *candidate == name)
+}
+
+fn azcopy_transfer_timeout() -> Duration {
+    env::var("RUN_TASK_AZCOPY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(DEFAULT_AZCOPY_TIMEOUT_SECS))
 }
 
 fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(), RunTaskError> {
@@ -1858,6 +2075,7 @@ fn upload_workspace_to_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.acquire();
     let secrets = [config.storage_key.as_str()];
     let source = format!("{}/*", workspace_dir.display());
     let mut last_error = None;
@@ -1874,13 +2092,27 @@ fn upload_workspace_to_share(
             "https://{}.file.core.windows.net/{}?{}",
             config.storage_account, share_name, sas
         );
-        let output = Command::new("azcopy")
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
             .arg("copy")
             .arg(&source)
             .arg(&dest_url)
             .arg("--recursive")
-            .arg("--overwrite=true")
-            .output()?;
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy to share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
         if output.status.success() {
             return Ok(());
         }
@@ -1913,6 +2145,7 @@ fn download_workspace_from_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.acquire();
     let secrets = [config.storage_key.as_str()];
     let temp_parent = workspace_dir.parent().unwrap_or(workspace_dir);
     let mut last_error = None;
@@ -1932,13 +2165,27 @@ fn download_workspace_from_share(
         let temp_download_dir = tempfile::Builder::new()
             .prefix(".azcopy-download-")
             .tempdir_in(temp_parent)?;
-        let output = Command::new("azcopy")
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
             .arg("copy")
             .arg(&source_url)
             .arg(temp_download_dir.path())
             .arg("--recursive")
-            .arg("--overwrite=true")
-            .output()?;
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy from share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
         if output.status.success() {
             promote_downloaded_workspace(temp_download_dir.path(), workspace_dir)?;
             return Ok(());
@@ -3808,6 +4055,7 @@ pub fn run_codex_warm_pool(
     let token_usage = extract_token_usage(&codex_output);
     let recovery_note = validate_warm_pool_codex_result(
         !request.reply_to.is_empty(),
+        workspace_dir,
         &reply_html_path,
         completion.exit_code,
         &codex_output,
@@ -5190,7 +5438,7 @@ printf '%s\n' "$@" > "$capture_file"
         let reply = temp.path().join("reply_email_draft.html");
         fs::write(&reply, "   \n\t").expect("write reply");
 
-        assert!(!reply_artifact_ready(&reply));
+        assert!(!reply_artifact_ready_for_workspace(temp.path(), &reply));
     }
 
     #[test]
@@ -5247,6 +5495,84 @@ printf '%s\n' "$@" > "$capture_file"
     }
 
     #[test]
+    fn test_promote_downloaded_workspace_skips_transient_root_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let download_root = temp.path().join("download");
+        let workspace_dir = temp.path().join("workspace");
+
+        fs::create_dir_all(download_root.join(".codex")).expect("create remote codex dir");
+        fs::create_dir_all(download_root.join("incoming_email")).expect("create remote input dir");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(workspace_dir.join(".codex")).expect("create local codex dir");
+        fs::create_dir_all(workspace_dir.join("incoming_email")).expect("create local input dir");
+
+        fs::write(
+            download_root.join("reply_email_draft.html"),
+            "<html>fresh</html>",
+        )
+        .expect("write remote reply");
+        fs::write(download_root.join(".codex_remote_exit_code"), "0").expect("write remote exit");
+        fs::write(download_root.join(".env"), "remote").expect("write remote env");
+        fs::write(
+            download_root.join(".codex").join("state.sqlite"),
+            "remote-state",
+        )
+        .expect("write remote codex");
+        fs::write(
+            download_root
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "remote-input",
+        )
+        .expect("write remote input");
+
+        fs::write(workspace_dir.join(".env"), "local").expect("write local env");
+        fs::write(
+            workspace_dir.join(".codex").join("state.sqlite"),
+            "local-state",
+        )
+        .expect("write local codex");
+        fs::write(
+            workspace_dir
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "local-input",
+        )
+        .expect("write local input");
+
+        promote_downloaded_workspace(&download_root, &workspace_dir).expect("promote workspace");
+
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("reply_email_draft.html"))
+                .expect("read promoted reply"),
+            "<html>fresh</html>"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex_remote_exit_code"))
+                .expect("read promoted exit"),
+            "0"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".env")).expect("read preserved env"),
+            "local"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex").join("state.sqlite"))
+                .expect("read preserved codex"),
+            "local-state"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                workspace_dir
+                    .join("incoming_email")
+                    .join("postmark_payload.json")
+            )
+            .expect("read preserved input"),
+            "local-input"
+        );
+    }
+
+    #[test]
     fn test_maybe_recover_from_ready_reply_artifact_returns_note() {
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
@@ -5254,6 +5580,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = maybe_recover_from_ready_reply_artifact(
             true,
+            temp.path(),
             &reply,
             Some(23),
             "response.failed event received",
@@ -5268,8 +5595,9 @@ printf '%s\n' "$@" > "$capture_file"
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
 
-        let err = validate_warm_pool_codex_result(true, &reply, 1, "stream disconnected")
-            .expect_err("expected CodexFailed");
+        let err =
+            validate_warm_pool_codex_result(true, temp.path(), &reply, 1, "stream disconnected")
+                .expect_err("expected CodexFailed");
 
         match err {
             RunTaskError::CodexFailed { status, output } => {
@@ -5288,6 +5616,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let err = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             0,
             r#"{"type":"event_msg","payload":{"type":"task_complete","status":"success","exit_code":0}}"#,
@@ -5305,6 +5634,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             1,
             "I'm sorry, but I cannot assist with that request.",

@@ -78,6 +78,7 @@ If you are using a dedicated API subdomain (example: `api.dowhiz.com`) for the R
 
 ## Core route map
 - `/`: Oliver-first landing page with a clear onboarding path.
+- `/oliver`: TPM-focused hook landing page that keeps the current DoWhiz auth/dashboard handoff.
 - `/start`: Legacy startup intake route retained for backward compatibility.
 - `/workspace`: Legacy workspace route that is no longer part of the primary product journey.
 - `/dashboard`: Internal analytics dashboard (supporting page, not the primary product home).
@@ -86,7 +87,7 @@ If you are using a dedicated API subdomain (example: `api.dowhiz.com`) for the R
 
 ## Routing and hosting notes
 - SPA routing uses `BrowserRouter`, so direct deep links require host rewrites to `/index.html`.
-- On Vercel, rewrite coverage is defined in `website/vercel.json`, including `/start`, `/workspace`, and `/dashboard`.
+- On Vercel, rewrite coverage is defined in `website/vercel.json`, including `/start`, `/oliver`, `/workspace`, and `/dashboard`.
 - On VM/Nginx hosting, `try_files $uri /index.html;` is required for SPA routes.
 
 ## Environment variables
