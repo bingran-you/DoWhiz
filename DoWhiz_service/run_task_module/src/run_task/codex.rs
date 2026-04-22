@@ -12,6 +12,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
+use super::aci_container_store::{
+    deregister_aci_container_mongo, register_aci_container_mongo, write_aci_recovery_context,
+};
 use super::browserbase::{
     collect_browserbase_env_overrides, BrowserbaseSessionCleanupGuard,
     BROWSERBASE_ACTIVE_SESSION_PATH_ENV_KEY, BROWSERBASE_STATE_DIR_ENV_KEY,
@@ -203,6 +206,132 @@ pub fn cleanup_all_aci_containers() -> usize {
         containers.len()
     );
     cleaned
+}
+
+/// Result of querying an ACI container's status.
+#[derive(Debug, Clone)]
+pub enum AciContainerStatus {
+    /// Container is still running
+    Running,
+    /// Container reached a terminal state
+    Terminal(String),
+    /// Container not found (already deleted or never existed)
+    NotFound,
+    /// Error querying container status
+    Error(String),
+}
+
+/// Query the status of an ACI container.
+/// Returns the container's state or NotFound if it doesn't exist.
+pub fn query_aci_container_status(
+    container_name: &str,
+    resource_group: &str,
+) -> AciContainerStatus {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("show")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--query")
+        .arg("instanceView.state")
+        .arg("--output")
+        .arg("tsv")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return AciContainerStatus::Error(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return AciContainerStatus::NotFound;
+        }
+        return AciContainerStatus::Error(format!("az command failed: {}", stderr));
+    }
+
+    let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if state.eq_ignore_ascii_case("Succeeded")
+        || state.eq_ignore_ascii_case("Failed")
+        || state.eq_ignore_ascii_case("Terminated")
+        || state.eq_ignore_ascii_case("Stopped")
+    {
+        AciContainerStatus::Terminal(state)
+    } else if state.is_empty() {
+        AciContainerStatus::NotFound
+    } else {
+        AciContainerStatus::Running
+    }
+}
+
+/// Poll an ACI container until it reaches a terminal state.
+/// Returns the terminal state or an error.
+pub fn poll_aci_container_until_terminal(
+    container_name: &str,
+    resource_group: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    let start = Instant::now();
+
+    loop {
+        match query_aci_container_status(container_name, resource_group) {
+            AciContainerStatus::Terminal(state) => return Ok(state),
+            AciContainerStatus::NotFound => {
+                return Err("container not found".to_string());
+            }
+            AciContainerStatus::Error(err) => {
+                return Err(err);
+            }
+            AciContainerStatus::Running => {
+                if start.elapsed() >= timeout {
+                    return Err(format!(
+                        "timeout after {}s waiting for container to reach terminal state",
+                        timeout.as_secs()
+                    ));
+                }
+                thread::sleep(Duration::from_secs(10));
+            }
+        }
+    }
+}
+
+/// Delete an ACI container by name and resource group.
+/// Silently succeeds if container doesn't exist.
+pub fn delete_aci_container_by_name(
+    container_name: &str,
+    resource_group: &str,
+) -> Result<(), String> {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("delete")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--yes")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return Ok(()); // Already deleted
+        }
+        return Err(format!("az command failed: {}", stderr));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1325,6 +1454,13 @@ fn run_codex_task_azure_aci(
     let env_override_keys: Vec<&str> = env_overrides.iter().map(|(key, _)| key.as_str()).collect();
     let _ = trace.record_json("aci/env_override_keys.json", &env_override_keys);
     register_aci_container(&container_name);
+    register_aci_container_mongo(&container_name, &host_workspace_dir, &config.resource_group);
+    write_aci_recovery_context(
+        &host_workspace_dir,
+        request.channel,
+        request.reply_to,
+        request.thread_epoch,
+    );
 
     let ephemeral_guard = if use_ephemeral_share() {
         eprintln!(
@@ -1415,6 +1551,7 @@ fn run_codex_task_azure_aci(
         );
     }
     deregister_aci_container(&container_name);
+    deregister_aci_container_mongo(&container_name);
 
     if let Some(ref guard) = ephemeral_guard {
         timing.start_stage();

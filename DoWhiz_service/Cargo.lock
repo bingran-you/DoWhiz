@@ -3718,12 +3718,14 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
+ "mongodb",
  "send_emails_module",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "toml",
+ "tracing",
  "uuid 1.21.0",
 ]
 
