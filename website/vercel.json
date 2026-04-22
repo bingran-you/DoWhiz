@@ -1,4 +1,24 @@
 {
+  "headers": [
+    {
+      "source": "/oliver",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/oliver/",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/start",
@@ -10,6 +30,14 @@
     },
     {
       "source": "/workspace",
+      "destination": "/"
+    },
+    {
+      "source": "/oliver",
+      "destination": "/"
+    },
+    {
+      "source": "/oliver/",
       "destination": "/"
     },
     {
