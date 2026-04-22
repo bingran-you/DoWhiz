@@ -127,6 +127,12 @@ pub async fn run_server(
             .map_err(|err| -> BoxError { err.into() })??;
     let message_router = Arc::new(MessageRouter::new());
 
+    // Recover orphaned ACI containers from previous worker crash/restart
+    if std::env::var("ACI_RECOVERY_ENABLED").ok().as_deref() == Some("1") {
+        info!("ACI recovery enabled, checking for orphaned containers");
+        task::spawn_blocking(crate::aci_recovery::recover_orphaned_aci_containers);
+    }
+
     // Initialize warm container pool in background (don't block server startup)
     tokio::spawn(async {
         if let Err(err) = crate::warm_pool::initialize_global_pool_manager().await {

@@ -17,6 +17,7 @@ mod types;
 mod utils;
 mod workspace;
 
+pub use aci_container_store::{read_aci_recovery_context, AciRecoveryContext};
 pub use codex::{
     cleanup_all_aci_containers, delete_aci_container_by_name, poll_aci_container_until_terminal,
     query_aci_container_status, run_codex_warm_pool, AciContainerStatus,

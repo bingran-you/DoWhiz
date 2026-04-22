@@ -12,7 +12,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
-use super::aci_container_store::{deregister_aci_container_mongo, register_aci_container_mongo};
+use super::aci_container_store::{
+    deregister_aci_container_mongo, register_aci_container_mongo, write_aci_recovery_context,
+};
 use super::browserbase::{
     collect_browserbase_env_overrides, BrowserbaseSessionCleanupGuard,
     BROWSERBASE_ACTIVE_SESSION_PATH_ENV_KEY, BROWSERBASE_STATE_DIR_ENV_KEY,
@@ -206,7 +208,10 @@ pub enum AciContainerStatus {
 
 /// Query the status of an ACI container.
 /// Returns the container's state or NotFound if it doesn't exist.
-pub fn query_aci_container_status(container_name: &str, resource_group: &str) -> AciContainerStatus {
+pub fn query_aci_container_status(
+    container_name: &str,
+    resource_group: &str,
+) -> AciContainerStatus {
     let mut cmd = Command::new("az");
     cmd.arg("container")
         .arg("show")
@@ -282,7 +287,10 @@ pub fn poll_aci_container_until_terminal(
 
 /// Delete an ACI container by name and resource group.
 /// Silently succeeds if container doesn't exist.
-pub fn delete_aci_container_by_name(container_name: &str, resource_group: &str) -> Result<(), String> {
+pub fn delete_aci_container_by_name(
+    container_name: &str,
+    resource_group: &str,
+) -> Result<(), String> {
     let mut cmd = Command::new("az");
     cmd.arg("container")
         .arg("delete")
@@ -1420,6 +1428,12 @@ fn run_codex_task_azure_aci(
     let _ = trace.record_json("aci/env_override_keys.json", &env_override_keys);
     register_aci_container(&container_name);
     register_aci_container_mongo(&container_name, &host_workspace_dir, &config.resource_group);
+    write_aci_recovery_context(
+        &host_workspace_dir,
+        request.channel,
+        request.reply_to,
+        request.thread_epoch,
+    );
 
     let ephemeral_guard = if use_ephemeral_share() {
         eprintln!(

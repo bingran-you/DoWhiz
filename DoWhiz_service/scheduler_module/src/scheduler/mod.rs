@@ -3,7 +3,7 @@ mod core;
 mod debug_archive;
 mod email_attachments;
 mod executor;
-mod outbound;
+pub(crate) mod outbound;
 mod reply;
 mod schedule;
 mod snapshot;
