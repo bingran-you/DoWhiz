@@ -263,7 +263,7 @@ pub fn query_aci_container_status(
     }
 
     let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if state.eq_ignore_ascii_case("Succeeded")
+    let result = if state.eq_ignore_ascii_case("Succeeded")
         || state.eq_ignore_ascii_case("Failed")
         || state.eq_ignore_ascii_case("Terminated")
         || state.eq_ignore_ascii_case("Stopped")
@@ -273,7 +273,14 @@ pub fn query_aci_container_status(
         AciContainerStatus::NotFound
     } else {
         AciContainerStatus::Running
-    }
+    };
+    tracing::info!(
+        "ACI status query: container={} resource_group={} status={:?}",
+        container_name,
+        resource_group,
+        result
+    );
+    result
 }
 
 /// Poll an ACI container until it reaches a terminal state.
@@ -284,10 +291,24 @@ pub fn poll_aci_container_until_terminal(
     timeout: Duration,
 ) -> Result<String, String> {
     let start = Instant::now();
+    tracing::info!(
+        "ACI poll start: container={} resource_group={} timeout={}s",
+        container_name,
+        resource_group,
+        timeout.as_secs()
+    );
 
     loop {
         match query_aci_container_status(container_name, resource_group) {
-            AciContainerStatus::Terminal(state) => return Ok(state),
+            AciContainerStatus::Terminal(state) => {
+                tracing::info!(
+                    "ACI poll complete: container={} terminal_state={} elapsed={}s",
+                    container_name,
+                    state,
+                    start.elapsed().as_secs()
+                );
+                return Ok(state);
+            }
             AciContainerStatus::NotFound => {
                 return Err("container not found".to_string());
             }
@@ -1467,6 +1488,12 @@ fn run_codex_task_azure_aci(
         request.channel,
         request.reply_to,
         request.thread_epoch,
+    );
+    tracing::info!(
+        "ACI recovery context written: container={} workspace={} channel={}",
+        container_name,
+        host_workspace_dir.display(),
+        request.channel
     );
 
     let ephemeral_guard = if use_ephemeral_share() {

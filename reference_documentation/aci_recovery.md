@@ -93,6 +93,22 @@ There is a small but possible window where worker restarts after sending to outb
 
 Entry point: `recover_orphaned_aci_containers()`
 
+### Call Chain
+
+```
+recover_orphaned_aci_containers()     // Entry point - lists all orphaned containers from MongoDB
+  └── recover_single_container()      // Handles one container
+        ├── query_aci_container_status()
+        ├── poll_aci_container_until_terminal()  // If still running
+        ├── propagate_results_to_outbound()      // Reads context, sends reply
+        │     ├── read_aci_recovery_context()
+        │     └── execute_{channel}_send()
+        ├── delete_aci_container_by_name()
+        └── deregister_aci_container_mongo()
+```
+
+### Startup Hook
+
 Called on worker startup when `ACI_RECOVERY_ENABLED=1`:
 
 ```rust
