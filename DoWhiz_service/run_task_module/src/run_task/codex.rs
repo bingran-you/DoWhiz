@@ -12,6 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
+use super::aci_container_store::{deregister_aci_container_mongo, register_aci_container_mongo};
 use super::browserbase::{
     collect_browserbase_env_overrides, BrowserbaseSessionCleanupGuard,
     BROWSERBASE_ACTIVE_SESSION_PATH_ENV_KEY, BROWSERBASE_STATE_DIR_ENV_KEY,
@@ -1298,6 +1299,7 @@ fn run_codex_task_azure_aci(
     let env_override_keys: Vec<&str> = env_overrides.iter().map(|(key, _)| key.as_str()).collect();
     let _ = trace.record_json("aci/env_override_keys.json", &env_override_keys);
     register_aci_container(&container_name);
+    register_aci_container_mongo(&container_name, &host_workspace_dir, &config.resource_group);
 
     let ephemeral_guard = if use_ephemeral_share() {
         eprintln!(
@@ -1388,6 +1390,7 @@ fn run_codex_task_azure_aci(
         );
     }
     deregister_aci_container(&container_name);
+    deregister_aci_container_mongo(&container_name);
 
     if let Some(ref guard) = ephemeral_guard {
         timing.start_stage();
