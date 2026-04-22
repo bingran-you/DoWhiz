@@ -17,7 +17,10 @@ mod types;
 mod utils;
 mod workspace;
 
-pub use codex::{cleanup_all_aci_containers, run_codex_warm_pool};
+pub use codex::{
+    cleanup_all_aci_containers, delete_aci_container_by_name, poll_aci_container_until_terminal,
+    query_aci_container_status, run_codex_warm_pool, AciContainerStatus,
+};
 pub use core::{run_claude_fallback_after_codex_failure, run_task};
 pub use errors::RunTaskError;
 pub use pool_manager::{PoolConfig, PoolManager};

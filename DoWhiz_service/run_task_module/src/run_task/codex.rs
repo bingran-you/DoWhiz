@@ -191,6 +191,126 @@ pub fn cleanup_all_aci_containers() -> usize {
     cleaned
 }
 
+/// Result of querying an ACI container's status.
+#[derive(Debug, Clone)]
+pub enum AciContainerStatus {
+    /// Container is still running
+    Running,
+    /// Container reached a terminal state
+    Terminal(String),
+    /// Container not found (already deleted or never existed)
+    NotFound,
+    /// Error querying container status
+    Error(String),
+}
+
+/// Query the status of an ACI container.
+/// Returns the container's state or NotFound if it doesn't exist.
+pub fn query_aci_container_status(container_name: &str, resource_group: &str) -> AciContainerStatus {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("show")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--query")
+        .arg("instanceView.state")
+        .arg("--output")
+        .arg("tsv")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return AciContainerStatus::Error(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return AciContainerStatus::NotFound;
+        }
+        return AciContainerStatus::Error(format!("az command failed: {}", stderr));
+    }
+
+    let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if state.eq_ignore_ascii_case("Succeeded")
+        || state.eq_ignore_ascii_case("Failed")
+        || state.eq_ignore_ascii_case("Terminated")
+        || state.eq_ignore_ascii_case("Stopped")
+    {
+        AciContainerStatus::Terminal(state)
+    } else if state.is_empty() {
+        AciContainerStatus::NotFound
+    } else {
+        AciContainerStatus::Running
+    }
+}
+
+/// Poll an ACI container until it reaches a terminal state.
+/// Returns the terminal state or an error.
+pub fn poll_aci_container_until_terminal(
+    container_name: &str,
+    resource_group: &str,
+    timeout: Duration,
+) -> Result<String, String> {
+    let start = Instant::now();
+
+    loop {
+        match query_aci_container_status(container_name, resource_group) {
+            AciContainerStatus::Terminal(state) => return Ok(state),
+            AciContainerStatus::NotFound => {
+                return Err("container not found".to_string());
+            }
+            AciContainerStatus::Error(err) => {
+                return Err(err);
+            }
+            AciContainerStatus::Running => {
+                if start.elapsed() >= timeout {
+                    return Err(format!(
+                        "timeout after {}s waiting for container to reach terminal state",
+                        timeout.as_secs()
+                    ));
+                }
+                thread::sleep(Duration::from_secs(10));
+            }
+        }
+    }
+}
+
+/// Delete an ACI container by name and resource group.
+/// Silently succeeds if container doesn't exist.
+pub fn delete_aci_container_by_name(container_name: &str, resource_group: &str) -> Result<(), String> {
+    let mut cmd = Command::new("az");
+    cmd.arg("container")
+        .arg("delete")
+        .arg("--name")
+        .arg(container_name)
+        .arg("--resource-group")
+        .arg(resource_group)
+        .arg("--yes")
+        .arg("--only-show-errors");
+
+    let output = match cmd.output() {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(format!("failed to run az command: {}", err));
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("ResourceNotFound") || stderr.contains("was not found") {
+            return Ok(()); // Already deleted
+        }
+        return Err(format!("az command failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecutionBackend {
     Local,
