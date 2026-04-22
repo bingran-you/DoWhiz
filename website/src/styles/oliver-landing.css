@@ -1,0 +1,823 @@
+.oliver-hook-page {
+  --oliver-accent: #c4652d;
+  --oliver-accent-soft: rgba(196, 101, 45, 0.12);
+  --oliver-ink-soft: rgba(16, 18, 22, 0.72);
+  --oliver-risk-high: #b9382e;
+  --oliver-risk-medium: #8e6200;
+  --oliver-grid-line: color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  position: relative;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(196, 101, 45, 0.16), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(16, 18, 22, 0.08), transparent 30%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-primary) 96%, #fff4ea 4%) 0%,
+      color-mix(in srgb, var(--surface-primary) 92%, var(--surface-secondary)) 48%,
+      color-mix(in srgb, var(--surface-secondary) 84%, var(--surface-primary)) 100%
+    );
+}
+
+[data-theme='dark'] .oliver-hook-page {
+  --oliver-accent: #f0a36e;
+  --oliver-accent-soft: rgba(240, 163, 110, 0.12);
+  --oliver-ink-soft: rgba(243, 245, 247, 0.74);
+  --oliver-grid-line: rgba(243, 245, 247, 0.08);
+  --oliver-risk-high: #f38b84;
+  --oliver-risk-medium: #d8b050;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(240, 163, 110, 0.12), transparent 34%),
+    radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.06), transparent 26%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 44%, var(--surface-primary)) 0%,
+      var(--surface-primary) 58%,
+      color-mix(in srgb, var(--surface-secondary) 74%, var(--surface-primary)) 100%
+    );
+}
+
+.oliver-hook-page::before,
+.oliver-hook-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.oliver-hook-page::before {
+  background:
+    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), var(--oliver-grid-line) 100%),
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 1px), var(--oliver-grid-line) 100%);
+  background-size: 92px 92px;
+  opacity: 0.26;
+}
+
+.oliver-hook-page::after {
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.28) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.25;
+}
+
+[data-theme='dark'] .oliver-hook-page::after {
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.08) 100%);
+  mix-blend-mode: normal;
+}
+
+.oliver-hook-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.28) 0 1px, transparent 1px),
+    radial-gradient(circle at 80% 70%, rgba(16, 18, 22, 0.06) 0 1px, transparent 1px);
+  background-size: 24px 24px, 28px 28px;
+  opacity: 0.18;
+}
+
+[data-theme='dark'] .oliver-hook-noise {
+  opacity: 0.12;
+}
+
+.oliver-hook-nav {
+  position: sticky;
+  top: 1rem;
+  z-index: 120;
+  padding: 1rem 1rem 0;
+}
+
+.oliver-hook-nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-overlay) 90%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 18px 40px -34px var(--shadow-strong);
+  padding: 0.8rem 0.95rem 0.8rem 1.1rem;
+}
+
+.oliver-hook-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  text-decoration: none;
+  min-width: max-content;
+}
+
+.oliver-hook-brand-mark {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.oliver-hook-brand-copy {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
+.oliver-hook-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.oliver-hook-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.48rem 0.88rem;
+}
+
+.oliver-hook-link:hover {
+  color: var(--text-primary);
+  background: var(--color-muted);
+}
+
+.oliver-hook-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: max-content;
+}
+
+.oliver-hook-nav-primary,
+.oliver-hook-nav-secondary {
+  min-width: max-content;
+}
+
+.oliver-hook-main {
+  position: relative;
+  z-index: 1;
+  padding-bottom: 5rem;
+}
+
+.oliver-hook-section,
+.oliver-hook-hero {
+  scroll-margin-top: 6.5rem;
+}
+
+.oliver-hook-hero {
+  padding: 6.8rem 0 2.2rem;
+}
+
+.oliver-hook-hero-grid {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  align-items: start;
+}
+
+.oliver-hook-copy {
+  display: grid;
+  gap: 1rem;
+  max-width: 620px;
+  padding-top: 1.6rem;
+}
+
+.oliver-hook-eyebrow,
+.oliver-hook-section-eyebrow,
+.oliver-hook-panel-label,
+.oliver-hook-card-kicker {
+  margin: 0;
+  color: var(--oliver-accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.oliver-hook-title,
+.oliver-hook-section-title,
+.oliver-hook-hero-panel h2 {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  letter-spacing: -0.045em;
+}
+
+.oliver-hook-title {
+  margin: 0;
+  font-size: clamp(3.25rem, 6.4vw, 5.3rem);
+  line-height: 0.94;
+  max-width: 11ch;
+  text-wrap: balance;
+}
+
+.oliver-hook-subtitle {
+  margin: 0;
+  max-width: 39ch;
+  color: var(--oliver-ink-soft);
+  font-size: 1.13rem;
+  line-height: 1.68;
+}
+
+.oliver-hook-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.35rem;
+}
+
+.oliver-hook-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--glass-bg) 88%, var(--surface-primary));
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.52rem 0.85rem;
+  box-shadow: 0 10px 22px -24px var(--shadow-strong);
+}
+
+.oliver-hook-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+.oliver-hook-note,
+.oliver-hook-disclaimer {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.62;
+}
+
+.oliver-hook-hero-panel,
+.oliver-hook-proof-card,
+.oliver-hook-outcome-card,
+.oliver-hook-step-card,
+.oliver-hook-surface-card,
+.oliver-hook-control-card,
+.oliver-hook-faq-card,
+.oliver-hook-final-card,
+.oliver-hook-artifact-card {
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--glass-bg) 94%, var(--surface-primary));
+  box-shadow: 0 22px 48px -40px var(--shadow-strong);
+}
+
+.oliver-hook-hero-panel {
+  display: grid;
+  gap: 1rem;
+  border-radius: 1.9rem;
+  padding: 1.35rem;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-primary) 92%, rgba(255, 255, 255, 0.35)) 0%,
+      color-mix(in srgb, var(--surface-primary) 86%, var(--surface-secondary)) 100%
+    );
+}
+
+[data-theme='dark'] .oliver-hook-hero-panel {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 94%, rgba(255, 255, 255, 0.02)) 0%,
+      color-mix(in srgb, var(--surface-primary) 96%, var(--surface-secondary)) 100%
+    );
+}
+
+.oliver-hook-hero-panel-head,
+.oliver-hook-card-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.oliver-hook-hero-panel-head h2 {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 0.96;
+}
+
+.oliver-hook-health {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+  text-align: right;
+}
+
+.oliver-hook-health-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: rgba(185, 56, 46, 0.12);
+  color: var(--oliver-risk-high);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.oliver-hook-health-detail {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  max-width: 20ch;
+}
+
+.oliver-hook-signal-band {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.oliver-hook-signal-chip,
+.oliver-hook-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.46rem 0.78rem;
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-primary) 84%, var(--surface-secondary));
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.oliver-hook-hero-panel-grid {
+  display: grid;
+  grid-template-columns: 1.12fr 0.88fr;
+  gap: 0.9rem;
+}
+
+.oliver-hook-artifact-card {
+  border-radius: 1.35rem;
+  padding: 1rem 1rem 1.05rem;
+}
+
+.oliver-hook-card-copy {
+  margin: 0.45rem 0 0;
+  color: var(--text-primary);
+  line-height: 1.65;
+}
+
+.oliver-hook-checklist,
+.oliver-hook-risk-list,
+.oliver-hook-proof-card ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.oliver-hook-checklist li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.oliver-hook-check-icon {
+  width: 1.65rem;
+  height: 1.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--oliver-accent-soft);
+  color: var(--oliver-accent);
+  flex: 0 0 auto;
+}
+
+.oliver-hook-check-icon svg,
+.oliver-hook-inline-link svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.oliver-hook-checklist li div {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.oliver-hook-checklist li strong,
+.oliver-hook-proof-card h3,
+.oliver-hook-outcome-card h3,
+.oliver-hook-step-card h3,
+.oliver-hook-control-card h3,
+.oliver-hook-faq-card h3 {
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.oliver-hook-checklist li span,
+.oliver-hook-checklist li small,
+.oliver-hook-proof-card p,
+.oliver-hook-proof-card li,
+.oliver-hook-outcome-card p,
+.oliver-hook-step-card p,
+.oliver-hook-control-card p,
+.oliver-hook-faq-card p,
+.oliver-hook-surface-copy p {
+  color: var(--text-secondary);
+  line-height: 1.62;
+}
+
+.oliver-hook-checklist li small {
+  white-space: nowrap;
+  font-size: 0.77rem;
+}
+
+.oliver-hook-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.oliver-hook-inline-link:hover {
+  color: var(--oliver-accent);
+}
+
+.oliver-hook-risk-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.oliver-hook-risk-level {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.oliver-hook-risk-level-high {
+  background: rgba(185, 56, 46, 0.12);
+  color: var(--oliver-risk-high);
+}
+
+.oliver-hook-risk-level-medium {
+  background: rgba(142, 98, 0, 0.12);
+  color: var(--oliver-risk-medium);
+}
+
+.oliver-hook-section {
+  padding: 1.8rem 0 0;
+}
+
+.oliver-hook-section-head {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 760px;
+  margin-bottom: 1.5rem;
+}
+
+.oliver-hook-section-head-left {
+  margin-bottom: 0;
+}
+
+.oliver-hook-section-title {
+  margin: 0;
+  font-size: clamp(2.15rem, 4.4vw, 3.3rem);
+  line-height: 0.97;
+  max-width: 14ch;
+}
+
+.oliver-hook-section-intro {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1.04rem;
+  line-height: 1.68;
+  max-width: 52ch;
+}
+
+.oliver-hook-section-intro-left {
+  max-width: 44ch;
+}
+
+.oliver-hook-proof-grid,
+.oliver-hook-outcome-grid,
+.oliver-hook-control-grid,
+.oliver-hook-faq-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.oliver-hook-proof-grid,
+.oliver-hook-control-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.oliver-hook-outcome-grid,
+.oliver-hook-faq-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.oliver-hook-proof-card,
+.oliver-hook-outcome-card,
+.oliver-hook-control-card,
+.oliver-hook-faq-card {
+  border-radius: 1.5rem;
+  padding: 1.15rem 1.15rem 1.2rem;
+}
+
+.oliver-hook-proof-card h3,
+.oliver-hook-outcome-card h3,
+.oliver-hook-control-card h3,
+.oliver-hook-faq-card h3 {
+  margin: 0.4rem 0 0.55rem;
+}
+
+.oliver-hook-proof-card ul {
+  margin-top: 0.95rem;
+}
+
+.oliver-hook-proof-card li {
+  position: relative;
+  padding-left: 1rem;
+}
+
+.oliver-hook-proof-card li::before {
+  content: '';
+  position: absolute;
+  top: 0.65rem;
+  left: 0;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--oliver-accent);
+}
+
+.oliver-hook-workflow-section {
+  padding-top: 2rem;
+}
+
+.oliver-hook-workflow-layout {
+  display: grid;
+  gap: 1.35rem;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  align-items: start;
+}
+
+.oliver-hook-workflow-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.oliver-hook-step-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem;
+  border-radius: 1.5rem;
+  padding: 1.15rem 1.2rem;
+}
+
+.oliver-hook-step-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1rem;
+  background: var(--oliver-accent-soft);
+  color: var(--oliver-accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.oliver-hook-step-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.oliver-hook-step-copy h3 {
+  margin: 0;
+}
+
+.oliver-hook-surface-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: 1.4rem;
+  align-items: center;
+  border-radius: 1.6rem;
+  padding: 1.25rem;
+}
+
+.oliver-hook-surface-copy .oliver-hook-section-title {
+  max-width: 16ch;
+}
+
+.oliver-hook-tool-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.oliver-hook-control-card {
+  min-height: 100%;
+}
+
+.oliver-hook-final-section {
+  padding-top: 2.15rem;
+}
+
+.oliver-hook-final-card {
+  border-radius: 1.8rem;
+  padding: 1.45rem;
+  display: grid;
+  gap: 0.8rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--surface-primary) 90%, rgba(255, 255, 255, 0.38)) 0%,
+      color-mix(in srgb, var(--surface-secondary) 92%, rgba(196, 101, 45, 0.06)) 100%
+    );
+}
+
+[data-theme='dark'] .oliver-hook-final-card {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--surface-secondary) 92%, rgba(255, 255, 255, 0.02)) 0%,
+      color-mix(in srgb, var(--surface-primary) 96%, rgba(240, 163, 110, 0.08)) 100%
+    );
+}
+
+.oliver-hook-final-card .oliver-hook-section-title,
+.oliver-hook-final-card .oliver-hook-section-intro {
+  max-width: 17ch;
+}
+
+.oliver-hook-final-actions {
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 1120px) {
+  .oliver-hook-hero-grid,
+  .oliver-hook-workflow-layout,
+  .oliver-hook-surface-card {
+    grid-template-columns: 1fr;
+  }
+
+  .oliver-hook-copy {
+    max-width: none;
+    padding-top: 0;
+  }
+
+  .oliver-hook-proof-grid,
+  .oliver-hook-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .oliver-hook-nav {
+    padding: 0.85rem 0.85rem 0;
+  }
+
+  .oliver-hook-nav-inner {
+    border-radius: 1.4rem;
+    padding: 0.9rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.8rem;
+  }
+
+  .oliver-hook-links {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 0.1rem;
+  }
+
+  .oliver-hook-links::-webkit-scrollbar {
+    display: none;
+  }
+
+  .oliver-hook-proof-grid,
+  .oliver-hook-outcome-grid,
+  .oliver-hook-control-grid,
+  .oliver-hook-faq-grid,
+  .oliver-hook-hero-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .oliver-hook-tool-chip-grid {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .oliver-hook-title {
+    font-size: clamp(2.45rem, 12vw, 3.55rem);
+    max-width: 10ch;
+  }
+
+  .oliver-hook-subtitle,
+  .oliver-hook-section-intro {
+    font-size: 0.98rem;
+  }
+
+  .oliver-hook-nav-actions,
+  .oliver-hook-cta-row,
+  .oliver-hook-final-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .oliver-hook-nav-primary,
+  .oliver-hook-nav-secondary,
+  .oliver-hook-primary-button,
+  .oliver-hook-secondary-button {
+    width: 100%;
+  }
+
+  .oliver-hook-nav-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .oliver-hook-brand {
+    justify-content: space-between;
+  }
+
+  .oliver-hook-hero {
+    padding-top: 5.5rem;
+  }
+
+  .oliver-hook-hero-panel,
+  .oliver-hook-proof-card,
+  .oliver-hook-outcome-card,
+  .oliver-hook-step-card,
+  .oliver-hook-surface-card,
+  .oliver-hook-control-card,
+  .oliver-hook-faq-card,
+  .oliver-hook-final-card,
+  .oliver-hook-artifact-card {
+    border-radius: 1.2rem;
+    padding: 1rem;
+  }
+
+  .oliver-hook-hero-panel-head,
+  .oliver-hook-card-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .oliver-hook-health {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .oliver-hook-checklist li {
+    grid-template-columns: auto 1fr;
+  }
+
+  .oliver-hook-checklist li small {
+    grid-column: 2 / -1;
+    padding-left: 0;
+  }
+
+  .oliver-hook-step-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .oliver-hook-nav {
+    top: 0.65rem;
+    padding-inline: 0.65rem;
+  }
+
+  .oliver-hook-link {
+    font-size: 0.84rem;
+    padding-inline: 0.72rem;
+  }
+
+  .oliver-hook-pill,
+  .oliver-hook-signal-chip,
+  .oliver-hook-tool-chip {
+    font-size: 0.82rem;
+  }
+}
