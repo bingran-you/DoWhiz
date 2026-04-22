@@ -9,6 +9,8 @@ use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use std_semaphore::Semaphore;
+
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
@@ -42,6 +44,11 @@ use super::utils::{
     ThreadSupersedeMonitor,
 };
 use super::workspace::{canonicalize_dir, workspace_path_in_container};
+
+/// Global semaphore to limit concurrent azcopy transfers.
+/// Prevents overloading the system when many tasks run in parallel.
+const AZCOPY_MAX_CONCURRENT: isize = 5;
+static AZCOPY_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(AZCOPY_MAX_CONCURRENT));
 
 const PAYMENT_ENV_KEYS: &[&str] = &[
     "GOATX402_API_URL",
@@ -2068,6 +2075,7 @@ fn upload_workspace_to_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.acquire();
     let secrets = [config.storage_key.as_str()];
     let source = format!("{}/*", workspace_dir.display());
     let mut last_error = None;
@@ -2137,6 +2145,7 @@ fn download_workspace_from_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.acquire();
     let secrets = [config.storage_key.as_str()];
     let temp_parent = workspace_dir.parent().unwrap_or(workspace_dir);
     let mut last_error = None;
