@@ -108,6 +108,20 @@ const REMOTE_EXIT_CODE_FILENAME: &str = ".codex_remote_exit_code";
 const HAG_MCP_CONFIG_START_MARKER: &str = "# BEGIN DOWHIZ HUMAN APPROVAL GATE MCP";
 const HAG_MCP_CONFIG_END_MARKER: &str = "# END DOWHIZ HUMAN APPROVAL GATE MCP";
 const EPHEMERAL_SHARE_PREFIX: &str = "task-";
+const DEFAULT_AZCOPY_TIMEOUT_SECS: u64 = 900;
+const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
+    ".agents",
+    ".codex",
+    ".codex_remote_prompt.txt",
+    ".config",
+    ".discord_context.json",
+    ".env",
+    ".google_access_token",
+    ".secrets",
+    "incoming_attachments",
+    "incoming_email",
+    "references",
+];
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
@@ -1797,9 +1811,29 @@ fn promote_downloaded_workspace(
     fs::create_dir_all(workspace_dir)?;
     for entry in fs::read_dir(download_root)? {
         let entry = entry?;
-        promote_downloaded_entry(&entry.path(), &workspace_dir.join(entry.file_name()))?;
+        let file_name = entry.file_name();
+        if should_skip_downloaded_workspace_entry(&file_name) {
+            continue;
+        }
+        promote_downloaded_entry(&entry.path(), &workspace_dir.join(file_name))?;
     }
     Ok(())
+}
+
+fn should_skip_downloaded_workspace_entry(file_name: &std::ffi::OsStr) -> bool {
+    let name = file_name.to_string_lossy();
+    DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES
+        .iter()
+        .any(|candidate| *candidate == name)
+}
+
+fn azcopy_transfer_timeout() -> Duration {
+    env::var("RUN_TASK_AZCOPY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(DEFAULT_AZCOPY_TIMEOUT_SECS))
 }
 
 fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(), RunTaskError> {
@@ -1913,13 +1947,27 @@ fn upload_workspace_to_share(
             "https://{}.file.core.windows.net/{}?{}",
             config.storage_account, share_name, sas
         );
-        let output = Command::new("azcopy")
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
             .arg("copy")
             .arg(&source)
             .arg(&dest_url)
             .arg("--recursive")
-            .arg("--overwrite=true")
-            .output()?;
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy to share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
         if output.status.success() {
             return Ok(());
         }
@@ -1971,13 +2019,27 @@ fn download_workspace_from_share(
         let temp_download_dir = tempfile::Builder::new()
             .prefix(".azcopy-download-")
             .tempdir_in(temp_parent)?;
-        let output = Command::new("azcopy")
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
             .arg("copy")
             .arg(&source_url)
             .arg(temp_download_dir.path())
             .arg("--recursive")
-            .arg("--overwrite=true")
-            .output()?;
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy from share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
         if output.status.success() {
             promote_downloaded_workspace(temp_download_dir.path(), workspace_dir)?;
             return Ok(());
@@ -5283,6 +5345,84 @@ printf '%s\n' "$@" > "$capture_file"
         assert_eq!(
             fs::read_to_string(workspace_dir.join("keep.txt")).expect("read unrelated file"),
             "keep me"
+        );
+    }
+
+    #[test]
+    fn test_promote_downloaded_workspace_skips_transient_root_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let download_root = temp.path().join("download");
+        let workspace_dir = temp.path().join("workspace");
+
+        fs::create_dir_all(download_root.join(".codex")).expect("create remote codex dir");
+        fs::create_dir_all(download_root.join("incoming_email")).expect("create remote input dir");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(workspace_dir.join(".codex")).expect("create local codex dir");
+        fs::create_dir_all(workspace_dir.join("incoming_email")).expect("create local input dir");
+
+        fs::write(
+            download_root.join("reply_email_draft.html"),
+            "<html>fresh</html>",
+        )
+        .expect("write remote reply");
+        fs::write(download_root.join(".codex_remote_exit_code"), "0").expect("write remote exit");
+        fs::write(download_root.join(".env"), "remote").expect("write remote env");
+        fs::write(
+            download_root.join(".codex").join("state.sqlite"),
+            "remote-state",
+        )
+        .expect("write remote codex");
+        fs::write(
+            download_root
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "remote-input",
+        )
+        .expect("write remote input");
+
+        fs::write(workspace_dir.join(".env"), "local").expect("write local env");
+        fs::write(
+            workspace_dir.join(".codex").join("state.sqlite"),
+            "local-state",
+        )
+        .expect("write local codex");
+        fs::write(
+            workspace_dir
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "local-input",
+        )
+        .expect("write local input");
+
+        promote_downloaded_workspace(&download_root, &workspace_dir).expect("promote workspace");
+
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("reply_email_draft.html"))
+                .expect("read promoted reply"),
+            "<html>fresh</html>"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex_remote_exit_code"))
+                .expect("read promoted exit"),
+            "0"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".env")).expect("read preserved env"),
+            "local"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex").join("state.sqlite"))
+                .expect("read preserved codex"),
+            "local-state"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                workspace_dir
+                    .join("incoming_email")
+                    .join("postmark_payload.json")
+            )
+            .expect("read preserved input"),
+            "local-input"
         );
     }
 
