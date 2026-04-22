@@ -197,10 +197,10 @@ function genericConnectModel(provider) {
     description: `${label} is linked to your account. Keep the first ask small and concrete so you can review the result quickly.`,
     examples: providerExamples[provider] || [
       `Start with one small request in ${lowerLabel}.`,
-      'Review the result in Tasks before you expand the workflow.',
+      'Review the result in Work before you expand the workflow.',
       'Save any tone or approval rules in Memory once the first task lands.'
     ],
-    cta: anchorCta('Open Tasks', '#section-tasks'),
+    cta: anchorCta('Open Work', '#section-work'),
     footnote: 'Aim for a first win that takes less than five minutes to review.'
   };
 }
@@ -229,7 +229,7 @@ export function buildConnectOnboardingModel({
           '@Oliver draft a crisp reply I can send from here.',
           '@Oliver turn this request into a task I can review in DoWhiz.'
         ],
-        cta: anchorCta('Open Tasks', '#section-tasks'),
+        cta: anchorCta('Open Work', '#section-work'),
         footnote: 'If you want a tighter tone or approval rules, save them in Memory before the next request.'
       };
     }
@@ -261,7 +261,7 @@ export function buildConnectOnboardingModel({
           '@Oliver draft a reply I can post back in this channel.',
           '@Oliver turn this request into a task I can review in DoWhiz.'
         ],
-        cta: anchorCta('Open Tasks', '#section-tasks'),
+        cta: anchorCta('Open Work', '#section-work'),
         footnote: 'If you want Oliver to follow team tone or approval rules, save them in Memory now.'
       };
     }
