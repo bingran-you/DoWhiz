@@ -317,6 +317,98 @@ fn send_payload_sanitizes_attachment_names_to_ascii() -> Result<(), Box<dyn std:
 }
 
 #[test]
+fn send_payload_wraps_data_tables_for_mobile_readability() -> Result<(), Box<dyn std::error::Error>>
+{
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+    let temp = TempDir::new()?;
+    let html_path = temp.path().join("reply_email_draft.html");
+    let raw_html = r#"
+        <table>
+          <tr>
+            <th>Metric</th>
+            <th>Monday</th>
+            <th>Tuesday</th>
+            <th>Wednesday</th>
+          </tr>
+          <tr>
+            <td>New tickets</td>
+            <td>12</td>
+            <td>15</td>
+            <td>8</td>
+          </tr>
+        </table>
+    "#;
+    fs::write(&html_path, raw_html)?;
+
+    let attachments_dir = temp.path().join("reply_email_attachments");
+    fs::create_dir(&attachments_dir)?;
+
+    let expected_html = normalize_email_html("Weekly metrics", raw_html);
+    assert!(
+        expected_html.contains(r#"data-dw-table-scroll="true""#),
+        "normalized html should include the responsive table scroll wrapper"
+    );
+    assert!(
+        expected_html.contains("min-width: 560px"),
+        "normalized html should keep four columns readable on narrow screens"
+    );
+
+    let expected_payload = json!({
+        "From": "sender@example.com",
+        "To": "to@example.com",
+        "Bcc": "sender@example.com",
+        "Subject": "Weekly metrics",
+        "TextBody": "Metric | Monday | Tuesday | Wednesday\nNew tickets | 12 | 15 | 8",
+        "HtmlBody": expected_html,
+    });
+
+    let response_body = json!({
+        "To": "to@example.com",
+        "SubmittedAt": "2024-01-01T00:00:00Z",
+        "MessageID": "test-message-id",
+        "ErrorCode": 0,
+        "Message": "OK",
+    });
+
+    let mut server = Server::new();
+    let api_base_url = server.url();
+    let mock = server
+        .mock("POST", "/email")
+        .match_header("x-postmark-server-token", "test-token")
+        .match_header("accept", "application/json")
+        .match_header("content-type", "application/json")
+        .match_body(Matcher::Json(expected_payload))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(response_body.to_string())
+        .create();
+
+    let _env = EnvGuard::set(&[
+        ("POSTMARK_SERVER_TOKEN", "test-token"),
+        ("POSTMARK_API_BASE_URL", api_base_url.as_str()),
+    ]);
+
+    let request = SendEmailParams {
+        subject: "Weekly metrics".to_string(),
+        html_path,
+        attachments_dir,
+        from: Some("sender@example.com".to_string()),
+        to: vec!["to@example.com".to_string()],
+        cc: vec![],
+        bcc: vec![],
+        in_reply_to: None,
+        references: None,
+        reply_to: None,
+    };
+
+    let response = send_email(&request)?;
+    assert_eq!(response.message_id, "test-message-id");
+
+    mock.assert();
+    Ok(())
+}
+
+#[test]
 #[ignore = "requires POSTMARK_LIVE_TEST=1 and Postmark credentials"]
 fn live_postmark_delivery_with_attachments() -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());

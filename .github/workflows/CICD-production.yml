@@ -165,7 +165,8 @@ jobs:
             --bin discord_cli \
             --bin lark_cli \
             --bin identity_lookup_cli \
-            --bin grocery_cli
+            --bin grocery_cli \
+            --bin task_status_cli
 
       - name: Archive rust binaries
         uses: actions/upload-artifact@v4
@@ -187,6 +188,7 @@ jobs:
             DoWhiz_service/target/release/lark_cli
             DoWhiz_service/target/release/identity_lookup_cli
             DoWhiz_service/target/release/grocery_cli
+            DoWhiz_service/target/release/task_status_cli
           if-no-files-found: error
 
   deploy:
@@ -282,6 +284,7 @@ jobs:
           install -m 755 /tmp/dowhiz-release/lark_cli "$RELEASE_DIR/lark_cli"
           install -m 755 /tmp/dowhiz-release/identity_lookup_cli "$RELEASE_DIR/identity_lookup_cli"
           install -m 755 /tmp/dowhiz-release/grocery_cli "$RELEASE_DIR/grocery_cli"
+          install -m 755 /tmp/dowhiz-release/task_status_cli "$RELEASE_DIR/task_status_cli"
           rm -rf /tmp/dowhiz-release
           EOF
 

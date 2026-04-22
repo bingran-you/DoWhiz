@@ -1,5 +1,7 @@
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use kuchiki::traits::*;
+use kuchiki::NodeRef;
 use mime_guess::MimeGuess;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -90,6 +92,12 @@ struct PostmarkHeader {
 const DOWHIZ_EMAIL_SHELL_MARKER: &str = r#"data-dowhiz-email-shell="true""#;
 const DOWHIZ_EMAIL_CONTENT_START: &str = "<!-- dowhiz-email-content:start -->";
 const DOWHIZ_EMAIL_CONTENT_END: &str = "<!-- dowhiz-email-content:end -->";
+const DOWHIZ_EMAIL_CONTENT_ROOT_ATTR: &str = "data-dw-email-content-root";
+const DOWHIZ_EMAIL_CONTENT_ROOT_SELECTOR: &str = r#"div[data-dw-email-content-root="true"]"#;
+const DOWHIZ_EMAIL_TABLE_WRAP_MARKER: &str = r#"data-dw-table-wrap="true""#;
+const DOWHIZ_EMAIL_TABLE_SCROLL_MARKER: &str = r#"data-dw-table-scroll="true""#;
+const DOWHIZ_EMAIL_TABLE_INNER_MARKER: &str = r#"data-dw-table-inner="true""#;
+const DOWHIZ_EMAIL_DATA_TABLE_ATTR: &str = "data-dw-enhanced-table";
 const DEFAULT_EMAIL_SUBJECT: &str = "DoWhiz update";
 const EMAIL_PREHEADER_MAX_CHARS: usize = 140;
 
@@ -109,6 +117,7 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
     } else {
         wrap_plain_text_body(body_source)
     };
+    let content_html = enhance_email_content_html(&content_html);
     let preheader = html_escape(&build_preheader(&normalized_subject, &content_html));
 
     format!(
@@ -266,10 +275,46 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         border-radius: 12px;
       }}
 
+      .dw-table-wrap {{
+        width: 100%;
+        max-width: 100%;
+        margin: 0 0 1.35em;
+      }}
+
+      .dw-table-hint {{
+        margin: 0 0 8px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #6b7280;
+      }}
+
+      .dw-table-scroll {{
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #e4e8ee;
+        border-radius: 14px;
+        background-color: #ffffff;
+      }}
+
+      .dw-table-inner {{
+        min-width: 100%;
+      }}
+
       .dw-content table {{
         width: 100% !important;
         max-width: 100% !important;
         border-collapse: collapse;
+      }}
+
+      .dw-content table.dw-data-table {{
+        width: 100% !important;
+        max-width: none !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        table-layout: auto !important;
       }}
 
       .dw-content th,
@@ -277,6 +322,19 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         border: 1px solid #e4e8ee;
         padding: 10px 12px;
         vertical-align: top;
+      }}
+
+      .dw-content table.dw-data-table th {{
+        background-color: #f6f8fb;
+        color: #1f1f22;
+        font-weight: 700;
+        text-align: left;
+      }}
+
+      .dw-content table.dw-data-table th,
+      .dw-content table.dw-data-table td {{
+        font-size: 14px;
+        line-height: 1.55;
       }}
 
       .dw-content hr {{
@@ -306,6 +364,21 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
 
         .dw-subject {{
           font-size: 28px !important;
+        }}
+
+        .dw-table-wrap {{
+          margin-bottom: 1.1em !important;
+        }}
+
+        .dw-table-scroll {{
+          border-radius: 12px !important;
+        }}
+
+        .dw-content table.dw-data-table th,
+        .dw-content table.dw-data-table td {{
+          padding: 9px 10px !important;
+          font-size: 13px !important;
+          line-height: 1.45 !important;
         }}
       }}
     </style>
@@ -547,7 +620,7 @@ fn clean_header_value(value: &Option<String>) -> Option<String> {
 
 fn plain_text_body_from_html(html: &str) -> String {
     let source = extract_shell_content_html(html).unwrap_or(html);
-    let text = decode_basic_html_entities(&strip_html_tags(source));
+    let text = render_html_text(source);
     if text.trim().is_empty() {
         "(no content)".to_string()
     } else {
@@ -556,7 +629,7 @@ fn plain_text_body_from_html(html: &str) -> String {
 }
 
 fn build_preheader(subject: &str, content_html: &str) -> String {
-    let preview_body = decode_basic_html_entities(&strip_html_tags(content_html));
+    let preview_body = render_html_text(content_html);
     let compact_body = compact_whitespace(&preview_body);
     let combined = if compact_body.is_empty() {
         subject.trim().to_string()
@@ -625,6 +698,432 @@ fn extract_style_blocks(raw_html: &str) -> String {
     styles.join("\n")
 }
 
+fn enhance_email_content_html(content_html: &str) -> String {
+    if !content_html.to_ascii_lowercase().contains("<table") {
+        return content_html.to_string();
+    }
+
+    let document = kuchiki::parse_html().one(format!(
+        r#"<!DOCTYPE html><html><body><div {root_attr}="true">{content_html}</div></body></html>"#,
+        root_attr = DOWHIZ_EMAIL_CONTENT_ROOT_ATTR,
+        content_html = content_html
+    ));
+    let tables: Vec<NodeRef> = match document.select("table") {
+        Ok(nodes) => nodes.map(|node| node.as_node().clone()).collect(),
+        Err(_) => return content_html.to_string(),
+    };
+
+    let mut changed = false;
+    for table in tables {
+        if !should_enhance_data_table(&table) {
+            continue;
+        }
+        let column_count = table_max_columns(&table);
+        if column_count < 2 {
+            continue;
+        }
+        if wrap_table_for_mobile(&table, column_count) {
+            changed = true;
+        }
+    }
+
+    if !changed {
+        return content_html.to_string();
+    }
+
+    match document.select_first(DOWHIZ_EMAIL_CONTENT_ROOT_SELECTOR) {
+        Ok(root) => children_as_html(root.as_node()),
+        Err(_) => content_html.to_string(),
+    }
+}
+
+fn should_enhance_data_table(table: &NodeRef) -> bool {
+    let Some(element) = table.as_element() else {
+        return false;
+    };
+    if element.name.local.as_ref() != "table" {
+        return false;
+    }
+    if table_has_ancestor(table, "table") {
+        return false;
+    }
+
+    let attrs = element.attributes.borrow();
+    if attrs.contains(DOWHIZ_EMAIL_DATA_TABLE_ATTR) {
+        return false;
+    }
+    !matches!(
+        attrs.get("role")
+            .map(|value| value.trim().to_ascii_lowercase()),
+        Some(role) if role == "presentation" || role == "none"
+    )
+}
+
+fn wrap_table_for_mobile(table: &NodeRef, column_count: usize) -> bool {
+    let min_width = preferred_table_min_width(column_count);
+    let Some((wrapper, inner)) = build_table_wrapper(min_width, column_count >= 4) else {
+        return false;
+    };
+
+    append_class(table, "dw-data-table");
+    set_attribute(table, DOWHIZ_EMAIL_DATA_TABLE_ATTR, "true");
+    append_style(
+        table,
+        "width: 100% !important; max-width: none !important; border-collapse: separate; border-spacing: 0; table-layout: auto;",
+    );
+    style_table_cells(table);
+    table.insert_before(wrapper);
+    inner.append(table.clone());
+    true
+}
+
+fn build_table_wrapper(min_width: usize, show_hint: bool) -> Option<(NodeRef, NodeRef)> {
+    let document = kuchiki::parse_html().one(format!(
+        r#"<!DOCTYPE html>
+<html>
+  <body>
+    <div class="dw-table-wrap" {wrap_marker} style="width: 100%; max-width: 100%; margin: 0 0 20px;">
+      {hint_html}
+      <div class="dw-table-scroll" {scroll_marker} style="width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; border: 1px solid #e4e8ee; border-radius: 14px; background-color: #ffffff;">
+        <div class="dw-table-inner" {inner_marker} style="min-width: {min_width}px;"></div>
+      </div>
+    </div>
+  </body>
+</html>"#,
+        wrap_marker = DOWHIZ_EMAIL_TABLE_WRAP_MARKER,
+        hint_html = if show_hint {
+            r#"<p class="dw-table-hint" aria-hidden="true" style="margin: 0 0 8px; font-size: 12px; line-height: 1.4; color: #6b7280;">Swipe horizontally to view all columns.</p>"#
+        } else {
+            ""
+        },
+        scroll_marker = DOWHIZ_EMAIL_TABLE_SCROLL_MARKER,
+        inner_marker = DOWHIZ_EMAIL_TABLE_INNER_MARKER,
+        min_width = min_width
+    ));
+    let wrapper = document
+        .select_first("div.dw-table-wrap")
+        .ok()?
+        .as_node()
+        .clone();
+    let inner = document
+        .select_first("div.dw-table-inner")
+        .ok()?
+        .as_node()
+        .clone();
+    Some((wrapper, inner))
+}
+
+fn style_table_cells(table: &NodeRef) {
+    if let Ok(headers) = table.select("th") {
+        for header in headers {
+            append_style(
+                header.as_node(),
+                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top; text-align: left; background-color: #f6f8fb; font-weight: 700;",
+            );
+        }
+    }
+    if let Ok(cells) = table.select("td") {
+        for cell in cells {
+            append_style(
+                cell.as_node(),
+                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top;",
+            );
+        }
+    }
+}
+
+fn append_class(node: &NodeRef, class_name: &str) {
+    let Some(element) = node.as_element() else {
+        return;
+    };
+    let mut attrs = element.attributes.borrow_mut();
+    let existing = attrs.get("class").unwrap_or("").trim().to_string();
+    if existing
+        .split_whitespace()
+        .any(|value| value.eq_ignore_ascii_case(class_name))
+    {
+        return;
+    }
+    if existing.is_empty() {
+        attrs.insert("class", class_name.to_string());
+    } else {
+        attrs.insert("class", format!("{existing} {class_name}"));
+    }
+}
+
+fn set_attribute(node: &NodeRef, name: &str, value: &str) {
+    let Some(element) = node.as_element() else {
+        return;
+    };
+    element
+        .attributes
+        .borrow_mut()
+        .insert(name, value.to_string());
+}
+
+fn append_style(node: &NodeRef, style_snippet: &str) {
+    let Some(element) = node.as_element() else {
+        return;
+    };
+    let cleaned = style_snippet.trim().trim_end_matches(';');
+    if cleaned.is_empty() {
+        return;
+    }
+
+    let mut attrs = element.attributes.borrow_mut();
+    if let Some(existing) = attrs.get_mut("style") {
+        let trimmed = existing.trim();
+        if trimmed.is_empty() {
+            *existing = format!("{cleaned};");
+            return;
+        }
+        if !trimmed.ends_with(';') {
+            existing.push(';');
+        }
+        if !existing.ends_with(' ') {
+            existing.push(' ');
+        }
+        existing.push_str(cleaned);
+        existing.push(';');
+        return;
+    }
+    attrs.insert("style", format!("{cleaned};"));
+}
+
+fn table_has_ancestor(node: &NodeRef, tag_name: &str) -> bool {
+    node.ancestors().any(|ancestor| {
+        ancestor
+            .as_element()
+            .map(|element| element.name.local.as_ref() == tag_name)
+            .unwrap_or(false)
+    })
+}
+
+fn table_max_columns(table: &NodeRef) -> usize {
+    let Ok(rows) = table.select("tr") else {
+        return 0;
+    };
+    rows.map(|row| row_column_count(row.as_node()))
+        .max()
+        .unwrap_or(0)
+}
+
+fn row_column_count(row: &NodeRef) -> usize {
+    row.children().filter_map(table_cell_span).sum()
+}
+
+fn table_cell_span(node: NodeRef) -> Option<usize> {
+    let element = node.as_element()?;
+    if !matches!(element.name.local.as_ref(), "td" | "th") {
+        return None;
+    }
+    let span = element
+        .attributes
+        .borrow()
+        .get("colspan")
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(1);
+    Some(span)
+}
+
+fn preferred_table_min_width(column_count: usize) -> usize {
+    column_count.saturating_mul(140).clamp(360, 960)
+}
+
+fn children_as_html(node: &NodeRef) -> String {
+    node.children()
+        .map(|child| child.to_string())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn render_html_text(html: &str) -> String {
+    let document = kuchiki::parse_html().one(format!(
+        r#"<!DOCTYPE html><html><body><div {root_attr}="true">{html}</div></body></html>"#,
+        root_attr = DOWHIZ_EMAIL_CONTENT_ROOT_ATTR,
+        html = html
+    ));
+    let Ok(root) = document.select_first(DOWHIZ_EMAIL_CONTENT_ROOT_SELECTOR) else {
+        return String::new();
+    };
+
+    let mut out = String::new();
+    for child in root.as_node().children() {
+        render_html_text_node(&child, &mut out, false);
+    }
+    normalize_rendered_text(&out)
+}
+
+fn render_html_text_node(node: &NodeRef, out: &mut String, preserve_whitespace: bool) {
+    if let Some(text) = node.as_text() {
+        append_rendered_text(out, &text.borrow(), preserve_whitespace);
+        return;
+    }
+
+    let Some(element) = node.as_element() else {
+        for child in node.children() {
+            render_html_text_node(&child, out, preserve_whitespace);
+        }
+        return;
+    };
+
+    let tag = element.name.local.as_ref();
+    if element
+        .attributes
+        .borrow()
+        .get("aria-hidden")
+        .map(|value| value.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        return;
+    }
+    match tag {
+        "br" => push_rendered_line_break(out),
+        "p" | "div" | "section" | "article" | "header" | "footer" | "blockquote" | "h1" | "h2"
+        | "h3" | "h4" | "h5" | "h6" | "table" | "thead" | "tbody" => {
+            push_rendered_block_break(out);
+            for child in node.children() {
+                render_html_text_node(&child, out, preserve_whitespace);
+            }
+            push_rendered_block_break(out);
+        }
+        "ul" | "ol" => {
+            push_rendered_block_break(out);
+            for child in node.children() {
+                render_html_text_node(&child, out, preserve_whitespace);
+            }
+            push_rendered_block_break(out);
+        }
+        "li" => {
+            push_rendered_list_break(out);
+            out.push_str("- ");
+            for child in node.children() {
+                render_html_text_node(&child, out, preserve_whitespace);
+            }
+            push_rendered_line_break(out);
+        }
+        "tr" => {
+            push_rendered_list_break(out);
+            let mut first_cell = true;
+            for child in node.children() {
+                if is_rendered_table_cell(&child) {
+                    if !first_cell {
+                        trim_rendered_trailing_whitespace(out);
+                        out.push_str(" | ");
+                    }
+                    first_cell = false;
+                }
+                render_html_text_node(&child, out, preserve_whitespace);
+            }
+            push_rendered_line_break(out);
+        }
+        "pre" => {
+            push_rendered_block_break(out);
+            for child in node.children() {
+                render_html_text_node(&child, out, true);
+            }
+            push_rendered_block_break(out);
+        }
+        _ => {
+            for child in node.children() {
+                render_html_text_node(&child, out, preserve_whitespace);
+            }
+        }
+    }
+}
+
+fn append_rendered_text(out: &mut String, text: &str, preserve_whitespace: bool) {
+    if preserve_whitespace {
+        out.push_str(text);
+        return;
+    }
+
+    let mut pending_space = out
+        .chars()
+        .last()
+        .map(|ch| ch.is_whitespace())
+        .unwrap_or(false);
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            if !pending_space {
+                out.push(' ');
+                pending_space = true;
+            }
+        } else {
+            out.push(ch);
+            pending_space = false;
+        }
+    }
+}
+
+fn push_rendered_block_break(out: &mut String) {
+    trim_rendered_trailing_whitespace(out);
+    if out.is_empty() {
+        return;
+    }
+    if out.ends_with("\n\n") {
+        return;
+    }
+    if out.ends_with('\n') {
+        out.push('\n');
+    } else {
+        out.push_str("\n\n");
+    }
+}
+
+fn push_rendered_list_break(out: &mut String) {
+    trim_rendered_trailing_whitespace(out);
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
+fn push_rendered_line_break(out: &mut String) {
+    trim_rendered_trailing_whitespace(out);
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
+fn trim_rendered_trailing_whitespace(out: &mut String) {
+    while matches!(out.chars().last(), Some(' ' | '\t')) {
+        out.pop();
+    }
+}
+
+fn is_rendered_table_cell(node: &NodeRef) -> bool {
+    node.as_element()
+        .map(|element| matches!(element.name.local.as_ref(), "td" | "th"))
+        .unwrap_or(false)
+}
+
+fn normalize_rendered_text(input: &str) -> String {
+    let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
+    let mut lines = Vec::new();
+    let mut previous_blank = false;
+    for line in normalized.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if !previous_blank {
+                lines.push(String::new());
+            }
+            previous_blank = true;
+            continue;
+        }
+        lines.push(trimmed.to_string());
+        previous_blank = false;
+    }
+
+    while matches!(lines.first(), Some(value) if value.is_empty()) {
+        lines.remove(0);
+    }
+    while matches!(lines.last(), Some(value) if value.is_empty()) {
+        lines.pop();
+    }
+    lines.join("\n")
+}
+
 fn looks_like_html_fragment(value: &str) -> bool {
     let lower = value.trim().to_ascii_lowercase();
     lower.contains("<p")
@@ -680,16 +1179,6 @@ fn html_escape(value: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-fn decode_basic_html_entities(value: &str) -> String {
-    value
-        .replace("&nbsp;", " ")
-        .replace("&#39;", "'")
-        .replace("&quot;", "\"")
-        .replace("&gt;", ">")
-        .replace("&lt;", "<")
-        .replace("&amp;", "&")
-}
-
 fn compact_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -705,20 +1194,6 @@ fn truncate_chars(value: &str, max_chars: usize) -> String {
         .take(max_chars.saturating_sub(1))
         .collect::<String>();
     out.push('…');
-    out
-}
-
-fn strip_html_tags(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut in_tag = false;
-    for ch in input.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(ch),
-            _ => {}
-        }
-    }
     out
 }
 
@@ -875,5 +1350,158 @@ mod tests {
             normalize_email_html("Status update", "<p>Hello <strong>team</strong></p>");
 
         assert_eq!(plain_text_body_from_html(&normalized), "Hello team");
+    }
+
+    #[test]
+    fn plain_text_body_from_html_keeps_table_structure_readable() {
+        let normalized = normalize_email_html(
+            "Weekly metrics",
+            r#"
+            <table>
+              <tr>
+                <th>Metric</th>
+                <th>Monday</th>
+                <th>Tuesday</th>
+              </tr>
+              <tr>
+                <td>New tickets</td>
+                <td>12</td>
+                <td>15</td>
+              </tr>
+            </table>
+            "#,
+        );
+
+        assert_eq!(
+            plain_text_body_from_html(&normalized),
+            "Metric | Monday | Tuesday\nNew tickets | 12 | 15"
+        );
+    }
+
+    #[test]
+    fn normalize_email_html_preserves_investment_contract_labels() {
+        let normalized = normalize_email_html(
+            "NVDA investment memo",
+            r#"
+            <h2>Final Recommendation</h2>
+            <ul>
+              <li><strong>Rating:</strong> Wait</li>
+              <li><strong>Horizon:</strong> Medium-term (stated)</li>
+              <li><strong>Confidence:</strong> Medium</li>
+              <li><strong>Timing Verdict:</strong> Wait</li>
+              <li><strong>Add Criteria:</strong> Better entry after earnings.</li>
+              <li><strong>Invalidation Criteria:</strong> Margin guide weakens.</li>
+              <li><strong>Biggest Near-Term Risk:</strong> Earnings volatility.</li>
+              <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
+            </ul>
+            <h2>Verified Facts</h2><ul><li>Fact one.</li></ul>
+            <h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x</li></ul>
+            <h2>Scenario Analysis</h2>
+            <p><strong>Bull Case:</strong> Demand stays strong.</p>
+            <p><strong>Base Case:</strong> Growth normalizes.</p>
+            <p><strong>Bear Case:</strong> Spending slows.</p>
+            "#,
+        );
+
+        let text = plain_text_body_from_html(&normalized);
+        for label in [
+            "Rating:",
+            "Horizon:",
+            "Confidence:",
+            "Timing Verdict:",
+            "Verified Facts",
+            "Derived Metrics",
+            "Bull Case:",
+            "Base Case:",
+            "Bear Case:",
+            "Add Criteria:",
+            "Invalidation Criteria:",
+            "Biggest Near-Term Risk:",
+            "Biggest Long-Term Strength:",
+        ] {
+            assert!(
+                normalized.contains(label) || text.contains(label),
+                "expected normalized email content to preserve label {label}"
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_email_html_wraps_data_tables_in_scroll_container() {
+        let normalized = normalize_email_html(
+            "Weekly metrics",
+            r#"
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Monday</th>
+                  <th>Tuesday</th>
+                  <th>Wednesday</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>New tickets</td>
+                  <td>12</td>
+                  <td>15</td>
+                  <td>8</td>
+                </tr>
+              </tbody>
+            </table>
+            "#,
+        );
+
+        assert!(normalized.contains(DOWHIZ_EMAIL_TABLE_WRAP_MARKER));
+        assert!(normalized.contains(DOWHIZ_EMAIL_TABLE_SCROLL_MARKER));
+        assert!(normalized.contains(r#"data-dw-enhanced-table="true""#));
+        assert!(normalized.contains(r#"class="dw-data-table""#));
+        assert!(normalized.contains("overflow-x: auto"));
+        assert!(normalized.contains("min-width: 560px"));
+    }
+
+    #[test]
+    fn normalize_email_html_skips_presentation_tables() {
+        let normalized = normalize_email_html(
+            "Layout table",
+            r#"
+            <table role="presentation">
+              <tr>
+                <td>Left</td>
+                <td>Right</td>
+              </tr>
+            </table>
+            "#,
+        );
+
+        assert!(!normalized.contains(DOWHIZ_EMAIL_TABLE_WRAP_MARKER));
+        assert!(!normalized.contains(DOWHIZ_EMAIL_TABLE_SCROLL_MARKER));
+        assert!(!normalized.contains(r#"data-dw-enhanced-table="true""#));
+        assert!(!normalized.contains(r#"class="dw-data-table""#));
+    }
+
+    #[test]
+    fn normalize_email_html_counts_colspan_when_sizing_tables() {
+        let normalized = normalize_email_html(
+            "Capacity plan",
+            r#"
+            <table>
+              <tr>
+                <th>Team</th>
+                <th colspan="2">Q2 capacity</th>
+                <th>Owner</th>
+              </tr>
+              <tr>
+                <td>Platform</td>
+                <td>Committed</td>
+                <td>Stretch</td>
+                <td>Riley</td>
+              </tr>
+            </table>
+            "#,
+        );
+
+        assert!(normalized.contains(DOWHIZ_EMAIL_TABLE_WRAP_MARKER));
+        assert!(normalized.contains("min-width: 560px"));
     }
 }

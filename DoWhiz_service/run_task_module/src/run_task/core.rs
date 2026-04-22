@@ -159,7 +159,8 @@ fn should_fallback_to_claude(primary_runner: &str, err: &RunTaskError) -> bool {
         | RunTaskError::DockerNotFound
         | RunTaskError::DockerFailed { .. }
         | RunTaskError::AzureCliNotFound
-        | RunTaskError::OutputMissing { .. } => true,
+        | RunTaskError::OutputMissing { .. }
+        | RunTaskError::OutputContractViolation { .. } => true,
         RunTaskError::CommandTimeout { command, .. } => {
             is_codex_timeout_eligible_for_fallback(command)
         }
@@ -249,6 +250,9 @@ fn primary_error_summary(err: &RunTaskError) -> &'static str {
         }
         RunTaskError::OutputMissing { .. } => {
             "Codex finished without writing the expected reply artifact"
+        }
+        RunTaskError::OutputContractViolation { .. } => {
+            "Codex wrote a reply artifact that failed the required output contract"
         }
         _ => "Codex execution failed",
     }

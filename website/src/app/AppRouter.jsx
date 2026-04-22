@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LandingPage from '../pages/LandingPage';
+import OliverLandingPage from '../pages/OliverLandingPage';
 import StartupIntakePage from '../pages/StartupIntakePage';
 import WorkspaceDemoPage from '../pages/WorkspaceDemoPage';
 import WorkspaceHomePage from '../pages/WorkspaceHomePage';
@@ -11,6 +12,7 @@ function AppRouter() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage locale="en-US" />} />
+        <Route path="/oliver" element={<OliverLandingPage />} />
         <Route path="/cn" element={<LandingPage locale="zh-CN" />} />
         <Route path="/cn/*" element={<LandingPage locale="zh-CN" />} />
         <Route path="/start" element={<StartupIntakePage />} />

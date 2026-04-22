@@ -2691,7 +2691,25 @@
       const ANALYTICS_ANON_KEY = 'dowhiz_analytics_anonymous_id';
       const ANALYTICS_SESSION_KEY = 'dowhiz_analytics_session_id';
       const ANALYTICS_ATTRIBUTION_KEY = 'dowhiz_analytics_attribution';
+      const AUTH_ENTRY_SURFACE_KEY = 'dowhiz_auth_entry_surface';
       const STARTUP_BLUEPRINT_STORAGE_KEY = 'dowhiz_startup_workspace_blueprint_v1';
+      const OLIVER_TPM_ENTRY_SURFACE = 'oliver_tpm';
+      const AUTH_ENTRY_COPY = {
+        [OLIVER_TPM_ENTRY_SURFACE]: {
+          authTitle: 'Run your work with Oliver',
+          authSubtitle:
+            'Sign in to review follow-through, connect the tools Oliver watches, and keep cross-functional context up to date.',
+          dashboardTitle: 'Your Oliver TPM workspace',
+          dashboardSubtitle:
+            'Review signals, follow-through, and the current setup Oliver uses to keep work moving.',
+          sidebarEyebrow: 'Oliver for TPMs',
+          sidebarTitle: 'TPM workspace',
+          sidebarDescription:
+            'Keep the next move, live signals, and the follow-through Oliver is coordinating in one place.',
+          overviewCopy: 'One clear next move, your live execution signals, and the follow-through that needs review.'
+        }
+      };
+      let activeEntrySurface = null;
 
       function analyticsGenerateId(prefix) {
         if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -2724,6 +2742,41 @@
         if (value === undefined || value === null) return null;
         const trimmed = String(value).trim();
         return trimmed.length ? trimmed : null;
+      }
+
+      function normalizeEntrySurface(value) {
+        const normalized = normalizeOptional(value);
+        return normalized === OLIVER_TPM_ENTRY_SURFACE ? normalized : null;
+      }
+
+      function readAuthEntrySurfaceFromSession() {
+        try {
+          return normalizeEntrySurface(window.sessionStorage.getItem(AUTH_ENTRY_SURFACE_KEY));
+        } catch {
+          return null;
+        }
+      }
+
+      function writeAuthEntrySurfaceToSession(value) {
+        try {
+          const normalized = normalizeEntrySurface(value);
+          if (!normalized) {
+            window.sessionStorage.removeItem(AUTH_ENTRY_SURFACE_KEY);
+            return;
+          }
+          window.sessionStorage.setItem(AUTH_ENTRY_SURFACE_KEY, normalized);
+        } catch {
+          // Ignore storage failures so auth never depends on storage.
+        }
+      }
+
+      function resolveAuthEntrySurface(params, expectingDashboard) {
+        const requested = normalizeEntrySurface(params.get('entry'));
+        if (requested) {
+          writeAuthEntrySurfaceToSession(requested);
+          return requested;
+        }
+        return expectingDashboard ? readAuthEntrySurfaceFromSession() : null;
       }
 
       function inferDeviceType(userAgent) {
@@ -2808,6 +2861,7 @@
           utm_campaign: attribution.utm_campaign || null,
           utm_term: attribution.utm_term || null,
           utm_content: attribution.utm_content || null,
+          entry_surface: activeEntrySurface || null,
           device_type: inferDeviceType(ua),
           browser: inferBrowser(ua),
           os: inferOs(ua),
@@ -2857,6 +2911,10 @@
       const authMessage = document.getElementById('auth-message');
       const pageTitle = document.getElementById('page-title');
       const pageSubtitle = document.getElementById('page-subtitle');
+      const dashboardSidebarEyebrow = document.querySelector('.sidebar-eyebrow');
+      const dashboardSidebarTitle = document.querySelector('.sidebar-title');
+      const dashboardSidebarDescription = document.querySelector('.sidebar-description');
+      const dashboardOverviewCopy = document.querySelector('#section-overview .dashboard-overview-copy');
       const existingAccountContainer = document.getElementById('existing-account-container');
       const existingAccountEmail = document.getElementById('existing-account-email');
       const sendResetEmailBtn = document.getElementById('send-reset-email');
@@ -2937,10 +2995,39 @@
       let cachedBalance = null;
       let pendingConnectionOnboarding = loadPendingConnectionOnboardingFromStorage();
 
+      function applyEntryAwareCopy(options = {}) {
+        const copy = AUTH_ENTRY_COPY[activeEntrySurface];
+        if (!copy) {
+          return;
+        }
+
+        const dashboardMode = options.dashboardMode === true;
+
+        if (pageTitle) {
+          pageTitle.textContent = dashboardMode ? copy.dashboardTitle : copy.authTitle;
+        }
+        if (pageSubtitle) {
+          pageSubtitle.textContent = dashboardMode ? copy.dashboardSubtitle : copy.authSubtitle;
+        }
+        if (dashboardSidebarEyebrow) {
+          dashboardSidebarEyebrow.textContent = copy.sidebarEyebrow;
+        }
+        if (dashboardSidebarTitle) {
+          dashboardSidebarTitle.textContent = copy.sidebarTitle;
+        }
+        if (dashboardSidebarDescription) {
+          dashboardSidebarDescription.textContent = copy.sidebarDescription;
+        }
+        if (dashboardOverviewCopy) {
+          dashboardOverviewCopy.textContent = copy.overviewCopy;
+        }
+      }
+
       // Check if user came from logged-in state (expecting dashboard)
       const authQueryParams = new URLSearchParams(window.location.search);
       const expectingDashboard = authQueryParams.get('loggedIn') === 'true';
       const popupAuthFlow = authQueryParams.get('popupAuth') === '1';
+      activeEntrySurface = resolveAuthEntrySurface(authQueryParams, expectingDashboard);
       const authIntentParams = new URLSearchParams();
       if (expectingDashboard) {
         authIntentParams.set('loggedIn', 'true');
@@ -2957,12 +3044,14 @@
         setDashboardMode(false);
         signinFormContainer.classList.remove('hidden');
       }
+      applyEntryAwareCopy({ dashboardMode: false });
 
       persistAttributionFromLocation();
       trackAnalyticsEvent(
         'signup_page_view',
         {
-          entry_mode: expectingDashboard ? 'logged_in_redirect' : 'direct'
+          entry_mode: expectingDashboard ? 'logged_in_redirect' : 'direct',
+          entry_surface: activeEntrySurface
         },
         {
           eventKey: `signup_page_view:${getOrCreateSessionId()}:${window.location.pathname}`
@@ -5693,6 +5782,7 @@
         dashboardContainer.classList.remove('hidden');
         pageTitle.textContent = 'Your Oliver setup';
         pageSubtitle.textContent = 'Connect apps, review tasks, save memory, and decide how Oliver should work for you.';
+        applyEntryAwareCopy({ dashboardMode: true });
 
         document.getElementById('account-id').textContent = accountData.account_id;
         document.getElementById('user-email').textContent = session.user.email;

@@ -31,6 +31,7 @@ use super::env::{
 use super::errors::RunTaskError;
 use super::github_auth::{ensure_github_cli_auth, resolve_github_auth};
 use super::prompt::{build_prompt, load_memory_context};
+use super::reply_contract::{ensure_expected_reply_artifact, reply_artifact_ready_for_workspace};
 use super::scheduled::{extract_scheduled_tasks, extract_scheduler_actions};
 use super::timing::{TaskTimingBuilder, TIMING_COLLECTOR};
 use super::trace::RunTaskTraceRecorder;
@@ -110,6 +111,20 @@ const REMOTE_EXIT_CODE_FILENAME: &str = ".codex_remote_exit_code";
 const HAG_MCP_CONFIG_START_MARKER: &str = "# BEGIN DOWHIZ HUMAN APPROVAL GATE MCP";
 const HAG_MCP_CONFIG_END_MARKER: &str = "# END DOWHIZ HUMAN APPROVAL GATE MCP";
 const EPHEMERAL_SHARE_PREFIX: &str = "task-";
+const DEFAULT_AZCOPY_TIMEOUT_SECS: u64 = 900;
+const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
+    ".agents",
+    ".codex",
+    ".codex_remote_prompt.txt",
+    ".config",
+    ".discord_context.json",
+    ".env",
+    ".google_access_token",
+    ".secrets",
+    "incoming_attachments",
+    "incoming_email",
+    "references",
+];
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
@@ -396,28 +411,14 @@ fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> P
     }
 }
 
-fn reply_artifact_ready(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    if path.file_name().and_then(|value| value.to_str()) == Some(".notion_api_replied") {
-        return true;
-    }
-    match fs::read_to_string(path) {
-        Ok(contents) => !contents.trim().is_empty(),
-        Err(_) => fs::metadata(path)
-            .map(|meta| meta.len() > 0)
-            .unwrap_or(false),
-    }
-}
-
 fn maybe_recover_from_ready_reply_artifact(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: Option<i32>,
     failure_output: &str,
 ) -> Option<String> {
-    if !reply_expected || !reply_artifact_ready(expected_reply_path) {
+    if !reply_expected || !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
         return None;
     }
 
@@ -457,6 +458,7 @@ fn record_codex_success(
 
 fn validate_warm_pool_codex_result(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: i32,
     codex_output: &str,
@@ -469,6 +471,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             Some(exit_status),
             &err.to_string(),
@@ -493,6 +496,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             status,
             &err.to_string(),
@@ -502,11 +506,8 @@ fn validate_warm_pool_codex_result(
         return Err(err);
     }
 
-    if reply_expected && !reply_artifact_ready(expected_reply_path) {
-        return Err(RunTaskError::OutputMissing {
-            path: expected_reply_path.to_path_buf(),
-            output: output_tail,
-        });
+    if reply_expected {
+        ensure_expected_reply_artifact(workspace_dir, expected_reply_path, &output_tail)?;
     }
 
     Ok(None)
@@ -1035,6 +1036,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             output.status.code(),
             &err.to_string(),
@@ -1091,6 +1093,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             status,
             &err.to_string(),
@@ -1120,10 +1123,34 @@ pub(super) fn run_codex_task(
 
     // Only check for reply file if a reply was expected
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail.clone(),
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    output.status.code(),
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             output.status.code(),
@@ -1600,6 +1627,7 @@ fn run_codex_task_azure_aci(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             exit_status,
             &err.to_string(),
@@ -1634,10 +1662,35 @@ fn run_codex_task_azure_aci(
     }
 
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail,
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    exit_status,
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+                TIMING_COLLECTOR.record(timing.finish());
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             exit_status,
@@ -1787,6 +1840,139 @@ fn use_ephemeral_share() -> bool {
     env_enabled("RUN_TASK_AZURE_ACI_EPHEMERAL_SHARE")
 }
 
+const AZCOPY_RETRY_DELAYS_SECS: [u64; 2] = [2, 4];
+const REDACTED_SECRET_PLACEHOLDER: &str = "REDACTED";
+const SAS_QUERY_PARAM_KEYS: &[&str] = &[
+    "sig", "se", "sp", "sr", "ss", "srt", "st", "sv", "skoid", "sktid", "skt", "ske", "sks", "skv",
+];
+
+fn redact_query_param(input: &str, key: &str) -> String {
+    let pattern = format!("{key}=");
+    let mut redacted = String::with_capacity(input.len());
+    let mut remaining = input;
+
+    while let Some(idx) = remaining.find(&pattern) {
+        let value_start = idx + pattern.len();
+        redacted.push_str(&remaining[..value_start]);
+
+        let tail = &remaining[value_start..];
+        let value_end = tail
+            .char_indices()
+            .find_map(|(offset, ch)| match ch {
+                '&' | ' ' | '\n' | '\r' | '\t' | '"' | '\'' | '<' | '>' => Some(offset),
+                _ => None,
+            })
+            .unwrap_or(tail.len());
+
+        redacted.push_str(REDACTED_SECRET_PLACEHOLDER);
+        remaining = &tail[value_end..];
+    }
+
+    redacted.push_str(remaining);
+    redacted
+}
+
+fn redact_sensitive_text(input: &str, secrets: &[&str]) -> String {
+    let mut redacted = input.to_string();
+    for secret in secrets {
+        if !secret.is_empty() {
+            redacted = redacted.replace(secret, REDACTED_SECRET_PLACEHOLDER);
+        }
+    }
+    for key in SAS_QUERY_PARAM_KEYS {
+        redacted = redact_query_param(&redacted, key);
+    }
+    redacted
+}
+
+fn sanitize_command_output(output: &[u8], secrets: &[&str]) -> String {
+    redact_sensitive_text(&String::from_utf8_lossy(output), secrets)
+}
+
+fn format_command_failure_output(stdout: &[u8], stderr: &[u8], secrets: &[&str]) -> String {
+    let stderr = sanitize_command_output(stderr, secrets);
+    let stdout = sanitize_command_output(stdout, secrets);
+    format!(
+        "stderr:\n{}\nstdout:\n{}",
+        if stderr.trim().is_empty() {
+            "(empty)"
+        } else {
+            stderr.trim_end()
+        },
+        if stdout.trim().is_empty() {
+            "(empty)"
+        } else {
+            stdout.trim_end()
+        },
+    )
+}
+
+fn promote_downloaded_entry(source: &Path, dest: &Path) -> Result<(), RunTaskError> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata.is_dir() {
+        fs::create_dir_all(dest)?;
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            promote_downloaded_entry(&entry.path(), &dest.join(entry.file_name()))?;
+        }
+        let _ = fs::remove_dir(source);
+        return Ok(());
+    }
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    if let Ok(existing) = fs::symlink_metadata(dest) {
+        if existing.is_dir() {
+            fs::remove_dir_all(dest)?;
+        } else {
+            fs::remove_file(dest)?;
+        }
+    }
+
+    match fs::rename(source, dest) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(source, dest)?;
+            fs::remove_file(source)?;
+            Ok(())
+        }
+    }
+}
+
+fn promote_downloaded_workspace(
+    download_root: &Path,
+    workspace_dir: &Path,
+) -> Result<(), RunTaskError> {
+    fs::create_dir_all(workspace_dir)?;
+    for entry in fs::read_dir(download_root)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        if should_skip_downloaded_workspace_entry(&file_name) {
+            continue;
+        }
+        promote_downloaded_entry(&entry.path(), &workspace_dir.join(file_name))?;
+    }
+    Ok(())
+}
+
+fn should_skip_downloaded_workspace_entry(file_name: &std::ffi::OsStr) -> bool {
+    let name = file_name.to_string_lossy();
+    DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES
+        .iter()
+        .any(|candidate| *candidate == name)
+}
+
+fn azcopy_transfer_timeout() -> Duration {
+    env::var("RUN_TASK_AZCOPY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(DEFAULT_AZCOPY_TIMEOUT_SECS))
+}
+
 fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(), RunTaskError> {
     let output = Command::new("az")
         .arg("storage")
@@ -1800,12 +1986,13 @@ fn create_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(
         .arg(&config.storage_key)
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share create --name {} failed:\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1827,12 +2014,13 @@ fn delete_ephemeral_share(config: &AzureAciConfig, share_name: &str) -> Result<(
         .arg("include")
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share delete --name {} failed:\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1863,11 +2051,12 @@ fn generate_share_sas(config: &AzureAciConfig, share_name: &str) -> Result<Strin
         .arg("tsv")
         .output()?;
     if !output.status.success() {
+        let secrets = [config.storage_key.as_str()];
         return Err(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
                 "az storage share generate-sas failed:\n{}",
-                String::from_utf8_lossy(&output.stderr)
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
     }
@@ -1879,29 +2068,68 @@ fn upload_workspace_to_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
-    // Generate SAS token for azcopy auth
-    let sas = generate_share_sas(config, share_name)?;
-    let dest_url = format!(
-        "https://{}.file.core.windows.net/{}?{}",
-        config.storage_account, share_name, sas
-    );
-    let output = Command::new("azcopy")
-        .arg("copy")
-        .arg(format!("{}/*", workspace_dir.display()))
-        .arg(&dest_url)
-        .arg("--recursive")
-        .output()?;
-    if !output.status.success() {
-        return Err(RunTaskError::CodexFailed {
+    let secrets = [config.storage_key.as_str()];
+    let source = format!("{}/*", workspace_dir.display());
+    let mut last_error = None;
+
+    for (attempt, delay_secs) in AZCOPY_RETRY_DELAYS_SECS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+        .enumerate()
+    {
+        let sas = generate_share_sas(config, share_name)?;
+        let dest_url = format!(
+            "https://{}.file.core.windows.net/{}?{}",
+            config.storage_account, share_name, sas
+        );
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
+            .arg("copy")
+            .arg(&source)
+            .arg(&dest_url)
+            .arg("--recursive")
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy to share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let attempt_number = attempt + 1;
+        last_error = Some(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
-                "azcopy copy to share {} failed:\n{}",
+                "azcopy copy to share {} failed (attempt {}/{}):\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                attempt_number,
+                AZCOPY_RETRY_DELAYS_SECS.len() + 1,
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
+
+        if let Some(delay_secs) = delay_secs {
+            thread::sleep(Duration::from_secs(delay_secs));
+        }
     }
-    Ok(())
+
+    Err(last_error.unwrap_or(RunTaskError::CodexFailed {
+        status: None,
+        output: format!("azcopy copy to share {share_name} failed"),
+    }))
 }
 
 fn download_workspace_from_share(
@@ -1909,29 +2137,72 @@ fn download_workspace_from_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
-    // Generate SAS token for azcopy auth
-    let sas = generate_share_sas(config, share_name)?;
-    let source_url = format!(
-        "https://{}.file.core.windows.net/{}/*?{}",
-        config.storage_account, share_name, sas
-    );
-    let output = Command::new("azcopy")
-        .arg("copy")
-        .arg(&source_url)
-        .arg(workspace_dir)
-        .arg("--recursive")
-        .output()?;
-    if !output.status.success() {
-        return Err(RunTaskError::CodexFailed {
+    let secrets = [config.storage_key.as_str()];
+    let temp_parent = workspace_dir.parent().unwrap_or(workspace_dir);
+    let mut last_error = None;
+
+    for (attempt, delay_secs) in AZCOPY_RETRY_DELAYS_SECS
+        .iter()
+        .copied()
+        .map(Some)
+        .chain(std::iter::once(None))
+        .enumerate()
+    {
+        let sas = generate_share_sas(config, share_name)?;
+        let source_url = format!(
+            "https://{}.file.core.windows.net/{}/*?{}",
+            config.storage_account, share_name, sas
+        );
+        let temp_download_dir = tempfile::Builder::new()
+            .prefix(".azcopy-download-")
+            .tempdir_in(temp_parent)?;
+        let mut copy_cmd = Command::new("azcopy");
+        copy_cmd
+            .arg("copy")
+            .arg(&source_url)
+            .arg(temp_download_dir.path())
+            .arg("--recursive")
+            .arg("--overwrite=true");
+        let output = match run_command_with_timeout(
+            copy_cmd,
+            azcopy_transfer_timeout(),
+            "azcopy copy from share",
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                last_error = Some(err);
+                if let Some(delay_secs) = delay_secs {
+                    thread::sleep(Duration::from_secs(delay_secs));
+                }
+                continue;
+            }
+        };
+        if output.status.success() {
+            promote_downloaded_workspace(temp_download_dir.path(), workspace_dir)?;
+            return Ok(());
+        }
+
+        let attempt_number = attempt + 1;
+        last_error = Some(RunTaskError::CodexFailed {
             status: output.status.code(),
             output: format!(
-                "azcopy copy from share {} failed:\n{}",
+                "azcopy copy from share {} failed (attempt {}/{}):\n{}",
                 share_name,
-                String::from_utf8_lossy(&output.stderr)
+                attempt_number,
+                AZCOPY_RETRY_DELAYS_SECS.len() + 1,
+                format_command_failure_output(&output.stdout, &output.stderr, &secrets)
             ),
         });
+
+        if let Some(delay_secs) = delay_secs {
+            thread::sleep(Duration::from_secs(delay_secs));
+        }
     }
-    Ok(())
+
+    Err(last_error.unwrap_or(RunTaskError::CodexFailed {
+        status: None,
+        output: format!("azcopy copy from share {share_name} failed"),
+    }))
 }
 
 struct EphemeralShareGuard<'a> {
@@ -3775,6 +4046,7 @@ pub fn run_codex_warm_pool(
     let token_usage = extract_token_usage(&codex_output);
     let recovery_note = validate_warm_pool_codex_result(
         !request.reply_to.is_empty(),
+        workspace_dir,
         &reply_html_path,
         completion.exit_code,
         &codex_output,
@@ -5157,7 +5429,138 @@ printf '%s\n' "$@" > "$capture_file"
         let reply = temp.path().join("reply_email_draft.html");
         fs::write(&reply, "   \n\t").expect("write reply");
 
-        assert!(!reply_artifact_ready(&reply));
+        assert!(!reply_artifact_ready_for_workspace(temp.path(), &reply));
+    }
+
+    #[test]
+    fn test_format_command_failure_output_redacts_sas_and_storage_key() {
+        let stdout = br#"INFO: Copying from https://acct.file.core.windows.net/share?sv=2022-11-02&sig=abc123&se=2099-01-01 to /tmp/out using key testkey123"#;
+        let stderr = br#"ERROR: auth failed for sig=abc123 and storage key testkey123"#;
+
+        let formatted = format_command_failure_output(stdout, stderr, &["testkey123"]);
+
+        assert!(formatted.contains("sig=REDACTED"));
+        assert!(formatted.contains("se=REDACTED"));
+        assert!(formatted.contains("REDACTED"));
+        assert!(!formatted.contains("abc123"));
+        assert!(!formatted.contains("testkey123"));
+    }
+
+    #[test]
+    fn test_promote_downloaded_workspace_overwrites_outputs_without_removing_unrelated_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let download_root = temp.path().join("download");
+        let workspace_dir = temp.path().join("workspace");
+
+        fs::create_dir_all(download_root.join("nested")).expect("create nested download dir");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::write(
+            download_root.join("reply_email_draft.html"),
+            "<html>new</html>",
+        )
+        .expect("write downloaded reply");
+        fs::write(download_root.join("nested").join("result.txt"), "fresh").expect("write nested");
+        fs::write(
+            workspace_dir.join("reply_email_draft.html"),
+            "<html>old</html>",
+        )
+        .expect("write old reply");
+        fs::write(workspace_dir.join("keep.txt"), "keep me").expect("write unrelated file");
+
+        promote_downloaded_workspace(&download_root, &workspace_dir).expect("promote workspace");
+
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("reply_email_draft.html"))
+                .expect("read promoted reply"),
+            "<html>new</html>"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("nested").join("result.txt"))
+                .expect("read nested result"),
+            "fresh"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("keep.txt")).expect("read unrelated file"),
+            "keep me"
+        );
+    }
+
+    #[test]
+    fn test_promote_downloaded_workspace_skips_transient_root_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let download_root = temp.path().join("download");
+        let workspace_dir = temp.path().join("workspace");
+
+        fs::create_dir_all(download_root.join(".codex")).expect("create remote codex dir");
+        fs::create_dir_all(download_root.join("incoming_email")).expect("create remote input dir");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(workspace_dir.join(".codex")).expect("create local codex dir");
+        fs::create_dir_all(workspace_dir.join("incoming_email")).expect("create local input dir");
+
+        fs::write(
+            download_root.join("reply_email_draft.html"),
+            "<html>fresh</html>",
+        )
+        .expect("write remote reply");
+        fs::write(download_root.join(".codex_remote_exit_code"), "0").expect("write remote exit");
+        fs::write(download_root.join(".env"), "remote").expect("write remote env");
+        fs::write(
+            download_root.join(".codex").join("state.sqlite"),
+            "remote-state",
+        )
+        .expect("write remote codex");
+        fs::write(
+            download_root
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "remote-input",
+        )
+        .expect("write remote input");
+
+        fs::write(workspace_dir.join(".env"), "local").expect("write local env");
+        fs::write(
+            workspace_dir.join(".codex").join("state.sqlite"),
+            "local-state",
+        )
+        .expect("write local codex");
+        fs::write(
+            workspace_dir
+                .join("incoming_email")
+                .join("postmark_payload.json"),
+            "local-input",
+        )
+        .expect("write local input");
+
+        promote_downloaded_workspace(&download_root, &workspace_dir).expect("promote workspace");
+
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("reply_email_draft.html"))
+                .expect("read promoted reply"),
+            "<html>fresh</html>"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex_remote_exit_code"))
+                .expect("read promoted exit"),
+            "0"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".env")).expect("read preserved env"),
+            "local"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join(".codex").join("state.sqlite"))
+                .expect("read preserved codex"),
+            "local-state"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                workspace_dir
+                    .join("incoming_email")
+                    .join("postmark_payload.json")
+            )
+            .expect("read preserved input"),
+            "local-input"
+        );
     }
 
     #[test]
@@ -5168,6 +5571,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = maybe_recover_from_ready_reply_artifact(
             true,
+            temp.path(),
             &reply,
             Some(23),
             "response.failed event received",
@@ -5182,8 +5586,9 @@ printf '%s\n' "$@" > "$capture_file"
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
 
-        let err = validate_warm_pool_codex_result(true, &reply, 1, "stream disconnected")
-            .expect_err("expected CodexFailed");
+        let err =
+            validate_warm_pool_codex_result(true, temp.path(), &reply, 1, "stream disconnected")
+                .expect_err("expected CodexFailed");
 
         match err {
             RunTaskError::CodexFailed { status, output } => {
@@ -5202,6 +5607,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let err = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             0,
             r#"{"type":"event_msg","payload":{"type":"task_complete","status":"success","exit_code":0}}"#,
@@ -5219,6 +5625,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             1,
             "I'm sorry, but I cannot assist with that request.",
@@ -5604,6 +6011,7 @@ printf '%s\n' "$@" > "$capture_file"
         let args = fs::read_to_string(&capture_path).expect("read captured args");
         assert!(args.contains("copy"));
         assert!(args.contains("--recursive"));
+        assert!(args.contains("--overwrite=true"));
         assert!(args.contains("teststorage.file.core.windows.net"));
         assert!(args.contains("task-test-123"));
         assert!(args.contains(&workspace_dir.to_string_lossy().to_string()));
@@ -5646,6 +6054,8 @@ fi
 set -e
 capture_file="${TEST_AZCOPY_CAPTURE_FILE:?}"
 printf '%s\n' "$@" > "$capture_file"
+mkdir -p "$3"
+printf 'downloaded result' > "$3/result.txt"
 "#,
         )
         .expect("write fake azcopy");
@@ -5684,9 +6094,13 @@ printf '%s\n' "$@" > "$capture_file"
         let args = fs::read_to_string(&capture_path).expect("read captured args");
         assert!(args.contains("copy"));
         assert!(args.contains("--recursive"));
+        assert!(args.contains("--overwrite=true"));
         assert!(args.contains("teststorage.file.core.windows.net"));
         assert!(args.contains("task-test-123"));
-        assert!(args.contains(&workspace_dir.to_string_lossy().to_string()));
+        assert_eq!(
+            fs::read_to_string(workspace_dir.join("result.txt")).expect("read promoted download"),
+            "downloaded result"
+        );
     }
 
     #[test]

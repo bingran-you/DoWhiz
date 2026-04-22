@@ -753,8 +753,8 @@ fn load_payload_summary(payload_path: &Path) -> Option<PayloadSummary> {
         message_id: json_string(&payload_json, "MessageID")
             .or_else(|| json_string(&payload_json, "MessageId"))
             .unwrap_or_default(),
-        text_body: json_string(&payload_json, "TextBody")
-            .or_else(|| json_string(&payload_json, "StrippedTextReply")),
+        text_body: json_string(&payload_json, "StrippedTextReply")
+            .or_else(|| json_string(&payload_json, "TextBody")),
         html_body: json_string(&payload_json, "HtmlBody"),
     })
 }
@@ -826,8 +826,12 @@ pub(super) fn create_unique_dir(root: &Path, base: &str) -> Result<PathBuf, std:
 mod tests {
     use super::*;
     use crate::domain::workspace_blueprint::StartupWorkspaceBlueprint;
+    use crate::employee_config::EmployeeProfile;
+    use crate::user_store::UserPaths;
     use serde_json::json;
+    use std::collections::HashSet;
     use std::fs;
+    use std::path::Path;
     use tempfile::tempdir;
 
     #[test]
@@ -936,5 +940,60 @@ mod tests {
         assert!(incoming_attachments.join("brief_v1.txt").exists());
         assert!(incoming_attachments.join("brief_v2.txt").exists());
         assert!(incoming_attachments.join("thread_manifest.json").exists());
+    }
+
+    #[test]
+    fn ensure_thread_workspace_copies_runtime_investment_skill() {
+        let temp = tempdir().expect("tempdir");
+        let user_root = temp.path().join("user");
+        let user_paths = UserPaths {
+            root: user_root.clone(),
+            state_dir: user_root.join("state"),
+            tasks_db_path: user_root.join("state/tasks.db"),
+            memory_dir: user_root.join("memory"),
+            secrets_dir: user_root.join("secrets"),
+            mail_root: user_root.join("mail"),
+            workspaces_root: user_root.join("workspaces"),
+        };
+        fs::create_dir_all(&user_paths.mail_root).expect("mail root");
+        fs::create_dir_all(&user_paths.workspaces_root).expect("workspaces root");
+
+        let employee = EmployeeProfile {
+            id: "little_bear".to_string(),
+            display_name: Some("Oliver".to_string()),
+            runner: "codex".to_string(),
+            model: Some("gpt-5.4".to_string()),
+            addresses: vec!["oliver@dowhiz.com".to_string()],
+            address_set: HashSet::from(["oliver@dowhiz.com".to_string()]),
+            runtime_root: None,
+            agents_path: None,
+            claude_path: None,
+            soul_path: None,
+            skills_dir: None,
+            discord_enabled: false,
+            slack_enabled: false,
+            bluebubbles_enabled: false,
+        };
+
+        let service_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("scheduler_module lives under DoWhiz_service");
+        let skills_root = service_root.join("skills");
+
+        let workspace = ensure_thread_workspace(
+            &user_paths,
+            "user-123",
+            "thread:investment",
+            &employee,
+            Some(&skills_root),
+        )
+        .expect("workspace");
+
+        assert!(
+            workspace
+                .join(".agents/skills/us-equity-daily-monitor/SKILL.md")
+                .exists(),
+            "runtime investment skill should be copied into the live workspace skill path"
+        );
     }
 }

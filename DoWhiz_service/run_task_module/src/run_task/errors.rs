@@ -64,6 +64,11 @@ pub enum RunTaskError {
         path: PathBuf,
         output: String,
     },
+    OutputContractViolation {
+        path: PathBuf,
+        reason: String,
+        output: String,
+    },
 }
 
 impl fmt::Display for RunTaskError {
@@ -153,6 +158,17 @@ impl fmt::Display for RunTaskError {
                     output
                 )
             }
+            RunTaskError::OutputContractViolation {
+                path,
+                reason,
+                output,
+            } => write!(
+                f,
+                "Output contract violation at {}: {}\nCodex output tail:\n{}",
+                path.display(),
+                reason,
+                output
+            ),
         }
     }
 }

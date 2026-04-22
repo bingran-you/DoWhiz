@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::mongo_store::{
     create_client_from_env, database_from_env, ensure_index_compatible, get_shared_client,
-    retry_mongo_write,
+    retry_mongo_read, retry_mongo_write,
 };
 
 use super::super::types::{Schedule, ScheduledTask, SchedulerError, TaskKind};
@@ -97,6 +97,18 @@ impl MongoSchedulerStore {
                     "owner_scope.kind": 1,
                     "owner_scope.id": 1,
                     "task_id": 1,
+                    "started_at": -1
+                })
+                .build(),
+        )
+        .map_err(mongo_err)?;
+        ensure_index_compatible(
+            &executions,
+            IndexModel::builder()
+                .keys(doc! {
+                    "owner_scope.kind": 1,
+                    "status": 1,
+                    "owner_scope.id": 1,
                     "started_at": -1
                 })
                 .build(),
@@ -271,9 +283,8 @@ impl MongoSchedulerStore {
     /// This prevents duplicate executions when the worker process restarts
     /// and loses its in-memory claims state.
     pub(crate) fn has_running_execution(&self, task_id: &str) -> Result<bool, SchedulerError> {
-        let count = self
-            .executions
-            .count_documents(
+        let count = retry_mongo_read("task_executions.has_running_execution", || {
+            self.executions.count_documents(
                 doc! {
                     "owner_scope.kind": &self.owner_kind,
                     "owner_scope.id": &self.owner_id,
@@ -282,7 +293,8 @@ impl MongoSchedulerStore {
                 },
                 None,
             )
-            .map_err(mongo_err)?;
+        })
+        .map_err(mongo_err)?;
         Ok(count > 0)
     }
 
@@ -355,9 +367,8 @@ impl MongoSchedulerStore {
         now: chrono::DateTime<Utc>,
         stale_after: ChronoDuration,
     ) -> Result<ExecutionReconciliationSummary, SchedulerError> {
-        let task_ids = self
-            .executions
-            .distinct(
+        let task_ids = retry_mongo_read("task_executions.distinct_running_task_ids", || {
+            self.executions.distinct(
                 "task_id",
                 doc! {
                     "owner_scope.kind": &self.owner_kind,
@@ -366,7 +377,8 @@ impl MongoSchedulerStore {
                 },
                 None,
             )
-            .map_err(mongo_err)?;
+        })
+        .map_err(mongo_err)?;
 
         let mut summary = ExecutionReconciliationSummary::default();
         for task_id in task_ids {
@@ -1726,6 +1738,7 @@ mod tests {
         let task = sample_one_shot_task(started_at - ChronoDuration::minutes(5));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 42,
             started_at,
             finished_at: None,
@@ -1762,6 +1775,7 @@ mod tests {
         task.last_run = Some(now - ChronoDuration::minutes(9));
         let execution = ExecutionRow {
             doc_id: Bson::Null,
+            task_id: task.id.to_string(),
             execution_id: 7,
             started_at,
             finished_at: Some(now - ChronoDuration::minutes(9)),

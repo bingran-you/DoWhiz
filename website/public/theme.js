@@ -188,7 +188,7 @@
 
   function shouldMountSharedNav() {
     const pathname = getContentPathname(window.location.pathname);
-    return pathname !== '/' && pathname !== '/index.html';
+    return pathname !== '/' && pathname !== '/index.html' && pathname !== '/oliver' && pathname !== '/oliver/';
   }
 
   function getActiveNavHref(pathname) {

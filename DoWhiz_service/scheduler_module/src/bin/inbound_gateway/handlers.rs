@@ -20,7 +20,8 @@ use scheduler_module::adapters::bluebubbles::BlueBubblesInboundAdapter;
 use scheduler_module::adapters::lark::LarkInboundAdapter;
 use scheduler_module::adapters::postmark::PostmarkInboundPayload;
 use scheduler_module::adapters::slack::{
-    is_url_verification, SlackChallengeResponse, SlackEventWrapper, SlackInboundAdapter,
+    is_url_verification, slack_message_subtype_is_supported_for_inbound, SlackChallengeResponse,
+    SlackEventWrapper, SlackInboundAdapter,
 };
 use scheduler_module::adapters::telegram::TelegramInboundAdapter;
 use scheduler_module::adapters::wechat::WeChatInboundAdapter;
@@ -45,6 +46,7 @@ use super::verify::{
 const SLACK_ENGAGED_THREAD_TTL: StdDuration = StdDuration::from_secs(12 * 60 * 60);
 const WECHAT_MP_PASSIVE_ACK_BODY: &str = "success";
 const WECHAT_MP_PASSIVE_REPLY_TEXT_ENV: &str = "WECHAT_MP_PASSIVE_REPLY_TEXT";
+const WECHAT_MP_PASSIVE_REPLY_TEXT_DEFAULT: &str = "已收到消息，正在处理中，请稍候。";
 
 /// Request payload for creating a workspace brief document
 #[derive(Debug, Deserialize)]
@@ -328,7 +330,7 @@ fn should_enqueue_slack_message(wrapper: &SlackEventWrapper, bot_user_id: Option
     let Some(event) = wrapper.event.as_ref() else {
         return false;
     };
-    if event.subtype.is_some() {
+    if !slack_message_subtype_is_supported_for_inbound(event.subtype.as_deref()) {
         return false;
     }
     // Filter out bot messages to prevent self-loops
@@ -931,17 +933,31 @@ async fn process_wechat_mp_async(
 fn wechat_mp_passive_ack_response(message: Option<&InboundMessage>) -> Response {
     if let (Some(reply_text), Some(message)) = (resolve_wechat_mp_passive_reply_text(), message) {
         if let Some(response) = build_wechat_mp_passive_text_response(message, &reply_text) {
+            info!(
+                "wechat_mp returning passive XML reply, text_len={}",
+                reply_text.len()
+            );
             return response;
         }
+        warn!(
+            "wechat_mp failed to build passive XML reply, falling back to 'success'. open_id={:?}, app_id={:?}",
+            message.metadata.wechat_mp_open_id,
+            message.metadata.wechat_mp_app_id
+        );
     }
+    info!("wechat_mp returning plain 'success' ack");
     (StatusCode::OK, WECHAT_MP_PASSIVE_ACK_BODY).into_response()
 }
 
 fn resolve_wechat_mp_passive_reply_text() -> Option<String> {
-    std::env::var(WECHAT_MP_PASSIVE_REPLY_TEXT_ENV)
+    let env_value = std::env::var(WECHAT_MP_PASSIVE_REPLY_TEXT_ENV)
         .ok()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+
+    // Use default passive reply text if env var is not set
+    // This ensures users always get immediate feedback when sending a message
+    Some(env_value.unwrap_or_else(|| WECHAT_MP_PASSIVE_REPLY_TEXT_DEFAULT.to_string()))
 }
 
 fn build_wechat_mp_passive_text_response(
@@ -2188,6 +2204,35 @@ mod tests {
                 event_ts: None,
             }),
             event_id: Some("Ev3".to_string()),
+            event_time: None,
+        };
+
+        assert!(should_enqueue_slack_message(&wrapper, None));
+    }
+
+    #[test]
+    fn should_enqueue_slack_message_accepts_file_share_dm_message() {
+        let wrapper = SlackEventWrapper {
+            event_type: "event_callback".to_string(),
+            challenge: None,
+            token: None,
+            team_id: Some("T1".to_string()),
+            api_app_id: Some("A1".to_string()),
+            event: Some(SlackMessageEvent {
+                event_type: "message".to_string(),
+                subtype: Some("file_share".to_string()),
+                channel: Some("D1".to_string()),
+                user: Some("U1".to_string()),
+                text: Some("project zip attached".to_string()),
+                ts: "1.031".to_string(),
+                thread_ts: None,
+                bot_id: None,
+                app_id: None,
+                files: None,
+                channel_type: Some("im".to_string()),
+                event_ts: None,
+            }),
+            event_id: Some("Ev3_file_share".to_string()),
             event_time: None,
         };
 

@@ -50,6 +50,7 @@ use super::env::{load_env_sources, read_env_trimmed, remove_restricted_agent_env
 use super::errors::RunTaskError;
 use super::github_auth::{ensure_github_cli_auth, resolve_github_auth};
 use super::prompt::{build_prompt_with_fast_completion, load_memory_context};
+use super::reply_contract::{ensure_expected_reply_artifact, reply_artifact_ready_for_workspace};
 use super::scheduled::{extract_scheduled_tasks, extract_scheduler_actions};
 use super::trace::RunTaskTraceRecorder;
 use super::types::{RunTaskOutput, RunTaskRequest};
@@ -143,6 +144,7 @@ pub(super) fn run_claude_task(
                 resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
             if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
                 !request.reply_to.is_empty(),
+                request.workspace_dir,
                 &expected_reply_path,
                 &err,
             ) {
@@ -200,10 +202,28 @@ pub(super) fn run_claude_task(
     // Use cross-channel routing to determine actual expected path
     let expected_reply_path =
         resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
-    if !request.reply_to.is_empty() && !expected_reply_path.exists() {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: assistant_tail,
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &assistant_tail,
+        ) {
+            Ok(()) => {
+                let _ = trace.finish(output.status.code(), true, None, None);
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: assistant_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage: None, // TODO: Extract from Claude API response
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(output.status.code(), false, Some(&err.to_string()), None);
         return Err(err);
@@ -378,27 +398,13 @@ fn run_claude_command(
     }
 }
 
-fn reply_artifact_ready(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    if path.file_name().and_then(|value| value.to_str()) == Some(".notion_api_replied") {
-        return true;
-    }
-    match fs::read_to_string(path) {
-        Ok(contents) => !contents.trim().is_empty(),
-        Err(_) => fs::metadata(path)
-            .map(|meta| meta.len() > 0)
-            .unwrap_or(false),
-    }
-}
-
 fn maybe_recover_from_ready_reply_artifact(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     err: &RunTaskError,
 ) -> Option<String> {
-    if !reply_expected || !reply_artifact_ready(expected_reply_path) {
+    if !reply_expected || !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
         return None;
     }
 
