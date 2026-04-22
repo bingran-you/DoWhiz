@@ -1,0 +1,63 @@
+{
+  "skill_name": "us-equity-daily-monitor",
+  "evals": [
+    {
+      "id": 1,
+      "name": "final-artifact-contract-nvda",
+      "kind": "live_run",
+      "subject": "NVDA investment memo",
+      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+      "require_contract": true
+    },
+    {
+      "id": 2,
+      "name": "anti-generic-output-fixture",
+      "kind": "fixture",
+      "artifact_html": "<p>NVIDIA is a good business, but I would wait until after earnings and buy in tranches.</p>",
+      "expected_failure": true
+    },
+    {
+      "id": 3,
+      "name": "horizon-awareness-nvda-3-month",
+      "kind": "live_run",
+      "subject": "NVDA 3-month position",
+      "prompt": "Is NVDA a buy this week for a 3-month position?",
+      "require_contract": true,
+      "expected_horizon_contains": "medium-term",
+      "expected_question_type_contains": "medium-term investment"
+    },
+    {
+      "id": 4,
+      "name": "live-path-alignment-nvda",
+      "kind": "live_run",
+      "subject": "NVDA alignment check",
+      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+      "require_contract": true,
+      "require_live_path_alignment": true
+    },
+    {
+      "id": 5,
+      "name": "wrong-premise-correction-nvda",
+      "kind": "live_run",
+      "subject": "NVDA earnings timing",
+      "prompt": "NVDA earnings are on May 27, 2026, right? Should I buy before them?",
+      "require_contract": true,
+      "must_contain_any": [
+        "May 20, 2026",
+        "May 20 2026"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "weak-case-confidence-plug",
+      "kind": "live_run",
+      "subject": "PLUG investment memo",
+      "prompt": "Give me deep research on PLUG and tell me whether now is a good time to buy.",
+      "require_contract": true,
+      "allowed_confidence": [
+        "low",
+        "medium"
+      ]
+    }
+  ]
+}

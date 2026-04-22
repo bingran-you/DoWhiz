@@ -3,12 +3,14 @@ mod support;
 use run_task_module::{
     run_claude_fallback_after_codex_failure, run_task, RunTaskError, RunTaskParams,
 };
+use send_emails_module::normalize_email_html;
 use std::env;
 use std::fs;
 use std::path::Path;
 use support::{
-    build_params, create_workspace, write_fake_claude, write_fake_codex, write_fake_gh, EnvGuard,
-    EnvUnsetGuard, FakeClaudeMode, FakeCodexMode, TempDir, ENV_MUTEX,
+    build_params, create_workspace, install_runtime_skills_and_employee_guidance,
+    write_fake_claude, write_fake_codex, write_fake_gh, EnvGuard, EnvUnsetGuard, FakeClaudeMode,
+    FakeCodexMode, TempDir, ENV_MUTEX,
 };
 
 fn env_enabled(key: &str) -> bool {
@@ -20,6 +22,48 @@ fn require_env(key: &'static str) {
     if value.trim().is_empty() {
         panic!("{key} must be set to run the real Codex E2E test");
     }
+}
+
+fn assert_investment_contract_labels(text: &str) {
+    for label in [
+        "Rating:",
+        "Horizon:",
+        "Confidence:",
+        "Timing Verdict:",
+        "Verified Facts",
+        "Derived Metrics",
+        "Bull Case",
+        "Base Case",
+        "Bear Case",
+        "Add Criteria:",
+        "Invalidation Criteria:",
+        "Biggest Near-Term Risk:",
+        "Biggest Long-Term Strength:",
+    ] {
+        assert!(text.contains(label), "missing label {label}");
+    }
+}
+
+fn write_investment_request(workspace: &Path, subject: &str, prompt: &str) {
+    let payload = format!(
+        r#"{{
+  "Subject": "{subject}",
+  "TextBody": "{prompt}",
+  "HtmlBody": "<p>{prompt}</p>"
+}}"#
+    );
+    fs::write(
+        workspace
+            .join("incoming_email")
+            .join("postmark_payload.json"),
+        payload,
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("incoming_email").join("email.html"),
+        format!("<p>{prompt}</p>"),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -1070,6 +1114,150 @@ fn run_task_codex_disabled_skips_placeholder_without_reply_to() {
 
 #[test]
 #[cfg(unix)]
+fn run_task_accepts_structured_investment_reply_from_fake_codex() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_structured").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::InvestmentStructured).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace)).unwrap();
+    let html = fs::read_to_string(result.reply_html_path).unwrap();
+    assert!(html.contains("Timing Verdict"));
+    assert!(html.contains("Verified Facts"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_final_artifact_preserves_investment_contract_after_email_normalization() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_final_artifact").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::InvestmentStructured).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace)).unwrap();
+    assert!(result.reply_html_path.ends_with("reply_email_draft.html"));
+
+    let raw_reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert_investment_contract_labels(&raw_reply);
+
+    let final_html = normalize_email_html("NVDA investment memo", &raw_reply);
+    assert_investment_contract_labels(&final_html);
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_investment_contract_violation_triggers_claude_fallback() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_fallback").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::InvestmentGeneric).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentStructured).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace)).unwrap();
+    let html = fs::read_to_string(result.reply_html_path).unwrap();
+    let recovery = result.recovery_note.unwrap_or_default();
+    assert!(recovery.contains("Claude fallback"));
+    assert!(html.contains("Timing Verdict"));
+    assert!(html.contains("Bull Case"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_investment_contract_violation_fails_closed_when_fallback_is_still_generic() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_fail_closed").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::InvestmentGeneric).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentGeneric).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let err = run_task(&build_params(&workspace)).expect_err("expected fail-closed contract error");
+    let rendered = err.to_string();
+    assert!(rendered.contains("Output contract violation"));
+    assert!(rendered.contains("missing required labels"));
+}
+
+#[test]
+#[cfg(unix)]
 fn run_task_real_codex_e2e_when_enabled() {
     let _lock = ENV_MUTEX.lock().unwrap();
     if !env_enabled("RUN_CODEX_E2E") {
@@ -1097,4 +1285,36 @@ fn run_task_real_codex_e2e_when_enabled() {
 
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
     assert!(!html.trim().is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_real_codex_investment_contract_e2e_when_enabled() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    if !env_enabled("RUN_CODEX_E2E") {
+        eprintln!("RUN_CODEX_E2E not set; skipping investment Codex E2E test.");
+        return;
+    }
+
+    require_env("AZURE_OPENAI_API_KEY_BACKUP");
+    require_env("AZURE_OPENAI_ENDPOINT_BACKUP");
+
+    let temp = TempDir::new("codex_task_investment_real_e2e").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    fs::create_dir_all(&home_dir).unwrap();
+    let _env = EnvGuard::set(&[("HOME", home_dir.to_str().unwrap())]);
+
+    let result = run_task(&build_params(&workspace)).unwrap_or_else(|err| {
+        panic!("Real investment Codex E2E test failed: {err}");
+    });
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert_investment_contract_labels(&html);
 }

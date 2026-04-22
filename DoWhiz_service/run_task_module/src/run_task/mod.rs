@@ -9,6 +9,7 @@ mod errors;
 mod github_auth;
 pub mod pool_manager;
 mod prompt;
+mod reply_contract;
 mod scheduled;
 pub mod timing;
 mod trace;

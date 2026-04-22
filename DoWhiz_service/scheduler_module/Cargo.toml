@@ -103,6 +103,10 @@ path = "src/bin/grocery_cli.rs"
 name = "task_status_cli"
 path = "src/bin/task_status_cli.rs"
 
+[[bin]]
+name = "investment_eval"
+path = "src/bin/investment_eval.rs"
+
 [dev-dependencies]
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder"] }
 mockito = "1"

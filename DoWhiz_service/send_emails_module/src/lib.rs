@@ -1379,6 +1379,54 @@ mod tests {
     }
 
     #[test]
+    fn normalize_email_html_preserves_investment_contract_labels() {
+        let normalized = normalize_email_html(
+            "NVDA investment memo",
+            r#"
+            <h2>Final Recommendation</h2>
+            <ul>
+              <li><strong>Rating:</strong> Wait</li>
+              <li><strong>Horizon:</strong> Medium-term (stated)</li>
+              <li><strong>Confidence:</strong> Medium</li>
+              <li><strong>Timing Verdict:</strong> Wait</li>
+              <li><strong>Add Criteria:</strong> Better entry after earnings.</li>
+              <li><strong>Invalidation Criteria:</strong> Margin guide weakens.</li>
+              <li><strong>Biggest Near-Term Risk:</strong> Earnings volatility.</li>
+              <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
+            </ul>
+            <h2>Verified Facts</h2><ul><li>Fact one.</li></ul>
+            <h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x</li></ul>
+            <h2>Scenario Analysis</h2>
+            <p><strong>Bull Case:</strong> Demand stays strong.</p>
+            <p><strong>Base Case:</strong> Growth normalizes.</p>
+            <p><strong>Bear Case:</strong> Spending slows.</p>
+            "#,
+        );
+
+        let text = plain_text_body_from_html(&normalized);
+        for label in [
+            "Rating:",
+            "Horizon:",
+            "Confidence:",
+            "Timing Verdict:",
+            "Verified Facts",
+            "Derived Metrics",
+            "Bull Case:",
+            "Base Case:",
+            "Bear Case:",
+            "Add Criteria:",
+            "Invalidation Criteria:",
+            "Biggest Near-Term Risk:",
+            "Biggest Long-Term Strength:",
+        ] {
+            assert!(
+                normalized.contains(label) || text.contains(label),
+                "expected normalized email content to preserve label {label}"
+            );
+        }
+    }
+
+    #[test]
     fn normalize_email_html_wraps_data_tables_in_scroll_container() {
         let normalized = normalize_email_html(
             "Weekly metrics",

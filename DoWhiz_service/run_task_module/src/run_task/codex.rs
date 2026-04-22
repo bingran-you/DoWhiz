@@ -28,6 +28,7 @@ use super::env::{
 use super::errors::RunTaskError;
 use super::github_auth::{ensure_github_cli_auth, resolve_github_auth};
 use super::prompt::{build_prompt, load_memory_context};
+use super::reply_contract::{ensure_expected_reply_artifact, reply_artifact_ready_for_workspace};
 use super::scheduled::{extract_scheduled_tasks, extract_scheduler_actions};
 use super::timing::{TaskTimingBuilder, TIMING_COLLECTOR};
 use super::trace::RunTaskTraceRecorder;
@@ -267,28 +268,14 @@ fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> P
     }
 }
 
-fn reply_artifact_ready(path: &Path) -> bool {
-    if !path.is_file() {
-        return false;
-    }
-    if path.file_name().and_then(|value| value.to_str()) == Some(".notion_api_replied") {
-        return true;
-    }
-    match fs::read_to_string(path) {
-        Ok(contents) => !contents.trim().is_empty(),
-        Err(_) => fs::metadata(path)
-            .map(|meta| meta.len() > 0)
-            .unwrap_or(false),
-    }
-}
-
 fn maybe_recover_from_ready_reply_artifact(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: Option<i32>,
     failure_output: &str,
 ) -> Option<String> {
-    if !reply_expected || !reply_artifact_ready(expected_reply_path) {
+    if !reply_expected || !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
         return None;
     }
 
@@ -328,6 +315,7 @@ fn record_codex_success(
 
 fn validate_warm_pool_codex_result(
     reply_expected: bool,
+    workspace_dir: &Path,
     expected_reply_path: &Path,
     exit_status: i32,
     codex_output: &str,
@@ -340,6 +328,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             Some(exit_status),
             &err.to_string(),
@@ -364,6 +353,7 @@ fn validate_warm_pool_codex_result(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             reply_expected,
+            workspace_dir,
             expected_reply_path,
             status,
             &err.to_string(),
@@ -373,11 +363,8 @@ fn validate_warm_pool_codex_result(
         return Err(err);
     }
 
-    if reply_expected && !reply_artifact_ready(expected_reply_path) {
-        return Err(RunTaskError::OutputMissing {
-            path: expected_reply_path.to_path_buf(),
-            output: output_tail,
-        });
+    if reply_expected {
+        ensure_expected_reply_artifact(workspace_dir, expected_reply_path, &output_tail)?;
     }
 
     Ok(None)
@@ -906,6 +893,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             output.status.code(),
             &err.to_string(),
@@ -962,6 +950,7 @@ pub(super) fn run_codex_task(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             status,
             &err.to_string(),
@@ -991,10 +980,34 @@ pub(super) fn run_codex_task(
 
     // Only check for reply file if a reply was expected
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail.clone(),
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    output.status.code(),
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             output.status.code(),
@@ -1463,6 +1476,7 @@ fn run_codex_task_azure_aci(
         };
         if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
             !request.reply_to.is_empty(),
+            request.workspace_dir,
             &expected_reply_path,
             exit_status,
             &err.to_string(),
@@ -1497,10 +1511,35 @@ fn run_codex_task_azure_aci(
     }
 
     // Use cross-channel routing to determine actual expected path
-    if !request.reply_to.is_empty() && !reply_artifact_ready(&expected_reply_path) {
-        let err = RunTaskError::OutputMissing {
-            path: expected_reply_path,
-            output: output_tail,
+    if !request.reply_to.is_empty() {
+        let err = match ensure_expected_reply_artifact(
+            request.workspace_dir,
+            &expected_reply_path,
+            &output_tail,
+        ) {
+            Ok(()) => {
+                record_codex_success(
+                    &mut trace,
+                    exit_status,
+                    &output_tail,
+                    None,
+                    token_usage.as_ref(),
+                );
+                TIMING_COLLECTOR.record(timing.finish());
+
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path,
+                    reply_attachments_dir,
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: None,
+                });
+            }
+            Err(err) => err,
         };
         let _ = trace.finish(
             exit_status,
@@ -3808,6 +3847,7 @@ pub fn run_codex_warm_pool(
     let token_usage = extract_token_usage(&codex_output);
     let recovery_note = validate_warm_pool_codex_result(
         !request.reply_to.is_empty(),
+        workspace_dir,
         &reply_html_path,
         completion.exit_code,
         &codex_output,
@@ -5190,7 +5230,7 @@ printf '%s\n' "$@" > "$capture_file"
         let reply = temp.path().join("reply_email_draft.html");
         fs::write(&reply, "   \n\t").expect("write reply");
 
-        assert!(!reply_artifact_ready(&reply));
+        assert!(!reply_artifact_ready_for_workspace(temp.path(), &reply));
     }
 
     #[test]
@@ -5254,6 +5294,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = maybe_recover_from_ready_reply_artifact(
             true,
+            temp.path(),
             &reply,
             Some(23),
             "response.failed event received",
@@ -5268,8 +5309,9 @@ printf '%s\n' "$@" > "$capture_file"
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
 
-        let err = validate_warm_pool_codex_result(true, &reply, 1, "stream disconnected")
-            .expect_err("expected CodexFailed");
+        let err =
+            validate_warm_pool_codex_result(true, temp.path(), &reply, 1, "stream disconnected")
+                .expect_err("expected CodexFailed");
 
         match err {
             RunTaskError::CodexFailed { status, output } => {
@@ -5288,6 +5330,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let err = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             0,
             r#"{"type":"event_msg","payload":{"type":"task_complete","status":"success","exit_code":0}}"#,
@@ -5305,6 +5348,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let note = validate_warm_pool_codex_result(
             true,
+            temp.path(),
             &reply,
             1,
             "I'm sorry, but I cannot assist with that request.",
