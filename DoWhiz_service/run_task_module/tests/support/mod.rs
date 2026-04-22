@@ -121,6 +121,8 @@ impl Drop for EnvUnsetGuard {
 #[derive(Clone, Copy)]
 pub enum FakeCodexMode {
     Success,
+    InvestmentStructured,
+    InvestmentGeneric,
     NoOutput,
     EmptyReply,
     Fail,
@@ -147,6 +149,56 @@ pub fn write_fake_codex(dir: &Path, mode: FakeCodexMode) -> io::Result<PathBuf> 
 set -e
 echo '{"type":"item.delta","item":{"type":"agent_message"},"delta":{"text":"ok"}}'
 echo "<html><body>Test reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#
+        }
+        FakeCodexMode::InvestmentStructured => {
+            r#"#!/bin/sh
+set -e
+cat > reply_email_draft.html <<'HTML'
+<h2>Request Framing</h2>
+<ul>
+  <li><strong>Ticker:</strong> NVDA</li>
+  <li><strong>Name:</strong> NVIDIA</li>
+  <li><strong>Type:</strong> Stock</li>
+  <li><strong>Research Mode:</strong> Deep research</li>
+  <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
+  <li><strong>Horizon:</strong> Long-term (inferred)</li>
+  <li><strong>Question Type:</strong> Long-term accumulation</li>
+</ul>
+<h2>Final Recommendation</h2>
+<ul>
+  <li><strong>Rating:</strong> Wait</li>
+  <li><strong>Horizon:</strong> Long-term (inferred)</li>
+  <li><strong>Confidence:</strong> Medium</li>
+  <li><strong>Timing Verdict:</strong> Wait</li>
+  <li><strong>Add Criteria:</strong> Better entry after earnings or improved valuation support.</li>
+  <li><strong>Invalidation Criteria:</strong> Demand slows or margin guidance weakens.</li>
+  <li><strong>Biggest Near-Term Risk:</strong> Event volatility around earnings.</li>
+  <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
+</ul>
+<h2>Verified Facts</h2>
+<ul><li>Fact.</li></ul>
+<h2>Derived Metrics</h2>
+<ul><li>Metric: price / eps = 10x</li></ul>
+<h2>Inference / Judgment</h2>
+<ul><li>Judgment.</li></ul>
+<h2>Scenario Analysis</h2>
+<p><strong>Bull Case:</strong> Demand remains strong.</p>
+<p><strong>Base Case:</strong> Growth normalizes.</p>
+<p><strong>Bear Case:</strong> Spending slows.</p>
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#
+        }
+        FakeCodexMode::InvestmentGeneric => {
+            r#"#!/bin/sh
+set -e
+cat > reply_email_draft.html <<'HTML'
+<p>NVIDIA is a good business, but I would wait until after earnings and buy in tranches instead of going all in now.</p>
+HTML
 mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 "#
@@ -385,6 +437,8 @@ exit 0
 #[derive(Clone, Copy)]
 pub enum FakeClaudeMode {
     Success,
+    InvestmentStructured,
+    InvestmentGeneric,
     EnsureModel,
     Fail,
     ReplyThenSleep,
@@ -403,6 +457,58 @@ pub fn write_fake_claude(dir: &Path, mode: FakeClaudeMode) -> io::Result<PathBuf
 set -e
 echo '{"type":"message_delta","delta":{"text":"ok"}}'
 echo "<html><body>Test reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#
+        }
+        FakeClaudeMode::InvestmentStructured => {
+            r#"#!/bin/sh
+set -e
+echo '{"type":"message_delta","delta":{"text":"ok"}}'
+cat > reply_email_draft.html <<'HTML'
+<h2>Request Framing</h2>
+<ul>
+  <li><strong>Ticker:</strong> NVDA</li>
+  <li><strong>Name:</strong> NVIDIA</li>
+  <li><strong>Type:</strong> Stock</li>
+  <li><strong>Research Mode:</strong> Deep research</li>
+  <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
+  <li><strong>Horizon:</strong> Long-term (inferred)</li>
+  <li><strong>Question Type:</strong> Long-term accumulation</li>
+</ul>
+<h2>Final Recommendation</h2>
+<ul>
+  <li><strong>Rating:</strong> Wait</li>
+  <li><strong>Horizon:</strong> Long-term (inferred)</li>
+  <li><strong>Confidence:</strong> Medium</li>
+  <li><strong>Timing Verdict:</strong> Wait</li>
+  <li><strong>Add Criteria:</strong> Better entry after earnings or improved valuation support.</li>
+  <li><strong>Invalidation Criteria:</strong> Demand slows or margin guidance weakens.</li>
+  <li><strong>Biggest Near-Term Risk:</strong> Event volatility around earnings.</li>
+  <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
+</ul>
+<h2>Verified Facts</h2>
+<ul><li>Fact.</li></ul>
+<h2>Derived Metrics</h2>
+<ul><li>Metric: price / eps = 10x</li></ul>
+<h2>Inference / Judgment</h2>
+<ul><li>Judgment.</li></ul>
+<h2>Scenario Analysis</h2>
+<p><strong>Bull Case:</strong> Demand remains strong.</p>
+<p><strong>Base Case:</strong> Growth normalizes.</p>
+<p><strong>Bear Case:</strong> Spending slows.</p>
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#
+        }
+        FakeClaudeMode::InvestmentGeneric => {
+            r#"#!/bin/sh
+set -e
+echo '{"type":"message_delta","delta":{"text":"ok"}}'
+cat > reply_email_draft.html <<'HTML'
+<p>Good business, but not a good all-in buy. Wait until after earnings.</p>
+HTML
 mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 "#
@@ -503,4 +609,41 @@ pub fn build_params(workspace: &Path) -> RunTaskParams {
         thread_epoch: None,
         thread_state_path: None,
     }
+}
+
+pub fn install_runtime_skills_and_employee_guidance(
+    workspace: &Path,
+    employee_id: &str,
+) -> io::Result<()> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let service_root = manifest_dir
+        .parent()
+        .expect("run_task_module lives under DoWhiz_service");
+    let skills_root = service_root.join("skills");
+    let employee_root = service_root.join("employees").join(employee_id);
+
+    copy_dir_recursive(&skills_root, &workspace.join(".agents").join("skills"))?;
+    for filename in ["AGENTS.md", "CLAUDE.md", "SOUL.md"] {
+        let src = employee_root.join(filename);
+        if src.exists() {
+            fs::copy(src, workspace.join(filename))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> io::Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dest_path)?;
+        } else {
+            fs::copy(&src_path, &dest_path)?;
+        }
+    }
+    Ok(())
 }
