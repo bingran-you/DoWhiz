@@ -7,7 +7,6 @@ import {
 import { getThemeForLocalTime, LOCAL_THEME_CHANGE_EVENT, THEME_META_COLORS } from '../theme/localTheme';
 import {
   OLIVER_AUTH_OVERVIEW_HREF,
-  OLIVER_AUTH_WORK_HREF,
   OLIVER_ENTRY_SURFACE,
   OLIVER_LANDING_VARIANT,
   oliverLandingContent
@@ -35,14 +34,14 @@ const updateLinkHref = (selector, href) => {
   }
 };
 
-function ArrowUpRightIcon() {
+function CheckLineIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">
       <path
-        d="M6 14L14 6M8 6h6v6"
+        d="M4.5 10.5l3.3 3.3L15.5 6"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -50,11 +49,11 @@ function ArrowUpRightIcon() {
   );
 }
 
-function CheckLineIcon() {
+function ArrowUpRightIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true">
       <path
-        d="M4.5 10.5l3.3 3.3L15.5 6"
+        d="M6 14L14 6M8 6h6v6"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"
@@ -145,55 +144,36 @@ function OliverLandingPage() {
   };
 
   return (
-    <div className="app-container oliver-hook-page">
-      <div className="oliver-hook-noise" aria-hidden="true" />
+    <div className="app-container oliver-clarity-page">
       <div className="content-layer">
-        <header className="oliver-hook-nav">
-          <div className="oliver-hook-nav-inner">
-            <a href="/" className="oliver-hook-brand" aria-label="Back to the DoWhiz homepage">
-              <img src="/assets/DoWhiz.svg" alt="" className="oliver-hook-brand-mark" aria-hidden="true" />
-              <span className="oliver-hook-brand-copy">
+        <header className="oliver-clarity-header">
+          <div className="container oliver-clarity-topbar">
+            <a href="/" className="oliver-clarity-brand" aria-label="Back to the DoWhiz homepage">
+              <img src="/assets/DoWhiz.svg" alt="" className="oliver-clarity-brand-mark" aria-hidden="true" />
+              <span className="oliver-clarity-brand-copy">
                 Do<span className="text-gradient">Whiz</span>
               </span>
             </a>
 
-            <nav className="oliver-hook-links" aria-label="Oliver page sections">
-              {content.nav.links.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="oliver-hook-link"
-                  onClick={() =>
-                    trackLandingInteraction('secondary_cta_click', {
-                      cta_location: 'oliver_nav',
-                      cta_text: link.label
-                    })
-                  }
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
-
-            <div className="oliver-hook-nav-actions">
+            <div className="oliver-clarity-topbar-actions">
               <a
-                className="btn btn-secondary oliver-hook-nav-secondary"
-                href={OLIVER_AUTH_WORK_HREF}
+                href="#sample-update"
+                className="oliver-clarity-proof-link"
                 onClick={() =>
                   trackLandingInteraction('secondary_cta_click', {
-                    cta_location: 'oliver_nav_work',
-                    cta_text: content.nav.secondaryCta
+                    cta_location: 'topbar_proof',
+                    cta_text: content.nav.proofLink
                   })
                 }
               >
-                {content.nav.secondaryCta}
+                {content.nav.proofLink}
               </a>
               <a
-                className="btn btn-primary oliver-hook-nav-primary"
+                className="btn btn-primary oliver-clarity-nav-cta"
                 href={OLIVER_AUTH_OVERVIEW_HREF}
                 onClick={() =>
                   trackLandingInteraction('primary_cta_click', {
-                    cta_location: 'oliver_nav_open',
+                    cta_location: 'topbar_primary',
                     cta_text: content.nav.primaryCta
                   })
                 }
@@ -204,29 +184,32 @@ function OliverLandingPage() {
           </div>
         </header>
 
-        <main className="oliver-hook-main">
-          <section className="oliver-hook-hero" id="top">
-            <div className="container oliver-hook-hero-grid">
-              <div className="oliver-hook-copy">
-                <p className="oliver-hook-eyebrow">{content.hero.eyebrow}</p>
-                <h1 className="oliver-hook-title">{content.hero.title}</h1>
-                <p className="oliver-hook-subtitle">{content.hero.subtitle}</p>
+        <main className="oliver-clarity-main">
+          <section className="oliver-clarity-hero">
+            <div className="container oliver-clarity-hero-grid">
+              <div className="oliver-clarity-copy">
+                <p className="oliver-clarity-eyebrow">{content.hero.eyebrow}</p>
+                <h1 className="oliver-clarity-title">{content.hero.title}</h1>
+                <p className="oliver-clarity-subtitle">{content.hero.subtitle}</p>
 
-                <div className="oliver-hook-pill-row" aria-label="Key TPM outputs">
-                  {content.hero.proofPills.map((item) => (
-                    <span key={item} className="oliver-hook-pill">
-                      {item}
-                    </span>
+                <ul className="oliver-clarity-highlight-list" aria-label="Key outputs">
+                  {content.hero.highlights.map((item) => (
+                    <li key={item} className="oliver-clarity-highlight-item">
+                      <span className="oliver-clarity-highlight-icon">
+                        <CheckLineIcon />
+                      </span>
+                      <span>{item}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
 
-                <div className="oliver-hook-cta-row">
+                <div className="oliver-clarity-cta-row">
                   <a
-                    className="btn btn-primary oliver-hook-primary-button"
+                    className="btn btn-primary oliver-clarity-primary-button"
                     href={OLIVER_AUTH_OVERVIEW_HREF}
                     onClick={() =>
                       trackLandingInteraction('primary_cta_click', {
-                        cta_location: 'hero_primary_open_oliver',
+                        cta_location: 'hero_primary',
                         cta_text: content.hero.primaryCta
                       })
                     }
@@ -234,11 +217,11 @@ function OliverLandingPage() {
                     {content.hero.primaryCta}
                   </a>
                   <a
-                    className="btn btn-secondary oliver-hook-secondary-button"
-                    href="#proof"
+                    className="btn btn-secondary oliver-clarity-secondary-button"
+                    href="#sample-update"
                     onClick={() =>
                       trackLandingInteraction('secondary_cta_click', {
-                        cta_location: 'hero_secondary_outputs',
+                        cta_location: 'hero_secondary',
                         cta_text: content.hero.secondaryCta
                       })
                     }
@@ -246,101 +229,72 @@ function OliverLandingPage() {
                     {content.hero.secondaryCta}
                   </a>
                 </div>
-
-                <p className="oliver-hook-note">{content.hero.note}</p>
               </div>
 
-              <aside className="oliver-hook-hero-panel" aria-label="Oliver launch review preview">
-                <div className="oliver-hook-hero-panel-head">
+              <aside
+                className="oliver-clarity-update-card"
+                id="sample-update"
+                aria-label="Sample weekly update"
+              >
+                <div className="oliver-clarity-update-head">
                   <div>
-                    <p className="oliver-hook-panel-label">{content.hero.artifact.label}</p>
-                    <h2>{content.hero.artifact.title}</h2>
+                    <p className="oliver-clarity-card-kicker">{content.hero.artifact.label}</p>
+                    <h2 className="oliver-clarity-card-title">{content.hero.artifact.program}</h2>
                   </div>
-                  <div className="oliver-hook-health">
-                    <span className="oliver-hook-health-badge">{content.hero.artifact.healthLabel}</span>
-                    <span className="oliver-hook-health-detail">{content.hero.artifact.healthDetail}</span>
+                  <div className="oliver-clarity-health-group">
+                    <span className="oliver-clarity-health-badge">{content.hero.artifact.healthLabel}</span>
+                    <span className="oliver-clarity-health-detail">{content.hero.artifact.healthDetail}</span>
                   </div>
                 </div>
 
-                <div className="oliver-hook-signal-band" aria-label="Signal sources">
-                  {content.hero.artifact.signalSources.map((item) => (
-                    <span key={item} className="oliver-hook-signal-chip">
-                      {item}
-                    </span>
-                  ))}
-                </div>
+                <section className="oliver-clarity-card-section">
+                  <p className="oliver-clarity-card-label">{content.hero.artifact.summaryLabel}</p>
+                  <p className="oliver-clarity-card-summary">{content.hero.artifact.summary}</p>
+                </section>
 
-                <div className="oliver-hook-hero-panel-grid">
-                  <section className="oliver-hook-artifact-card oliver-hook-artifact-card-update">
-                    <p className="oliver-hook-card-kicker">{content.hero.artifact.summary.label}</p>
-                    <p className="oliver-hook-card-copy">{content.hero.artifact.summary.text}</p>
+                <div className="oliver-clarity-update-grid">
+                  <section className="oliver-clarity-card-section">
+                    <p className="oliver-clarity-card-label">{content.hero.artifact.risksLabel}</p>
+                    <ul className="oliver-clarity-issue-list">
+                      {content.hero.artifact.risks.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
                   </section>
 
-                  <section className="oliver-hook-artifact-card oliver-hook-artifact-card-actions">
-                    <p className="oliver-hook-card-kicker">Actions ready</p>
-                    <ul className="oliver-hook-checklist">
-                      {content.hero.artifact.actions.map((item) => (
-                        <li key={`${item.owner}-${item.task}`}>
-                          <span className="oliver-hook-check-icon">
-                            <CheckLineIcon />
-                          </span>
-                          <div>
-                            <strong>{item.owner}</strong>
-                            <span>{item.task}</span>
-                          </div>
-                          <small>{item.due}</small>
+                  <section className="oliver-clarity-card-section">
+                    <p className="oliver-clarity-card-label">{content.hero.artifact.ownersLabel}</p>
+                    <ul className="oliver-clarity-owner-list">
+                      {content.hero.artifact.owners.map((item) => (
+                        <li key={`${item.owner}-${item.action}`}>
+                          <strong>{item.owner}</strong>
+                          <span>{item.action}</span>
                         </li>
                       ))}
                     </ul>
                   </section>
                 </div>
 
-                <section className="oliver-hook-artifact-card oliver-hook-artifact-card-risks">
-                  <div className="oliver-hook-card-row">
-                    <p className="oliver-hook-card-kicker">Current risks</p>
-                    <a
-                      href={OLIVER_AUTH_WORK_HREF}
-                      className="oliver-hook-inline-link"
-                      onClick={() =>
-                        trackLandingInteraction('secondary_cta_click', {
-                          cta_location: 'hero_risk_register',
-                          cta_text: 'Open current work view'
-                        })
-                      }
-                    >
-                      Open current work view
-                      <ArrowUpRightIcon />
-                    </a>
-                  </div>
-                  <ul className="oliver-hook-risk-list">
-                    {content.hero.artifact.risks.map((item) => (
-                      <li key={item.label}>
-                        <span className={`oliver-hook-risk-level oliver-hook-risk-level-${item.level.toLowerCase()}`}>
-                          {item.level}
-                        </span>
-                        <span>{item.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <p className="oliver-clarity-source-note">
+                  <span>{content.hero.artifact.sourceLabel}</span>
+                  {content.hero.artifact.sources}
+                </p>
               </aside>
             </div>
           </section>
 
-          <section className="oliver-hook-section" id="proof">
+          <section className="oliver-clarity-section oliver-clarity-section-outputs">
             <div className="container">
-              <div className="oliver-hook-section-head">
-                <p className="oliver-hook-section-eyebrow">{content.proof.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.proof.title}</h2>
-                <p className="oliver-hook-section-intro">{content.proof.intro}</p>
+              <div className="oliver-clarity-section-head">
+                <p className="oliver-clarity-section-eyebrow">{content.outputs.eyebrow}</p>
+                <h2 className="oliver-clarity-section-title">{content.outputs.title}</h2>
               </div>
 
-              <div className="oliver-hook-proof-grid">
-                {content.proof.cards.map((card) => (
-                  <article key={card.title} className="oliver-hook-proof-card">
-                    <p className="oliver-hook-card-kicker">{card.eyebrow}</p>
+              <div className="oliver-clarity-output-grid">
+                {content.outputs.cards.map((card) => (
+                  <article key={card.title} className="oliver-clarity-surface-card">
                     <h3>{card.title}</h3>
-                    <p>{card.summary}</p>
+                    <p>{card.description}</p>
                     <ul>
                       {card.bullets.map((bullet) => (
                         <li key={bullet}>{bullet}</li>
@@ -352,37 +306,18 @@ function OliverLandingPage() {
             </div>
           </section>
 
-          <section className="oliver-hook-section" id="ownership">
+          <section className="oliver-clarity-section oliver-clarity-section-setup">
             <div className="container">
-              <div className="oliver-hook-section-head">
-                <p className="oliver-hook-section-eyebrow">{content.ownership.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.ownership.title}</h2>
-                <p className="oliver-hook-section-intro">{content.ownership.intro}</p>
+              <div className="oliver-clarity-section-head">
+                <p className="oliver-clarity-section-eyebrow">{content.setup.eyebrow}</p>
+                <h2 className="oliver-clarity-section-title">{content.setup.title}</h2>
               </div>
 
-              <div className="oliver-hook-outcome-grid">
-                {content.ownership.cards.map((card) => (
-                  <article key={card.title} className="oliver-hook-outcome-card">
-                    <h3>{card.title}</h3>
-                    <p>{card.description}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="oliver-hook-section oliver-hook-workflow-section" id="workflow">
-            <div className="container oliver-hook-workflow-layout">
-              <div className="oliver-hook-section-head oliver-hook-section-head-left">
-                <p className="oliver-hook-section-eyebrow">{content.workflow.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.workflow.title}</h2>
-              </div>
-
-              <div className="oliver-hook-workflow-list">
-                {content.workflow.steps.map((step) => (
-                  <article key={step.label} className="oliver-hook-step-card">
-                    <div className="oliver-hook-step-label">{step.label}</div>
-                    <div className="oliver-hook-step-copy">
+              <div className="oliver-clarity-step-grid">
+                {content.setup.steps.map((step) => (
+                  <article key={step.label} className="oliver-clarity-step-card">
+                    <div className="oliver-clarity-step-label">{step.label}</div>
+                    <div className="oliver-clarity-step-copy">
                       <h3>{step.title}</h3>
                       <p>{step.description}</p>
                     </div>
@@ -392,96 +327,51 @@ function OliverLandingPage() {
             </div>
           </section>
 
-          <section className="oliver-hook-section oliver-hook-tools-section" id="tools">
-            <div className="container oliver-hook-surface-card">
-              <div className="oliver-hook-surface-copy">
-                <p className="oliver-hook-section-eyebrow">{content.tools.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.tools.title}</h2>
-                <p className="oliver-hook-section-intro oliver-hook-section-intro-left">{content.tools.intro}</p>
-              </div>
-
-              <div className="oliver-hook-tool-chip-grid" aria-label="Signal sources Oliver can work across">
-                {content.tools.items.map((item) => (
-                  <span key={item} className="oliver-hook-tool-chip">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="oliver-hook-section" id="controls">
+          <section className="oliver-clarity-section oliver-clarity-section-trust">
             <div className="container">
-              <div className="oliver-hook-section-head">
-                <p className="oliver-hook-section-eyebrow">{content.controls.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.controls.title}</h2>
-                <p className="oliver-hook-section-intro">{content.controls.intro}</p>
-              </div>
+              <div className="oliver-clarity-trust-panel">
+                <div className="oliver-clarity-section-head oliver-clarity-section-head-compact">
+                  <p className="oliver-clarity-section-eyebrow">{content.trust.eyebrow}</p>
+                  <h2 className="oliver-clarity-section-title">{content.trust.title}</h2>
+                  <p className="oliver-clarity-section-intro">{content.trust.intro}</p>
+                </div>
 
-              <div className="oliver-hook-control-grid">
-                {content.controls.cards.map((card) => (
-                  <article key={card.title} className="oliver-hook-control-card">
-                    <h3>{card.title}</h3>
-                    <p>{card.description}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
+                <div className="oliver-clarity-trust-grid">
+                  {content.trust.items.map((item) => (
+                    <article key={item.title} className="oliver-clarity-trust-card">
+                      <h3>{item.title}</h3>
+                      <p>{item.description}</p>
+                    </article>
+                  ))}
+                </div>
 
-          <section className="oliver-hook-section" id="faq">
-            <div className="container">
-              <div className="oliver-hook-section-head">
-                <p className="oliver-hook-section-eyebrow">{content.faq.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.faq.title}</h2>
-              </div>
-
-              <div className="oliver-hook-faq-grid">
-                {content.faq.items.map((item) => (
-                  <article key={item.question} className="oliver-hook-faq-card">
-                    <h3>{item.question}</h3>
-                    <p>{item.answer}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="oliver-hook-section oliver-hook-final-section">
-            <div className="container">
-              <div className="oliver-hook-final-card">
-                <p className="oliver-hook-section-eyebrow">{content.finalCta.eyebrow}</p>
-                <h2 className="oliver-hook-section-title">{content.finalCta.title}</h2>
-                <p className="oliver-hook-section-intro">{content.finalCta.description}</p>
-
-                <div className="oliver-hook-cta-row oliver-hook-final-actions">
+                <div className="oliver-clarity-trust-actions">
                   <a
-                    className="btn btn-primary oliver-hook-primary-button"
+                    className="btn btn-primary oliver-clarity-primary-button"
                     href={OLIVER_AUTH_OVERVIEW_HREF}
                     onClick={() =>
                       trackLandingInteraction('primary_cta_click', {
-                        cta_location: 'final_primary_open_oliver',
-                        cta_text: content.finalCta.primaryCta
+                        cta_location: 'trust_primary',
+                        cta_text: content.trust.primaryCta
                       })
                     }
                   >
-                    {content.finalCta.primaryCta}
+                    {content.trust.primaryCta}
                   </a>
                   <a
-                    className="btn btn-secondary oliver-hook-secondary-button"
-                    href={OLIVER_AUTH_WORK_HREF}
+                    href="#sample-update"
+                    className="oliver-clarity-inline-link"
                     onClick={() =>
                       trackLandingInteraction('secondary_cta_click', {
-                        cta_location: 'final_secondary_work_view',
-                        cta_text: content.finalCta.secondaryCta
+                        cta_location: 'trust_secondary',
+                        cta_text: 'See sample update'
                       })
                     }
                   >
-                    {content.finalCta.secondaryCta}
+                    See sample update
+                    <ArrowUpRightIcon />
                   </a>
                 </div>
-
-                <p className="oliver-hook-disclaimer">{content.finalCta.disclaimer}</p>
               </div>
             </div>
           </section>

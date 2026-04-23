@@ -1,196 +1,132 @@
-.oliver-hook-page {
-  --oliver-accent: #c4652d;
-  --oliver-accent-soft: rgba(196, 101, 45, 0.12);
-  --oliver-ink-soft: rgba(16, 18, 22, 0.72);
-  --oliver-risk-high: #b9382e;
-  --oliver-risk-medium: #8e6200;
-  --oliver-grid-line: color-mix(in srgb, var(--border-subtle) 92%, transparent);
+.oliver-clarity-page {
+  --oliver-accent: color-mix(in srgb, var(--brand-primary) 88%, #7c4f2b 12%);
+  --oliver-warm-border: color-mix(in srgb, var(--glass-border) 86%, rgba(124, 79, 43, 0.12));
+  --oliver-risk-bg: color-mix(in srgb, #c04b3f 12%, var(--surface-primary));
+  --oliver-risk-text: #b43f34;
   position: relative;
   background:
-    radial-gradient(circle at 15% 10%, rgba(196, 101, 45, 0.16), transparent 34%),
-    radial-gradient(circle at 82% 18%, rgba(16, 18, 22, 0.08), transparent 30%),
+    radial-gradient(circle at top center, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 34%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface-primary) 96%, #fff4ea 4%) 0%,
-      color-mix(in srgb, var(--surface-primary) 92%, var(--surface-secondary)) 48%,
+      color-mix(in srgb, var(--surface-primary) 98%, #ffffff 2%) 0%,
+      color-mix(in srgb, var(--surface-primary) 92%, var(--surface-secondary)) 56%,
       color-mix(in srgb, var(--surface-secondary) 84%, var(--surface-primary)) 100%
     );
 }
 
-[data-theme='dark'] .oliver-hook-page {
-  --oliver-accent: #f0a36e;
-  --oliver-accent-soft: rgba(240, 163, 110, 0.12);
-  --oliver-ink-soft: rgba(243, 245, 247, 0.74);
-  --oliver-grid-line: rgba(243, 245, 247, 0.08);
-  --oliver-risk-high: #f38b84;
-  --oliver-risk-medium: #d8b050;
+[data-theme='dark'] .oliver-clarity-page {
+  --oliver-accent: color-mix(in srgb, var(--brand-primary) 80%, #f2a46a 20%);
+  --oliver-risk-bg: color-mix(in srgb, #ff786a 18%, var(--surface-secondary));
+  --oliver-risk-text: #ffb8af;
   background:
-    radial-gradient(circle at 12% 14%, rgba(240, 163, 110, 0.12), transparent 34%),
-    radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.06), transparent 26%),
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.06), transparent 30%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface-secondary) 44%, var(--surface-primary)) 0%,
-      var(--surface-primary) 58%,
-      color-mix(in srgb, var(--surface-secondary) 74%, var(--surface-primary)) 100%
+      color-mix(in srgb, var(--surface-secondary) 48%, var(--surface-primary)) 0%,
+      var(--surface-primary) 55%,
+      color-mix(in srgb, var(--surface-secondary) 72%, var(--surface-primary)) 100%
     );
 }
 
-.oliver-hook-page::before,
-.oliver-hook-page::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.oliver-clarity-header {
+  padding: 1rem 0 0;
 }
 
-.oliver-hook-page::before {
-  background:
-    linear-gradient(90deg, transparent 0, transparent calc(100% - 1px), var(--oliver-grid-line) 100%),
-    linear-gradient(180deg, transparent 0, transparent calc(100% - 1px), var(--oliver-grid-line) 100%);
-  background-size: 92px 92px;
-  opacity: 0.26;
-}
-
-.oliver-hook-page::after {
-  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.28) 100%);
-  mix-blend-mode: screen;
-  opacity: 0.25;
-}
-
-[data-theme='dark'] .oliver-hook-page::after {
-  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, 0.08) 100%);
-  mix-blend-mode: normal;
-}
-
-.oliver-hook-noise {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.28) 0 1px, transparent 1px),
-    radial-gradient(circle at 80% 70%, rgba(16, 18, 22, 0.06) 0 1px, transparent 1px);
-  background-size: 24px 24px, 28px 28px;
-  opacity: 0.18;
-}
-
-[data-theme='dark'] .oliver-hook-noise {
-  opacity: 0.12;
-}
-
-.oliver-hook-nav {
-  position: sticky;
-  top: 1rem;
-  z-index: 120;
-  padding: 1rem 1rem 0;
-}
-
-.oliver-hook-nav-inner {
-  max-width: 1200px;
-  margin: 0 auto;
+.oliver-clarity-topbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
   justify-content: space-between;
+  gap: 1rem;
+  min-height: 4rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-overlay) 90%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  border-radius: var(--radius-full);
+  background: var(--navbar-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: 0 18px 40px -34px var(--shadow-strong);
-  padding: 0.8rem 0.95rem 0.8rem 1.1rem;
 }
 
-.oliver-hook-brand {
+.oliver-clarity-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  color: var(--text-primary);
+  gap: 0.625rem;
   text-decoration: none;
+  color: var(--text-primary);
   min-width: max-content;
 }
 
-.oliver-hook-brand-mark {
+.oliver-clarity-brand-mark {
   width: 1.85rem;
   height: 1.85rem;
-  border-radius: 0.5rem;
+  border-radius: 0.45rem;
   flex: 0 0 auto;
 }
 
-.oliver-hook-brand-copy {
-  font-size: 1.1rem;
+.oliver-clarity-brand-copy {
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: var(--tracking-tight);
 }
 
-.oliver-hook-links {
+.oliver-clarity-topbar-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  flex: 1 1 auto;
-  min-width: 0;
+  gap: 0.9rem;
+  flex: 0 0 auto;
 }
 
-.oliver-hook-link {
+.oliver-clarity-proof-link,
+.oliver-clarity-inline-link {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  gap: 0.35rem;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.94rem;
   font-weight: 500;
-  padding: 0.48rem 0.88rem;
+  text-decoration: none;
 }
 
-.oliver-hook-link:hover {
+.oliver-clarity-proof-link:hover,
+.oliver-clarity-inline-link:hover {
   color: var(--text-primary);
-  background: var(--color-muted);
 }
 
-.oliver-hook-nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  min-width: max-content;
+.oliver-clarity-inline-link svg {
+  width: 1rem;
+  height: 1rem;
 }
 
-.oliver-hook-nav-primary,
-.oliver-hook-nav-secondary {
-  min-width: max-content;
-}
-
-.oliver-hook-main {
-  position: relative;
-  z-index: 1;
+.oliver-clarity-main {
   padding-bottom: 5rem;
 }
 
-.oliver-hook-section,
-.oliver-hook-hero {
-  scroll-margin-top: 6.5rem;
+.oliver-clarity-hero,
+.oliver-clarity-section {
+  scroll-margin-top: 5rem;
 }
 
-.oliver-hook-hero {
-  padding: 6.8rem 0 2.2rem;
+.oliver-clarity-hero {
+  padding: 5.5rem 0 2.5rem;
 }
 
-.oliver-hook-hero-grid {
+.oliver-clarity-hero-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
   gap: 2rem;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
-  align-items: start;
+  align-items: center;
 }
 
-.oliver-hook-copy {
+.oliver-clarity-copy {
   display: grid;
   gap: 1rem;
-  max-width: 620px;
-  padding-top: 1.6rem;
+  max-width: 38rem;
 }
 
-.oliver-hook-eyebrow,
-.oliver-hook-section-eyebrow,
-.oliver-hook-panel-label,
-.oliver-hook-card-kicker {
+.oliver-clarity-eyebrow,
+.oliver-clarity-section-eyebrow,
+.oliver-clarity-card-kicker,
+.oliver-clarity-card-label {
   margin: 0;
   color: var(--oliver-accent);
   font-size: 0.78rem;
@@ -199,625 +135,425 @@
   text-transform: uppercase;
 }
 
-.oliver-hook-title,
-.oliver-hook-section-title,
-.oliver-hook-hero-panel h2 {
-  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  letter-spacing: -0.045em;
-}
-
-.oliver-hook-title {
+.oliver-clarity-title {
   margin: 0;
-  font-size: clamp(3.25rem, 6.4vw, 5.3rem);
-  line-height: 0.94;
-  max-width: 11ch;
+  font-size: clamp(2.8rem, 5.8vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-weight: 700;
   text-wrap: balance;
+  max-width: 11.5ch;
 }
 
-.oliver-hook-subtitle {
+.oliver-clarity-subtitle {
   margin: 0;
-  max-width: 39ch;
-  color: var(--oliver-ink-soft);
-  font-size: 1.13rem;
-  line-height: 1.68;
+  max-width: 38ch;
+  color: var(--text-secondary);
+  font-size: clamp(1.03rem, 2vw, 1.15rem);
+  line-height: 1.6;
 }
 
-.oliver-hook-pill-row {
+.oliver-clarity-highlight-list,
+.oliver-clarity-issue-list,
+.oliver-clarity-owner-list,
+.oliver-clarity-surface-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.oliver-clarity-highlight-list {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 22rem;
+}
+
+.oliver-clarity-highlight-item {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  margin-top: 0.35rem;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 500;
 }
 
-.oliver-hook-pill {
+.oliver-clarity-highlight-icon {
+  width: 1.6rem;
+  height: 1.6rem;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: 999px;
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--glass-bg) 88%, var(--surface-primary));
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  padding: 0.52rem 0.85rem;
-  box-shadow: 0 10px 22px -24px var(--shadow-strong);
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-primary));
+  color: var(--brand-primary);
+  flex: 0 0 auto;
 }
 
-.oliver-hook-cta-row {
+.oliver-clarity-highlight-icon svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.oliver-clarity-cta-row,
+.oliver-clarity-trust-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.9rem;
-  margin-top: 0.4rem;
+  align-items: center;
+  gap: 0.85rem;
 }
 
-.oliver-hook-note,
-.oliver-hook-disclaimer {
-  margin: 0;
-  max-width: 64ch;
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.62;
-}
-
-.oliver-hook-hero-panel,
-.oliver-hook-proof-card,
-.oliver-hook-outcome-card,
-.oliver-hook-step-card,
-.oliver-hook-surface-card,
-.oliver-hook-control-card,
-.oliver-hook-faq-card,
-.oliver-hook-final-card,
-.oliver-hook-artifact-card {
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--glass-bg) 94%, var(--surface-primary));
+.oliver-clarity-update-card,
+.oliver-clarity-surface-card,
+.oliver-clarity-step-card,
+.oliver-clarity-trust-card,
+.oliver-clarity-trust-panel {
+  border: 1px solid var(--oliver-warm-border);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, rgba(255, 255, 255, 0.58));
   box-shadow: 0 22px 48px -40px var(--shadow-strong);
 }
 
-.oliver-hook-hero-panel {
+[data-theme='dark'] .oliver-clarity-update-card,
+[data-theme='dark'] .oliver-clarity-surface-card,
+[data-theme='dark'] .oliver-clarity-step-card,
+[data-theme='dark'] .oliver-clarity-trust-card,
+[data-theme='dark'] .oliver-clarity-trust-panel {
+  background: color-mix(in srgb, var(--surface-elevated) 88%, rgba(255, 255, 255, 0.04));
+}
+
+.oliver-clarity-update-card {
   display: grid;
-  gap: 1rem;
-  border-radius: 1.9rem;
+  gap: 1.1rem;
   padding: 1.35rem;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-primary) 92%, rgba(255, 255, 255, 0.35)) 0%,
-      color-mix(in srgb, var(--surface-primary) 86%, var(--surface-secondary)) 100%
-    );
+  border-radius: 1.6rem;
 }
 
-[data-theme='dark'] .oliver-hook-hero-panel {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface-secondary) 94%, rgba(255, 255, 255, 0.02)) 0%,
-      color-mix(in srgb, var(--surface-primary) 96%, var(--surface-secondary)) 100%
-    );
-}
-
-.oliver-hook-hero-panel-head,
-.oliver-hook-card-row {
+.oliver-clarity-update-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.oliver-hook-hero-panel-head h2 {
+.oliver-clarity-card-title {
   margin: 0.2rem 0 0;
-  font-size: clamp(1.6rem, 3vw, 2.2rem);
-  line-height: 0.96;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
 }
 
-.oliver-hook-health {
+.oliver-clarity-health-group {
   display: grid;
   gap: 0.35rem;
   justify-items: end;
   text-align: right;
 }
 
-.oliver-hook-health-badge {
+.oliver-clarity-health-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 5.75rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  padding: 0.35rem 0.7rem;
-  background: rgba(185, 56, 46, 0.12);
-  color: var(--oliver-risk-high);
-  font-size: 0.84rem;
+  background: var(--oliver-risk-bg);
+  color: var(--oliver-risk-text);
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
-.oliver-hook-health-detail {
+.oliver-clarity-health-detail {
+  max-width: 19ch;
   color: var(--text-secondary);
-  font-size: 0.82rem;
-  max-width: 20ch;
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 
-.oliver-hook-signal-band {
-  display: flex;
-  flex-wrap: wrap;
+.oliver-clarity-card-section {
+  display: grid;
   gap: 0.55rem;
 }
 
-.oliver-hook-signal-chip,
-.oliver-hook-tool-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-radius: 999px;
-  padding: 0.46rem 0.78rem;
-  border: 1px solid var(--glass-border);
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--surface-primary) 84%, var(--surface-secondary));
-  font-size: 0.86rem;
-  font-weight: 500;
-}
-
-.oliver-hook-hero-panel-grid {
-  display: grid;
-  grid-template-columns: 1.12fr 0.88fr;
-  gap: 0.9rem;
-}
-
-.oliver-hook-artifact-card {
-  border-radius: 1.35rem;
-  padding: 1rem 1rem 1.05rem;
-}
-
-.oliver-hook-card-copy {
-  margin: 0.45rem 0 0;
+.oliver-clarity-card-summary {
+  margin: 0;
   color: var(--text-primary);
   line-height: 1.65;
 }
 
-.oliver-hook-checklist,
-.oliver-hook-risk-list,
-.oliver-hook-proof-card ul {
-  margin: 0;
-  padding: 0;
+.oliver-clarity-update-grid {
   display: grid;
-  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
-.oliver-hook-checklist li {
+.oliver-clarity-issue-list,
+.oliver-clarity-owner-list {
   display: grid;
-  grid-template-columns: auto 1fr auto;
   gap: 0.7rem;
-  align-items: start;
 }
 
-.oliver-hook-check-icon {
-  width: 1.65rem;
-  height: 1.65rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.oliver-clarity-issue-list li,
+.oliver-clarity-surface-card li {
+  position: relative;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.oliver-clarity-issue-list li::before,
+.oliver-clarity-surface-card li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.62rem;
+  width: 0.38rem;
+  height: 0.38rem;
   border-radius: 999px;
-  background: var(--oliver-accent-soft);
-  color: var(--oliver-accent);
-  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--brand-primary) 58%, transparent);
 }
 
-.oliver-hook-check-icon svg,
-.oliver-hook-inline-link svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-.oliver-hook-checklist li div {
+.oliver-clarity-owner-list li {
   display: grid;
-  gap: 0.16rem;
+  gap: 0.18rem;
 }
 
-.oliver-hook-checklist li strong,
-.oliver-hook-proof-card h3,
-.oliver-hook-outcome-card h3,
-.oliver-hook-step-card h3,
-.oliver-hook-control-card h3,
-.oliver-hook-faq-card h3 {
-  font-size: 1.02rem;
-  line-height: 1.25;
+.oliver-clarity-owner-list strong {
+  font-size: 0.94rem;
+  line-height: 1.3;
 }
 
-.oliver-hook-checklist li span,
-.oliver-hook-checklist li small,
-.oliver-hook-proof-card p,
-.oliver-hook-proof-card li,
-.oliver-hook-outcome-card p,
-.oliver-hook-step-card p,
-.oliver-hook-control-card p,
-.oliver-hook-faq-card p,
-.oliver-hook-surface-copy p {
+.oliver-clarity-owner-list span {
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.oliver-clarity-source-note {
+  margin: 0;
+  padding-top: 0.95rem;
+  border-top: 1px solid color-mix(in srgb, var(--oliver-warm-border) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.oliver-clarity-source-note span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.oliver-clarity-section {
+  padding: 1.5rem 0 0;
+}
+
+.oliver-clarity-section-head {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 38rem;
+  margin-bottom: 1.35rem;
+}
+
+.oliver-clarity-section-head-compact {
+  margin-bottom: 0;
+}
+
+.oliver-clarity-section-title {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 2.85rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  max-width: 14ch;
+}
+
+.oliver-clarity-section-intro {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 55ch;
+}
+
+.oliver-clarity-output-grid,
+.oliver-clarity-step-grid,
+.oliver-clarity-trust-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.oliver-clarity-output-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.oliver-clarity-surface-card,
+.oliver-clarity-step-card,
+.oliver-clarity-trust-card {
+  border-radius: 1.35rem;
+  padding: 1.2rem;
+}
+
+.oliver-clarity-surface-card h3,
+.oliver-clarity-step-copy h3,
+.oliver-clarity-trust-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.oliver-clarity-surface-card p,
+.oliver-clarity-step-copy p,
+.oliver-clarity-trust-card p {
+  margin: 0.55rem 0 0;
   color: var(--text-secondary);
   line-height: 1.62;
 }
 
-.oliver-hook-checklist li small {
-  white-space: nowrap;
-  font-size: 0.77rem;
-}
-
-.oliver-hook-inline-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--text-primary);
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.oliver-hook-inline-link:hover {
-  color: var(--oliver-accent);
-}
-
-.oliver-hook-risk-list li {
+.oliver-clarity-surface-card ul {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.7rem;
-  align-items: start;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
 }
 
-.oliver-hook-risk-level {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 4.5rem;
-  border-radius: 999px;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.76rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.oliver-hook-risk-level-high {
-  background: rgba(185, 56, 46, 0.12);
-  color: var(--oliver-risk-high);
-}
-
-.oliver-hook-risk-level-medium {
-  background: rgba(142, 98, 0, 0.12);
-  color: var(--oliver-risk-medium);
-}
-
-.oliver-hook-section {
-  padding: 1.8rem 0 0;
-}
-
-.oliver-hook-section-head {
-  display: grid;
-  gap: 0.75rem;
-  max-width: 760px;
-  margin-bottom: 1.5rem;
-}
-
-.oliver-hook-section-head-left {
-  margin-bottom: 0;
-}
-
-.oliver-hook-section-title {
-  margin: 0;
-  font-size: clamp(2.15rem, 4.4vw, 3.3rem);
-  line-height: 0.97;
-  max-width: 14ch;
-}
-
-.oliver-hook-section-intro {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 1.04rem;
-  line-height: 1.68;
-  max-width: 52ch;
-}
-
-.oliver-hook-section-intro-left {
-  max-width: 44ch;
-}
-
-.oliver-hook-proof-grid,
-.oliver-hook-outcome-grid,
-.oliver-hook-control-grid,
-.oliver-hook-faq-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.oliver-hook-proof-grid,
-.oliver-hook-control-grid {
+.oliver-clarity-step-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.oliver-hook-outcome-grid,
-.oliver-hook-faq-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.oliver-hook-proof-card,
-.oliver-hook-outcome-card,
-.oliver-hook-control-card,
-.oliver-hook-faq-card {
-  border-radius: 1.5rem;
-  padding: 1.15rem 1.15rem 1.2rem;
-}
-
-.oliver-hook-proof-card h3,
-.oliver-hook-outcome-card h3,
-.oliver-hook-control-card h3,
-.oliver-hook-faq-card h3 {
-  margin: 0.4rem 0 0.55rem;
-}
-
-.oliver-hook-proof-card ul {
-  margin-top: 0.95rem;
-}
-
-.oliver-hook-proof-card li {
-  position: relative;
-  padding-left: 1rem;
-}
-
-.oliver-hook-proof-card li::before {
-  content: '';
-  position: absolute;
-  top: 0.65rem;
-  left: 0;
-  width: 0.38rem;
-  height: 0.38rem;
-  border-radius: 999px;
-  background: var(--oliver-accent);
-}
-
-.oliver-hook-workflow-section {
-  padding-top: 2rem;
-}
-
-.oliver-hook-workflow-layout {
+.oliver-clarity-step-card {
   display: grid;
-  gap: 1.35rem;
-  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
-  align-items: start;
-}
-
-.oliver-hook-workflow-list {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.oliver-hook-step-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
   gap: 1rem;
-  border-radius: 1.5rem;
-  padding: 1.15rem 1.2rem;
 }
 
-.oliver-hook-step-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 1rem;
-  background: var(--oliver-accent-soft);
-  color: var(--oliver-accent);
+.oliver-clarity-step-label {
+  width: fit-content;
+  min-width: 2.8rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-primary));
+  color: var(--brand-primary);
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
-.oliver-hook-step-copy {
+.oliver-clarity-trust-panel {
   display: grid;
-  gap: 0.35rem;
-}
-
-.oliver-hook-step-copy h3 {
-  margin: 0;
-}
-
-.oliver-hook-surface-card {
-  display: grid;
-  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
   gap: 1.4rem;
-  align-items: center;
-  border-radius: 1.6rem;
-  padding: 1.25rem;
-}
-
-.oliver-hook-surface-copy .oliver-hook-section-title {
-  max-width: 16ch;
-}
-
-.oliver-hook-tool-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  justify-content: flex-end;
-}
-
-.oliver-hook-control-card {
-  min-height: 100%;
-}
-
-.oliver-hook-final-section {
-  padding-top: 2.15rem;
-}
-
-.oliver-hook-final-card {
-  border-radius: 1.8rem;
   padding: 1.45rem;
-  display: grid;
-  gap: 0.8rem;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--surface-primary) 90%, rgba(255, 255, 255, 0.38)) 0%,
-      color-mix(in srgb, var(--surface-secondary) 92%, rgba(196, 101, 45, 0.06)) 100%
-    );
+  border-radius: 1.55rem;
 }
 
-[data-theme='dark'] .oliver-hook-final-card {
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--surface-secondary) 92%, rgba(255, 255, 255, 0.02)) 0%,
-      color-mix(in srgb, var(--surface-primary) 96%, rgba(240, 163, 110, 0.08)) 100%
-    );
+.oliver-clarity-trust-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.oliver-hook-final-card .oliver-hook-section-title,
-.oliver-hook-final-card .oliver-hook-section-intro {
-  max-width: 17ch;
+.oliver-clarity-nav-cta,
+.oliver-clarity-primary-button {
+  min-width: max-content;
 }
 
-.oliver-hook-final-actions {
-  margin-top: 0.15rem;
-}
+@media (max-width: 1024px) {
+  .oliver-clarity-hero {
+    padding-top: 4.75rem;
+  }
 
-@media (max-width: 1120px) {
-  .oliver-hook-hero-grid,
-  .oliver-hook-workflow-layout,
-  .oliver-hook-surface-card {
+  .oliver-clarity-hero-grid,
+  .oliver-clarity-output-grid,
+  .oliver-clarity-step-grid,
+  .oliver-clarity-trust-grid {
     grid-template-columns: 1fr;
   }
 
-  .oliver-hook-copy {
-    max-width: none;
-    padding-top: 0;
-  }
-
-  .oliver-hook-proof-grid,
-  .oliver-hook-control-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .oliver-clarity-update-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 900px) {
-  .oliver-hook-nav {
-    padding: 0.85rem 0.85rem 0;
+@media (max-width: 720px) {
+  .oliver-clarity-header {
+    padding-top: 0.75rem;
   }
 
-  .oliver-hook-nav-inner {
-    border-radius: 1.4rem;
-    padding: 0.9rem;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.8rem;
+  .oliver-clarity-topbar {
+    padding: 0.75rem 0.9rem;
   }
 
-  .oliver-hook-links {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding-bottom: 0.1rem;
-  }
-
-  .oliver-hook-links::-webkit-scrollbar {
+  .oliver-clarity-proof-link {
     display: none;
   }
 
-  .oliver-hook-proof-grid,
-  .oliver-hook-outcome-grid,
-  .oliver-hook-control-grid,
-  .oliver-hook-faq-grid,
-  .oliver-hook-hero-panel-grid {
-    grid-template-columns: 1fr;
+  .oliver-clarity-brand-copy {
+    font-size: 1.2rem;
   }
 
-  .oliver-hook-tool-chip-grid {
-    justify-content: flex-start;
+  .oliver-clarity-nav-cta {
+    padding-inline: 1rem;
   }
-}
 
-@media (max-width: 680px) {
-  .oliver-hook-title {
-    font-size: clamp(2.45rem, 12vw, 3.55rem);
+  .oliver-clarity-hero {
+    padding-top: 3.5rem;
+  }
+
+  .oliver-clarity-title {
     max-width: 10ch;
   }
 
-  .oliver-hook-subtitle,
-  .oliver-hook-section-intro {
-    font-size: 0.98rem;
-  }
-
-  .oliver-hook-nav-actions,
-  .oliver-hook-cta-row,
-  .oliver-hook-final-actions {
-    width: 100%;
-    flex-direction: column;
+  .oliver-clarity-cta-row,
+  .oliver-clarity-trust-actions {
     align-items: stretch;
   }
 
-  .oliver-hook-nav-primary,
-  .oliver-hook-nav-secondary,
-  .oliver-hook-primary-button,
-  .oliver-hook-secondary-button {
+  .oliver-clarity-primary-button,
+  .oliver-clarity-secondary-button,
+  .oliver-clarity-nav-cta {
     width: 100%;
+    justify-content: center;
   }
 
-  .oliver-hook-nav-inner {
-    grid-template-columns: 1fr;
-  }
-
-  .oliver-hook-brand {
-    justify-content: space-between;
-  }
-
-  .oliver-hook-hero {
-    padding-top: 5.5rem;
-  }
-
-  .oliver-hook-hero-panel,
-  .oliver-hook-proof-card,
-  .oliver-hook-outcome-card,
-  .oliver-hook-step-card,
-  .oliver-hook-surface-card,
-  .oliver-hook-control-card,
-  .oliver-hook-faq-card,
-  .oliver-hook-final-card,
-  .oliver-hook-artifact-card {
-    border-radius: 1.2rem;
-    padding: 1rem;
-  }
-
-  .oliver-hook-hero-panel-head,
-  .oliver-hook-card-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .oliver-hook-health {
-    justify-items: start;
-    text-align: left;
-  }
-
-  .oliver-hook-checklist li {
-    grid-template-columns: auto 1fr;
-  }
-
-  .oliver-hook-checklist li small {
-    grid-column: 2 / -1;
-    padding-left: 0;
-  }
-
-  .oliver-hook-step-card {
-    grid-template-columns: 1fr;
+  .oliver-clarity-update-card,
+  .oliver-clarity-surface-card,
+  .oliver-clarity-step-card,
+  .oliver-clarity-trust-card,
+  .oliver-clarity-trust-panel {
+    border-radius: 1.25rem;
   }
 }
 
 @media (max-width: 560px) {
-  .oliver-hook-nav {
-    top: 0.65rem;
-    padding-inline: 0.65rem;
+  .oliver-clarity-topbar {
+    gap: 0.75rem;
   }
 
-  .oliver-hook-link {
-    font-size: 0.84rem;
-    padding-inline: 0.72rem;
+  .oliver-clarity-brand-copy {
+    font-size: 1.08rem;
   }
 
-  .oliver-hook-pill,
-  .oliver-hook-signal-chip,
-  .oliver-hook-tool-chip {
-    font-size: 0.82rem;
+  .oliver-clarity-title {
+    font-size: clamp(2.6rem, 14vw, 4rem);
+  }
+
+  .oliver-clarity-subtitle,
+  .oliver-clarity-section-intro,
+  .oliver-clarity-card-summary {
+    font-size: 1rem;
+  }
+
+  .oliver-clarity-health-group {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .oliver-clarity-update-head {
+    flex-direction: column;
+  }
+
+  .oliver-clarity-source-note {
+    padding-top: 0.8rem;
+  }
+
+  .oliver-clarity-inline-link {
+    width: 100%;
+    justify-content: center;
   }
 }
