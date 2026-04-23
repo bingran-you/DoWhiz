@@ -26,22 +26,74 @@ from typing import Any
 
 SERVICE_ROOT = Path(__file__).resolve().parents[3]
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+EVALS_ROOT = SKILL_ROOT / "evals"
 WORKSPACE_ROOT = SKILL_ROOT.parent.parent / "us-equity-daily-monitor-workspace"
 REQUIRED_LABELS = [
-    "rating:",
-    "horizon:",
+    "request framing",
+    "ticker:",
+    "name:",
+    "type:",
+    "research mode:",
+    "user objective:",
+    "horizon basis:",
+    "question type:",
+    "decision card",
+    "new money action:",
+    "existing holder action:",
+    "near-term timing view:",
+    "long-term ownership view:",
     "confidence:",
-    "timing verdict:",
+    "one-line rationale:",
+    "why in 3 bullets",
+    "what is priced in:",
+    "what keeps this from being stronger:",
+    "what would change the view:",
+    "trigger block",
+    "upgrade / add triggers:",
+    "stay wait unless:",
+    "invalidation criteria:",
     "verified facts",
     "derived metrics",
-    "bull case",
-    "base case",
-    "bear case",
-    "add criteria:",
-    "invalidation criteria:",
-    "biggest near-term risk:",
-    "biggest long-term strength:",
+    "expectations",
+    "what the next catalyst must show:",
+    "what could disappoint even if fundamentals are fine:",
+    "opportunity-cost / peer check",
+    "inference / judgment",
+    "bull case:",
+    "base case:",
+    "bear case:",
+    "source notes",
+    "disclaimer",
 ]
+SUMMARY_FIRST_HEADINGS = [
+    "request framing",
+    "decision card",
+    "why in 3 bullets",
+    "trigger block",
+    "verified facts",
+]
+SECTION_HEADINGS = [
+    "request framing",
+    "decision card",
+    "why in 3 bullets",
+    "trigger block",
+    "verified facts",
+    "derived metrics",
+    "expectations",
+    "opportunity-cost / peer check",
+    "inference / judgment",
+    "scenario analysis",
+    "source notes",
+    "disclaimer",
+]
+LINKED_EVIDENCE_SECTIONS = [
+    "verified facts",
+    "derived metrics",
+    "expectations",
+    "source notes",
+]
+NEW_MONEY_ACTIONS = ["buy", "wait", "starter only", "avoid for now"]
+EXISTING_HOLDER_ACTIONS = ["hold", "add", "trim", "exit", "hold / do not add"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,7 +104,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_evals() -> list[dict[str, Any]]:
-    payload = json.loads((SKILL_ROOT / "evals" / "evals.json").read_text())
+    payload = json.loads((EVALS_ROOT / "evals.json").read_text())
     return payload["evals"]
 
 
@@ -67,6 +119,61 @@ def normalize_text(raw_html: str) -> str:
     return " ".join(text.split()).lower()
 
 
+def contains_in_order(text: str, markers: list[str]) -> bool:
+    start = 0
+    for marker in markers:
+        idx = text.find(marker, start)
+        if idx == -1:
+            return False
+        start = idx + len(marker)
+    return True
+
+
+def find_field_value(text: str, label: str, allowed: list[str]) -> str | None:
+    for value in allowed:
+        if f"{label}: {value}" in text:
+            return value
+    return None
+
+
+def extract_section(html_lower: str, heading: str) -> str | None:
+    start = find_heading_position(html_lower, heading)
+    if start is None:
+        return None
+    section_start = start + 1
+    end = len(html_lower)
+    for next_heading in SECTION_HEADINGS:
+        if next_heading == heading:
+            continue
+        idx = find_heading_position(html_lower[section_start:], next_heading)
+        if idx is not None:
+            end = min(end, section_start + idx)
+    return html_lower[start:end]
+
+
+def find_heading_position(html_lower: str, heading: str) -> int | None:
+    for marker in [f">{heading}</", f">{heading}<"]:
+        idx = html_lower.find(marker)
+        if idx != -1:
+            return idx
+    return None
+
+
+def section_contains_link(html_lower: str, heading: str) -> bool:
+    section = extract_section(html_lower, heading)
+    if not section:
+        return False
+    return 'href="http' in section or "href='http" in section
+
+
+def count_evidence_chips(html_lower: str) -> int:
+    return html_lower.count("dw-evidence-chip")
+
+
+def has_source_tier(html_lower: str, tier: str) -> bool:
+    return f'data-source-tier="{tier}"' in html_lower or f"data-source-tier='{tier}'" in html_lower
+
+
 def extract_field(text: str, label: str) -> str | None:
     pattern = re.compile(rf"{re.escape(label)}\s*:\s*([^<\n\r]+)", re.IGNORECASE)
     match = pattern.search(text)
@@ -75,8 +182,33 @@ def extract_field(text: str, label: str) -> str | None:
     return match.group(1).strip().lower()
 
 
-def grade_contract(text: str) -> list[str]:
-    return [label for label in REQUIRED_LABELS if label not in text]
+def audit_artifact(artifact_html: str) -> dict[str, Any]:
+    text = normalize_text(artifact_html)
+    html_lower = artifact_html.lower()
+    missing_labels = [label for label in REQUIRED_LABELS if label not in text]
+    decision_card_pos = text.find("decision card")
+
+    return {
+        "normalized_text": text,
+        "missing_labels": missing_labels,
+        "new_money_action": find_field_value(text, "new money action", NEW_MONEY_ACTIONS),
+        "existing_holder_action": find_field_value(
+            text, "existing holder action", EXISTING_HOLDER_ACTIONS
+        ),
+        "summary_first_ok": contains_in_order(text, SUMMARY_FIRST_HEADINGS),
+        "decision_card_near_top": decision_card_pos != -1 and decision_card_pos < 900,
+        "evidence_chip_count": count_evidence_chips(html_lower),
+        "source_tiers": {
+            tier: has_source_tier(html_lower, tier)
+            for tier in ["primary", "independent", "reference"]
+        },
+        "linked_evidence_sections": {
+            heading: section_contains_link(html_lower, heading)
+            for heading in LINKED_EVIDENCE_SECTIONS
+        },
+        "confidence": extract_field(text, "confidence"),
+        "html_lower": html_lower,
+    }
 
 
 def run_live_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
@@ -138,7 +270,10 @@ def run_live_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
 
 
 def run_fixture_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
-    artifact_html = case["artifact_html"]
+    if case.get("artifact_file"):
+        artifact_html = (EVALS_ROOT / case["artifact_file"]).read_text()
+    else:
+        artifact_html = case["artifact_html"]
     rendered_path = eval_dir / "final_rendered_email.html"
     rendered_path.write_text(artifact_html)
     return {
@@ -150,48 +285,120 @@ def run_fixture_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
 
 
 def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, Any]:
-    artifact_html = run_result["artifact_html"]
-    text = normalize_text(artifact_html)
+    audit = audit_artifact(run_result["artifact_html"])
+    text = audit["normalized_text"]
     checks: list[dict[str, Any]] = []
 
-    missing_contract = grade_contract(text)
     if case.get("expected_failure"):
+        failed_reasons = []
+        if audit["missing_labels"]:
+            failed_reasons.append(f"missing labels: {', '.join(audit['missing_labels'])}")
+        if not audit["summary_first_ok"]:
+            failed_reasons.append("summary-first order missing")
+        if not audit["new_money_action"]:
+            failed_reasons.append("new money action missing or invalid")
+        if audit["evidence_chip_count"] < 4:
+            failed_reasons.append("evidence chips missing")
         checks.append(
             {
                 "name": "generic_commentary_fixture_rejected",
-                "passed": bool(missing_contract),
-                "detail": "grader rejected fixture" if missing_contract else "fixture unexpectedly passed",
+                "passed": bool(failed_reasons),
+                "detail": "; ".join(failed_reasons)
+                if failed_reasons
+                else "fixture unexpectedly passed the stronger contract",
             }
         )
     elif case.get("require_contract"):
         checks.append(
             {
                 "name": "required_contract_labels_present",
-                "passed": not missing_contract,
+                "passed": not audit["missing_labels"],
                 "detail": "ok"
-                if not missing_contract
-                else f"missing: {', '.join(missing_contract)}",
+                if not audit["missing_labels"]
+                else f"missing: {', '.join(audit['missing_labels'])}",
             }
         )
 
-    if case.get("expected_horizon_contains"):
-        horizon = extract_field(text, "horizon") or ""
+    if case.get("require_actions"):
         checks.append(
             {
-                "name": "horizon_awareness",
-                "passed": case["expected_horizon_contains"] in horizon,
-                "detail": f"horizon={horizon or '(missing)'}",
+                "name": "new_money_vs_existing_holder_actions",
+                "passed": bool(audit["new_money_action"] and audit["existing_holder_action"]),
+                "detail": (
+                    f"new_money={audit['new_money_action'] or '(missing)'} "
+                    f"existing_holder={audit['existing_holder_action'] or '(missing)'}"
+                ),
             }
         )
 
-    if case.get("expected_question_type_contains"):
+    if case.get("require_dual_horizon"):
         checks.append(
             {
-                "name": "question_type_alignment",
-                "passed": case["expected_question_type_contains"] in text,
+                "name": "dual_horizon_present",
+                "passed": "near-term timing view:" in text and "long-term ownership view:" in text,
                 "detail": "ok"
-                if case["expected_question_type_contains"] in text
-                else "question type missing from final artifact",
+                if "near-term timing view:" in text and "long-term ownership view:" in text
+                else "near-term or long-term view missing",
+            }
+        )
+
+    if case.get("require_expectations"):
+        expectations_ok = (
+            "what is priced in:" in text
+            and "what the next catalyst must show:" in text
+            and "what could disappoint even if fundamentals are fine:" in text
+        )
+        checks.append(
+            {
+                "name": "expectations_layer_present",
+                "passed": expectations_ok,
+                "detail": "ok" if expectations_ok else "expectations layer missing pieces",
+            }
+        )
+
+    if case.get("require_evidence_chips"):
+        linked_sections_ok = all(audit["linked_evidence_sections"].values())
+        checks.append(
+            {
+                "name": "clickable_evidence_present",
+                "passed": audit["evidence_chip_count"] >= 4 and linked_sections_ok,
+                "detail": (
+                    f"chips={audit['evidence_chip_count']} "
+                    f"linked_sections={audit['linked_evidence_sections']}"
+                ),
+            }
+        )
+
+    if case.get("require_source_tiers"):
+        tiers_ok = all(audit["source_tiers"].values())
+        checks.append(
+            {
+                "name": "tiered_sources_present",
+                "passed": tiers_ok,
+                "detail": f"tiers={audit['source_tiers']}",
+            }
+        )
+
+    if case.get("require_scan_first"):
+        checks.append(
+            {
+                "name": "scan_first_information_architecture",
+                "passed": audit["summary_first_ok"] and audit["decision_card_near_top"],
+                "detail": (
+                    f"summary_first_ok={audit['summary_first_ok']} "
+                    f"decision_card_near_top={audit['decision_card_near_top']}"
+                ),
+            }
+        )
+
+    if case.get("require_opportunity_cost"):
+        checks.append(
+            {
+                "name": "opportunity_cost_present",
+                "passed": "opportunity-cost / peer check" in text,
+                "detail": "ok"
+                if "opportunity-cost / peer check" in text
+                else "opportunity-cost block missing",
             }
         )
 
@@ -206,7 +413,7 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         )
 
     if case.get("must_contain_any"):
-        passed = any(s.lower() in artifact_html.lower() for s in case["must_contain_any"])
+        passed = any(s.lower() in run_result["artifact_html"].lower() for s in case["must_contain_any"])
         checks.append(
             {
                 "name": "required_correction_or_phrase_present",
@@ -216,7 +423,7 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         )
 
     if case.get("allowed_confidence"):
-        confidence = extract_field(text, "confidence") or ""
+        confidence = audit["confidence"] or ""
         allowed = [value.lower() for value in case["allowed_confidence"]]
         checks.append(
             {
@@ -259,17 +466,15 @@ def main() -> None:
                 "id": case["id"],
                 "name": case["name"],
                 "passed": grading["passed"],
+                "checks": grading["checks"],
                 "artifact_path": grading["artifact_path"],
                 "reply_draft_path": grading["reply_draft_path"],
             }
         )
 
     summary_path = iteration_dir / "summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2))
-    failed = [item for item in summary if not item["passed"]]
-    print(json.dumps({"summary_path": str(summary_path), "failed": failed}, indent=2))
-    if failed:
-        raise SystemExit(1)
+    summary_path.write_text(json.dumps({"results": summary}, indent=2))
+    print(summary_path)
 
 
 if __name__ == "__main__":

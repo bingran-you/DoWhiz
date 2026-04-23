@@ -5,20 +5,72 @@ use serde_json::Value;
 
 use super::errors::RunTaskError;
 
-const REQUIRED_INVESTMENT_LABELS: &[(&str, bool)] = &[
-    ("Rating", true),
-    ("Horizon", true),
+const REQUIRED_INVESTMENT_MARKERS: &[(&str, bool)] = &[
+    ("Request Framing", false),
+    ("Ticker", true),
+    ("Name", true),
+    ("Type", true),
+    ("Research Mode", true),
+    ("User Objective", true),
+    ("Horizon Basis", true),
+    ("Question Type", true),
+    ("Decision Card", false),
+    ("New Money Action", true),
+    ("Existing Holder Action", true),
+    ("Near-Term Timing View", true),
+    ("Long-Term Ownership View", true),
     ("Confidence", true),
-    ("Timing Verdict", true),
+    ("One-Line Rationale", true),
+    ("Why in 3 bullets", false),
+    ("What Is Priced In", true),
+    ("What Keeps This From Being Stronger", true),
+    ("What Would Change The View", true),
+    ("Trigger Block", false),
+    ("Upgrade / Add Triggers", true),
+    ("Stay Wait Unless", true),
+    ("Invalidation Criteria", true),
     ("Verified Facts", false),
     ("Derived Metrics", false),
-    ("Bull Case", false),
-    ("Base Case", false),
-    ("Bear Case", false),
-    ("Add Criteria", true),
-    ("Invalidation Criteria", true),
-    ("Biggest Near-Term Risk", true),
-    ("Biggest Long-Term Strength", true),
+    ("Expectations", false),
+    ("What the Next Catalyst Must Show", true),
+    ("What Could Disappoint Even If Fundamentals Are Fine", true),
+    ("Opportunity-Cost / Peer Check", false),
+    ("Inference / Judgment", false),
+    ("Bull Case", true),
+    ("Base Case", true),
+    ("Bear Case", true),
+    ("Source Notes", false),
+    ("Disclaimer", false),
+];
+
+const SUMMARY_FIRST_HEADINGS: &[&str] = &[
+    "request framing",
+    "decision card",
+    "why in 3 bullets",
+    "trigger block",
+    "verified facts",
+];
+
+const SECTION_HEADINGS: &[&str] = &[
+    "request framing",
+    "decision card",
+    "why in 3 bullets",
+    "trigger block",
+    "verified facts",
+    "derived metrics",
+    "expectations",
+    "opportunity-cost / peer check",
+    "inference / judgment",
+    "scenario analysis",
+    "source notes",
+    "disclaimer",
+];
+
+const LINKED_EVIDENCE_SECTIONS: &[&str] = &[
+    "verified facts",
+    "derived metrics",
+    "expectations",
+    "source notes",
 ];
 
 const FINANCE_CONTEXT_KEYWORDS: &[&str] = &[
@@ -54,6 +106,9 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "wait",
 ];
 
+const NEW_MONEY_ACTIONS: &[&str] = &["buy", "wait", "starter only", "avoid for now"];
+const EXISTING_HOLDER_ACTIONS: &[&str] = &["hold", "add", "trim", "exit", "hold / do not add"];
+
 pub(super) fn ensure_expected_reply_artifact(
     workspace_dir: &Path,
     reply_path: &Path,
@@ -66,16 +121,15 @@ pub(super) fn ensure_expected_reply_artifact(
         });
     }
 
-    let Some(missing_labels) = investment_contract_missing_labels(workspace_dir, reply_path)?
-    else {
+    let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
         return Ok(());
     };
 
     Err(RunTaskError::OutputContractViolation {
         path: reply_path.to_path_buf(),
         reason: format!(
-            "investment reply is missing required labels: {}",
-            missing_labels.join(", ")
+            "investment reply violates required contract: {}",
+            violations.join("; ")
         ),
         output: output_tail.to_string(),
     })
@@ -85,7 +139,7 @@ pub(super) fn reply_artifact_ready_for_workspace(workspace_dir: &Path, reply_pat
     ensure_expected_reply_artifact(workspace_dir, reply_path, "").is_ok()
 }
 
-fn investment_contract_missing_labels(
+fn investment_contract_violations(
     workspace_dir: &Path,
     reply_path: &Path,
 ) -> Result<Option<Vec<String>>, RunTaskError> {
@@ -96,9 +150,69 @@ fn investment_contract_missing_labels(
 
     let reply_body = fs::read_to_string(reply_path)?;
     let normalized_reply = normalize_search_text(&reply_body);
+    let lowered_reply = reply_body.to_ascii_lowercase();
+    let mut violations = Vec::new();
+
+    let missing_markers = missing_required_markers(&normalized_reply);
+    if !missing_markers.is_empty() {
+        violations.push(format!(
+            "missing required labels: {}",
+            missing_markers.join(", ")
+        ));
+    }
+
+    if !contains_markers_in_order(&normalized_reply, SUMMARY_FIRST_HEADINGS) {
+        violations.push(
+            "summary-first section order must be Request Framing -> Decision Card -> Why in 3 bullets -> Trigger Block -> Verified Facts"
+                .to_string(),
+        );
+    }
+
+    if let Some(issue) = validate_action_field(&reply_body, "New Money Action", NEW_MONEY_ACTIONS) {
+        violations.push(issue);
+    }
+    if let Some(issue) = validate_action_field(
+        &reply_body,
+        "Existing Holder Action",
+        EXISTING_HOLDER_ACTIONS,
+    ) {
+        violations.push(issue);
+    }
+
+    let evidence_chip_count = lowered_reply.matches("dw-evidence-chip").count();
+    if evidence_chip_count < 4 {
+        violations.push(format!(
+            "expected at least 4 evidence chips, found {}",
+            evidence_chip_count
+        ));
+    }
+
+    for tier in ["primary", "independent", "reference"] {
+        if !contains_source_tier(&lowered_reply, tier) {
+            violations.push(format!("missing source tier evidence chip: {}", tier));
+        }
+    }
+
+    for heading in LINKED_EVIDENCE_SECTIONS {
+        if !section_contains_clickable_link(&lowered_reply, heading) {
+            violations.push(format!(
+                "section `{}` must include a clickable source link",
+                heading
+            ));
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(violations))
+    }
+}
+
+fn missing_required_markers(normalized_reply: &str) -> Vec<String> {
     let mut missing = Vec::new();
 
-    for (label, require_colon) in REQUIRED_INVESTMENT_LABELS {
+    for (label, require_colon) in REQUIRED_INVESTMENT_MARKERS {
         let present = if *require_colon {
             normalized_reply.contains(&format!("{}:", label.to_ascii_lowercase()))
         } else {
@@ -109,11 +223,105 @@ fn investment_contract_missing_labels(
         }
     }
 
-    if missing.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(missing))
+    missing
+}
+
+fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
+    let mut search_start = 0;
+    for marker in markers {
+        let haystack = &normalized_reply[search_start..];
+        let Some(found) = haystack.find(marker) else {
+            return false;
+        };
+        search_start += found + marker.len();
     }
+    true
+}
+
+fn validate_action_field(raw_html: &str, label: &str, allowed_values: &[&str]) -> Option<String> {
+    let value = extract_labeled_value(raw_html, label)?;
+    let value = normalize_action_value(&value);
+
+    if allowed_values
+        .iter()
+        .any(|candidate| normalize_action_value(candidate) == value)
+    {
+        return None;
+    }
+
+    Some(format!(
+        "`{}` must be one of: {}",
+        label,
+        allowed_values.join(", ")
+    ))
+}
+
+fn extract_labeled_value(raw_html: &str, label: &str) -> Option<String> {
+    let lower = raw_html.to_ascii_lowercase();
+    let marker = format!("{}:", label.to_ascii_lowercase());
+    let start = lower.find(&marker)?;
+    let tail = &raw_html[start..];
+    let lower_tail = &lower[start..];
+    let mut end = tail.len();
+    for boundary in ["</li", "</p", "</div", "<br", "\n"] {
+        if let Some(idx) = lower_tail.find(boundary) {
+            end = end.min(idx);
+        }
+    }
+    let fragment = rough_html_to_text(&tail[..end]);
+    let lowered_fragment = fragment.to_ascii_lowercase();
+    let marker_index = lowered_fragment.find(&marker)?;
+    let value = fragment[marker_index + marker.len()..].trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn normalize_action_value(raw: &str) -> String {
+    raw.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn contains_source_tier(lowered_reply: &str, tier: &str) -> bool {
+    lowered_reply.contains(&format!("data-source-tier=\"{}\"", tier))
+        || lowered_reply.contains(&format!("data-source-tier='{}'", tier))
+}
+
+fn section_contains_clickable_link(lowered_reply: &str, heading: &str) -> bool {
+    let Some(section) = extract_section(lowered_reply, heading) else {
+        return false;
+    };
+    section.contains("href=\"http") || section.contains("href='http")
+}
+
+fn extract_section<'a>(lowered_reply: &'a str, heading: &str) -> Option<&'a str> {
+    let start = find_heading_position(lowered_reply, heading)?;
+    let section_start = start + 1;
+    let mut end = lowered_reply.len();
+
+    for next_heading in SECTION_HEADINGS {
+        if *next_heading == heading {
+            continue;
+        }
+        if let Some(offset) = find_heading_position(&lowered_reply[section_start..], next_heading) {
+            end = end.min(section_start + offset);
+        }
+    }
+
+    Some(&lowered_reply[start..end])
+}
+
+fn find_heading_position(lowered_reply: &str, heading: &str) -> Option<usize> {
+    for marker in [format!(">{}</", heading), format!(">{}<", heading)] {
+        if let Some(idx) = lowered_reply.find(&marker) {
+            return Some(idx);
+        }
+    }
+    None
 }
 
 fn load_inbound_request_text(workspace_dir: &Path) -> Result<String, RunTaskError> {
@@ -279,26 +487,48 @@ mod tests {
         let workspace = write_workspace(
             "Give me deep research on NVDA and tell me whether now is a good time to buy.",
             r#"
-            <h2>Request Framing</h2>
-            <ul><li><strong>Horizon:</strong> Long-term (inferred)</li></ul>
-            <h2>Final Recommendation</h2>
-            <ul>
-              <li><strong>Rating:</strong> Wait</li>
-              <li><strong>Horizon:</strong> Long-term (inferred)</li>
+            <section><h2>Request Framing</h2><ul>
+              <li><strong>Ticker:</strong> NVDA</li>
+              <li><strong>Name:</strong> NVIDIA</li>
+              <li><strong>Type:</strong> Stock</li>
+              <li><strong>Research Mode:</strong> Deep research</li>
+              <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
+              <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
+              <li><strong>Question Type:</strong> Long-term accumulation</li>
+            </ul></section>
+            <section class="dw-investment-card"><h2>Decision Card</h2><ul>
+              <li><strong>New Money Action:</strong> Starter Only</li>
+              <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
+              <li><strong>Near-Term Timing View:</strong> Wait for a cleaner post-earnings setup.</li>
+              <li><strong>Long-Term Ownership View:</strong> Attractive if AI demand durability remains intact.</li>
               <li><strong>Confidence:</strong> Medium</li>
-              <li><strong>Timing Verdict:</strong> Wait</li>
-              <li><strong>Add Criteria:</strong> Better valuation or cleaner post-earnings setup.</li>
-              <li><strong>Invalidation Criteria:</strong> Demand slowdown or margin compression.</li>
-              <li><strong>Biggest Near-Term Risk:</strong> Event volatility.</li>
-              <li><strong>Biggest Long-Term Strength:</strong> AI platform leadership.</li>
-            </ul>
-            <h2>Verified Facts</h2><ul><li>Fact</li></ul>
-            <h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x</li></ul>
-            <h2>Inference / Judgment</h2><ul><li>Judgment</li></ul>
-            <h2>Scenario Analysis</h2>
-            <p><strong>Bull Case:</strong> Demand remains strong.</p>
-            <p><strong>Base Case:</strong> Growth normalizes.</p>
-            <p><strong>Bear Case:</strong> Spending slows.</p>
+              <li><strong>One-Line Rationale:</strong> Quality is high, but expectations and valuation leave a thin near-term margin for error.</li>
+            </ul></section>
+            <section><h2>Why in 3 bullets</h2><ul>
+              <li><strong>What Is Priced In:</strong> Sustained AI spending and another strong quarter.</li>
+              <li><strong>What Keeps This From Being Stronger:</strong> Valuation already assumes very little execution slippage.</li>
+              <li><strong>What Would Change The View:</strong> Better evidence that demand durability is outrunning already-high expectations.</li>
+            </ul></section>
+            <section><h2>Trigger Block</h2><ul>
+              <li><strong>Upgrade / Add Triggers:</strong> Strong beat plus durable margin guidance.</li>
+              <li><strong>Stay Wait Unless:</strong> Setup de-risks after earnings or valuation resets.</li>
+              <li><strong>Invalidation Criteria:</strong> Demand or gross margin thesis weakens materially.</li>
+            </ul></section>
+            <section><h2>Verified Facts</h2><ul><li>Revenue grew. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li></ul></section>
+            <section><h2>Derived Metrics</h2><ul><li>Forward P/E: price / forward EPS = 31x. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
+            <section><h2>Expectations</h2><ul>
+              <li><strong>What the Next Catalyst Must Show:</strong> Sustained data-center demand plus margin resilience. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li>
+              <li><strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Guidance that is merely good rather than exceptional.</li>
+            </ul></section>
+            <section><h2>Opportunity-Cost / Peer Check</h2><ul><li>NVIDIA still has the strongest AI platform position, but buying the index avoids single-report valuation compression. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="reference" href="https://www.nasdaq.com">Quote</a></div></li></ul></section>
+            <section><h2>Inference / Judgment</h2><ul><li>Judgment.</li></ul></section>
+            <section><h2>Scenario Analysis</h2>
+              <p><strong>Bull Case:</strong> Demand remains strong.</p>
+              <p><strong>Base Case:</strong> Growth normalizes.</p>
+              <p><strong>Bear Case:</strong> Spending slows.</p>
+            </section>
+            <section><h2>Source Notes</h2><ul><li>Primary, independent, and reference sources were cross-checked. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
+            <section><h2>Disclaimer</h2><p>Public-information-based research only, not personalized investment advice or trade execution.</p></section>
             "#,
         );
         let reply_path = workspace.join("reply_email_draft.html");
@@ -320,7 +550,7 @@ mod tests {
         let rendered = err.to_string();
         assert!(
             rendered.contains("Output contract violation")
-                || rendered.contains("missing required labels")
+                || rendered.contains("violates required contract")
         );
         assert!(!reply_artifact_ready_for_workspace(&workspace, &reply_path));
     }

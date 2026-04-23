@@ -28,6 +28,9 @@ For email tasks, `reply_email_draft.html` is the pre-send workspace artifact. Th
 HTML is produced later by `send_emails_module::normalize_email_html(...)`, so tests that care about
 the rendered customer-facing structure should grade the normalized final HTML, not just an internal
 model transcript or the raw shell logs.
+For investment replies, the final artifact contract is intentionally stricter than a generic memo:
+the normalized HTML must preserve the scan-first decision card, dual action tracks, expectations,
+and inline clickable evidence chips with tiered sources.
 
 Late-finalization recovery:
 - when Codex has already written the expected reply artifact, `run_task` now treats that artifact as

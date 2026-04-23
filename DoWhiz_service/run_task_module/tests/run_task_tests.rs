@@ -26,21 +26,76 @@ fn require_env(key: &'static str) {
 
 fn assert_investment_contract_labels(text: &str) {
     for label in [
-        "Rating:",
-        "Horizon:",
+        "Request Framing",
+        "Ticker:",
+        "Name:",
+        "Type:",
+        "Research Mode:",
+        "User Objective:",
+        "Horizon Basis:",
+        "Question Type:",
+        "Decision Card",
+        "New Money Action:",
+        "Existing Holder Action:",
+        "Near-Term Timing View:",
+        "Long-Term Ownership View:",
         "Confidence:",
-        "Timing Verdict:",
+        "One-Line Rationale:",
+        "Why in 3 bullets",
+        "What Is Priced In:",
+        "What Keeps This From Being Stronger:",
+        "What Would Change The View:",
+        "Trigger Block",
+        "Upgrade / Add Triggers:",
+        "Stay Wait Unless:",
+        "Invalidation Criteria:",
         "Verified Facts",
         "Derived Metrics",
+        "Expectations",
+        "What the Next Catalyst Must Show:",
+        "What Could Disappoint Even If Fundamentals Are Fine:",
+        "Opportunity-Cost / Peer Check",
+        "Inference / Judgment",
         "Bull Case",
         "Base Case",
         "Bear Case",
-        "Add Criteria:",
-        "Invalidation Criteria:",
-        "Biggest Near-Term Risk:",
-        "Biggest Long-Term Strength:",
+        "Source Notes",
+        "Disclaimer",
     ] {
         assert!(text.contains(label), "missing label {label}");
+    }
+    assert!(
+        text.contains("dw-evidence-chip") || text.contains("data-source-tier="),
+        "missing evidence chips"
+    );
+    for tier in ["primary", "independent", "reference"] {
+        assert!(
+            text.contains(&format!("data-source-tier=\"{tier}\""))
+                || text.contains(&format!("data-source-tier='{tier}'")),
+            "missing source tier {tier}"
+        );
+    }
+    for marker in [
+        "Request Framing",
+        "Decision Card",
+        "Why in 3 bullets",
+        "Trigger Block",
+        "Verified Facts",
+    ]
+    .windows(2)
+    {
+        let earlier = text
+            .find(marker[0])
+            .unwrap_or_else(|| panic!("missing marker {}", marker[0]));
+        let later = text
+            .find(marker[1])
+            .unwrap_or_else(|| panic!("missing marker {}", marker[1]));
+        assert!(
+            earlier < later,
+            "expected {} to appear before {}",
+            marker[0],
+            marker[1]
+        );
     }
 }
 
@@ -1142,8 +1197,11 @@ fn run_task_accepts_structured_investment_reply_from_fake_codex() {
 
     let result = run_task(&build_params(&workspace)).unwrap();
     let html = fs::read_to_string(result.reply_html_path).unwrap();
-    assert!(html.contains("Timing Verdict"));
+    assert!(html.contains("New Money Action"));
     assert!(html.contains("Verified Facts"));
+    assert!(html.contains("Opportunity-Cost / Peer Check"));
+    assert!(html.contains("New Money Action:</strong> Starter Only"));
+    assert!(html.contains("Existing Holder Action:</strong> Hold / Do not add"));
 }
 
 #[test]
@@ -1217,7 +1275,7 @@ fn run_task_investment_contract_violation_triggers_claude_fallback() {
     let html = fs::read_to_string(result.reply_html_path).unwrap();
     let recovery = result.recovery_note.unwrap_or_default();
     assert!(recovery.contains("Claude fallback"));
-    assert!(html.contains("Timing Verdict"));
+    assert!(html.contains("New Money Action"));
     assert!(html.contains("Bull Case"));
 }
 
@@ -1253,7 +1311,7 @@ fn run_task_investment_contract_violation_fails_closed_when_fallback_is_still_ge
     let err = run_task(&build_params(&workspace)).expect_err("expected fail-closed contract error");
     let rendered = err.to_string();
     assert!(rendered.contains("Output contract violation"));
-    assert!(rendered.contains("missing required labels"));
+    assert!(rendered.contains("violates required contract"));
 }
 
 #[test]

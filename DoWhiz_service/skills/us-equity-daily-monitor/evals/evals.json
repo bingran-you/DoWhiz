@@ -3,11 +3,17 @@
   "evals": [
     {
       "id": 1,
-      "name": "final-artifact-contract-nvda",
-      "kind": "live_run",
-      "subject": "NVDA investment memo",
-      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
-      "require_contract": true
+      "name": "structured-scan-first-fixture",
+      "kind": "fixture",
+      "artifact_file": "fixtures/structured_scan_first_email.html",
+      "require_contract": true,
+      "require_actions": true,
+      "require_dual_horizon": true,
+      "require_expectations": true,
+      "require_evidence_chips": true,
+      "require_source_tiers": true,
+      "require_scan_first": true,
+      "require_opportunity_cost": true
     },
     {
       "id": 2,
@@ -18,42 +24,53 @@
     },
     {
       "id": 3,
-      "name": "horizon-awareness-nvda-3-month",
+      "name": "nokia-live-decision-memo",
       "kind": "live_run",
-      "subject": "NVDA 3-month position",
-      "prompt": "Is NVDA a buy this week for a 3-month position?",
+      "subject": "Nokia investment memo",
+      "prompt": "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
       "require_contract": true,
-      "expected_horizon_contains": "medium-term",
-      "expected_question_type_contains": "medium-term investment"
-    },
-    {
-      "id": 4,
-      "name": "live-path-alignment-nvda",
-      "kind": "live_run",
-      "subject": "NVDA alignment check",
-      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
-      "require_contract": true,
+      "require_actions": true,
+      "require_dual_horizon": true,
+      "require_expectations": true,
+      "require_evidence_chips": true,
+      "require_source_tiers": true,
+      "require_scan_first": true,
+      "require_opportunity_cost": true,
       "require_live_path_alignment": true
     },
     {
-      "id": 5,
+      "id": 4,
       "name": "wrong-premise-correction-nvda",
       "kind": "live_run",
       "subject": "NVDA earnings timing",
       "prompt": "NVDA earnings are on May 27, 2026, right? Should I buy before them?",
       "require_contract": true,
+      "require_actions": true,
+      "require_dual_horizon": true,
+      "require_expectations": true,
+      "require_evidence_chips": true,
+      "require_source_tiers": true,
+      "require_scan_first": true,
+      "require_opportunity_cost": true,
       "must_contain_any": [
         "May 20, 2026",
         "May 20 2026"
       ]
     },
     {
-      "id": 6,
+      "id": 5,
       "name": "weak-case-confidence-plug",
       "kind": "live_run",
       "subject": "PLUG investment memo",
       "prompt": "Give me deep research on PLUG and tell me whether now is a good time to buy.",
       "require_contract": true,
+      "require_actions": true,
+      "require_dual_horizon": true,
+      "require_expectations": true,
+      "require_evidence_chips": true,
+      "require_source_tiers": true,
+      "require_scan_first": true,
+      "require_opportunity_cost": true,
       "allowed_confidence": [
         "low",
         "medium"
