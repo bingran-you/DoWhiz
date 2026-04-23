@@ -1565,12 +1565,10 @@ fn run_codex_task_azure_aci(
         &mut timing,
     );
 
-    // If execution was canceled (e.g., shutdown signal), skip cleanup to preserve
-    // the container for recovery on next startup.
-    let was_canceled = matches!(&execution, Err(RunTaskError::Canceled { .. }));
-    if was_canceled {
+    // If shutdown is in progress, skip cleanup to preserve the container for recovery.
+    if crate::shutdown::is_shutdown_in_progress() {
         eprintln!(
-            "[run_task] azure_aci execution canceled, skipping cleanup for recovery: container={}",
+            "[run_task] azure_aci shutdown in progress, skipping cleanup for recovery: container={}",
             container_name
         );
     } else {
