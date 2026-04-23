@@ -9,6 +9,8 @@ use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use std_semaphore::Semaphore;
+
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
@@ -42,6 +44,12 @@ use super::utils::{
     ThreadSupersedeMonitor,
 };
 use super::workspace::{canonicalize_dir, workspace_path_in_container};
+
+/// Global semaphore to limit concurrent azcopy transfers.
+/// Prevents overloading the system when many tasks run in parallel.
+const AZCOPY_MAX_CONCURRENT: isize = 5;
+static AZCOPY_SEMAPHORE: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(AZCOPY_MAX_CONCURRENT));
 
 const PAYMENT_ENV_KEYS: &[&str] = &[
     "GOATX402_API_URL",
@@ -256,7 +264,7 @@ pub fn query_aci_container_status(
     }
 
     let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if state.eq_ignore_ascii_case("Succeeded")
+    let result = if state.eq_ignore_ascii_case("Succeeded")
         || state.eq_ignore_ascii_case("Failed")
         || state.eq_ignore_ascii_case("Terminated")
         || state.eq_ignore_ascii_case("Stopped")
@@ -266,7 +274,14 @@ pub fn query_aci_container_status(
         AciContainerStatus::NotFound
     } else {
         AciContainerStatus::Running
-    }
+    };
+    tracing::info!(
+        "ACI status query: container={} resource_group={} status={:?}",
+        container_name,
+        resource_group,
+        result
+    );
+    result
 }
 
 /// Poll an ACI container until it reaches a terminal state.
@@ -277,10 +292,24 @@ pub fn poll_aci_container_until_terminal(
     timeout: Duration,
 ) -> Result<String, String> {
     let start = Instant::now();
+    tracing::info!(
+        "ACI poll start: container={} resource_group={} timeout={}s",
+        container_name,
+        resource_group,
+        timeout.as_secs()
+    );
 
     loop {
         match query_aci_container_status(container_name, resource_group) {
-            AciContainerStatus::Terminal(state) => return Ok(state),
+            AciContainerStatus::Terminal(state) => {
+                tracing::info!(
+                    "ACI poll complete: container={} terminal_state={} elapsed={}s",
+                    container_name,
+                    state,
+                    start.elapsed().as_secs()
+                );
+                return Ok(state);
+            }
             AciContainerStatus::NotFound => {
                 return Err("container not found".to_string());
             }
@@ -332,6 +361,33 @@ pub fn delete_aci_container_by_name(
     }
 
     Ok(())
+}
+
+/// Download ephemeral share results for ACI recovery.
+/// Called by aci_recovery to fetch results from Azure File Share before reading reply file.
+pub fn download_ephemeral_share_for_recovery(
+    container_name: &str,
+    workspace_path: &std::path::Path,
+) -> Result<(), String> {
+    let config = match load_azure_aci_config() {
+        Ok(cfg) => cfg,
+        Err(err) => return Err(format!("failed to load ACI config: {:?}", err)),
+    };
+
+    let share_name = format!("{}{}", EPHEMERAL_SHARE_PREFIX, container_name);
+    tracing::info!(
+        "downloading ephemeral share for recovery: share={} workspace={}",
+        share_name,
+        workspace_path.display()
+    );
+
+    match download_workspace_from_share(&config, &share_name, workspace_path) {
+        Ok(()) => {
+            tracing::info!("ephemeral share download complete: share={}", share_name);
+            Ok(())
+        }
+        Err(err) => Err(format!("ephemeral share download failed: {:?}", err)),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1461,6 +1517,12 @@ fn run_codex_task_azure_aci(
         request.reply_to,
         request.thread_epoch,
     );
+    tracing::info!(
+        "ACI recovery context written: container={} workspace={} channel={}",
+        container_name,
+        host_workspace_dir.display(),
+        request.channel
+    );
 
     let ephemeral_guard = if use_ephemeral_share() {
         eprintln!(
@@ -1530,28 +1592,37 @@ fn run_codex_task_azure_aci(
         &effective_share,
         &mut timing,
     );
-    eprintln!(
-        "[run_task] azure_aci delete-request container={} resource_group={}",
-        container_name, config.resource_group
-    );
-    if let Err(cleanup_err) =
-        delete_aci_container_with_timeout(&config, &container_name, Duration::from_secs(20))
-    {
-        if !is_aci_not_found_error(&cleanup_err) {
-            eprintln!(
-                "[run_task] azure_aci delete-request failed container={} resource_group={} error={}",
-                container_name, config.resource_group, cleanup_err
-            );
-        }
-    }
-    if execution.is_err() {
+
+    // If shutdown is in progress, skip cleanup to preserve the container for recovery.
+    if crate::shutdown::is_shutdown_in_progress() {
         eprintln!(
-            "[run_task] azure_aci execution failed for container={} (cleanup requested)",
+            "[run_task] azure_aci shutdown in progress, skipping cleanup for recovery: container={}",
             container_name
         );
+    } else {
+        eprintln!(
+            "[run_task] azure_aci delete-request container={} resource_group={}",
+            container_name, config.resource_group
+        );
+        if let Err(cleanup_err) =
+            delete_aci_container_with_timeout(&config, &container_name, Duration::from_secs(20))
+        {
+            if !is_aci_not_found_error(&cleanup_err) {
+                eprintln!(
+                    "[run_task] azure_aci delete-request failed container={} resource_group={} error={}",
+                    container_name, config.resource_group, cleanup_err
+                );
+            }
+        }
+        if execution.is_err() {
+            eprintln!(
+                "[run_task] azure_aci execution failed for container={} (cleanup requested)",
+                container_name
+            );
+        }
+        deregister_aci_container(&container_name);
+        deregister_aci_container_mongo(&container_name);
     }
-    deregister_aci_container(&container_name);
-    deregister_aci_container_mongo(&container_name);
 
     if let Some(ref guard) = ephemeral_guard {
         timing.start_stage();
@@ -2068,6 +2139,7 @@ fn upload_workspace_to_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.access();
     let secrets = [config.storage_key.as_str()];
     let source = format!("{}/*", workspace_dir.display());
     let mut last_error = None;
@@ -2137,6 +2209,7 @@ fn download_workspace_from_share(
     share_name: &str,
     workspace_dir: &Path,
 ) -> Result<(), RunTaskError> {
+    let _permit = AZCOPY_SEMAPHORE.access();
     let secrets = [config.storage_key.as_str()];
     let temp_parent = workspace_dir.parent().unwrap_or(workspace_dir);
     let mut last_error = None;
@@ -2275,6 +2348,7 @@ fn build_aci_container_name() -> String {
     format!("dwz-codex-{}-{}-{}", millis, std::process::id(), seq)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_azure_aci_execution(
     config: &AzureAciConfig,
     container_name: &str,
@@ -4622,7 +4696,7 @@ mod tests {
     #[test]
     fn test_collect_payment_env_overrides_uses_employee_prefix_fallback() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("GOATX402_API_URL"),
             EnvVarGuard::unset("GOATX402_API_KEY"),
             EnvVarGuard::unset("EMPLOYEE_PAYMENT_ENV_PREFIX"),
@@ -4646,7 +4720,7 @@ mod tests {
     #[test]
     fn test_collect_payment_env_overrides_prefers_unprefixed_values() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("EMPLOYEE_PAYMENT_ENV_PREFIX", "OLIVER"),
             EnvVarGuard::set("GOATX402_API_KEY", "api-key-global"),
             EnvVarGuard::set("OLIVER_GOATX402_API_KEY", "api-key-prefixed"),
@@ -4661,7 +4735,7 @@ mod tests {
     #[test]
     fn test_collect_bright_data_env_overrides_sets_canonical_and_alias_keys() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(BRIGHT_DATA_API_KEY_ENV_KEY, "bright-key"),
             EnvVarGuard::unset(BRIGHTDATA_API_KEY_ENV_KEY),
             EnvVarGuard::set("BRIGHT_DATA_XIAOHONGSHU_COLLECTOR", "collector-123"),
@@ -4686,7 +4760,7 @@ mod tests {
     #[test]
     fn test_collect_bright_data_env_overrides_falls_back_to_cli_alias() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset(BRIGHT_DATA_API_KEY_ENV_KEY),
             EnvVarGuard::set(BRIGHTDATA_API_KEY_ENV_KEY, "alias-only-key"),
             EnvVarGuard::unset("BRIGHT_DATA_XIAOHONGSHU_COLLECTOR"),
@@ -4711,7 +4785,7 @@ mod tests {
     #[test]
     fn test_collect_human_approval_gate_env_overrides_collects_expected_keys() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("POSTMARK_SERVER_TOKEN", "pm-token"),
             EnvVarGuard::set("HUMAN_APPROVAL_REPLY_TO", "inbox@example.com"),
             EnvVarGuard::set("GOOGLE_PASSWORD", "google-password"),
@@ -4734,7 +4808,7 @@ mod tests {
     #[test]
     fn test_collect_human_approval_gate_env_overrides_skips_unset_or_blank_values() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("POSTMARK_SERVER_TOKEN"),
             EnvVarGuard::set("HUMAN_APPROVAL_FROM", "   "),
             EnvVarGuard::unset("HUMAN_APPROVAL_REPLY_TO"),
@@ -4765,7 +4839,7 @@ addresses = ["dowhiz@deep-tutor.com"]
         )
         .expect("write employee config");
 
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(
                 "EMPLOYEE_CONFIG_PATH",
                 config_path.to_string_lossy().as_ref(),
@@ -4806,7 +4880,7 @@ addresses = ["dowhiz@deep-tutor.com"]
         .expect("write employee config");
 
         let _cwd_guard = CurrentDirGuard::set(temp.path());
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("EMPLOYEE_CONFIG_PATH", "employee.staging.toml"),
             EnvVarGuard::set("EMPLOYEE_ID", "boiled_egg"),
             EnvVarGuard::unset("HUMAN_APPROVAL_FROM"),
@@ -4838,7 +4912,7 @@ addresses = ["dowhiz@deep-tutor.com"]
         )
         .expect("write employee config");
 
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(
                 "EMPLOYEE_CONFIG_PATH",
                 config_path.to_string_lossy().as_ref(),
@@ -4865,7 +4939,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_collect_google_workspace_cli_env_overrides_builds_credentials_file() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset(GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV),
             EnvVarGuard::set(
                 "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_ID",
@@ -4923,7 +4997,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_collect_google_workspace_cli_env_overrides_uses_existing_file_env() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(
                 GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV,
                 ".auth/google_workspace_cli_credentials.json",
@@ -4962,7 +5036,7 @@ addresses = ["dowhiz@deep-tutor.com"]
         )
         .expect("write external credentials");
 
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV, &external_file_str),
             EnvVarGuard::unset("GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_ID"),
             EnvVarGuard::unset("GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_SECRET"),
@@ -4993,7 +5067,7 @@ addresses = ["dowhiz@deep-tutor.com"]
         let workspace = tempfile::tempdir().expect("workspace tempdir");
         let missing_external = workspace.path().join("..").join("missing-credentials.json");
         let missing_external_str = missing_external.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set(
                 GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV,
                 &missing_external_str,
@@ -5038,7 +5112,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_collect_google_workspace_cli_env_overrides_skips_when_components_incomplete() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset(GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV),
             EnvVarGuard::set(
                 "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_ID",
@@ -5062,7 +5136,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_codex_sandbox_mode_prefers_codex_sandbox_mode() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("CODEX_SANDBOX_MODE", "danger-full-access"),
             EnvVarGuard::set("RUN_TASK_CODEX_SANDBOX_MODE", "workspace-write"),
         ];
@@ -5073,7 +5147,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_codex_bypass_sandbox_respects_unprefixed_key() {
         let _lock = env_lock();
-        let _guards = vec![EnvVarGuard::set("CODEX_BYPASS_SANDBOX", "1")];
+        let _guards = [EnvVarGuard::set("CODEX_BYPASS_SANDBOX", "1")];
 
         assert!(codex_bypass_sandbox());
     }
@@ -5081,7 +5155,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_resolve_execution_backend_defaults_to_local() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_EXECUTION_BACKEND"),
             EnvVarGuard::unset("DEPLOY_TARGET"),
         ];
@@ -5091,7 +5165,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_resolve_execution_backend_auto_staging_uses_azure_aci() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_EXECUTION_BACKEND"),
             EnvVarGuard::set("DEPLOY_TARGET", "staging"),
         ];
@@ -5101,7 +5175,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_resolve_execution_backend_auto_production_uses_azure_aci() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_EXECUTION_BACKEND"),
             EnvVarGuard::set("DEPLOY_TARGET", "production"),
         ];
@@ -5111,7 +5185,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_resolve_execution_backend_uses_run_task_execution_backend_when_set() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("DEPLOY_TARGET", "staging"),
             EnvVarGuard::set("RUN_TASK_EXECUTION_BACKEND", "azure_aci"),
         ];
@@ -5121,7 +5195,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_codex_command_timeout_defaults_to_overall_budget_when_unset() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
             EnvVarGuard::unset("RUN_TASK_CODEX_TIMEOUT_SECS"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -5133,7 +5207,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_codex_command_timeout_respects_explicit_override_and_budget() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "300"),
             EnvVarGuard::set("RUN_TASK_CODEX_TIMEOUT_SECS", "900"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -5163,7 +5237,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_load_azure_aci_config_uses_unprefixed_keys() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "stg-rg"),
             EnvVarGuard::set(
                 "RUN_TASK_AZURE_ACI_IMAGE",
@@ -5187,7 +5261,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_load_azure_aci_config_requires_unprefixed_resource_group() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_AZURE_ACI_RESOURCE_GROUP"),
             EnvVarGuard::set(
                 "RUN_TASK_AZURE_ACI_IMAGE",
@@ -5210,7 +5284,7 @@ addresses = ["dowhiz@deep-tutor.com"]
     #[test]
     fn test_ensure_local_execution_allowed_rejects_staging_without_override() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("DEPLOY_TARGET", "staging"),
             EnvVarGuard::unset("RUN_TASK_ALLOW_LOCAL_EXECUTION"),
         ];
@@ -5258,7 +5332,7 @@ printf '%s\n' "$@" > "$capture_file"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZ_CAPTURE_FILE", &capture_value),
         ];
@@ -5336,7 +5410,7 @@ printf '%s\n' "$@" > "$capture_file"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZ_CAPTURE_FILE", &capture_value),
         ];
@@ -5664,7 +5738,7 @@ printf '%s\n' "$@" > "$capture_file"
 
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
-        let _guards = vec![EnvVarGuard::set("PATH", &path_value)];
+        let _guards = [EnvVarGuard::set("PATH", &path_value)];
 
         let config = AzureAciConfig {
             resource_group: "stg-rg".to_string(),
@@ -5900,7 +5974,7 @@ printf '%s\n' "$@" > "$capture_file"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZ_CAPTURE_FILE", &capture_value),
         ];
@@ -5985,7 +6059,7 @@ printf '%s\n' "$@" > "$capture_file"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZCOPY_CAPTURE_FILE", &capture_value),
         ];
@@ -6068,7 +6142,7 @@ printf 'downloaded result' > "$3/result.txt"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZCOPY_CAPTURE_FILE", &capture_value),
         ];
@@ -6130,7 +6204,7 @@ printf '%s\n' "$@" > "$capture_file"
         let original_path = env::var("PATH").unwrap_or_default();
         let path_value = format!("{}:{}", bin_dir.display(), original_path);
         let capture_value = capture_path.to_string_lossy().to_string();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("PATH", &path_value),
             EnvVarGuard::set("TEST_AZ_CAPTURE_FILE", &capture_value),
         ];

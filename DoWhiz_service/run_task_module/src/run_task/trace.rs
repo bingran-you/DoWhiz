@@ -55,6 +55,7 @@ pub(super) fn trace_dir(workspace_dir: &Path) -> PathBuf {
 }
 
 impl RunTaskTraceRecorder {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         workspace_dir: &Path,
         runner: &str,

@@ -322,17 +322,20 @@ pub async fn run_server(
         .with_graceful_shutdown(shutdown)
         .await;
     info!("shutdown signal received, stopping services...");
+    run_task_module::shutdown::set_shutdown_in_progress();
     ingestion_control.stop_and_join();
     scheduler_control.stop_and_join();
 
-    // Clean up any active ACI containers to prevent orphans
-    let cleaned = run_task_module::cleanup_all_aci_containers();
-    if cleaned > 0 {
-        info!(
-            "cleaned up {} orphaned ACI container(s) on shutdown",
-            cleaned
-        );
-    }
+    // NOTE: We intentionally do NOT clean up ACI containers on shutdown.
+    // Recovery on next startup will handle any orphaned containers, which allows
+    // graceful restarts (like CI/CD deploys) to preserve in-flight work.
+    // let cleaned = run_task_module::cleanup_all_aci_containers();
+    // if cleaned > 0 {
+    //     info!(
+    //         "cleaned up {} orphaned ACI container(s) on shutdown",
+    //         cleaned
+    //     );
+    // }
 
     serve_result?;
     Ok(())

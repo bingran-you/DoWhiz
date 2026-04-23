@@ -1356,19 +1356,19 @@
 
       .dashboard-home-shell {
         display: grid;
-        grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
-        gap: 1.1rem;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
         align-items: start;
       }
 
       .dashboard-home-main,
       .dashboard-home-aside {
         display: grid;
-        gap: 1rem;
+        gap: 0.9rem;
       }
 
       .dashboard-home-header {
-        gap: 1rem;
+        gap: 0.6rem;
       }
 
       .dashboard-inline-action {
@@ -1389,8 +1389,8 @@
 
       .workspace-recommendation-card {
         display: grid;
-        gap: 0.9rem;
-        padding: 1.05rem;
+        gap: 1rem;
+        padding: 1.2rem;
         border-radius: 1.1rem;
         border: 1px solid color-mix(in srgb, var(--text, #fff) 12%, var(--border, #333));
         background:
@@ -1590,8 +1590,8 @@
       }
 
       .workspace-summary-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 0.75rem;
       }
 
@@ -1818,10 +1818,199 @@
       }
 
       .workspace-summary-empty {
-        grid-column: 1 / -1;
+        width: 100%;
         padding: 0.8rem;
         border-radius: 0.7rem;
         border: 1px dashed var(--border, #333);
+        color: var(--text-muted, #888);
+      }
+
+      .dashboard-home-primary {
+        display: grid;
+        gap: 0.95rem;
+      }
+
+      .dashboard-home-state-line {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted, #888);
+      }
+
+      .dashboard-home-kicker {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.28rem 0.58rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 10%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 84%, transparent);
+        color: var(--text, #fff);
+        font-weight: 600;
+      }
+
+      .dashboard-home-primary-title {
+        margin: 0;
+        font-size: 1.45rem;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+
+      .dashboard-home-primary-summary {
+        margin: 0;
+        max-width: 52rem;
+        font-size: 1rem;
+        line-height: 1.6;
+        color: var(--text, #fff);
+      }
+
+      .dashboard-home-primary-helper {
+        margin: 0;
+        max-width: 48rem;
+        font-size: 0.92rem;
+        line-height: 1.55;
+        color: var(--text-muted, #888);
+      }
+
+      .dashboard-home-primary-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .dashboard-home-guide {
+        margin: 0;
+        padding: 0.9rem 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border, #333);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 78%, transparent);
+        font-size: 0.9rem;
+        line-height: 1.55;
+        color: var(--text-muted, #888);
+      }
+
+      .dashboard-home-guide strong {
+        color: var(--text, #fff);
+      }
+
+      .dashboard-home-chip {
+        min-width: 0;
+        flex: 1 1 170px;
+        padding: 0.8rem 0.9rem;
+        border-radius: 0.9rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background:
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--surface-secondary, #17191d) 74%, transparent) 0%,
+            color-mix(in srgb, var(--surface, #1a1a1a) 92%, transparent) 100%
+          );
+      }
+
+      .dashboard-home-chip-label {
+        margin: 0 0 0.3rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted, #888);
+      }
+
+      .dashboard-home-chip-value {
+        margin: 0;
+        font-size: 0.96rem;
+        line-height: 1.4;
+        color: var(--text, #fff);
+      }
+
+      .dashboard-home-loading {
+        padding: 1rem;
+        border-radius: 0.85rem;
+        border: 1px dashed var(--border, #333);
+        color: var(--text-muted, #888);
+        line-height: 1.5;
+      }
+
+      .next-step-compact-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .next-step-compact-item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 0.85rem;
+        align-items: start;
+        padding: 0.95rem 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border, #333);
+        background: color-mix(in srgb, var(--surface, #1a1a1a) 82%, transparent);
+      }
+
+      .next-step-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2rem;
+        padding: 0.34rem 0.58rem;
+        border-radius: 999px;
+        border: 1px solid var(--border, #333);
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 80%, transparent);
+        color: var(--text-muted, #888);
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .next-step-status-pill.is-complete {
+        border-color: rgba(34, 197, 94, 0.35);
+        background: rgba(34, 197, 94, 0.12);
+        color: #22c55e;
+      }
+
+      .next-step-status-pill.is-current {
+        border-color: rgba(245, 158, 11, 0.35);
+        background: rgba(245, 158, 11, 0.12);
+        color: #f59e0b;
+      }
+
+      .next-step-compact-copy {
+        min-width: 0;
+      }
+
+      .next-step-compact-title {
+        margin: 0 0 0.25rem;
+        font-size: 0.96rem;
+      }
+
+      .next-step-compact-description {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: var(--text-muted, #888);
+      }
+
+      .next-step-note-card {
+        display: grid;
+        gap: 0.5rem;
+        padding: 0.95rem 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid color-mix(in srgb, var(--text, #fff) 8%, var(--border, #333));
+        background: color-mix(in srgb, var(--surface-secondary, #17191d) 78%, transparent);
+      }
+
+      .next-step-note-title {
+        margin: 0;
+        font-size: 0.92rem;
+      }
+
+      .next-step-note-copy {
+        margin: 0;
+        font-size: 0.88rem;
+        line-height: 1.55;
         color: var(--text-muted, #888);
       }
 
@@ -1990,9 +2179,14 @@
       @media (max-width: 780px) {
         .dashboard-home-header,
         .workspace-recommendation-actions,
-        .next-step-item {
+        .next-step-item,
+        .dashboard-home-primary-actions {
           flex-direction: column;
           align-items: stretch;
+        }
+
+        .next-step-compact-item {
+          grid-template-columns: 1fr;
         }
 
         .next-step-action {
@@ -2005,7 +2199,6 @@
 
         .account-grid,
         .workspace-recommendation-grid,
-        .workspace-summary-grid,
         .settings-grid {
           grid-template-columns: 1fr;
         }
@@ -2250,10 +2443,10 @@
                 <nav class="sidebar-nav" aria-label="Dashboard Sections">
                   <a class="sidebar-link is-active" href="#section-overview">Home</a>
                   <a class="sidebar-link" href="#section-channels">Connections</a>
-                  <a class="sidebar-link" href="#section-workspace">Checklist</a>
+                  <a class="sidebar-link" href="#section-workspace">Setup</a>
                   <a class="sidebar-link" href="#section-work">Work</a>
-                  <a class="sidebar-link" href="#section-organization">Organization</a>
-                  <a class="sidebar-link" href="#section-settings">Preferences</a>
+                  <a class="sidebar-link" href="#section-memo">Memory</a>
+                  <a class="sidebar-link" href="#section-settings">Settings</a>
                 </nav>
                 <div class="sidebar-note">
                   <div class="sidebar-note-title">Support</div>
@@ -2272,11 +2465,8 @@
                         <div>
                           <p class="dashboard-section-eyebrow">Home</p>
                           <h2>Today with Oliver</h2>
-                          <p class="dashboard-overview-copy">One clear next move, your current setup, and the latest work signal.</p>
+                          <p class="dashboard-overview-copy">Current state, one honest next move, and where work will show up.</p>
                         </div>
-                        <button id="info-btn" class="auth-btn auth-btn-oauth dashboard-inline-action">
-                          Account and billing
-                        </button>
                       </div>
                       <div id="workspace-recommendation-card" class="workspace-recommendation-card">
                         <div class="workspace-recommendation-empty">Looking at your setup for the clearest next step...</div>
@@ -2285,27 +2475,12 @@
                         <div class="workspace-summary-empty">Loading your setup snapshot...</div>
                       </div>
                     </div>
-                    <aside class="dashboard-home-aside">
-                      <div class="dashboard-account-panel">
-                        <p class="dashboard-section-eyebrow">Account</p>
-                        <div class="account-grid dashboard-account-grid">
-                          <div class="account-meta-item">
-                            <p class="account-meta-label">Account</p>
-                            <span id="account-id">Loading...</span>
-                          </div>
-                          <div class="account-meta-item">
-                            <p class="account-meta-label">Sign-in email</p>
-                            <span id="user-email">Loading...</span>
-                          </div>
-                        </div>
-                      </div>
-                    </aside>
                   </div>
                 </section>
 
                 <section id="section-channels" class="legal-card dashboard-section">
                   <p class="dashboard-section-eyebrow">Connections</p>
-                  <h2>Connected Apps</h2>
+                  <h2>Connections</h2>
                   <p>Connect and manage the apps Oliver can use for your account.</p>
                   <div class="settings-panel">
                     <h3>Add a connection</h3>
@@ -2362,31 +2537,31 @@
                 <section id="section-workspace" class="legal-card dashboard-section">
                   <div class="dashboard-header">
                     <div>
-                      <p class="dashboard-section-eyebrow">Setup plan</p>
-                      <h2>Checklist and next steps</h2>
+                      <p class="dashboard-section-eyebrow">Setup</p>
+                      <h2>Setup</h2>
                     </div>
-                    <a id="update-team-brief-btn" class="auth-btn auth-btn-oauth" href="#section-channels">Open Connected Apps</a>
+                    <a id="update-team-brief-btn" class="auth-btn auth-btn-oauth" href="#section-channels">Open Connections</a>
                   </div>
                   <p class="dashboard-overview-copy">
-                    Keep the next win small, personal, and easy to review.
+                    Keep setup lean: connect one app, send one request there, then review it in Work.
                   </p>
                   <div id="workspace-next-steps" class="workspace-next-steps" style="margin-top: 2rem;">
                     <div class="dashboard-header">
                       <div>
-                        <h3 style="margin-bottom: 0.35rem;">Setup checklist</h3>
-                        <p class="next-step-section-intro">Keep the next win small, personal, and easy to review.</p>
+                        <h3 style="margin-bottom: 0.35rem;">Core setup loop</h3>
+                        <p class="next-step-section-intro">This should stay small. More setup only helps after the first review loop works.</p>
                       </div>
-                      <span id="next-steps-progress" class="next-step-progress">0 of 4 done</span>
+                      <span id="next-steps-progress" class="next-step-progress">0 of 3 core steps done</span>
                     </div>
                     <div id="next-steps-list" class="next-steps-list">
-                      <p style="color: var(--text-muted, #888);">Loading your checklist...</p>
+                      <p style="color: var(--text-muted, #888);">Loading your setup loop...</p>
                     </div>
                   </div>
                 </section>
 
                 <section id="section-work" class="legal-card dashboard-section">
                   <p class="dashboard-section-eyebrow">Work</p>
-                  <h2>Recent work</h2>
+                  <h2>Work</h2>
                   <p>Review incoming tasks and manage recurring Oliver work across your connected apps.</p>
                   <div class="work-view-tabs" role="tablist" aria-label="Work views">
                     <button
@@ -2477,7 +2652,7 @@
 
                 <section id="section-memo" class="legal-card dashboard-section">
                   <p class="dashboard-section-eyebrow">Memory</p>
-                  <h2>Saved memory</h2>
+                  <h2>Memory</h2>
                   <p>Save the tone, context, and rules Oliver should remember across tasks.</p>
                   <div id="memo-container" style="margin-top: 1rem;">
                     <textarea id="memo-content" style="
@@ -2550,10 +2725,28 @@
                 </section>
 
                 <section id="section-settings" class="legal-card dashboard-section">
-                  <p class="dashboard-section-eyebrow">Preferences</p>
-                  <h2>Preferences and controls</h2>
-                  <p>Manage entry points and choose how proactive Oliver should be.</p>
+                  <p class="dashboard-section-eyebrow">Settings</p>
+                  <h2>Settings</h2>
+                  <p>Manage account details, entry points, and how proactive Oliver should be.</p>
                   <div class="settings-grid">
+                    <div class="settings-panel">
+                      <h3>Account and billing</h3>
+                      <p>Keep billing and account details out of the homepage and here with the rest of your settings.</p>
+                      <div class="account-grid">
+                        <div class="account-meta-item">
+                          <p class="account-meta-label">Account</p>
+                          <span id="account-id">Loading...</span>
+                        </div>
+                        <div class="account-meta-item">
+                          <p class="account-meta-label">Sign-in email</p>
+                          <span id="user-email">Loading...</span>
+                        </div>
+                      </div>
+                      <button id="info-btn" class="auth-btn auth-btn-oauth" style="margin-top: 0.85rem;">
+                        View billing
+                      </button>
+                    </div>
+
                     <div class="settings-panel">
                       <h3>Manual linking</h3>
                       <p>Add an email, phone number, or chat identifier Oliver should recognize for your account.</p>
@@ -2656,6 +2849,10 @@
         filterOptionalExtensionsForNextSteps,
         parseStoredConnectOnboarding
       } from './connect-onboarding.js';
+      import {
+        buildDashboardHomepageModel,
+        buildDashboardSetupModel
+      } from './homepage-state.js';
 
       // Configuration
       // TODO: Update Supabase credentials for staging if using a separate Supabase project
@@ -2705,8 +2902,8 @@
           sidebarEyebrow: 'Oliver for TPMs',
           sidebarTitle: 'TPM workspace',
           sidebarDescription:
-            'Keep the next move, live signals, and the follow-through Oliver is coordinating in one place.',
-          overviewCopy: 'One clear next move, your live execution signals, and the follow-through that needs review.'
+            'See the current state, the next move, and the follow-through Oliver is coordinating in one place.',
+          overviewCopy: 'Current state, one honest next move, and the follow-through that needs review.'
         }
       };
       let activeEntrySurface = null;
@@ -2931,6 +3128,7 @@
         .map((link) => document.querySelector(link.getAttribute('href')))
         .filter(Boolean);
       const workspaceRecommendationCard = document.getElementById('workspace-recommendation-card');
+      const workspaceSummaryContent = document.getElementById('workspace-summary-content');
       const proactivityLevelSelect = document.getElementById('proactivity-level-select');
       const proactivityLevelStatus = document.getElementById('proactivity-level-status');
 
@@ -2956,12 +3154,12 @@
       };
       const RECOMMENDATION_SECTION_LABELS = {
         'section-work': 'Open Work',
-        'section-channels': 'Open Connected Apps',
+        'section-channels': 'Open Connections',
         'section-memo': 'Open Memory',
         'section-routines': 'Open Routines',
         'section-settings': 'Open Settings',
-        'section-tasks': 'Open Tasks',
-        'section-workspace': 'Open Checklist',
+        'section-tasks': 'Open Work',
+        'section-workspace': 'Open Setup',
         'section-organization': 'Open Organization'
       };
       const WORKSPACE_RECOMMENDATION_CACHE_KEY = 'dowhiz_workspace_recommendation_cache_v2';
@@ -2993,6 +3191,7 @@
       let routineActionErrors = {};
       let cachedMemoContent = '';
       let cachedBalance = null;
+      let dashboardHomeLoading = false;
       let pendingConnectionOnboarding = loadPendingConnectionOnboardingFromStorage();
 
       function applyEntryAwareCopy(options = {}) {
@@ -3433,7 +3632,7 @@
             <a
               class="auth-btn auth-btn-primary"
               data-connect-onboarding-action="anchor"
-              href="${escapeHtml(cta.href || '#section-tasks')}"
+              href="${escapeHtml(cta.href || '#section-work')}"
             >
               ${escapeHtml(cta.label || 'Open')}
             </a>
@@ -3544,6 +3743,27 @@
         return Boolean(founderName) && Boolean(thesis) && goals.length > 0;
       }
 
+      function buildDashboardHomeContext() {
+        const workspaceBlueprint = loadWorkspaceBlueprintFromStorage();
+        const connectedTypes = connectedProviderTypes(cachedIdentifiers);
+        const successfulTaskCount = countSuccessfulTasks(cachedTasks);
+        const taskCount = Array.isArray(cachedTasks) ? cachedTasks.length : 0;
+        const reviewableTaskCount = countReviewableTasks(cachedTasks);
+        const hasSavedMemory = hasSavedMemoryNote();
+        const preferredChannels = normalizeWorkspaceList(workspaceBlueprint?.preferred_channels)
+          .map((item) => String(item || '').toLowerCase());
+
+        return {
+          workspaceBlueprint,
+          connectedTypes,
+          successfulTaskCount,
+          taskCount,
+          reviewableTaskCount,
+          hasSavedMemory,
+          preferredChannels
+        };
+      }
+
       function updateTeamBriefLinkFromStorage() {
         if (!updateTeamBriefBtn) {
           return;
@@ -3552,69 +3772,28 @@
       }
 
       function loadWorkspaceSummaryFromStorage() {
-        const container = document.getElementById('workspace-summary-content');
-        if (!container) {
+        if (!workspaceSummaryContent) {
           return;
         }
-        const workspaceBlueprint = loadWorkspaceBlueprintFromStorage();
         updateTeamBriefLinkFromStorage();
 
-        const connectedTypes = connectedProviderTypes(cachedIdentifiers);
-        const successfulTaskCount = countSuccessfulTasks(cachedTasks);
-        const taskCount = Array.isArray(cachedTasks) ? cachedTasks.length : 0;
-        const hasMemory = hasSavedMemoryNote();
-        const memoLines = getMemoValue()
-          .split(/\n+/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .slice(0, 3);
-        const savedFocus = normalizeWorkspaceList(workspaceBlueprint?.goals_30_90_days).slice(0, 3);
+        if (dashboardHomeLoading) {
+          workspaceSummaryContent.innerHTML = `
+            <div class="workspace-summary-empty">Loading your current state...</div>
+          `;
+          renderNextSteps(cachedIdentifiers || []);
+          renderConnectionOnboardingCard();
+          return;
+        }
 
-        const setupSummary = connectedTypes.length
-          ? `${connectedTypes.length} app${connectedTypes.length === 1 ? '' : 's'} connected`
-          : 'Start with one connected app';
-        const connectedItems = connectedTypes.length
-          ? connectedTypes.map((provider) => `<li>${escapeHtml(providerDisplayName(provider))}</li>`).join('')
-          : '<li>Connect the first app where Oliver should receive work.</li>';
-        const memoryItems = hasMemory
-          ? memoLines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')
-          : (savedFocus.length
-            ? savedFocus.map((goal) => `<li>${escapeHtml(goal)}</li>`).join('')
-            : [
-                'Your preferred tone or writing style',
-                'Sensitive actions that should wait for approval',
-                'Recurring context Oliver should remember'
-              ].map((item) => `<li>${escapeHtml(item)}</li>`).join(''));
-        const memoryTitle = hasMemory ? 'Memory preview' : (savedFocus.length ? 'Saved focus' : 'What to save next');
-        const memorySummary = hasMemory ? 'Ready to reuse' : 'Add first note';
-        const reviewableTaskCount = countReviewableTasks(cachedTasks);
-        const workSummary = taskCount === 0
-          ? 'No task history yet'
-          : `${successfulTaskCount} completed, ${reviewableTaskCount} reviewable`;
-
-        container.innerHTML = `
-          <article class="workspace-summary-card workspace-summary-card-stat">
-            <p class="workspace-summary-kicker">Connected surfaces</p>
-            <p class="workspace-summary-stat">${connectedTypes.length}</p>
-            <p class="workspace-summary-meta"><strong>${escapeHtml(setupSummary)}</strong></p>
-            <ul class="workspace-summary-list">${connectedItems}</ul>
-          </article>
-          <article class="workspace-summary-card workspace-summary-card-stat">
-            <p class="workspace-summary-kicker">Recent work</p>
-            <p class="workspace-summary-stat">${taskCount}</p>
-            <p class="workspace-summary-meta"><strong>${taskCount === 1 ? '1 task seen' : `${taskCount} tasks seen`}</strong></p>
-            <p class="workspace-summary-meta">${escapeHtml(workSummary)}</p>
-          </article>
-          <article class="workspace-summary-card">
-            <div class="workspace-summary-card-head">
-              <div>
-                <p class="workspace-summary-kicker">Memory</p>
-                <h3>${memoryTitle}</h3>
-              </div>
-              <span class="workspace-summary-badge">${escapeHtml(memorySummary)}</span>
-            </div>
-            <ul class="workspace-summary-list">${memoryItems}</ul>
-          </article>
+        const homeModel = buildDashboardHomepageModel(buildDashboardHomeContext());
+        workspaceSummaryContent.innerHTML = `
+          ${homeModel.chips.map((chip) => `
+            <article class="dashboard-home-chip">
+              <p class="dashboard-home-chip-label">${escapeHtml(chip.label)}</p>
+              <p class="dashboard-home-chip-value">${escapeHtml(chip.value)}</p>
+            </article>
+          `).join('')}
         `;
 
         // Render next steps with current cached identifiers
@@ -3790,7 +3969,7 @@
           pushRecommendation({
             key: 'open_connected_apps',
             triggerType: 'setup_blocker',
-            title: 'Open Connected Apps and choose your first connection',
+            title: 'Open Connections and choose your first connection',
             whyNow: 'The first setup step should stay small and reversible.',
             outcome: 'You can connect one tool without changing the rest of your workflow.',
             action: { kind: 'open_dashboard_section', section: 'section-channels' }
@@ -3811,7 +3990,7 @@
             triggerType: 'first_value_gap',
             title: 'Give Oliver one small task in a connected app',
             whyNow: `You already connected ${summarizeConnectedProviders(connectedTypes)}. The next win is one task you can quickly review.`,
-            outcome: 'Your first task will show up in Tasks so you can see the loop from request to result.',
+            outcome: 'Your first task will show up in Work so you can see the loop from request to result.',
             action: { kind: 'open_dashboard_section', section: 'section-tasks' }
           });
           if (!hasMemory) {
@@ -3846,7 +4025,7 @@
           pushRecommendation({
             key: 'review_tasks',
             triggerType: 'continuation_opportunity',
-            title: 'Review the first task result in Tasks',
+            title: 'Review the first task result in Work',
             whyNow: 'The fastest way to build trust is to inspect one finished loop end to end.',
             outcome: 'You will see what Oliver should keep doing and what should stay behind review.',
             action: { kind: 'open_dashboard_section', section: 'section-tasks' }
@@ -3865,7 +4044,7 @@
           pushRecommendation({
             key: 'review_in_progress',
             triggerType: 'setup_blocker',
-            title: 'Check Tasks and review the first result before repeating it',
+            title: 'Check Work and review the first result before repeating it',
             whyNow: 'You have work in motion; the next step is to see how Oliver handled it.',
             outcome: 'Review gives you a clear sense of what should repeat and what should still need approval.',
             action: { kind: 'open_dashboard_section', section: 'section-tasks' }
@@ -3933,7 +4112,7 @@
           pushRecommendation({
             key: 'check_connected_apps',
             triggerType: 'continuation_opportunity',
-            title: 'Open Connected Apps if you want broader coverage',
+            title: 'Open Connections if you want broader coverage',
             whyNow: 'More connections help only when they support work you already trust Oliver with.',
             outcome: 'Expansion stays deliberate instead of noisy.',
             action: { kind: 'open_dashboard_section', section: 'section-channels' }
@@ -3960,10 +4139,10 @@
           return RECOMMENDATION_SECTION_LABELS[recommendation?.action?.section] || 'Open section';
         }
         if (actionKind === 'trigger_create_brief') {
-          return 'Open Checklist';
+          return 'Open Setup';
         }
         if (actionKind === 'trigger_create_plan') {
-          return 'Open Tasks';
+          return 'Open Work';
         }
         if (actionKind === 'update_team_brief') {
           return 'Open Settings';
@@ -4234,218 +4413,45 @@
           return;
         }
 
-        const current = currentWorkspaceRecommendation();
-        const currentIdentity = recommendationIdentity(current);
-        const currentLevel = proactivityLevelSelect?.value || 'minimal';
-
-        if (workspaceRecommendationStatus === 'loading') {
+        if (dashboardHomeLoading) {
           workspaceRecommendationCard.innerHTML = `
-            <div class="workspace-recommendation-empty">
-              Reviewing your connected apps, memory, and recent tasks for the clearest next move...
+            <div class="dashboard-home-loading">
+              Loading the current state, next move, and where work will show up...
             </div>
           `;
           return;
         }
 
-        if (workspaceRecommendationStatus === 'needs_brief') {
-          workspaceRecommendationCard.innerHTML = `
-            <div class="workspace-recommendation-helper">
-              <p><strong>Start with one connection</strong></p>
-              <p>Once Oliver has one approved app and one small task, this card will start surfacing the clearest next step automatically.</p>
-            </div>
-            <div class="workspace-recommendation-actions">
-              <button id="workspace-recommendation-edit-brief" class="auth-btn auth-btn-primary">Open Connected Apps</button>
-              <span class="workspace-recommendation-status">Recommendations turn on automatically as your setup becomes more complete.</span>
-            </div>
-          `;
-          document.getElementById('workspace-recommendation-edit-brief')?.addEventListener('click', () => {
-            openDashboardSection('section-channels');
-          });
-          return;
-        }
-
-        if (workspaceRecommendationStatus === 'error') {
-          workspaceRecommendationCard.innerHTML = `
-            <div class="workspace-recommendation-helper">
-              <p><strong>We could not load a recommendation right now.</strong></p>
-              <p>${escapeHtml(workspaceRecommendationErrorMessage || 'Please try again in a moment.')}</p>
-            </div>
-            <div class="workspace-recommendation-actions">
-              <button id="workspace-recommendation-retry" class="auth-btn auth-btn-primary">Try again</button>
-            </div>
-          `;
-          document.getElementById('workspace-recommendation-retry')?.addEventListener('click', async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-              await loadWorkspaceRecommendation(session.access_token, { force: true });
-            }
-          });
-          return;
-        }
-
-        if (!current) {
-          const freshnessMessage = workspaceRecommendationFreshnessMessage();
-          const canManualRefresh = currentLevel !== 'off';
-          const emptyMessage = workspaceRecommendationDismissedForDay
-            ? 'You dismissed today\'s recommendation. Refresh anytime or check back tomorrow.'
-            : currentLevel === 'off'
-              ? 'Proactive suggestions are off. Turn them back on in Settings whenever you want a clear next-step nudge.'
-              : 'No proactive suggestion right now. As soon as Oliver sees a clear next step, it will show up here.';
-          workspaceRecommendationCard.innerHTML = `
-            <div class="workspace-recommendation-empty">${escapeHtml(emptyMessage)}</div>
-            ${(canManualRefresh || freshnessMessage) ? `
-              <div class="workspace-recommendation-actions">
-                ${canManualRefresh ? '<button id="workspace-recommendation-refresh" class="auth-btn auth-btn-oauth">Refresh</button>' : ''}
-                <span class="workspace-recommendation-status">${escapeHtml(freshnessMessage || '')}</span>
-              </div>
-            ` : ''}
-          `;
-          document.getElementById('workspace-recommendation-refresh')?.addEventListener('click', () => {
-            handleWorkspaceRecommendationManualRefresh();
-          });
-          return;
-        }
-
-        const alternatives = recommendationItems().filter(
-          (item) => recommendationIdentity(item) !== currentIdentity
-        );
-        const busyAttribute = workspaceRecommendationBusy ? ' disabled' : '';
-        const statusClass = workspaceRecommendationErrorMessage ? 'workspace-recommendation-status is-error' : 'workspace-recommendation-status';
-        const freshnessMessage = workspaceRecommendationFreshnessMessage();
-        const statusMessage = workspaceRecommendationBusy
-          ? 'Working on this recommendation...'
-          : workspaceRecommendationErrorMessage || freshnessMessage || '';
-        const triggerLabel = RECOMMENDATION_TRIGGER_LABELS[current.trigger_type] || formatRecommendationToken(current.trigger_type);
-
-        const alternativesHtml = workspaceRecommendationAlternativesVisible && alternatives.length > 0
-          ? `
-            <div class="workspace-recommendation-alternatives">
-              ${alternatives.map((item) => `
-                <article class="workspace-recommendation-alt-item">
-                  <h4>${escapeHtml(item.title)}</h4>
-                  <p class="workspace-recommendation-alt-copy">${escapeHtml(item.why_now)}</p>
-                  <p class="workspace-recommendation-alt-copy">${escapeHtml(item.outcome)}</p>
-                  <div>
-                    <button class="auth-btn auth-btn-oauth" data-recommendation-select="${escapeHtml(recommendationIdentity(item))}"${busyAttribute}>Use this instead</button>
-                  </div>
-                </article>
-              `).join('')}
-            </div>
-          `
-          : '';
-
-        const whyHtml = workspaceRecommendationWhyVisible
-          ? `
-            <div class="workspace-recommendation-why">
-              <p>We only surface one recommendation at a time, using your connected apps, saved memory, and recent task outcomes.</p>
-              <p>This one is showing because it matches the <strong>${escapeHtml(triggerLabel)}</strong> trigger class. Choosing “Not now” hides it for the rest of today unless you manually refresh.</p>
-            </div>
-          `
-          : '';
+        const homeModel = buildDashboardHomepageModel(buildDashboardHomeContext());
+        const stateChip = homeModel.chips[0];
+        const guideCopy = homeModel.stateKey === 'connected_no_tasks'
+          ? 'Requests start in a connected app, not inside Work. Work becomes useful after the first request lands.'
+          : homeModel.stateKey === 'no_connected_app'
+            ? 'Connections decide where requests can start. Work is where the result shows up after that request lands.'
+            : 'Work is the review surface. Memory is where you tighten tone, context, and approval rules after the first loop is clear.';
 
         workspaceRecommendationCard.innerHTML = `
-          <div class="workspace-recommendation-header">
-            <div class="workspace-recommendation-kicker">
-              <span class="workspace-recommendation-badge">Oliver guidance</span>
-              <span class="workspace-recommendation-trigger">${escapeHtml(triggerLabel)}</span>
+          <div class="dashboard-home-primary">
+            <div class="dashboard-home-state-line">
+              <span class="dashboard-home-kicker">Oliver focus</span>
+              <span>${escapeHtml(stateChip?.value || 'In progress')}</span>
             </div>
-          </div>
-          <h3 class="workspace-recommendation-title">${escapeHtml(current.title)}</h3>
-          <div class="workspace-recommendation-grid">
-            <div class="workspace-recommendation-detail">
-              <p class="workspace-recommendation-label">Why now</p>
-              <p class="workspace-recommendation-copy">${escapeHtml(current.why_now)}</p>
-            </div>
-            <div class="workspace-recommendation-detail">
-              <p class="workspace-recommendation-label">What this unlocks</p>
-              <p class="workspace-recommendation-copy">${escapeHtml(current.outcome)}</p>
-            </div>
-          </div>
-          <div class="workspace-recommendation-actions">
-            <button id="workspace-recommendation-primary" class="auth-btn auth-btn-primary"${busyAttribute}>
-              ${escapeHtml(recommendationPrimaryActionLabel(current))}
-            </button>
-            <div class="workspace-recommendation-secondary-actions">
-              ${alternatives.length > 0 ? `
-                <button id="workspace-recommendation-toggle-options" class="workspace-recommendation-text-btn"${busyAttribute}>
-                  ${workspaceRecommendationAlternativesVisible ? 'Hide options' : `Show ${Math.min(alternatives.length, 2)} options`}
-                </button>
-              ` : ''}
-              <button id="workspace-recommendation-refresh" class="workspace-recommendation-text-btn"${busyAttribute}>Refresh</button>
-              <button id="workspace-recommendation-defer" class="workspace-recommendation-text-btn"${busyAttribute}>Not now</button>
-              <button id="workspace-recommendation-why-btn" class="workspace-recommendation-text-btn"${busyAttribute}>
-                ${workspaceRecommendationWhyVisible ? 'Hide details' : 'Why am I seeing this?'}
+            <h3 class="dashboard-home-primary-title">${escapeHtml(homeModel.title)}</h3>
+            <p class="dashboard-home-primary-summary">${escapeHtml(homeModel.summary)}</p>
+            <div class="dashboard-home-primary-actions">
+              <button id="dashboard-home-primary-action" class="auth-btn auth-btn-primary">
+                ${escapeHtml(homeModel.primaryAction.label)}
               </button>
             </div>
+            <p class="dashboard-home-primary-helper">${escapeHtml(homeModel.helper)}</p>
+            <p class="dashboard-home-guide"><strong>Keep the loop honest:</strong> ${escapeHtml(guideCopy)}</p>
           </div>
-          <div class="${statusClass}">${statusMessage ? escapeHtml(statusMessage) : '&nbsp;'}</div>
-          ${whyHtml}
-          ${alternativesHtml}
         `;
 
-        document.getElementById('workspace-recommendation-primary')?.addEventListener('click', () => {
-          handleWorkspaceRecommendationPrimaryAction();
-        });
-
-        document.getElementById('workspace-recommendation-refresh')?.addEventListener('click', () => {
-          handleWorkspaceRecommendationManualRefresh();
-        });
-
-        document.getElementById('workspace-recommendation-defer')?.addEventListener('click', () => {
-          handleWorkspaceRecommendationDefer();
-        });
-
-        document.getElementById('workspace-recommendation-toggle-options')?.addEventListener('click', async () => {
-          workspaceRecommendationAlternativesVisible = !workspaceRecommendationAlternativesVisible;
-          renderWorkspaceRecommendationCard();
-
-          if (workspaceRecommendationAlternativesVisible) {
-            const { data: { session } } = await supabase.auth.getSession();
-            trackAnalyticsEvent(
-              'workspace_recommendation_alternatives_opened',
-              recommendationAnalyticsProperties(current),
-              session ? { accessToken: session.access_token } : {}
-            );
+        document.getElementById('dashboard-home-primary-action')?.addEventListener('click', () => {
+          if (homeModel.primaryAction.kind === 'open_dashboard_section') {
+            openDashboardSection(homeModel.primaryAction.section);
           }
-        });
-
-        document.getElementById('workspace-recommendation-why-btn')?.addEventListener('click', async () => {
-          workspaceRecommendationWhyVisible = !workspaceRecommendationWhyVisible;
-          renderWorkspaceRecommendationCard();
-
-          if (workspaceRecommendationWhyVisible) {
-            const { data: { session } } = await supabase.auth.getSession();
-            trackAnalyticsEvent(
-              'workspace_recommendation_reason_opened',
-              recommendationAnalyticsProperties(current),
-              session ? { accessToken: session.access_token } : {}
-            );
-          }
-        });
-
-        workspaceRecommendationCard.querySelectorAll('[data-recommendation-select]').forEach((button) => {
-          button.addEventListener('click', async (event) => {
-            const nextKey = event.currentTarget?.getAttribute('data-recommendation-select');
-            if (!nextKey || nextKey === workspaceRecommendationSelectedKey) {
-              return;
-            }
-
-            workspaceRecommendationSelectedKey = nextKey;
-            workspaceRecommendationWhyVisible = false;
-            workspaceRecommendationErrorMessage = '';
-            renderWorkspaceRecommendationCard();
-
-            const selected = currentWorkspaceRecommendation();
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session && selected) {
-              await maybeTrackWorkspaceRecommendationShown(session.access_token);
-              trackAnalyticsEvent(
-                'workspace_recommendation_alternative_selected',
-                recommendationAnalyticsProperties(selected),
-                { accessToken: session.access_token }
-              );
-            }
-          });
         });
       }
 
@@ -4757,7 +4763,7 @@
         }
 
         if (actionKind === 'trigger_create_plan') {
-          openDashboardSection('section-tasks');
+          openDashboardSection('section-work');
           return;
         }
 
@@ -5071,178 +5077,69 @@
         if (!container) return;
 
         const progress = document.getElementById('next-steps-progress');
-        const connectedTypes = connectedProviderTypes(identifiers);
-        const hasAnyConnected = connectedTypes.length > 0;
-        const taskCount = Array.isArray(cachedTasks) ? cachedTasks.length : 0;
-        const successfulTaskCount = countSuccessfulTasks(cachedTasks);
-        const reviewableTaskCount = countReviewableTasks(cachedTasks);
-        const hasMemory = hasSavedMemoryNote();
-        const completedChecklistCount = [
-          hasAnyConnected,
-          taskCount > 0,
-          hasMemory,
-          reviewableTaskCount > 0
-        ].filter(Boolean).length;
+        if (dashboardHomeLoading) {
+          if (progress) {
+            progress.textContent = 'Loading...';
+          }
+          container.innerHTML = '<p class="next-step-empty">Loading your setup loop...</p>';
+          return;
+        }
+
+        const setupModel = buildDashboardSetupModel({
+          connectedTypes: connectedProviderTypes(identifiers),
+          taskCount: Array.isArray(cachedTasks) ? cachedTasks.length : 0,
+          reviewableTaskCount: countReviewableTasks(cachedTasks),
+          hasSavedMemory: hasSavedMemoryNote()
+        });
 
         if (progress) {
-          progress.textContent = `${completedChecklistCount} of 4 done`;
+          progress.textContent = setupModel.progressLabel;
         }
 
-        const preferredChannels = normalizeWorkspaceList(loadWorkspaceBlueprintFromStorage()?.preferred_channels).map((item) => item.toLowerCase());
-        const providerOrder = buildPreferredProviderOrder(preferredChannels);
-        const suggestedConnections = providerOrder
-          .filter((provider) => !connectedTypes.includes(provider))
-          .map((provider) => OAUTH_TASKS.find((task) => task.identifierType === provider))
-          .filter(Boolean)
-          .slice(0, 3);
-        const optionalExtensions = filterOptionalExtensionsForNextSteps(
-          ADMIN_TASKS_CONFIG,
-          connectedTypes
-        );
-
-        const checklistTasks = [
-          {
-            id: 'connect-one-app',
-            title: 'Connect one app',
-            description: 'Start with the first app where Oliver should receive or complete work.',
-            status: hasAnyConnected ? 'complete' : 'pending',
-            completeLabel: `${connectedTypes.length} connected`,
-            actionLabel: 'Open Connected Apps',
-            href: '#section-channels'
-          },
-          {
-            id: 'try-first-task',
-            title: 'Try one starter task',
-            description: hasAnyConnected
-              ? 'Send Oliver one small request in a connected app so it appears in Tasks.'
-              : 'Connect an app first, then send Oliver one small request from there.',
-            status: taskCount > 0 ? (reviewableTaskCount > 0 ? 'complete' : 'in_progress') : 'pending',
-            completeLabel: `${taskCount} task${taskCount === 1 ? '' : 's'} started`,
-            pendingLabel: 'Waiting for first result',
-            actionLabel: 'Open Tasks',
-            href: '#section-tasks'
-          },
-          {
-            id: 'save-memory',
-            title: 'Save preferences in Memory',
-            description: 'Add tone, recurring context, or approval rules Oliver should remember.',
-            status: hasMemory ? 'complete' : 'pending',
-            completeLabel: 'Saved',
-            actionLabel: 'Open Memory',
-            href: '#section-memo'
-          },
-          {
-            id: 'review-result',
-            title: 'Review the result',
-            description: taskCount > 0
-              ? 'Use Tasks to review the first result before expanding the workflow.'
-              : 'Once a task runs, review the result here before you repeat it.',
-            status: reviewableTaskCount > 0 ? 'complete' : 'pending',
-            completeLabel: successfulTaskCount > 0
-              ? `${successfulTaskCount} successful`
-              : `${reviewableTaskCount} result${reviewableTaskCount === 1 ? '' : 's'} ready`,
-            actionLabel: 'Open Tasks',
-            href: '#section-tasks'
+        function renderAction(action) {
+          if (!action) {
+            return '';
           }
-        ];
-
-        function renderCompleteBadge(label) {
-          return `<span class="next-step-complete"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> ${escapeHtml(label)}</span>`;
+          return `<a class="auth-btn auth-btn-oauth" href="#${escapeHtml(action.section || 'section-work')}">${escapeHtml(action.label || 'Open')}</a>`;
         }
 
-        function renderPendingBadge(label) {
-          return `<span class="next-step-pending-text"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> ${escapeHtml(label)}</span>`;
+        function renderStatus(status) {
+          const label = status === 'complete'
+            ? 'Done'
+            : status === 'current'
+              ? 'Now'
+              : 'Later';
+          const className = status === 'complete'
+            ? 'next-step-status-pill is-complete'
+            : status === 'current'
+              ? 'next-step-status-pill is-current'
+              : 'next-step-status-pill';
+          return `<span class="${className}">${escapeHtml(label)}</span>`;
         }
 
-        function renderTaskAction(task) {
-          if (task.status === 'complete') {
-            return renderCompleteBadge(task.completeLabel || 'Complete');
-          }
-
-          if (task.status === 'in_progress') {
-            return `
-              <div class="next-step-pending">
-                ${renderPendingBadge(task.pendingLabel || 'In progress')}
-                <a class="auth-btn auth-btn-oauth" href="${task.href || '#section-tasks'}">${escapeHtml(task.actionLabel || 'Open')}</a>
+        container.innerHTML = `
+          <div class="next-step-compact-list">
+            ${setupModel.steps.map((step) => `
+              <div class="next-step-compact-item" data-step-key="${escapeHtml(step.key)}">
+                ${renderStatus(step.status)}
+                <div class="next-step-compact-copy">
+                  <p class="next-step-compact-title">${escapeHtml(step.title)}</p>
+                  <p class="next-step-compact-description">${escapeHtml(step.description)}</p>
+                </div>
+                <div class="next-step-action">
+                  ${renderAction(step.action)}
+                </div>
               </div>
-            `;
-          }
-
-          if (task.href) {
-            return `<a class="auth-btn auth-btn-oauth" href="${task.href}">${escapeHtml(task.actionLabel || 'Open')}</a>`;
-          }
-
-          if (task.oauthButtonId) {
-            return `<button class="auth-btn auth-btn-oauth" onclick="document.getElementById('${task.oauthButtonId}').click()">${escapeHtml(task.actionLabel || 'Connect')}</button>`;
-          }
-
-          if (task.externalUrl) {
-            const completedTasks = JSON.parse(localStorage.getItem('dw_completed_admin_tasks') || '[]');
-            if (completedTasks.includes(task.id)) {
-              return renderCompleteBadge('Added');
-            }
-            if (task.id === 'add-oliver-discord') {
-              return `<a href="#" class="auth-btn auth-btn-primary" onclick="openDiscordBotAuth(event)">${escapeHtml(task.actionLabel || 'Add')}</a>`;
-            }
-            if (task.id === 'add-oliver-slack') {
-              return `<a href="#" class="auth-btn auth-btn-primary" onclick="openSlackBotAuth(event)">${escapeHtml(task.actionLabel || 'Add')}</a>`;
-            }
-            return `<a href="${task.externalUrl}" target="_blank" rel="noopener noreferrer" class="auth-btn auth-btn-primary">${escapeHtml(task.actionLabel || 'Open')}</a>`;
-          }
-
-          return `<a class="auth-btn auth-btn-oauth" href="#section-channels">Open Connected Apps</a>`;
-        }
-
-        function renderTaskItem(task) {
-          return `
-            <div class="next-step-item" data-task-id="${task.id}">
-              <div class="next-step-info">
-                <p class="next-step-title">${escapeHtml(task.title)}</p>
-                <p class="next-step-description">${escapeHtml(task.description)}</p>
+            `).join('')}
+            ${setupModel.note ? `
+              <div class="next-step-note-card">
+                <p class="next-step-note-title">${escapeHtml(setupModel.note.title)}</p>
+                <p class="next-step-note-copy">${escapeHtml(setupModel.note.description)}</p>
+                <div>${renderAction(setupModel.note.action)}</div>
               </div>
-              <div class="next-step-action">
-                ${renderTaskAction(task)}
-              </div>
-            </div>
-          `;
-        }
-
-        function renderSection(title, intro, tasks, emptyMessage) {
-          const tasksHtml = tasks.length > 0
-            ? tasks.map(renderTaskItem).join('')
-            : `<p class="next-step-empty">${escapeHtml(emptyMessage)}</p>`;
-          return `
-            <div class="next-step-section">
-              <h4 class="next-step-subheader">${escapeHtml(title)}</h4>
-              <p class="next-step-section-intro">${escapeHtml(intro)}</p>
-              ${tasksHtml}
-            </div>
-          `;
-        }
-
-        let html = '';
-        html += renderSection(
-          'Checklist',
-          'These four steps matter most for a clean first run with Oliver.',
-          checklistTasks,
-          'No checklist items right now.'
-        );
-        html += renderSection(
-          'Suggested connections',
-          'Only add the next app when it supports a real task you already want Oliver to handle.',
-          suggestedConnections,
-          'You already connected the currently supported apps.'
-        );
-        if (optionalExtensions.length > 0) {
-          html += renderSection(
-            'Optional extensions',
-            'Use these only after the matching app connection is already in place.',
-            optionalExtensions,
-            'No optional extensions to show right now.'
-          );
-        }
-
-        container.innerHTML = html;
+            ` : ''}
+          </div>
+        `;
       }
 
       function scrollToDashboardHashTarget() {
@@ -5491,6 +5388,7 @@
         routineActionBusyIds = new Set();
         routineActionErrors = {};
         cachedMemoContent = '';
+        dashboardHomeLoading = false;
         workspaceRecommendationResponse = null;
         workspaceRecommendationStatus = 'idle';
         workspaceRecommendationErrorMessage = '';
@@ -5781,13 +5679,14 @@
         hideExistingAccountOptions();
         dashboardContainer.classList.remove('hidden');
         pageTitle.textContent = 'Your Oliver setup';
-        pageSubtitle.textContent = 'Connect apps, review tasks, save memory, and decide how Oliver should work for you.';
+        pageSubtitle.textContent = 'Connect apps, review work, save memory, and decide how Oliver should work for you.';
         applyEntryAwareCopy({ dashboardMode: true });
 
         document.getElementById('account-id').textContent = accountData.account_id;
         document.getElementById('user-email').textContent = session.user.email;
         initOrganizationUI(accountData);
         setupOrganizationListeners();
+        dashboardHomeLoading = true;
         loadWorkspaceSummaryFromStorage();
         workspaceRecommendationStatus = 'loading';
         workspaceRecommendationErrorMessage = '';
@@ -5803,7 +5702,9 @@
           loadWorkspaceRecommendationPreferences(session.access_token),
           loadBalanceAndBadges(session.access_token)
         ]);
+        dashboardHomeLoading = false;
         loadWorkspaceSummaryFromStorage();
+        renderWorkspaceRecommendationCard();
         await loadWorkspaceRecommendation(session.access_token);
 
         updateSidebarNavigation();
@@ -6947,7 +6848,7 @@
               taskList.innerHTML = renderWorkListState({
                 tagName: 'li',
                 className: 'task-item work-item',
-                message: 'No tasks yet. Send Oliver one request from a connected app and it will show up here.'
+                message: 'No work yet. Send one small request from a connected app and it will show up here for review.'
               });
               tasksStatus.textContent = `Updated ${new Date().toLocaleTimeString()}`;
               loadWorkspaceSummaryFromStorage();
@@ -7006,7 +6907,7 @@
             taskList.innerHTML = renderWorkListState({
               tagName: 'li',
               className: 'task-item work-item',
-              message: 'No tasks yet. Send Oliver one request from a connected app and it will show up here.'
+              message: 'No work yet. Send one small request from a connected app and it will show up here for review.'
             });
           } else {
             taskList.innerHTML = allTasks.map(task => renderTask(task)).join('');

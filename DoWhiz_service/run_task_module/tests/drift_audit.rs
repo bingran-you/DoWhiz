@@ -245,7 +245,7 @@ fn manual_drift_audit_reports_contract_drift() {
     audit_legacy_cli_references(&root, &mut findings);
     audit_google_docs_usage_dispatch(&root, &mut findings);
 
-    findings.sort_by(|a, b| a.render().cmp(&b.render()));
+    findings.sort_by_key(|finding| finding.render());
 
     if findings.is_empty() {
         eprintln!("No drift findings detected.");

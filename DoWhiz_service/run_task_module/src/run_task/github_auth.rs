@@ -223,7 +223,7 @@ pub(super) fn ensure_github_cli_auth(github_auth: &GitHubAuthConfig) -> Result<(
 
 fn apply_env_overrides(cmd: &mut Command, overrides: &[(String, String)], skip: &[&str]) {
     for (key, value) in overrides {
-        if skip.iter().any(|blocked| *blocked == key.as_str()) {
+        if skip.contains(&key.as_str()) {
             continue;
         }
         cmd.env(key, value);

@@ -51,7 +51,7 @@ test('Slack install onboarding switches to a calm live-state CTA', () => {
 
   assert.equal(model.title, 'Oliver is now available in Slack');
   assert.equal(model.cta.kind, 'anchor');
-  assert.equal(model.cta.href, '#section-tasks');
+  assert.equal(model.cta.href, '#section-work');
   assert.equal(model.examples.length, 3);
   assertContentGuardrails(model);
 });
@@ -78,7 +78,7 @@ test('Generic connected apps still produce a deterministic onboarding model', ()
 
   assert.equal(model.title, 'GitHub connected');
   assert.equal(model.cta.kind, 'anchor');
-  assert.equal(model.cta.href, '#section-tasks');
+  assert.equal(model.cta.href, '#section-work');
   assert.equal(model.examples.length, 3);
   assertContentGuardrails(model);
 });

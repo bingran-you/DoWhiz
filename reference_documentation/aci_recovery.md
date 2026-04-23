@@ -93,6 +93,23 @@ There is a small but possible window where worker restarts after sending to outb
 
 Entry point: `recover_orphaned_aci_containers()`
 
+### Call Chain
+
+```
+recover_orphaned_aci_containers()     // Entry point - lists all orphaned containers from MongoDB
+  └── recover_single_container()      // Handles one container
+        ├── query_aci_container_status()
+        ├── poll_aci_container_until_terminal()  // If still running
+        ├── download_ephemeral_share_for_recovery()  // Download results from Azure File Share
+        ├── propagate_results_to_outbound()      // Reads context, sends reply
+        │     ├── read_aci_recovery_context()
+        │     └── execute_{channel}_send()
+        ├── delete_aci_container_by_name()
+        └── deregister_aci_container_mongo()
+```
+
+### Startup Hook
+
 Called on worker startup when `ACI_RECOVERY_ENABLED=1`:
 
 ```rust
@@ -124,6 +141,38 @@ Dispatches to appropriate adapter:
 - Notion → `execute_notion_send()`
 - Zoom → Skip (no direct reply)
 
+## Shutdown Flag
+
+To preserve ACI containers during graceful shutdown (e.g., CI/CD deploys), a global shutdown flag is used:
+
+```rust
+// run_task_module/src/shutdown.rs
+static SHUTDOWN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_shutdown_in_progress()   // Called in server.rs on shutdown signal
+pub fn is_shutdown_in_progress()    // Checked in codex.rs before cleanup
+```
+
+When SIGTERM is received:
+1. `server.rs` logs "shutdown signal received" and calls `set_shutdown_in_progress()`
+2. ACI task threads check `is_shutdown_in_progress()` before cleanup
+3. If shutdown is in progress, skip delete/deregister to preserve container for recovery
+
+Without this, containers would be deleted during shutdown before recovery could find them.
+
+## Ephemeral Share Download
+
+ACI tasks use ephemeral Azure File Shares for workspace data. Results are written to the share during execution, then downloaded back to the host workspace after completion.
+
+During recovery, this download step was missing. Added:
+
+```rust
+// run_task_module/src/run_task/codex.rs
+pub fn download_ephemeral_share_for_recovery(container_name, workspace_path)
+```
+
+This uses azcopy to download from `task-{container_name}` share to the workspace before checking for reply files.
+
 ## Design Decision: Recovery Context File
 
 Initially considered deriving channel from workspace metadata files:
@@ -137,12 +186,14 @@ Initially considered deriving channel from workspace metadata files:
 
 ## Files Modified
 
+- `run_task_module/src/shutdown.rs` - Global shutdown flag (AtomicBool)
+- `run_task_module/src/lib.rs` - Exports shutdown module
 - `run_task_module/src/run_task/aci_container_store.rs` - MongoDB tracking + recovery context
-- `run_task_module/src/run_task/codex.rs` - ACI status polling, writes recovery context at registration
+- `run_task_module/src/run_task/codex.rs` - ACI status polling, shutdown check, ephemeral share download, writes recovery context
 - `run_task_module/src/run_task/mod.rs` - Exports
-- `scheduler_module/src/aci_recovery.rs` - Recovery logic
+- `scheduler_module/src/aci_recovery.rs` - Recovery logic + ephemeral share download call
 - `scheduler_module/src/scheduler/mod.rs` - Made `outbound` module `pub(crate)`
-- `scheduler_module/src/service/server.rs` - Recovery hook on startup
+- `scheduler_module/src/service/server.rs` - Recovery hook on startup, sets shutdown flag
 
 ## Enabling Recovery
 
@@ -150,5 +201,8 @@ Set environment variable:
 ```bash
 ACI_RECOVERY_ENABLED=1
 ```
+
+## E2E Testing
+* [4/22/26] E2E discord task with intermittent `pm2 stop` triggered after ACI container creation, `dw_worker` was successfully able to recover the task and send an outbound reply via Discord.
 
 Recovery runs asynchronously on worker startup via `task::spawn_blocking`.
