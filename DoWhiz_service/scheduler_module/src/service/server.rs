@@ -322,6 +322,7 @@ pub async fn run_server(
         .with_graceful_shutdown(shutdown)
         .await;
     info!("shutdown signal received, stopping services...");
+    run_task_module::shutdown::set_shutdown_in_progress();
     ingestion_control.stop_and_join();
     scheduler_control.stop_and_join();
 
