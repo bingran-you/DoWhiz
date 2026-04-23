@@ -8,8 +8,9 @@ use run_task_module::aci_container_store::{
     deregister_aci_container_mongo, list_aci_containers, AciContainerRecord,
 };
 use run_task_module::{
-    delete_aci_container_by_name, poll_aci_container_until_terminal, query_aci_container_status,
-    read_aci_recovery_context, AciContainerStatus,
+    delete_aci_container_by_name, download_ephemeral_share_for_recovery,
+    poll_aci_container_until_terminal, query_aci_container_status, read_aci_recovery_context,
+    AciContainerStatus,
 };
 
 use crate::channel::{Channel, ChannelMetadata};
@@ -114,6 +115,16 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
                     container.container_name, err
                 );
             }
+        }
+
+        // Download results from ephemeral share (if used)
+        if let Err(err) =
+            download_ephemeral_share_for_recovery(&container.container_name, workspace)
+        {
+            warn!(
+                "ephemeral share download failed for container {}: {} (may not have used ephemeral share)",
+                container.container_name, err
+            );
         }
 
         // Propagate results to outbound

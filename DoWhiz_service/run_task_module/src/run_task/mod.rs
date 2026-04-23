@@ -20,7 +20,8 @@ mod workspace;
 
 pub use aci_container_store::{read_aci_recovery_context, AciRecoveryContext};
 pub use codex::{
-    cleanup_all_aci_containers, delete_aci_container_by_name, poll_aci_container_until_terminal,
+    cleanup_all_aci_containers, delete_aci_container_by_name,
+    download_ephemeral_share_for_recovery, poll_aci_container_until_terminal,
     query_aci_container_status, run_codex_warm_pool, AciContainerStatus,
 };
 pub use core::{run_claude_fallback_after_codex_failure, run_task};
