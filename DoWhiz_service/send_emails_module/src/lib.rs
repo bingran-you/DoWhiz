@@ -343,6 +343,98 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         border-top: 1px solid #e4e8ee;
       }}
 
+      .dw-content section {{
+        margin: 0 0 1.4em;
+      }}
+
+      .dw-investment-card,
+      .dw-trigger-grid,
+      .dw-source-note,
+      .dw-chart-card {{
+        margin: 0 0 1.25em;
+        padding: 16px 18px;
+        border: 1px solid #e4e8ee;
+        border-radius: 14px;
+        background-color: #fbfcfe;
+      }}
+
+      .dw-investment-card {{
+        border-color: #d9e3f0;
+        background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+      }}
+
+      .dw-investment-kicker {{
+        display: inline-block;
+        margin: 0 0 10px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background-color: #eef4fb;
+        color: #31506f;
+        font-size: 12px;
+        line-height: 1.3;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }}
+
+      .dw-investment-list,
+      .dw-trigger-list {{
+        margin: 0 0 0.2em 1.1em !important;
+      }}
+
+      .dw-investment-list li,
+      .dw-trigger-list li {{
+        margin: 0 0 0.5em;
+      }}
+
+      .dw-evidence-row {{
+        margin: 8px 0 0;
+      }}
+
+      .dw-evidence-chip {{
+        display: inline-block;
+        margin: 0 8px 8px 0;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #d8dee9;
+        background-color: #ffffff;
+        color: #35506c !important;
+        text-decoration: none;
+        font-size: 12px;
+        line-height: 1.25;
+        font-weight: 700;
+      }}
+
+      .dw-evidence-chip[data-source-tier="primary"] {{
+        border-color: #9fc3ff;
+        background-color: #eef5ff;
+        color: #184a90 !important;
+      }}
+
+      .dw-evidence-chip[data-source-tier="independent"] {{
+        border-color: #b7d9c0;
+        background-color: #eef8f1;
+        color: #1f6a39 !important;
+      }}
+
+      .dw-evidence-chip[data-source-tier="reference"] {{
+        border-color: #dfcfad;
+        background-color: #fcf6e8;
+        color: #8a5a08 !important;
+      }}
+
+      .dw-source-note {{
+        background-color: #fffdf8;
+      }}
+
+      .dw-chart-card figcaption,
+      .dw-chart-caption {{
+        margin-top: 10px;
+        color: #5b616d;
+        font-size: 13px;
+        line-height: 1.5;
+      }}
+
       @media screen and (max-width: 640px) {{
         .dw-shell-pad {{
           padding: 10px !important;
@@ -379,6 +471,19 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
           padding: 9px 10px !important;
           font-size: 13px !important;
           line-height: 1.45 !important;
+        }}
+
+        .dw-investment-card,
+        .dw-trigger-grid,
+        .dw-source-note,
+        .dw-chart-card {{
+          padding: 14px !important;
+          border-radius: 12px !important;
+        }}
+
+        .dw-evidence-chip {{
+          margin-right: 6px !important;
+          margin-bottom: 6px !important;
         }}
       }}
     </style>
@@ -1383,47 +1488,100 @@ mod tests {
         let normalized = normalize_email_html(
             "NVDA investment memo",
             r#"
-            <h2>Final Recommendation</h2>
-            <ul>
-              <li><strong>Rating:</strong> Wait</li>
-              <li><strong>Horizon:</strong> Medium-term (stated)</li>
-              <li><strong>Confidence:</strong> Medium</li>
-              <li><strong>Timing Verdict:</strong> Wait</li>
-              <li><strong>Add Criteria:</strong> Better entry after earnings.</li>
+            <section><h2>Request Framing</h2><ul>
+              <li><strong>Ticker:</strong> NVDA</li>
+              <li><strong>Name:</strong> NVIDIA</li>
+              <li><strong>Type:</strong> Stock</li>
+              <li><strong>Research Mode:</strong> Deep research</li>
+              <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
+              <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
+              <li><strong>Question Type:</strong> Long-term accumulation</li>
+            </ul></section>
+            <section class="dw-investment-card">
+              <h2>Decision Card</h2>
+              <ul class="dw-investment-list">
+                <li><strong>New Money Action:</strong> Wait</li>
+                <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
+                <li><strong>Near-Term Timing View:</strong> Wait for a cleaner setup.</li>
+                <li><strong>Long-Term Ownership View:</strong> Attractive if execution remains strong.</li>
+                <li><strong>Confidence:</strong> Medium</li>
+                <li><strong>One-Line Rationale:</strong> Great business, expensive setup.</li>
+              </ul>
+            </section>
+            <section><h2>Why in 3 bullets</h2><ul>
+              <li><strong>What Is Priced In:</strong> Another strong quarter.</li>
+              <li><strong>What Keeps This From Being Stronger:</strong> Little room for error.</li>
+              <li><strong>What Would Change The View:</strong> Cleaner valuation or stronger evidence.</li>
+            </ul></section>
+            <section class="dw-trigger-grid"><h2>Trigger Block</h2><ul>
+              <li><strong>Upgrade / Add Triggers:</strong> Durable beat plus guidance.</li>
+              <li><strong>Stay Wait Unless:</strong> Setup de-risks.</li>
               <li><strong>Invalidation Criteria:</strong> Margin guide weakens.</li>
-              <li><strong>Biggest Near-Term Risk:</strong> Earnings volatility.</li>
-              <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
-            </ul>
-            <h2>Verified Facts</h2><ul><li>Fact one.</li></ul>
-            <h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x</li></ul>
-            <h2>Scenario Analysis</h2>
-            <p><strong>Bull Case:</strong> Demand stays strong.</p>
-            <p><strong>Base Case:</strong> Growth normalizes.</p>
-            <p><strong>Bear Case:</strong> Spending slows.</p>
+            </ul></section>
+            <section><h2>Verified Facts</h2><ul><li>Fact one.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li></ul></section>
+            <section><h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
+            <section><h2>Expectations</h2><ul>
+              <li><strong>What the Next Catalyst Must Show:</strong> Demand and margin durability.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a></div></li>
+              <li><strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Good but not great guidance.</li>
+            </ul></section>
+            <section><h2>Opportunity-Cost / Peer Check</h2><ul><li>Buying the index has lower single-report risk.</li></ul></section>
+            <section><h2>Inference / Judgment</h2><ul><li>Judgment.</li></ul></section>
+            <section><h2>Scenario Analysis</h2>
+              <p><strong>Bull Case:</strong> Demand stays strong.</p>
+              <p><strong>Base Case:</strong> Growth normalizes.</p>
+              <p><strong>Bear Case:</strong> Spending slows.</p>
+            </section>
+            <section class="dw-source-note"><h2>Source Notes</h2><ul><li>Cross-checked primary, independent, and reference sources.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
+            <section><h2>Disclaimer</h2><p>Public-information-based research only, not personalized investment advice or trade execution.</p></section>
             "#,
         );
 
         let text = plain_text_body_from_html(&normalized);
         for label in [
-            "Rating:",
-            "Horizon:",
+            "Request Framing",
+            "Ticker:",
+            "Name:",
+            "Type:",
+            "Research Mode:",
+            "User Objective:",
+            "Horizon Basis:",
+            "Question Type:",
+            "Decision Card",
+            "New Money Action:",
+            "Existing Holder Action:",
+            "Near-Term Timing View:",
+            "Long-Term Ownership View:",
             "Confidence:",
-            "Timing Verdict:",
+            "One-Line Rationale:",
+            "Why in 3 bullets",
+            "What Is Priced In:",
+            "What Keeps This From Being Stronger:",
+            "What Would Change The View:",
+            "Trigger Block",
+            "Upgrade / Add Triggers:",
+            "Stay Wait Unless:",
+            "Invalidation Criteria:",
             "Verified Facts",
             "Derived Metrics",
+            "Expectations",
+            "What the Next Catalyst Must Show:",
+            "What Could Disappoint Even If Fundamentals Are Fine:",
+            "Opportunity-Cost / Peer Check",
+            "Inference / Judgment",
             "Bull Case:",
             "Base Case:",
             "Bear Case:",
-            "Add Criteria:",
-            "Invalidation Criteria:",
-            "Biggest Near-Term Risk:",
-            "Biggest Long-Term Strength:",
+            "Source Notes",
+            "Disclaimer",
         ] {
             assert!(
                 normalized.contains(label) || text.contains(label),
                 "expected normalized email content to preserve label {label}"
             );
         }
+        assert!(normalized.contains("dw-investment-card"));
+        assert!(normalized.contains("dw-evidence-chip"));
+        assert!(normalized.contains(r#"data-source-tier="primary""#));
     }
 
     #[test]

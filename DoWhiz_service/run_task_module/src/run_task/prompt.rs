@@ -535,22 +535,47 @@ See `.agents/skills/notion/SKILL.md` for detailed command reference.
 
 fn build_investment_capabilities_section() -> &'static str {
     r#"Investment research requests:
-- When the user asks about one U.S. stock or one U.S. ETF, asks whether now is a good time to buy, asks about buying before earnings, or wants a Buy / Wait / Sell investment view, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
-- Keep the final user-visible reply structured. Do not collapse it into generic commentary.
+- When the user asks about one U.S. stock or one U.S. ETF, asks whether now is a good time to buy, asks about buying before earnings, or wants a decision-useful investment view, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
+- Keep the final user-visible reply structured and scan-first. Do not collapse it into generic commentary or one long research wall.
 - For email replies, preserve these exact visible labels in `reply_email_draft.html`:
-  - `Rating:`
-  - `Horizon:`
+  - `Request Framing`
+  - `Ticker:`
+  - `Name:`
+  - `Type:`
+  - `Research Mode:`
+  - `User Objective:`
+  - `Horizon Basis:`
+  - `Question Type:`
+  - `Decision Card`
+  - `New Money Action:`
+  - `Existing Holder Action:`
+  - `Near-Term Timing View:`
+  - `Long-Term Ownership View:`
   - `Confidence:`
-  - `Timing Verdict:`
+  - `One-Line Rationale:`
+  - `Why in 3 bullets`
+  - `What Is Priced In:`
+  - `What Keeps This From Being Stronger:`
+  - `What Would Change The View:`
+  - `Trigger Block`
+  - `Upgrade / Add Triggers:`
+  - `Stay Wait Unless:`
+  - `Invalidation Criteria:`
   - `Verified Facts`
   - `Derived Metrics`
-  - `Bull Case`
-  - `Base Case`
-  - `Bear Case`
-  - `Add Criteria:`
-  - `Invalidation Criteria:`
-  - `Biggest Near-Term Risk:`
-  - `Biggest Long-Term Strength:`
+  - `Expectations`
+  - `What the Next Catalyst Must Show:`
+  - `What Could Disappoint Even If Fundamentals Are Fine:`
+  - `Opportunity-Cost / Peer Check`
+  - `Inference / Judgment`
+  - `Scenario Analysis`
+  - `Bull Case:`
+  - `Base Case:`
+  - `Bear Case:`
+  - `Source Notes`
+  - `Disclaimer`
+- Material factual and derived-metric claims must keep clickable source links near the claim, preferably as compact evidence chips such as `<a class="dw-evidence-chip" data-source-tier="primary|independent|reference" href="https://...">...</a>`.
+- Use a mix of source tiers: primary filings/IR, at least one reputable independent external source when relevant, and at least one quote/reference source for market-data cross-checking.
 - If the user states a conflicting earnings date or similar factual premise, correct it explicitly in the final reply instead of silently accepting it.
 
 "#
@@ -1631,8 +1656,10 @@ mod tests {
         );
 
         assert!(prompt.contains(".agents/skills/us-equity-daily-monitor/SKILL.md"));
-        assert!(prompt.contains("Timing Verdict"));
-        assert!(prompt.contains("Biggest Near-Term Risk"));
+        assert!(prompt.contains("New Money Action"));
+        assert!(prompt.contains("Existing Holder Action"));
+        assert!(prompt.contains("What Is Priced In"));
+        assert!(prompt.contains("dw-evidence-chip"));
         assert!(prompt.contains("final user-visible reply structured"));
     }
 

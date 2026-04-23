@@ -138,11 +138,151 @@ pub enum FakeCodexMode {
     Sleep,
 }
 
+const STRUCTURED_INVESTMENT_REPLY_HTML: &str = r#"
+<section>
+  <h2>Request Framing</h2>
+  <ul>
+    <li><strong>Ticker:</strong> NVDA</li>
+    <li><strong>Name:</strong> NVIDIA</li>
+    <li><strong>Type:</strong> Stock</li>
+    <li><strong>Research Mode:</strong> Deep research</li>
+    <li><strong>User Objective:</strong> Decide whether initiating now is attractive (stated)</li>
+    <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
+    <li><strong>Question Type:</strong> Long-term accumulation</li>
+  </ul>
+</section>
+<section class="dw-investment-card">
+  <div class="dw-investment-kicker">Decision-ready memo</div>
+  <h2>Decision Card</h2>
+  <ul class="dw-investment-list">
+    <li><strong>New Money Action:</strong> Starter Only</li>
+    <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
+    <li><strong>Near-Term Timing View:</strong> Wait for a cleaner post-earnings setup because expectations are already demanding.</li>
+    <li><strong>Long-Term Ownership View:</strong> Still worth owning if AI compute demand and margin durability remain intact.</li>
+    <li><strong>Confidence:</strong> Medium</li>
+    <li><strong>One-Line Rationale:</strong> The business is elite, but near-term upside needs another strong report to beat what the market already expects.</li>
+  </ul>
+</section>
+<section>
+  <h2>Why in 3 bullets</h2>
+  <ul>
+    <li><strong>What Is Priced In:</strong> Continued data-center strength, durable gross margin, and another clean beat.</li>
+    <li><strong>What Keeps This From Being Stronger:</strong> The setup leaves little room for merely good results.</li>
+    <li><strong>What Would Change The View:</strong> Better evidence that demand durability is widening faster than valuation expectations.</li>
+  </ul>
+</section>
+<section class="dw-trigger-grid">
+  <h2>Trigger Block</h2>
+  <ul class="dw-trigger-list">
+    <li><strong>Upgrade / Add Triggers:</strong> Another beat plus guidance that still shows durable AI spending and margin resilience.</li>
+    <li><strong>Stay Wait Unless:</strong> The next report materially beats what is already priced in or the stock resets without a thesis break.</li>
+    <li><strong>Invalidation Criteria:</strong> Demand slows, customer digestion extends, or gross-margin structure deteriorates.</li>
+  </ul>
+</section>
+<section>
+  <h2>Verified Facts</h2>
+  <ul>
+    <li>
+      NVIDIA's latest filings and prepared remarks showed data-center revenue still dominating the growth story.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a>
+        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
+      </div>
+    </li>
+    <li>
+      Market-data cross-checks still show the stock trading at a premium versus the broader index.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
+      </div>
+    </li>
+  </ul>
+</section>
+<section>
+  <h2>Derived Metrics</h2>
+  <ul>
+    <li>
+      Forward P/E: share price / next-twelve-month EPS consensus = roughly 31x, which keeps the burden of proof high.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a>
+        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
+      </div>
+    </li>
+  </ul>
+</section>
+<section>
+  <h2>Expectations</h2>
+  <ul>
+    <li>
+      <strong>What the Next Catalyst Must Show:</strong> Revenue and margin strength that remains clearly ahead of the already-bullish setup.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">Transcript</a>
+        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
+      </div>
+    </li>
+    <li>
+      <strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Guidance that confirms growth but not enough incremental upside to justify the current multiple.
+    </li>
+  </ul>
+</section>
+<section>
+  <h2>Opportunity-Cost / Peer Check</h2>
+  <ul>
+    <li>
+      Versus buying the index, NVIDIA still offers better direct AI exposure, but it also carries much more single-report expectation risk.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
+        <a class="dw-evidence-chip" data-source-tier="reference" href="https://www.nasdaq.com">Quote</a>
+      </div>
+    </li>
+  </ul>
+</section>
+<section>
+  <h2>Inference / Judgment</h2>
+  <ul>
+    <li>Judgment: the company remains best-in-class, but the near-term setup is still more "great business, demanding setup" than clear asymmetric entry.</li>
+  </ul>
+</section>
+<section>
+  <h2>Scenario Analysis</h2>
+  <p><strong>Bull Case:</strong> Demand and margins stay stronger than the market already expects.</p>
+  <p><strong>Base Case:</strong> Fundamentals stay solid, but upside is constrained by how much is already priced in.</p>
+  <p><strong>Bear Case:</strong> Customers digest capacity longer than expected and valuation compresses.</p>
+</section>
+<section class="dw-source-note">
+  <h2>Source Notes</h2>
+  <ul>
+    <li>
+      Primary, independent, and reference sources were cross-checked instead of relying only on company-controlled material.
+      <div class="dw-evidence-row">
+        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a>
+        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
+        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
+      </div>
+    </li>
+  </ul>
+</section>
+<section>
+  <h2>Disclaimer</h2>
+  <p>Public-information-based research only, not personalized investment advice or trade execution.</p>
+</section>
+"#;
+
 #[cfg(unix)]
 pub fn write_fake_codex(dir: &Path, mode: FakeCodexMode) -> io::Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
 
     let script_path = dir.join("codex");
+    let investment_structured_script = format!(
+        r#"#!/bin/sh
+set -e
+cat > reply_email_draft.html <<'HTML'
+{structured_reply}
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+        structured_reply = STRUCTURED_INVESTMENT_REPLY_HTML
+    );
     let script = match mode {
         FakeCodexMode::Success => {
             r#"#!/bin/sh
@@ -153,46 +293,7 @@ mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 "#
         }
-        FakeCodexMode::InvestmentStructured => {
-            r#"#!/bin/sh
-set -e
-cat > reply_email_draft.html <<'HTML'
-<h2>Request Framing</h2>
-<ul>
-  <li><strong>Ticker:</strong> NVDA</li>
-  <li><strong>Name:</strong> NVIDIA</li>
-  <li><strong>Type:</strong> Stock</li>
-  <li><strong>Research Mode:</strong> Deep research</li>
-  <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
-  <li><strong>Horizon:</strong> Long-term (inferred)</li>
-  <li><strong>Question Type:</strong> Long-term accumulation</li>
-</ul>
-<h2>Final Recommendation</h2>
-<ul>
-  <li><strong>Rating:</strong> Wait</li>
-  <li><strong>Horizon:</strong> Long-term (inferred)</li>
-  <li><strong>Confidence:</strong> Medium</li>
-  <li><strong>Timing Verdict:</strong> Wait</li>
-  <li><strong>Add Criteria:</strong> Better entry after earnings or improved valuation support.</li>
-  <li><strong>Invalidation Criteria:</strong> Demand slows or margin guidance weakens.</li>
-  <li><strong>Biggest Near-Term Risk:</strong> Event volatility around earnings.</li>
-  <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
-</ul>
-<h2>Verified Facts</h2>
-<ul><li>Fact.</li></ul>
-<h2>Derived Metrics</h2>
-<ul><li>Metric: price / eps = 10x</li></ul>
-<h2>Inference / Judgment</h2>
-<ul><li>Judgment.</li></ul>
-<h2>Scenario Analysis</h2>
-<p><strong>Bull Case:</strong> Demand remains strong.</p>
-<p><strong>Base Case:</strong> Growth normalizes.</p>
-<p><strong>Bear Case:</strong> Spending slows.</p>
-HTML
-mkdir -p reply_email_attachments
-echo "attachment" > reply_email_attachments/attachment.txt
-"#
-        }
+        FakeCodexMode::InvestmentStructured => investment_structured_script.as_str(),
         FakeCodexMode::InvestmentGeneric => {
             r#"#!/bin/sh
 set -e
@@ -451,6 +552,18 @@ pub fn write_fake_claude(dir: &Path, mode: FakeClaudeMode) -> io::Result<PathBuf
     use std::os::unix::fs::PermissionsExt;
 
     let script_path = dir.join("claude");
+    let investment_structured_script = format!(
+        r#"#!/bin/sh
+set -e
+echo '{{"type":"message_delta","delta":{{"text":"ok"}}}}'
+cat > reply_email_draft.html <<'HTML'
+{structured_reply}
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+        structured_reply = STRUCTURED_INVESTMENT_REPLY_HTML
+    );
     let script = match mode {
         FakeClaudeMode::Success => {
             r#"#!/bin/sh
@@ -461,47 +574,7 @@ mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 "#
         }
-        FakeClaudeMode::InvestmentStructured => {
-            r#"#!/bin/sh
-set -e
-echo '{"type":"message_delta","delta":{"text":"ok"}}'
-cat > reply_email_draft.html <<'HTML'
-<h2>Request Framing</h2>
-<ul>
-  <li><strong>Ticker:</strong> NVDA</li>
-  <li><strong>Name:</strong> NVIDIA</li>
-  <li><strong>Type:</strong> Stock</li>
-  <li><strong>Research Mode:</strong> Deep research</li>
-  <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
-  <li><strong>Horizon:</strong> Long-term (inferred)</li>
-  <li><strong>Question Type:</strong> Long-term accumulation</li>
-</ul>
-<h2>Final Recommendation</h2>
-<ul>
-  <li><strong>Rating:</strong> Wait</li>
-  <li><strong>Horizon:</strong> Long-term (inferred)</li>
-  <li><strong>Confidence:</strong> Medium</li>
-  <li><strong>Timing Verdict:</strong> Wait</li>
-  <li><strong>Add Criteria:</strong> Better entry after earnings or improved valuation support.</li>
-  <li><strong>Invalidation Criteria:</strong> Demand slows or margin guidance weakens.</li>
-  <li><strong>Biggest Near-Term Risk:</strong> Event volatility around earnings.</li>
-  <li><strong>Biggest Long-Term Strength:</strong> AI compute leadership.</li>
-</ul>
-<h2>Verified Facts</h2>
-<ul><li>Fact.</li></ul>
-<h2>Derived Metrics</h2>
-<ul><li>Metric: price / eps = 10x</li></ul>
-<h2>Inference / Judgment</h2>
-<ul><li>Judgment.</li></ul>
-<h2>Scenario Analysis</h2>
-<p><strong>Bull Case:</strong> Demand remains strong.</p>
-<p><strong>Base Case:</strong> Growth normalizes.</p>
-<p><strong>Bear Case:</strong> Spending slows.</p>
-HTML
-mkdir -p reply_email_attachments
-echo "attachment" > reply_email_attachments/attachment.txt
-"#
-        }
+        FakeClaudeMode::InvestmentStructured => investment_structured_script.as_str(),
         FakeClaudeMode::InvestmentGeneric => {
             r#"#!/bin/sh
 set -e
