@@ -202,4 +202,7 @@ Set environment variable:
 ACI_RECOVERY_ENABLED=1
 ```
 
+## E2E Testing
+* [4/22/26] E2E discord task with intermittent `pm2 stop` triggered after ACI container creation, `dw_worker` was successfully able to recover the task and send an outbound reply via Discord.
+
 Recovery runs asynchronously on worker startup via `task::spawn_blocking`.
