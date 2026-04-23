@@ -362,6 +362,33 @@ pub fn delete_aci_container_by_name(
     Ok(())
 }
 
+/// Download ephemeral share results for ACI recovery.
+/// Called by aci_recovery to fetch results from Azure File Share before reading reply file.
+pub fn download_ephemeral_share_for_recovery(
+    container_name: &str,
+    workspace_path: &std::path::Path,
+) -> Result<(), String> {
+    let config = match load_azure_aci_config() {
+        Ok(cfg) => cfg,
+        Err(err) => return Err(format!("failed to load ACI config: {:?}", err)),
+    };
+
+    let share_name = format!("{}{}", EPHEMERAL_SHARE_PREFIX, container_name);
+    tracing::info!(
+        "downloading ephemeral share for recovery: share={} workspace={}",
+        share_name,
+        workspace_path.display()
+    );
+
+    match download_workspace_from_share(&config, &share_name, workspace_path) {
+        Ok(()) => {
+            tracing::info!("ephemeral share download complete: share={}", share_name);
+            Ok(())
+        }
+        Err(err) => Err(format!("ephemeral share download failed: {:?}", err)),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecutionBackend {
     Local,
