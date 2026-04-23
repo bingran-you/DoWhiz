@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use chrono::Utc;
 use mongodb::bson::{doc, DateTime as BsonDateTime, Document};
-use mongodb::options::{ClientOptions, FindOptions};
+use mongodb::options::ClientOptions;
 use mongodb::sync::{Client, Collection, Database};
 
 const COLLECTION_NAME: &str = "aci_containers";
@@ -198,12 +198,8 @@ pub fn list_aci_containers() -> Vec<AciContainerRecord> {
         return Vec::new();
     };
 
-    let cursor = match coll.find(
-        doc! {},
-        FindOptions::builder()
-            .sort(doc! { "created_at": 1 })
-            .build(),
-    ) {
+    // Note: avoid sorting by created_at as CosmosDB requires an index for it
+    let cursor = match coll.find(doc! {}, None) {
         Ok(cursor) => cursor,
         Err(err) => {
             tracing::warn!("failed to list ACI containers from MongoDB: {}", err);
