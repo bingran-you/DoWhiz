@@ -1565,28 +1565,39 @@ fn run_codex_task_azure_aci(
         &effective_share,
         &mut timing,
     );
-    eprintln!(
-        "[run_task] azure_aci delete-request container={} resource_group={}",
-        container_name, config.resource_group
-    );
-    if let Err(cleanup_err) =
-        delete_aci_container_with_timeout(&config, &container_name, Duration::from_secs(20))
-    {
-        if !is_aci_not_found_error(&cleanup_err) {
-            eprintln!(
-                "[run_task] azure_aci delete-request failed container={} resource_group={} error={}",
-                container_name, config.resource_group, cleanup_err
-            );
-        }
-    }
-    if execution.is_err() {
+
+    // If execution was canceled (e.g., shutdown signal), skip cleanup to preserve
+    // the container for recovery on next startup.
+    let was_canceled = matches!(&execution, Err(RunTaskError::Canceled { .. }));
+    if was_canceled {
         eprintln!(
-            "[run_task] azure_aci execution failed for container={} (cleanup requested)",
+            "[run_task] azure_aci execution canceled, skipping cleanup for recovery: container={}",
             container_name
         );
+    } else {
+        eprintln!(
+            "[run_task] azure_aci delete-request container={} resource_group={}",
+            container_name, config.resource_group
+        );
+        if let Err(cleanup_err) =
+            delete_aci_container_with_timeout(&config, &container_name, Duration::from_secs(20))
+        {
+            if !is_aci_not_found_error(&cleanup_err) {
+                eprintln!(
+                    "[run_task] azure_aci delete-request failed container={} resource_group={} error={}",
+                    container_name, config.resource_group, cleanup_err
+                );
+            }
+        }
+        if execution.is_err() {
+            eprintln!(
+                "[run_task] azure_aci execution failed for container={} (cleanup requested)",
+                container_name
+            );
+        }
+        deregister_aci_container(&container_name);
+        deregister_aci_container_mongo(&container_name);
     }
-    deregister_aci_container(&container_name);
-    deregister_aci_container_mongo(&container_name);
 
     if let Some(ref guard) = ephemeral_guard {
         timing.start_stage();
