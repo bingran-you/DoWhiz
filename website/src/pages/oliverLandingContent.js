@@ -1,12 +1,14 @@
 export const OLIVER_ENTRY_SURFACE = 'oliver_tpm';
-export const OLIVER_LANDING_VARIANT = 'oliver_tpm_hook_v4_visual_scan';
+export const OLIVER_LANDING_VARIANT = 'oliver_tpm_hook_v5_cta_avatar';
 export const OLIVER_AUTH_OVERVIEW_HREF = '/auth/index.html?loggedIn=true&entry=oliver_tpm#section-overview';
+export const OLIVER_AUTH_SIGN_IN_HREF = '/auth/index.html?entry=oliver_tpm';
+export const OLIVER_HOME_HREF = '/';
 
 export const oliverLandingContent = {
   metadata: {
     title: 'Oliver by DoWhiz | AI TPM for product and engineering teams',
     description:
-      'Oliver is the AI TPM for product and engineering teams. He watches one program, drafts the weekly update, tracks current risks, and keeps the next owners moving.',
+      'Oliver is the AI TPM for product and engineering teams. Sign in, point him at one program, and get the weekly update, current risks, and next owners.',
     canonicalUrl: 'https://dowhiz.com/oliver',
     robots: 'noindex, nofollow',
     htmlLang: 'en',
@@ -15,24 +17,28 @@ export const oliverLandingContent = {
     ogImage: 'https://dowhiz.com/assets/DoWhiz.svg',
     ogImageAlt: 'Oliver landing page for product and engineering teams'
   },
+  nav: {
+    homeLabel: 'Home',
+    signInLabel: 'Sign in',
+    primaryCta: 'Open Oliver'
+  },
   hero: {
-    badge: 'TPM loop',
-    eyebrow: 'AI TPM for product and engineering teams',
-    title: 'Meet Oliver, your AI TPM.',
-    accent: 'He turns one messy week into a clear next move.',
+    badge: 'AI TPM',
+    eyebrow: 'For launches, releases, and cross-functional work',
+    title: 'Oliver is your AI TPM.',
     subtitle:
-      'Point him at one launch, release, or cross-functional stream. He watches the Slack threads, GitHub issues, docs, and meeting notes around it, then gives you the update, the risks, and the next owners.',
-    activity: 'Weekly launch review drafted in 8 min. Ready for review.',
-    primaryCta: 'Try Oliver on one program',
+      'Sign in, point him at one program, and get the update, current risks, and next owners.',
+    activity: 'Weekly review ready to send.',
+    primaryCta: 'Open Oliver',
     secondaryCta: 'See output samples',
-    proofPills: ['Weekly update draft', 'Current risks', 'Owner follow-through'],
-    orbitSignals: ['Slack', 'GitHub', 'Docs', 'Notes']
+    proofPills: ['Weekly update', 'Current risks', 'Next owners'],
+    orbitSignals: ['Slack', 'GitHub', 'Docs', 'Meetings']
   },
   workflow: {
-    eyebrow: 'How Oliver Works',
-    title: 'Show him one program.',
-    subtitle: 'You connect the signals. Oliver returns the TPM artifacts.',
-    signalsLabel: 'Signals watched',
+    eyebrow: 'How to start',
+    title: 'Connect one program.',
+    subtitle: 'Oliver watches the signals and drafts the output.',
+    signalsLabel: 'Signals in',
     signals: [
       { title: 'Slack blocker thread', meta: '#launch-ops', tone: 'teal' },
       { title: 'GitHub regression', meta: 'payments/callback', tone: 'violet' },
@@ -40,8 +46,8 @@ export const oliverLandingContent = {
     ],
     coreLabel: 'Oliver',
     coreTitle: 'Reviews the week',
-    coreSubtitle: 'Builds the TPM view before it gets lost in threads.',
-    outputsLabel: 'What comes back',
+    coreSubtitle: 'Builds one operating picture.',
+    outputsLabel: 'What you get',
     outputs: [
       { title: 'Weekly update', meta: 'Ready to review', tone: 'emerald' },
       { title: 'Current risks', meta: '2 need decisions', tone: 'amber' },
@@ -49,14 +55,14 @@ export const oliverLandingContent = {
     ]
   },
   proof: {
-    eyebrow: 'What You Can Scan',
-    title: 'Three screens explain the product faster than paragraphs.',
+    eyebrow: 'Output samples',
+    title: 'Scan the outputs.',
     cards: [
       {
         key: 'update',
         eyebrow: 'Weekly update',
-        title: 'A status note you can actually send.',
-        description: 'Health, movement, blockers, and next asks in one reviewable draft.',
+        title: 'Send-ready draft',
+        description: 'Health, blockers, and next asks.',
         visual: {
           type: 'update',
           windowTitle: 'Mobile release weekly update',
@@ -73,8 +79,8 @@ export const oliverLandingContent = {
       {
         key: 'risks',
         eyebrow: 'Risk register',
-        title: 'A live blocker list, not a dead recap.',
-        description: 'Severity, owner, and next review stay attached to the problem.',
+        title: 'Live risk list',
+        description: 'Severity, owner, and next review.',
         visual: {
           type: 'risks',
           rows: [
@@ -87,8 +93,8 @@ export const oliverLandingContent = {
       {
         key: 'follow-up',
         eyebrow: 'Owner follow-through',
-        title: 'One view of what should move next.',
-        description: 'Oliver keeps the next owners, tools, and statuses in the same loop.',
+        title: 'Next owners',
+        description: 'Who moves next, in one place.',
         visual: {
           type: 'follow-up',
           rows: [
@@ -102,12 +108,13 @@ export const oliverLandingContent = {
   },
   trust: {
     eyebrow: 'Stay In Control',
-    title: 'Review before send. Keep scope tight. Start on the existing DoWhiz account flow.',
+    title: 'Review before send.',
     items: [
       'Review before send',
       'Only connected scopes',
-      'Shared DoWhiz auth and dashboard'
+      'Shared DoWhiz setup'
     ],
-    primaryCta: 'Try Oliver on one program'
+    primaryCta: 'Open Oliver',
+    secondaryCta: 'Sign in'
   }
 };

@@ -5,9 +5,12 @@ import {
   trackAnalyticsEvent
 } from '../analytics';
 import { getThemeForLocalTime, LOCAL_THEME_CHANGE_EVENT, THEME_META_COLORS } from '../theme/localTheme';
+import oliverAvatar from '../assets/Oliver-Avatar-Apr-23-2026.png';
 import {
+  OLIVER_AUTH_SIGN_IN_HREF,
   OLIVER_AUTH_OVERVIEW_HREF,
   OLIVER_ENTRY_SURFACE,
+  OLIVER_HOME_HREF,
   OLIVER_LANDING_VARIANT,
   oliverLandingContent
 } from './oliverLandingContent';
@@ -288,12 +291,49 @@ function OliverLandingPage() {
       <div className="content-layer">
         <header className="oliver-clarity-header">
           <div className="container oliver-clarity-topbar">
-            <a href="/" className="oliver-clarity-brand" aria-label="Back to the DoWhiz homepage">
+            <a href={OLIVER_HOME_HREF} className="oliver-clarity-brand" aria-label="Back to the DoWhiz homepage">
               <img src="/assets/DoWhiz.svg" alt="" className="oliver-clarity-brand-mark" aria-hidden="true" />
-              <span className="oliver-clarity-brand-copy">
-                Do<span className="text-gradient">Whiz</span>
-              </span>
+              <span className="oliver-clarity-brand-copy">DoWhiz</span>
             </a>
+
+            <div className="oliver-clarity-topbar-actions">
+              <a
+                href={OLIVER_HOME_HREF}
+                className="oliver-clarity-inline-link oliver-clarity-topbar-link"
+                onClick={() =>
+                  trackLandingInteraction('secondary_cta_click', {
+                    cta_location: 'header_home',
+                    cta_text: content.nav.homeLabel
+                  })
+                }
+              >
+                {content.nav.homeLabel}
+              </a>
+              <a
+                href={OLIVER_AUTH_SIGN_IN_HREF}
+                className="btn btn-secondary oliver-clarity-secondary-button"
+                onClick={() =>
+                  trackLandingInteraction('secondary_cta_click', {
+                    cta_location: 'header_sign_in',
+                    cta_text: content.nav.signInLabel
+                  })
+                }
+              >
+                {content.nav.signInLabel}
+              </a>
+              <a
+                href={OLIVER_AUTH_OVERVIEW_HREF}
+                className="btn btn-primary oliver-clarity-primary-button"
+                onClick={() =>
+                  trackLandingInteraction('primary_cta_click', {
+                    cta_location: 'header_primary',
+                    cta_text: content.nav.primaryCta
+                  })
+                }
+              >
+                {content.nav.primaryCta}
+              </a>
+            </div>
           </div>
         </header>
 
@@ -314,7 +354,7 @@ function OliverLandingPage() {
                 <div className="oliver-clarity-portrait-ring">
                   <div className="oliver-clarity-portrait-ring-outer"></div>
                   <div className="oliver-clarity-portrait-ring-inner">
-                    <img src="/assets/DoWhiz.svg" alt="" aria-hidden="true" className="oliver-clarity-portrait" />
+                    <img src={oliverAvatar} alt="" className="oliver-clarity-portrait" />
                   </div>
                   <span className="oliver-clarity-portrait-status"></span>
                 </div>
@@ -323,7 +363,6 @@ function OliverLandingPage() {
               <div className="oliver-clarity-hero-copy">
                 <p className="oliver-clarity-eyebrow">{content.hero.eyebrow}</p>
                 <h1 className="oliver-clarity-title">{content.hero.title}</h1>
-                <p className="oliver-clarity-accent">{content.hero.accent}</p>
                 <p className="oliver-clarity-subtitle">{content.hero.subtitle}</p>
                 <div className="oliver-clarity-activity-pill">{content.hero.activity}</div>
                 <div className="oliver-clarity-cta-row">
@@ -387,7 +426,7 @@ function OliverLandingPage() {
 
                 <div className="oliver-clarity-orchestration-core">
                   <div className="oliver-clarity-core-avatar">
-                    <img src="/assets/DoWhiz.svg" alt="" aria-hidden="true" className="oliver-clarity-core-portrait" />
+                    <img src={oliverAvatar} alt="" aria-hidden="true" className="oliver-clarity-core-portrait" />
                   </div>
                   <p className="oliver-clarity-column-label">{content.workflow.coreLabel}</p>
                   <h3>{content.workflow.coreTitle}</h3>
@@ -450,18 +489,32 @@ function OliverLandingPage() {
                   ))}
                 </div>
 
-                <a
-                  className="btn btn-primary oliver-clarity-primary-button"
-                  href={OLIVER_AUTH_OVERVIEW_HREF}
-                  onClick={() =>
-                    trackLandingInteraction('primary_cta_click', {
-                      cta_location: 'trust_primary',
-                      cta_text: content.trust.primaryCta
-                    })
-                  }
-                >
-                  {content.trust.primaryCta}
-                </a>
+                <div className="oliver-clarity-trust-actions">
+                  <a
+                    className="btn btn-primary oliver-clarity-primary-button"
+                    href={OLIVER_AUTH_OVERVIEW_HREF}
+                    onClick={() =>
+                      trackLandingInteraction('primary_cta_click', {
+                        cta_location: 'trust_primary',
+                        cta_text: content.trust.primaryCta
+                      })
+                    }
+                  >
+                    {content.trust.primaryCta}
+                  </a>
+                  <a
+                    className="btn btn-secondary oliver-clarity-secondary-button"
+                    href={OLIVER_AUTH_SIGN_IN_HREF}
+                    onClick={() =>
+                      trackLandingInteraction('secondary_cta_click', {
+                        cta_location: 'trust_secondary',
+                        cta_text: content.trust.secondaryCta
+                      })
+                    }
+                  >
+                    {content.trust.secondaryCta}
+                  </a>
+                </div>
               </div>
             </div>
           </section>
