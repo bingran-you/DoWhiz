@@ -1,129 +1,113 @@
 export const OLIVER_ENTRY_SURFACE = 'oliver_tpm';
-export const OLIVER_LANDING_VARIANT = 'oliver_tpm_hook_v2_clarity';
+export const OLIVER_LANDING_VARIANT = 'oliver_tpm_hook_v4_visual_scan';
 export const OLIVER_AUTH_OVERVIEW_HREF = '/auth/index.html?loggedIn=true&entry=oliver_tpm#section-overview';
 
 export const oliverLandingContent = {
   metadata: {
     title: 'Oliver by DoWhiz | AI TPM for product and engineering teams',
     description:
-      'Oliver is the AI TPM for product and engineering teams. He turns scattered execution signals into a weekly update draft, current risks, and clear next owners.',
+      'Oliver is the AI TPM for product and engineering teams. He watches one program, drafts the weekly update, tracks current risks, and keeps the next owners moving.',
     canonicalUrl: 'https://dowhiz.com/oliver',
     robots: 'noindex, nofollow',
     htmlLang: 'en',
     ogLocale: 'en_US',
-    themeColor: '#f5f7fb',
+    themeColor: '#050816',
     ogImage: 'https://dowhiz.com/assets/DoWhiz.svg',
     ogImageAlt: 'Oliver landing page for product and engineering teams'
   },
-  nav: {
-    proofLink: 'See sample update',
-    primaryCta: 'Try Oliver on one program'
-  },
   hero: {
+    badge: 'TPM loop',
     eyebrow: 'AI TPM for product and engineering teams',
-    title: 'Oliver turns execution noise into updates, risks, and next owners.',
+    title: 'Meet Oliver, your AI TPM.',
+    accent: 'He turns one messy week into a clear next move.',
     subtitle:
-      'Point him at one launch, release, or cross-functional stream. He watches the Slack threads, GitHub issues, meeting notes, and docs around it, then drafts the weekly update and tells you what needs attention next.',
+      'Point him at one launch, release, or cross-functional stream. He watches the Slack threads, GitHub issues, docs, and meeting notes around it, then gives you the update, the risks, and the next owners.',
+    activity: 'Weekly launch review drafted in 8 min. Ready for review.',
     primaryCta: 'Try Oliver on one program',
-    secondaryCta: 'See a sample weekly update',
-    highlights: ['Weekly update draft', 'Current risks', 'Next owners'],
-    artifact: {
-      label: 'Sample weekly update',
-      program: 'Mobile release',
-      healthLabel: 'At risk',
-      healthDetail: '1 blocker needs resolution before QA sign-off',
-      summaryLabel: 'This week',
-      summary:
-        'Checkout is code-complete, but QA is blocked by the payment callback regression. The fallback copy is drafted and still needs one product approval.',
-      risksLabel: 'Current risks',
-      risks: [
-        'Payment callback bug is still blocking QA sign-off.',
-        'Fallback copy is drafted but not approved yet.',
-        'Release note timing depends on the final QA decision.'
-      ],
-      ownersLabel: 'Next owners',
-      owners: [
-        { owner: 'Engineering', action: 'Confirm callback fix ETA by 3 PM' },
-        { owner: 'Product', action: 'Approve fallback copy before today ends' },
-        { owner: 'Ops', action: 'Send the release note once QA goes green' }
-      ],
-      sourceLabel: 'Signals watched',
-      sources: 'Slack, GitHub, meeting notes, and release docs'
-    }
+    secondaryCta: 'See output samples',
+    proofPills: ['Weekly update draft', 'Current risks', 'Owner follow-through'],
+    orbitSignals: ['Slack', 'GitHub', 'Docs', 'Notes']
   },
-  outputs: {
-    eyebrow: 'What You Get This Week',
-    title: 'Three outputs a TPM actually needs.',
-    cards: [
-      {
-        title: 'Weekly update draft',
-        description: 'A concise update you can review and send, not a transcript you still have to interpret.',
-        bullets: [
-          'What moved this week',
-          'What is blocked right now',
-          'What leadership or partners need to know next'
-        ]
-      },
-      {
-        title: 'Current risks',
-        description: 'A short list of blockers with clear severity, owners, and the next review point.',
-        bullets: [
-          'Risks stay visible until they move',
-          'Mitigations stay attached to the issue',
-          'Escalations stay obvious instead of hiding in threads'
-        ]
-      },
-      {
-        title: 'Next owners',
-        description: 'A follow-through list that makes the next move explicit instead of leaving it inside chat.',
-        bullets: [
-          'Who owns the next action',
-          'What they need to do',
-          'What Oliver should draft or chase down next'
-        ]
-      }
+  workflow: {
+    eyebrow: 'How Oliver Works',
+    title: 'Show him one program.',
+    subtitle: 'You connect the signals. Oliver returns the TPM artifacts.',
+    signalsLabel: 'Signals watched',
+    signals: [
+      { title: 'Slack blocker thread', meta: '#launch-ops', tone: 'teal' },
+      { title: 'GitHub regression', meta: 'payments/callback', tone: 'violet' },
+      { title: 'Launch notes', meta: 'decision recap', tone: 'gold' }
+    ],
+    coreLabel: 'Oliver',
+    coreTitle: 'Reviews the week',
+    coreSubtitle: 'Builds the TPM view before it gets lost in threads.',
+    outputsLabel: 'What comes back',
+    outputs: [
+      { title: 'Weekly update', meta: 'Ready to review', tone: 'emerald' },
+      { title: 'Current risks', meta: '2 need decisions', tone: 'amber' },
+      { title: 'Next owners', meta: '3 follow-ups ready', tone: 'sky' }
     ]
   },
-  setup: {
-    eyebrow: 'How To Start',
-    title: 'One short loop from signal to follow-through.',
-    steps: [
+  proof: {
+    eyebrow: 'What You Can Scan',
+    title: 'Three screens explain the product faster than paragraphs.',
+    cards: [
       {
-        label: '01',
-        title: 'Connect one program',
-        description: 'Start with the Slack threads, GitHub issues, docs, and notes around one launch or release.'
+        key: 'update',
+        eyebrow: 'Weekly update',
+        title: 'A status note you can actually send.',
+        description: 'Health, movement, blockers, and next asks in one reviewable draft.',
+        visual: {
+          type: 'update',
+          windowTitle: 'Mobile release weekly update',
+          status: 'At risk',
+          metrics: ['2 blockers', '3 owners', 'Fri review'],
+          lines: [
+            { label: 'Build', value: 86 },
+            { label: 'QA', value: 52 },
+            { label: 'Comms', value: 74 }
+          ],
+          bullets: ['Checkout is code-complete', 'QA waits on callback fix', 'Fallback copy needs approval']
+        }
       },
       {
-        label: '02',
-        title: 'Review the draft',
-        description: 'Oliver pulls the signal into a weekly update, current risks, and clear next owners.'
+        key: 'risks',
+        eyebrow: 'Risk register',
+        title: 'A live blocker list, not a dead recap.',
+        description: 'Severity, owner, and next review stay attached to the problem.',
+        visual: {
+          type: 'risks',
+          rows: [
+            { tone: 'high', label: 'Callback regression', owner: 'Eng', review: 'Today' },
+            { tone: 'medium', label: 'Fallback copy approval', owner: 'Product', review: 'Today' },
+            { tone: 'low', label: 'Release note timing', owner: 'Ops', review: 'Fri' }
+          ]
+        }
       },
       {
-        label: '03',
-        title: 'Send or follow up',
-        description: 'Approve the update, send it, or let Oliver follow up on the moves that need to happen next.'
+        key: 'follow-up',
+        eyebrow: 'Owner follow-through',
+        title: 'One view of what should move next.',
+        description: 'Oliver keeps the next owners, tools, and statuses in the same loop.',
+        visual: {
+          type: 'follow-up',
+          rows: [
+            { tool: 'Slack', owner: 'Engineering', action: 'Confirm ETA', state: 'Queued' },
+            { tool: 'GitHub', owner: 'Product', action: 'Approve fallback copy', state: 'Waiting' },
+            { tool: 'Docs', owner: 'Ops', action: 'Send release note', state: 'Ready' }
+          ]
+        }
       }
     ]
   },
   trust: {
-    eyebrow: 'Trust And Control',
-    title: 'You review the moves that matter.',
-    intro:
-      'Oliver should tighten follow-through, not create mystery automation. The operating rule is simple: clear boundaries, reviewable output, and one shared DoWhiz account flow underneath.',
+    eyebrow: 'Stay In Control',
+    title: 'Review before send. Keep scope tight. Start on the existing DoWhiz account flow.',
     items: [
-      {
-        title: 'Review before send',
-        description: 'Status updates and follow-ups can wait for your approval when the stakes are high.'
-      },
-      {
-        title: 'Bounded permissions',
-        description: 'Oliver only works inside the tools and scopes you explicitly connect.'
-      },
-      {
-        title: 'Current account flow',
-        description: 'This page hands off to the existing DoWhiz auth and dashboard experience for now.'
-      }
+      'Review before send',
+      'Only connected scopes',
+      'Shared DoWhiz auth and dashboard'
     ],
-    primaryCta: 'Start with one weekly review'
+    primaryCta: 'Try Oliver on one program'
   }
 };
