@@ -48,7 +48,8 @@ use super::workspace::{canonicalize_dir, workspace_path_in_container};
 /// Global semaphore to limit concurrent azcopy transfers.
 /// Prevents overloading the system when many tasks run in parallel.
 const AZCOPY_MAX_CONCURRENT: isize = 5;
-static AZCOPY_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(AZCOPY_MAX_CONCURRENT));
+static AZCOPY_SEMAPHORE: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(AZCOPY_MAX_CONCURRENT));
 
 const PAYMENT_ENV_KEYS: &[&str] = &[
     "GOATX402_API_URL",
