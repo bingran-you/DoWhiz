@@ -9,7 +9,9 @@ use mongodb::IndexModel;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tracing::warn;
+use uuid::Uuid;
 
+use crate::account_store::get_global_account_store;
 use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
 use crate::{Schedule, ScheduledTask};
 
@@ -21,7 +23,6 @@ pub struct IndexStore {
 #[derive(Debug, Clone)]
 struct MongoIndexStore {
     task_index: Collection<Document>,
-    users: Collection<Document>,
 }
 
 #[derive(Debug, Clone)]
@@ -92,8 +93,7 @@ impl MongoIndexStore {
                 .keys(doc! { "enabled": 1, "next_run": 1 })
                 .build(),
         )?;
-        let users = db.collection::<Document>("users");
-        Ok(Self { task_index, users })
+        Ok(Self { task_index })
     }
 
     fn sync_user_tasks(
@@ -101,17 +101,31 @@ impl MongoIndexStore {
         user_id: &str,
         tasks: &[ScheduledTask],
     ) -> Result<(), IndexStoreError> {
-        // Gate: only sync if user_id exists in users collection
-        let user_exists = self
-            .users
-            .count_documents(doc! { "user_id": user_id }, None)?
-            > 0;
-        if !user_exists {
-            warn!(
-                "sync_user_tasks blocked: user_id {} not found in users collection",
-                user_id
-            );
-            return Ok(());
+        // Gate: block if user_id is a Supabase account_id (not a channel_user_id).
+        // Account IDs come from auth and should never be used for task scheduling.
+        // Channel user IDs are created via get_or_create_user and are valid.
+        if let Ok(uuid) = Uuid::parse_str(user_id) {
+            if let Some(store) = get_global_account_store() {
+                match store.get_account(uuid) {
+                    Ok(Some(_account)) => {
+                        warn!(
+                            "sync_user_tasks blocked: user_id {} is a Supabase account_id, not a channel_user_id",
+                            user_id
+                        );
+                        return Ok(());
+                    }
+                    Ok(None) => {
+                        // Not an account_id, allow through (it's a channel_user_id)
+                    }
+                    Err(e) => {
+                        // If we can't check, allow through to avoid blocking legitimate users
+                        warn!(
+                            "sync_user_tasks: account_store check failed for {}: {}, allowing through",
+                            user_id, e
+                        );
+                    }
+                }
+            }
         }
 
         let task_rows = enabled_task_next_runs(tasks);
