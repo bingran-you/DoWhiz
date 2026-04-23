@@ -21,6 +21,7 @@ pub struct IndexStore {
 #[derive(Debug, Clone)]
 struct MongoIndexStore {
     task_index: Collection<Document>,
+    users: Collection<Document>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,7 +92,8 @@ impl MongoIndexStore {
                 .keys(doc! { "enabled": 1, "next_run": 1 })
                 .build(),
         )?;
-        Ok(Self { task_index })
+        let users = db.collection::<Document>("users");
+        Ok(Self { task_index, users })
     }
 
     fn sync_user_tasks(
@@ -99,6 +101,19 @@ impl MongoIndexStore {
         user_id: &str,
         tasks: &[ScheduledTask],
     ) -> Result<(), IndexStoreError> {
+        // Gate: only sync if user_id exists in users collection
+        let user_exists = self
+            .users
+            .count_documents(doc! { "user_id": user_id }, None)?
+            > 0;
+        if !user_exists {
+            warn!(
+                "sync_user_tasks blocked: user_id {} not found in users collection",
+                user_id
+            );
+            return Ok(());
+        }
+
         let task_rows = enabled_task_next_runs(tasks);
         let task_ids: Vec<String> = task_rows
             .iter()
