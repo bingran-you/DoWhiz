@@ -103,14 +103,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ needs.prepare.outputs.deploy_sha }}
+
+      - name: Reclaim runner disk space before Rust restore
+        run: |
+          set -euo pipefail
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/local/.ghcup \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/dotnet \
+            /usr/share/swift
+          sudo apt-get clean
+          echo "Disk usage after cleanup:"
+          df -h
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             DoWhiz_service -> target
+
+      - name: Drop cached artifacts not needed for tests
+        run: |
+          set -euo pipefail
+          rm -rf target/debug/incremental target/release
+          echo "Disk usage after pruning Rust artifacts:"
+          df -h .
 
       - name: Run tests (scheduler_module)
         run: cargo test --locked -p scheduler_module
@@ -137,8 +160,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ needs.prepare.outputs.deploy_sha }}
+
+      - name: Reclaim runner disk space before Rust restore
+        run: |
+          set -euo pipefail
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/local/.ghcup \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/dotnet \
+            /usr/share/swift
+          sudo apt-get clean
+          echo "Disk usage after cleanup:"
+          df -h
 
       - name: Restore Rust cache
         uses: Swatinem/rust-cache@v2
