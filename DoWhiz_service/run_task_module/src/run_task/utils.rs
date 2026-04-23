@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn run_task_timeout_defaults_to_watchdog_budget_minus_headroom() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_TIMEOUT_SECS"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn run_task_timeout_respects_shorter_explicit_override() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "120"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
@@ -278,7 +278,7 @@ mod tests {
     #[test]
     fn run_task_timeout_caps_explicit_value_to_watchdog_budget() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "36000"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn run_task_timeout_uses_custom_task_timeout_budget() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::unset("RUN_TASK_TIMEOUT_SECS"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "900"),
         ];
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn run_task_timeout_caps_to_custom_task_timeout_budget() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "880"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "900"),
         ];
@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn run_task_timeout_ignores_invalid_values() {
         let _lock = ENV_LOCK.lock().expect("env lock");
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "abc"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "0"),
         ];

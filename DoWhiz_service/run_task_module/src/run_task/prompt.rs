@@ -20,6 +20,7 @@ fn mark_registration_prompted(workspace_dir: &Path) {
     let _ = fs::write(workspace_dir.join(".registration_prompted"), "1");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_prompt(
     input_email_dir: &Path,
     input_attachments_dir: &Path,
@@ -49,6 +50,7 @@ pub(super) fn build_prompt(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_prompt_with_fast_completion(
     input_email_dir: &Path,
     input_attachments_dir: &Path,
@@ -79,6 +81,7 @@ pub(super) fn build_prompt_with_fast_completion(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_prompt_internal(
     input_email_dir: &Path,
     input_attachments_dir: &Path,

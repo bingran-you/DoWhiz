@@ -33,6 +33,15 @@ function servePublicHtml() {
         const isStaticPath = staticPaths.some(p => url.startsWith(p))
 
         if (isStaticPath) {
+          const hasExplicitExtension = /\.[^/]+$/.test(url)
+          const isHtmlRequest = url.endsWith('.html')
+
+          // Let Vite serve JS, CSS, images, and other public assets normally.
+          if (hasExplicitExtension && !isHtmlRequest) {
+            next()
+            return
+          }
+
           // Try to serve index.html from the public folder
           let filePath = url.endsWith('/') ? url + 'index.html' : url
           if (!filePath.endsWith('.html') && !filePath.includes('.')) {
