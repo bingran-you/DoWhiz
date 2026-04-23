@@ -22,6 +22,8 @@ use uuid::Uuid;
 
 fn main() -> ExitCode {
     dotenvy::dotenv().ok();
+    // Also load .notion_env for NOTION_API_TOKEN (written by tpm_cron.rs)
+    dotenvy::from_filename(".notion_env").ok();
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {

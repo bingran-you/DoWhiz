@@ -1594,6 +1594,8 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
 #[derive(Debug, Deserialize)]
 pub struct SetOrganizationRequest {
     pub organization_name: String,
+    /// Optional cron expression for TPM sync schedule (default: "0 0 9 * * MON-FRI")
+    pub cron_expr: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1754,6 +1756,7 @@ pub async fn setup_tpm_cron(
     };
 
     let org_name = payload.organization_name.clone();
+    let cron_expr = payload.cron_expr.clone();
 
     // Verify user belongs to this organization
     if account.organization_id.is_none() {
@@ -1820,7 +1823,7 @@ pub async fn setup_tpm_cron(
             &index_store,
             account_id,
             &org_name_for_cron,
-            None,
+            cron_expr.as_deref(),
         )
     })
     .await
