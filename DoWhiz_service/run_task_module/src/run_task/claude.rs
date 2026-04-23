@@ -359,7 +359,7 @@ fn ensure_claude_settings(
         "model": model_name,
     });
     let rendered = serde_json::to_string_pretty(&payload)
-        .map_err(|err| RunTaskError::Io(io::Error::new(io::ErrorKind::Other, err.to_string())))?;
+        .map_err(|err| RunTaskError::Io(io::Error::other(err)))?;
     fs::write(settings_path, format!("{}\n", rendered))?;
     Ok(())
 }
@@ -627,7 +627,7 @@ mod tests {
     #[test]
     fn claude_fallback_timeout_defaults_to_run_task_timeout() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
             EnvVarGuard::unset("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -639,7 +639,7 @@ mod tests {
     #[test]
     fn claude_fallback_timeout_respects_explicit_cap() {
         let _lock = env_lock();
-        let _guards = vec![
+        let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
             EnvVarGuard::set("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS", "300"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
