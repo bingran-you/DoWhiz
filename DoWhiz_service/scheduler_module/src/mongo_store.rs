@@ -382,6 +382,17 @@ fn ensure_task_executions_indexes(db: &Database) -> Result<(), mongodb::error::E
             .keys(doc! { "started_at": -1 })
             .build(),
     )?;
+    ensure_index_compatible(
+        &collection,
+        IndexModel::builder()
+            .keys(doc! {
+                "status": 1,
+                "owner_scope.kind": 1,
+                "owner_scope.id": 1,
+                "started_at": -1
+            })
+            .build(),
+    )?;
     Ok(())
 }
 
