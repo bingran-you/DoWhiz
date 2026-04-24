@@ -188,7 +188,9 @@ pub fn setup_tpm_cron(
         .ensure_user_dirs(&user_paths)
         .map_err(|e| TpmCronError::UserDirsCreation(e.to_string()))?;
 
-    let workspace_dir = user_paths.workspaces_root.join("tpm_cron_placeholder");
+    // Use unique workspace per cron setup to avoid collisions
+    let cron_id = Uuid::new_v4();
+    let workspace_dir = user_paths.workspaces_root.join(format!("tpm_cron_{}", cron_id));
 
     // Create all workspace directories required by RunTaskTask validation
     for subdir in [
@@ -199,6 +201,42 @@ pub fn setup_tpm_cron(
     ] {
         std::fs::create_dir_all(workspace_dir.join(subdir))
             .map_err(|e| TpmCronError::WorkspaceCreation(e.to_string()))?;
+    }
+
+    // Write Notion context files for tpm_cli
+    if let Ok(notion_store) = NotionStore::new() {
+        if let Ok(credentials) = notion_store.get_credentials_for_account(user_id) {
+            if let Some(cred) = credentials.first() {
+                // Write .notion_context.json with workspace_id
+                let notion_context = json!({
+                    "workspace_id": cred.workspace_id,
+                    "workspace_name": cred.workspace_name,
+                });
+                let context_path = workspace_dir.join(".notion_context.json");
+                if let Err(e) = std::fs::write(
+                    &context_path,
+                    serde_json::to_string_pretty(&notion_context).unwrap_or_default(),
+                ) {
+                    tracing::warn!("Failed to write .notion_context.json: {}", e);
+                } else {
+                    info!(
+                        "Wrote .notion_context.json for TPM cron workspace (workspace_id={})",
+                        cred.workspace_id
+                    );
+                }
+
+                // Write .notion_env with access token
+                let env_path = workspace_dir.join(".notion_env");
+                if let Err(e) = std::fs::write(
+                    &env_path,
+                    format!("NOTION_API_TOKEN={}\n", cred.access_token),
+                ) {
+                    tracing::warn!("Failed to write .notion_env: {}", e);
+                } else {
+                    info!("Wrote .notion_env for TPM cron workspace");
+                }
+            }
+        }
     }
 
     // Load employee config to get reply_from address
