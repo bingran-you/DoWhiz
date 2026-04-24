@@ -2021,7 +2021,7 @@ fn read_latest_azcopy_log_tail(secrets: &[&str]) -> Option<String> {
     for entry in fs::read_dir(&log_dir).ok()? {
         let entry = entry.ok()?;
         let path = entry.path();
-        if !path.extension().is_some_and(|e| e == "log") {
+        if path.extension().is_none_or(|e| e != "log") {
             continue;
         }
         let modified = entry.metadata().ok().and_then(|m| m.modified().ok())?;
