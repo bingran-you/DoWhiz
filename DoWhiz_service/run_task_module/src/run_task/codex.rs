@@ -136,6 +136,20 @@ const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize)]
+struct AzureAciContainerInstanceView {
+    #[serde(default)]
+    state: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AzureAciContainerShowState {
+    #[serde(rename = "provisioningState", default)]
+    provisioning_state: Option<String>,
+    #[serde(rename = "instanceView", default)]
+    instance_view: Option<AzureAciContainerInstanceView>,
+}
+
+#[derive(Debug, Deserialize)]
 struct HumanApprovalEmployeeConfigFile {
     #[serde(default)]
     employees: Vec<HumanApprovalEmployeeConfigEntry>,
@@ -2710,6 +2724,40 @@ fn fetch_aci_show_json(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn parse_aci_show_states(show_json: &str) -> Option<(Option<String>, Option<String>)> {
+    let parsed = serde_json::from_str::<AzureAciContainerShowState>(show_json).ok()?;
+    Some((
+        parsed.provisioning_state,
+        parsed.instance_view.and_then(|view| view.state),
+    ))
+}
+
+fn aci_show_indicates_container_started(show_json: &str) -> bool {
+    let Some((provisioning_state, instance_state)) = parse_aci_show_states(show_json) else {
+        return false;
+    };
+
+    let provisioning_state = provisioning_state.unwrap_or_default();
+    let instance_state = instance_state.unwrap_or_default();
+
+    if instance_state.eq_ignore_ascii_case("Failed")
+        || provisioning_state.eq_ignore_ascii_case("Failed")
+        || provisioning_state.eq_ignore_ascii_case("Canceled")
+    {
+        return false;
+    }
+
+    provisioning_state.eq_ignore_ascii_case("Succeeded")
+        || provisioning_state.eq_ignore_ascii_case("Creating")
+        || provisioning_state.eq_ignore_ascii_case("Pending")
+        || instance_state.eq_ignore_ascii_case("Running")
+        || instance_state.eq_ignore_ascii_case("Waiting")
+        || instance_state.eq_ignore_ascii_case("Pending")
+        || instance_state.eq_ignore_ascii_case("Succeeded")
+        || instance_state.eq_ignore_ascii_case("Terminated")
+        || instance_state.eq_ignore_ascii_case("Stopped")
+}
+
 fn create_aci_container(
     config: &AzureAciConfig,
     container_name: &str,
@@ -2727,15 +2775,41 @@ fn create_aci_container(
         }
     }
 
-    let create_output =
-        match run_command_with_timeout(create_cmd, Duration::from_secs(300), "az container create")
-        {
-            Ok(output) => output,
-            Err(RunTaskError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(RunTaskError::AzureCliNotFound)
+    let create_output = match run_command_with_timeout(
+        create_cmd,
+        Duration::from_secs(300),
+        "az container create",
+    ) {
+        Ok(output) => output,
+        Err(timeout @ RunTaskError::CommandTimeout { .. }) => {
+            match fetch_aci_show_json(config, container_name) {
+                Ok(show_json) if aci_show_indicates_container_started(&show_json) => {
+                    if let Some((provisioning_state, instance_state)) =
+                        parse_aci_show_states(&show_json)
+                    {
+                        eprintln!(
+                            "[run_task] azure_aci create timeout but container is present container={} provisioning_state={} instance_state={}; continuing with state polling",
+                            container_name,
+                            provisioning_state.as_deref().unwrap_or("-"),
+                            instance_state.as_deref().unwrap_or("-")
+                        );
+                    } else {
+                        eprintln!(
+                            "[run_task] azure_aci create timeout but container is present container={}; continuing with state polling",
+                            container_name
+                        );
+                    }
+                    return Ok(());
+                }
+                Ok(_) => return Err(timeout),
+                Err(_) => return Err(timeout),
             }
-            Err(err) => return Err(err),
-        };
+        }
+        Err(RunTaskError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(RunTaskError::AzureCliNotFound)
+        }
+        Err(err) => return Err(err),
+    };
     if !create_output.status.success() {
         let mut combined = String::new();
         combined.push_str(&String::from_utf8_lossy(&create_output.stdout));
@@ -5495,6 +5569,49 @@ printf '%s\n' "$@" > "$capture_file"
         assert!(azure_aci_execution_succeeded(&execution, Some(0)));
         assert!(!azure_aci_execution_succeeded(&execution, Some(1)));
         assert!(!azure_aci_execution_succeeded(&execution, None));
+    }
+
+    #[test]
+    fn test_aci_show_indicates_container_started_for_running_container() {
+        let show_json = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Running"
+          }
+        }"#;
+
+        assert!(aci_show_indicates_container_started(show_json));
+    }
+
+    #[test]
+    fn test_aci_show_indicates_container_started_rejects_failed_container() {
+        let show_json = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Failed"
+          }
+        }"#;
+
+        assert!(!aci_show_indicates_container_started(show_json));
+    }
+
+    #[test]
+    fn test_aci_show_indicates_container_started_accepts_terminated_for_polling_recovery() {
+        let terminated = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Terminated"
+          }
+        }"#;
+        let stopped = r#"{
+          "provisioningState": "Succeeded",
+          "instanceView": {
+            "state": "Stopped"
+          }
+        }"#;
+
+        assert!(aci_show_indicates_container_started(terminated));
+        assert!(aci_show_indicates_container_started(stopped));
     }
 
     #[test]
