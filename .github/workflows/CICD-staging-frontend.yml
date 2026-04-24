@@ -128,42 +128,28 @@ jobs:
           echo "VITE_API_BASE=${{ secrets.STAGING_VITE_API_BASE }}" > /home/${{ secrets.STAGING_AZURE_VM_USER }}/server/DoWhiz_frontend/website/.env.local
           EOF
 
-      - name: Update frontend repo and install dependencies
+      - name: Update frontend repo
         run: |
           ssh -F ~/.ssh/config azurestaging << 'EOF'
           cd /home/${{ secrets.STAGING_AZURE_VM_USER }}/server/DoWhiz_frontend
           git fetch origin
           git checkout -f dev
           git pull origin dev
-          cd website
-          npm install
           EOF
 
-      - name: Restart frontend service
+      - name: Reload Caddy
         run: |
           ssh -F ~/.ssh/config azurestaging << 'EOF'
-          set -e
-          if [ -s /home/${{ secrets.STAGING_AZURE_VM_USER }}/.nvm/nvm.sh ]; then
-            source /home/${{ secrets.STAGING_AZURE_VM_USER }}/.nvm/nvm.sh
-          fi
-          FRONTEND_DIR=/home/${{ secrets.STAGING_AZURE_VM_USER }}/server/DoWhiz_frontend/website
-
-          if pm2 describe dw_frontend >/dev/null 2>&1; then
-            pm2 restart dw_frontend --update-env
-          else
-            pm2 start npm --name dw_frontend --cwd "$FRONTEND_DIR" -- run preview -- --host 0.0.0.0 --port 3000
-          fi
-
-          pm2 save
+          sudo systemctl reload caddy
 
           # Health check for frontend
-          for attempt in $(seq 1 12); do
-            http_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 15 "http://127.0.0.1:3000" || true)"
+          for attempt in $(seq 1 6); do
+            http_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 15 "https://staging.dowhiz.com" || true)"
             if [[ "$http_code" == "200" ]]; then
               echo "Frontend health check passed: HTTP $http_code"
               exit 0
             fi
-            echo "Waiting for frontend (${attempt}/12), last HTTP ${http_code:-000}..."
+            echo "Waiting for frontend (${attempt}/6), last HTTP ${http_code:-000}..."
             sleep 5
           done
           echo "Frontend health check failed after retries" >&2
