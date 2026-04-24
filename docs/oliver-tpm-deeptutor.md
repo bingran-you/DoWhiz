@@ -740,20 +740,24 @@ The **original TPM cron** mistakenly used `account_id` (account UUID) for:
 2. Each cron fire added more tasks to SQLite (under `account_uuid` path)
 3. **trigger_tpm_sync** was first to call `index_store.sync_user_tasks(&account_uuid, tasks)`
 
-#### What Happens When Index Sync Uses a "New" User ID
+#### What Happens When Index Sync Uses an Account ID as the user_id
+
+Recall the **dual-write system** - a task is actually written in two places in the `tasks` collection:
+1. A UUID is generated for a task upserted into the `tasks` via `add_one_shot_in_with_id`. This is so the later call to `sync_user_tasks` can **upsert the tasks associated with the UUID into `task_index`**, where the global worker can then poll from it.
+2. A separate entry is upserted into `tasks` with the account_id associated with the user via Supabase. **This is for frontend polling.**
 
 `sync_user_tasks(user_id, tasks)` performs:
 ```rust
 // 1. Delete all existing tasks for this user_id
 DELETE FROM task_index WHERE user_id = ?
 
-// 2. Insert all tasks from the SQLite scheduler
+// 2. Insert all tasks from the tasks collection for this user_id
 INSERT INTO task_index (user_id, task_id, ...) VALUES ...
 ```
 
 When `user_id = account_uuid`:
 - **Delete phase**: Finds nothing (no prior tasks under this "new" user_id)
-- **Insert phase**: Inserts ALL accumulated tasks from the SQLite file
+- **Insert phase**: Inserts ALL tasks from step 2 (all the frontend polling entries in `tasks`) into `task_index`
 
 Since the account_uuid path had 170+ accumulated tasks from cron runs, all were synced at once → CosmosDB 429 rate limit.
 
@@ -790,6 +794,9 @@ This ensures:
 2. `tasks` collection's `owner_scope.id` is `email_user_id` (extracted from path)
 3. No "new" user_id accumulation → sync cleans up properly
 4. Choose email as the user_id source since the channel in RunTaskTask was set to "email".
+
+*Update:* We have seen that incorrect calls to `sync_to_task_index` can cause an upshot of tasks being populated in `task_index`, where CosmosDB rate-limiting brings the entire system to a halt. Thus, we added a further robustness check:
+* If the user_id passed into `sync_user_tasks` is in Supabase (i.e. the user_id is an `account_id`), we block access. 
 
 ### Issue 2: Credentials not used correctly by TPM Commands in ACI Container
 
