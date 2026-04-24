@@ -8,9 +8,9 @@ import { getThemeForLocalTime, LOCAL_THEME_CHANGE_EVENT, THEME_META_COLORS } fro
 import oliverAvatar from '../assets/Oliver-Avatar-Apr-23-2026.png';
 import {
   OLIVER_AUTH_SIGN_IN_HREF,
-  OLIVER_AUTH_OVERVIEW_HREF,
   OLIVER_ENTRY_SURFACE,
   OLIVER_HOME_HREF,
+  OLIVER_LAUNCH_HREF,
   OLIVER_LANDING_VARIANT,
   oliverLandingContent
 } from './oliverLandingContent';
@@ -219,9 +219,9 @@ function OliverLandingPage() {
       'landing_page_view',
       {
         landing_page_variant: OLIVER_LANDING_VARIANT,
-        landing_story: 'tpm_hook',
+        landing_story: 'launch_execution',
         entry_surface: OLIVER_ENTRY_SURFACE,
-        role_focus: 'tpm'
+        role_focus: 'launch_execution'
       },
       {
         eventKey: `landing_page_view:${sessionId}:/oliver`,
@@ -280,7 +280,7 @@ function OliverLandingPage() {
   const trackLandingInteraction = (eventName, properties = {}) => {
     trackAnalyticsEvent(eventName, {
       landing_page_variant: OLIVER_LANDING_VARIANT,
-      landing_story: 'tpm_hook',
+      landing_story: 'launch_execution',
       entry_surface: OLIVER_ENTRY_SURFACE,
       ...properties
     });
@@ -322,7 +322,7 @@ function OliverLandingPage() {
                 {content.nav.signInLabel}
               </a>
               <a
-                href={OLIVER_AUTH_OVERVIEW_HREF}
+                href={OLIVER_LAUNCH_HREF}
                 className="btn btn-primary oliver-clarity-primary-button"
                 onClick={() =>
                   trackLandingInteraction('primary_cta_click', {
@@ -368,7 +368,7 @@ function OliverLandingPage() {
                 <div className="oliver-clarity-cta-row">
                   <a
                     className="btn btn-primary oliver-clarity-primary-button"
-                    href={OLIVER_AUTH_OVERVIEW_HREF}
+                    href={OLIVER_LAUNCH_HREF}
                     onClick={() =>
                       trackLandingInteraction('primary_cta_click', {
                         cta_location: 'hero_primary',
@@ -492,7 +492,7 @@ function OliverLandingPage() {
                 <div className="oliver-clarity-trust-actions">
                   <a
                     className="btn btn-primary oliver-clarity-primary-button"
-                    href={OLIVER_AUTH_OVERVIEW_HREF}
+                    href={OLIVER_LAUNCH_HREF}
                     onClick={() =>
                       trackLandingInteraction('primary_cta_click', {
                         cta_location: 'trust_primary',

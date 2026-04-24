@@ -27,8 +27,8 @@ use crate::scheduler::{
     append_task_execution_event, insert_scheduled_task, is_user_visible_routine_task,
     load_scheduled_task, persist_scheduled_task, prepare_task_for_resume,
     try_load_routines_with_status, try_load_task_executions, try_load_task_with_status,
-    try_load_tasks_with_status, try_load_tasks_with_status_shared, RoutineSummary, Schedule,
-    ScheduledTask, TaskExecutionSummary, TaskKind,
+    try_load_tasks_with_status_shared, RoutineSummary, Schedule, ScheduledTask,
+    TaskExecutionSummary, TaskKind,
 };
 use crate::slack_store::{SlackInstallation, SlackStore};
 use crate::thread_state::{
@@ -37,6 +37,7 @@ use crate::thread_state::{
 use crate::user_store::UserStore;
 use crate::{load_tasks_with_status, TaskStatusSummary};
 
+use super::launch_execution::{generate_launch_execution_response, LaunchExecutionRequest};
 use super::onboarding::{
     run_install_onboarding, AccountStoreInstallOnboardingStateStore,
     DiscordInstallOnboardingClient, InstallOnboardingConfig, InstallOnboardingRequest,
@@ -2535,6 +2536,33 @@ pub async fn startup_workspace_intake_chat(
         Err(error_message) => {
             let status = if error_message.contains("No conversation messages")
                 || error_message.contains("messages")
+            {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::BAD_GATEWAY
+            };
+
+            (
+                status,
+                Json(serde_json::json!({
+                    "error": error_message
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST /api/launch-execution/analyze
+/// Analyze one pasted launch thread into a narrow execution plan and readiness brief.
+pub async fn analyze_launch_execution(
+    Json(request): Json<LaunchExecutionRequest>,
+) -> impl IntoResponse {
+    match generate_launch_execution_response(request).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(error_message) => {
+            let status = if error_message.contains("context_text")
+                || error_message.contains("Unsupported source_type")
             {
                 StatusCode::BAD_REQUEST
             } else {
@@ -7161,6 +7189,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/api/startup-workspace/intake-chat",
             post(startup_workspace_intake_chat),
+        )
+        .route(
+            "/api/launch-execution/analyze",
+            post(analyze_launch_execution),
         )
         .route(
             "/api/workspace/provider-state",

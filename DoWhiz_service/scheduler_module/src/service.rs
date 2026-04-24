@@ -10,6 +10,7 @@ pub mod grocery;
 mod html;
 mod inbound;
 mod ingestion;
+pub mod launch_execution;
 mod onboarding;
 mod postmark;
 mod recipients;

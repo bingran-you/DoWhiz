@@ -1,57 +1,57 @@
-export const OLIVER_ENTRY_SURFACE = 'oliver_tpm';
-export const OLIVER_LANDING_VARIANT = 'oliver_tpm_hook_v5_cta_avatar';
-export const OLIVER_AUTH_OVERVIEW_HREF = '/auth/index.html?loggedIn=true&entry=oliver_tpm#section-overview';
-export const OLIVER_AUTH_SIGN_IN_HREF = '/auth/index.html?entry=oliver_tpm';
+export const OLIVER_ENTRY_SURFACE = 'oliver_launch_execution';
+export const OLIVER_LANDING_VARIANT = 'oliver_launch_execution_hook_v1';
+export const OLIVER_LAUNCH_HREF = '/oliver/launch';
+export const OLIVER_AUTH_SIGN_IN_HREF = '/auth/index.html?entry=oliver_launch_execution';
 export const OLIVER_HOME_HREF = '/';
 
 export const oliverLandingContent = {
   metadata: {
-    title: 'Oliver by DoWhiz | AI TPM for product and engineering teams',
+    title: 'Oliver by DoWhiz | Launch Execution Copilot',
     description:
-      'Oliver is the AI TPM for product and engineering teams. Sign in, point him at one program, and get the weekly update, current risks, and next owners.',
+      'Turn one messy launch thread into an accountable execution plan and a live readiness brief backed by evidence.',
     canonicalUrl: 'https://dowhiz.com/oliver',
     robots: 'noindex, nofollow',
     htmlLang: 'en',
     ogLocale: 'en_US',
     themeColor: '#050816',
     ogImage: 'https://dowhiz.com/assets/DoWhiz.svg',
-    ogImageAlt: 'Oliver landing page for product and engineering teams'
+    ogImageAlt: 'Oliver landing page for launch execution'
   },
   nav: {
     homeLabel: 'Home',
     signInLabel: 'Sign in',
-    primaryCta: 'Open Oliver'
+    primaryCta: 'Try Launch Flow'
   },
   hero: {
-    badge: 'AI TPM',
-    eyebrow: 'For launches, releases, and cross-functional work',
-    title: 'Oliver is your AI TPM.',
+    badge: 'Launch Execution Copilot',
+    eyebrow: 'For one launch thread at a time',
+    title: 'Turn one messy launch thread into accountable execution.',
     subtitle:
-      'Sign in, point him at one program, and get the update, current risks, and next owners.',
-    activity: 'Weekly review ready to send.',
-    primaryCta: 'Open Oliver',
+      'Paste the thread. Oliver extracts owners, dates, dependencies, blockers, open decisions, and a readiness brief backed by evidence.',
+    activity: 'Readiness brief refreshed from the latest owner update.',
+    primaryCta: 'Try Launch Flow',
     secondaryCta: 'See output samples',
-    proofPills: ['Weekly update', 'Current risks', 'Next owners'],
-    orbitSignals: ['Slack', 'GitHub', 'Docs', 'Meetings']
+    proofPills: ['Owners + dates', 'Blockers + decisions', 'Readiness brief'],
+    orbitSignals: ['Thread', 'Milestones', 'Risks', 'Owners']
   },
   workflow: {
     eyebrow: 'How to start',
-    title: 'Connect one program.',
-    subtitle: 'Oliver watches the signals and drafts the output.',
+    title: 'Paste one launch thread.',
+    subtitle: 'Oliver turns the thread into a narrow execution layer instead of a generic project dashboard.',
     signalsLabel: 'Signals in',
     signals: [
-      { title: 'Slack blocker thread', meta: '#launch-ops', tone: 'teal' },
-      { title: 'GitHub regression', meta: 'payments/callback', tone: 'violet' },
-      { title: 'Launch notes', meta: 'decision recap', tone: 'gold' }
+      { title: 'Launch thread bundle', meta: 'Slack or email paste', tone: 'teal' },
+      { title: 'Planning note', meta: 'milestones + dependencies', tone: 'gold' },
+      { title: 'Latest owner reply', meta: 'refresh the brief', tone: 'sky' }
     ],
     coreLabel: 'Oliver',
-    coreTitle: 'Reviews the week',
-    coreSubtitle: 'Builds one operating picture.',
+    coreTitle: 'Builds the execution layer',
+    coreSubtitle: 'Extracts ownership, dates, risks, decisions, and follow-ups.',
     outputsLabel: 'What you get',
     outputs: [
-      { title: 'Weekly update', meta: 'Ready to review', tone: 'emerald' },
-      { title: 'Current risks', meta: '2 need decisions', tone: 'amber' },
-      { title: 'Next owners', meta: '3 follow-ups ready', tone: 'sky' }
+      { title: 'Launch plan', meta: 'Milestones + owners', tone: 'emerald' },
+      { title: 'Readiness brief', meta: 'Evidence-backed status', tone: 'amber' },
+      { title: 'Follow-ups', meta: 'Missing owners and blockers', tone: 'sky' }
     ]
   },
   proof: {
@@ -60,47 +60,51 @@ export const oliverLandingContent = {
     cards: [
       {
         key: 'update',
-        eyebrow: 'Weekly update',
-        title: 'Send-ready draft',
-        description: 'Health, blockers, and next asks.',
+        eyebrow: 'Readiness brief',
+        title: 'One accountable launch view',
+        description: 'Overall readiness, blockers, and what changed since the last update.',
         visual: {
           type: 'update',
-          windowTitle: 'Mobile release weekly update',
-          status: 'At risk',
-          metrics: ['2 blockers', '3 owners', 'Fri review'],
+          windowTitle: 'Mobile checkout launch readiness',
+          status: 'Yellow',
+          metrics: ['1 blocker', '4 owners', 'June 11 review'],
           lines: [
-            { label: 'Build', value: 86 },
-            { label: 'QA', value: 52 },
-            { label: 'Comms', value: 74 }
+            { label: 'Build', value: 82 },
+            { label: 'QA', value: 45 },
+            { label: 'Comms', value: 68 }
           ],
-          bullets: ['Checkout is code-complete', 'QA waits on callback fix', 'Fallback copy needs approval']
+          bullets: [
+            'Payments callback still blocks QA signoff',
+            'Fallback copy approval is unresolved',
+            'Lifecycle needs final date and screenshots'
+          ]
         }
       },
       {
         key: 'risks',
-        eyebrow: 'Risk register',
-        title: 'Live risk list',
-        description: 'Severity, owner, and next review.',
+        eyebrow: 'Owner / date / risk tracker',
+        title: 'Tracker, not task sprawl',
+        description: 'The smallest useful layer for launch accountability.',
         visual: {
           type: 'risks',
           rows: [
-            { tone: 'high', label: 'Callback regression', owner: 'Eng', review: 'Today' },
-            { tone: 'medium', label: 'Fallback copy approval', owner: 'Product', review: 'Today' },
-            { tone: 'low', label: 'Release note timing', owner: 'Ops', review: 'Fri' }
+            { tone: 'high', label: 'Callback retries stable in staging', owner: 'Jon', review: 'Needs date' },
+            { tone: 'medium', label: 'Fallback copy legal approval', owner: 'Product', review: 'Open' },
+            { tone: 'low', label: 'Lifecycle comms scheduled', owner: 'Lena', review: 'After screenshots' }
           ]
         }
       },
       {
         key: 'follow-up',
-        eyebrow: 'Owner follow-through',
-        title: 'Next owners',
-        description: 'Who moves next, in one place.',
+        eyebrow: 'Next follow-ups',
+        title: 'Keep the loop moving',
+        description: 'The next asks are generated from missing owners, dates, blockers, and stale updates.',
         visual: {
           type: 'follow-up',
           rows: [
-            { tool: 'Slack', owner: 'Engineering', action: 'Confirm ETA', state: 'Queued' },
-            { tool: 'GitHub', owner: 'Product', action: 'Approve fallback copy', state: 'Waiting' },
-            { tool: 'Docs', owner: 'Ops', action: 'Send release note', state: 'Ready' }
+            { tool: 'Thread', owner: 'Infra', action: 'Confirm retry queue ETA', state: 'Queued' },
+            { tool: 'Thread', owner: 'Product', action: 'Name owner for copy approval', state: 'Waiting' },
+            { tool: 'Thread', owner: 'Lifecycle', action: 'Request final launch date', state: 'Ready' }
           ]
         }
       }
@@ -108,13 +112,13 @@ export const oliverLandingContent = {
   },
   trust: {
     eyebrow: 'Stay In Control',
-    title: 'Review before send.',
+    title: 'Keep the launch loop tight.',
     items: [
-      'Review before send',
-      'Only connected scopes',
-      'Shared DoWhiz setup'
+      'Evidence stays visible',
+      'Follow-up drafts first',
+      'One launch at a time'
     ],
-    primaryCta: 'Open Oliver',
+    primaryCta: 'Try Launch Flow',
     secondaryCta: 'Sign in'
   }
 };
