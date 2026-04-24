@@ -162,7 +162,7 @@ pub fn setup_tpm_cron(
         account.id, organization, org.id
     );
 
-    // Get verified email
+    // Get verified email for the cron owner (used for workspace paths)
     let identifiers = account_store
         .list_identifiers(user_id)
         .map_err(|e| TpmCronError::ListIdentifiers(e.to_string()))?;
@@ -172,6 +172,34 @@ pub fn setup_tpm_cron(
         .find(|id| id.identifier_type == "email" && id.verified)
         .map(|id| id.identifier.clone())
         .ok_or_else(|| TpmCronError::NoVerifiedEmail(user_id_str.clone()))?;
+
+    // Collect verified emails for ALL org members (for reply_to)
+    let org_accounts = account_store
+        .list_accounts_by_organization_id(org.id)
+        .map_err(|e| TpmCronError::FetchAccount(e.to_string()))?;
+
+    let mut org_member_emails: Vec<String> = Vec::new();
+    for org_account in &org_accounts {
+        if let Ok(member_identifiers) = account_store.list_identifiers(org_account.id) {
+            if let Some(verified_email) = member_identifiers
+                .iter()
+                .find(|id| id.identifier_type == "email" && id.verified)
+            {
+                org_member_emails.push(verified_email.identifier.clone());
+            }
+        }
+    }
+
+    // Ensure at least the cron owner is in the list
+    if org_member_emails.is_empty() {
+        org_member_emails.push(email.clone());
+    }
+
+    info!(
+        "setup_tpm_cron: org has {} members, reply_to={:?}",
+        org_member_emails.len(),
+        org_member_emails
+    );
 
     // Get or create email user in UserStore (same pattern as email handler)
     let email_user = user_store
@@ -281,7 +309,7 @@ pub fn setup_tpm_cron(
         model_name: "gpt-5.4".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
-        reply_to: vec![email.clone()],
+        reply_to: org_member_emails.clone(),
         reply_from: Some(reply_from),
         archive_root: None,
         thread_id: None,
@@ -379,7 +407,7 @@ pub fn trigger_tpm_sync(
         account.id, organization, org.id
     );
 
-    // Get verified email
+    // Get verified email for the trigger owner (used for workspace paths)
     let identifiers = account_store
         .list_identifiers(user_id)
         .map_err(|e| TpmCronError::ListIdentifiers(e.to_string()))?;
@@ -389,6 +417,34 @@ pub fn trigger_tpm_sync(
         .find(|id| id.identifier_type == "email" && id.verified)
         .map(|id| id.identifier.clone())
         .ok_or_else(|| TpmCronError::NoVerifiedEmail(user_id_str.clone()))?;
+
+    // Collect verified emails for ALL org members (for reply_to)
+    let org_accounts = account_store
+        .list_accounts_by_organization_id(org.id)
+        .map_err(|e| TpmCronError::FetchAccount(e.to_string()))?;
+
+    let mut org_member_emails: Vec<String> = Vec::new();
+    for org_account in &org_accounts {
+        if let Ok(member_identifiers) = account_store.list_identifiers(org_account.id) {
+            if let Some(verified_email) = member_identifiers
+                .iter()
+                .find(|id| id.identifier_type == "email" && id.verified)
+            {
+                org_member_emails.push(verified_email.identifier.clone());
+            }
+        }
+    }
+
+    // Ensure at least the trigger owner is in the list
+    if org_member_emails.is_empty() {
+        org_member_emails.push(email.clone());
+    }
+
+    info!(
+        "trigger_tpm_sync: org has {} members, reply_to={:?}",
+        org_member_emails.len(),
+        org_member_emails
+    );
 
     // Get or create email user in UserStore (same pattern as email handler)
     let email_user = user_store
@@ -498,7 +554,7 @@ pub fn trigger_tpm_sync(
         model_name: "gpt-5.4".to_string(),
         runner: "codex".to_string(),
         codex_disabled: false,
-        reply_to: vec![email.clone()],
+        reply_to: org_member_emails.clone(),
         reply_from: Some(reply_from),
         archive_root: None,
         thread_id: None,

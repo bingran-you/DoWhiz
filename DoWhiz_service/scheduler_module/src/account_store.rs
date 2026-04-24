@@ -1905,6 +1905,31 @@ impl AccountStore {
         Ok(count_row.get(0))
     }
 
+    /// List all accounts in an organization by organization ID.
+    pub fn list_accounts_by_organization_id(
+        &self,
+        organization_id: Uuid,
+    ) -> Result<Vec<Account>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let rows = conn.query(
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
+             FROM accounts WHERE organization_id = $1",
+            &[&organization_id],
+        )?;
+
+        Ok(rows
+            .iter()
+            .map(|r| Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
+            })
+            .collect())
+    }
+
     /// Create an email verification token (expires in 24 hours)
     pub fn create_email_verification_token(
         &self,
