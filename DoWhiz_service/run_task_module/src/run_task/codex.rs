@@ -1977,7 +1977,7 @@ fn sanitize_command_output(output: &[u8], secrets: &[&str]) -> String {
 fn format_command_failure_output(stdout: &[u8], stderr: &[u8], secrets: &[&str]) -> String {
     let stderr = sanitize_command_output(stderr, secrets);
     let stdout = sanitize_command_output(stdout, secrets);
-    format!(
+    let mut message = format!(
         "stderr:\n{}\nstdout:\n{}",
         if stderr.trim().is_empty() {
             "(empty)"
@@ -1989,7 +1989,70 @@ fn format_command_failure_output(stdout: &[u8], stderr: &[u8], secrets: &[&str])
         } else {
             stdout.trim_end()
         },
-    )
+    );
+    if stderr.trim().is_empty() && stdout.trim().is_empty() {
+        if let Some(log_tail) = read_latest_azcopy_log_tail(secrets) {
+            message.push_str("\nazcopy_log_tail:\n");
+            message.push_str(&log_tail);
+        }
+    }
+    message
+}
+
+/// When azcopy fails without writing to stdout/stderr (common: it writes only
+/// to its own log file under `~/.azcopy/`), attempt to surface the tail of
+/// that log so operators can see the real error. Returns the last ~40 lines
+/// of the most-recently-modified `*.log` file in `$AZCOPY_LOG_LOCATION` /
+/// `~/.azcopy`, with secrets redacted. Returns None if no log is found.
+fn read_latest_azcopy_log_tail(secrets: &[&str]) -> Option<String> {
+    const MAX_TAIL_BYTES: usize = 8_192;
+    const MAX_TAIL_LINES: usize = 40;
+
+    let log_dir = env::var("AZCOPY_LOG_LOCATION")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| env::var("HOME").ok().map(|h| PathBuf::from(h).join(".azcopy")))?;
+
+    let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
+    for entry in fs::read_dir(&log_dir).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        if !path.extension().is_some_and(|e| e == "log") {
+            continue;
+        }
+        let modified = entry.metadata().ok().and_then(|m| m.modified().ok())?;
+        if latest
+            .as_ref()
+            .is_none_or(|(ts, _)| modified > *ts)
+        {
+            latest = Some((modified, path));
+        }
+    }
+
+    let (_, log_path) = latest?;
+    let content = fs::read_to_string(&log_path).ok()?;
+    let tail: String = content
+        .lines()
+        .rev()
+        .take(MAX_TAIL_LINES)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut trimmed = tail;
+    if trimmed.len() > MAX_TAIL_BYTES {
+        trimmed = trimmed
+            .chars()
+            .rev()
+            .take(MAX_TAIL_BYTES)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+    }
+    let header = format!("(from {}):\n", log_path.display());
+    Some(format!("{}{}", header, redact_sensitive_text(&trimmed, secrets)))
 }
 
 fn promote_downloaded_entry(source: &Path, dest: &Path) -> Result<(), RunTaskError> {
@@ -5635,6 +5698,40 @@ printf '%s\n' "$@" > "$capture_file"
         assert!(formatted.contains("REDACTED"));
         assert!(!formatted.contains("abc123"));
         assert!(!formatted.contains("testkey123"));
+    }
+
+    #[test]
+    fn test_format_command_failure_output_includes_azcopy_log_tail_when_empty() {
+        let _lock = env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let log_dir = temp.path().to_path_buf();
+        let log_path = log_dir.join("recent.log");
+        let log_content = "2026-04-20T12:00:00Z INFO: starting copy\n\
+                           2026-04-20T12:00:01Z ERROR: RESPONSE 403: AuthorizationPermissionMismatch\n\
+                           2026-04-20T12:00:01Z ERROR: sig=leakedSig should be redacted\n";
+        fs::write(&log_path, log_content).expect("write log");
+
+        let _guard = EnvVarGuard::set("AZCOPY_LOG_LOCATION", log_dir.to_str().unwrap());
+
+        let formatted = format_command_failure_output(b"", b"", &["leakedSig"]);
+
+        assert!(formatted.contains("azcopy_log_tail:"));
+        assert!(formatted.contains("AuthorizationPermissionMismatch"));
+        assert!(!formatted.contains("leakedSig"));
+    }
+
+    #[test]
+    fn test_format_command_failure_output_skips_azcopy_tail_when_stderr_present() {
+        let _lock = env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let log_dir = temp.path().to_path_buf();
+        fs::write(log_dir.join("x.log"), "should not appear").expect("write log");
+
+        let _guard = EnvVarGuard::set("AZCOPY_LOG_LOCATION", log_dir.to_str().unwrap());
+
+        let formatted = format_command_failure_output(b"", b"ERROR: real stderr", &[]);
+        assert!(!formatted.contains("azcopy_log_tail"));
+        assert!(formatted.contains("real stderr"));
     }
 
     #[test]
