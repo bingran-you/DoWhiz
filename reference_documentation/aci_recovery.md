@@ -93,20 +93,30 @@ There is a small but possible window where worker restarts after sending to outb
 
 Entry point: `recover_orphaned_aci_containers()`
 
+### Parallel Recovery
+
+Recovery runs **in parallel** - each container gets its own thread (fire-and-forget). This ensures:
+- A slow/stuck container doesn't block others from completing
+- Worker startup isn't blocked waiting for recovery
+- Each container's result is propagated as soon as it's ready
+
 ### Call Chain
 
 ```
-recover_orphaned_aci_containers()     // Entry point - lists all orphaned containers from MongoDB
-  └── recover_single_container()      // Handles one container
-        ├── query_aci_container_status()
-        ├── poll_aci_container_until_terminal()  // If still running
-        ├── download_ephemeral_share_for_recovery()  // Download results from Azure File Share
-        ├── propagate_results_to_outbound()      // Reads context, sends reply
-        │     ├── read_aci_recovery_context()
-        │     └── execute_{channel}_send()
-        ├── delete_aci_container_by_name()
-        └── deregister_aci_container_mongo()
+tokio::spawn(recover_orphaned_aci_containers())  // Async entry point
+  └── tokio::task::spawn_blocking() for each     // Parallel, fire-and-forget on blocking pool
+        └── recover_single_container()           // Handles one container (blocking)
+              ├── query_aci_container_status()
+              ├── poll_aci_container_until_terminal()  // If still running (blocking)
+              ├── download_ephemeral_share_for_recovery()  // Download results from Azure File Share
+              ├── propagate_results_to_outbound()      // Reads context, sends reply
+              │     ├── read_aci_recovery_context()
+              │     └── execute_{channel}_send()
+              ├── delete_aci_container_by_name()
+              └── deregister_aci_container_mongo()
 ```
+
+Note: The outer function is async (lightweight coordination), but `spawn_blocking` is used for each container because `poll_aci_container_until_terminal()` is blocking. Tokio's blocking pool (default 512 threads) manages thread reuse.
 
 ### Startup Hook
 
@@ -116,7 +126,7 @@ Called on worker startup when `ACI_RECOVERY_ENABLED=1`:
 // In server.rs
 if std::env::var("ACI_RECOVERY_ENABLED").ok().as_deref() == Some("1") {
     info!("ACI recovery enabled, checking for orphaned containers");
-    task::spawn_blocking(crate::aci_recovery::recover_orphaned_aci_containers);
+    tokio::spawn(crate::aci_recovery::recover_orphaned_aci_containers());
 }
 ```
 
@@ -204,5 +214,6 @@ ACI_RECOVERY_ENABLED=1
 
 ## E2E Testing
 * [4/22/26] E2E discord task with intermittent `pm2 stop` triggered after ACI container creation, `dw_worker` was successfully able to recover the task and send an outbound reply via Discord.
+* [4/24/26] Verified recovery on dowhizprod1: found 9 orphaned containers after worker restart, recovery correctly spawned parallel threads and began monitoring each container independently.
 
-Recovery runs asynchronously on worker startup via `task::spawn_blocking`.
+Recovery runs asynchronously on worker startup via `tokio::spawn`, with each container recovered in parallel via `spawn_blocking` on tokio's blocking thread pool.

@@ -29,7 +29,11 @@ const POLL_TIMEOUT_SECS: u64 = 3600; // 1 hour max wait
 /// 1. Check if outbound was already sent (marker file)
 /// 2. If not, poll until terminal, then propagate results
 /// 3. Cleanup (delete from Azure, deregister from MongoDB)
-pub fn recover_orphaned_aci_containers() {
+///
+/// Recovery runs in parallel - each container gets its own thread from tokio's blocking
+/// pool so a slow/stuck container doesn't block others from completing. Tasks are
+/// fire-and-forget so one stuck container doesn't block worker startup or other recoveries.
+pub async fn recover_orphaned_aci_containers() {
     let containers = list_aci_containers();
     if containers.is_empty() {
         info!("no orphaned ACI containers to recover");
@@ -41,14 +45,21 @@ pub fn recover_orphaned_aci_containers() {
         containers.len()
     );
 
+    // Spawn a blocking task for each container (parallel, fire-and-forget)
     for container in containers {
-        if let Err(err) = recover_single_container(&container) {
-            warn!(
-                "failed to recover container {}: {}",
-                container.container_name, err
-            );
-        }
+        let container_name = container.container_name.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = recover_single_container(&container) {
+                warn!(
+                    "failed to recover container {}: {}",
+                    container_name, err
+                );
+            }
+        });
+        // No .await - fire and forget
     }
+
+    info!("spawned recovery tasks for all orphaned containers");
 }
 
 fn recover_single_container(container: &AciContainerRecord) -> Result<(), String> {
