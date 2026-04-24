@@ -190,7 +190,9 @@ pub fn setup_tpm_cron(
 
     // Use unique workspace per cron setup to avoid collisions
     let cron_id = Uuid::new_v4();
-    let workspace_dir = user_paths.workspaces_root.join(format!("tpm_cron_{}", cron_id));
+    let workspace_dir = user_paths
+        .workspaces_root
+        .join(format!("tpm_cron_{}", cron_id));
 
     // Create all workspace directories required by RunTaskTask validation
     for subdir in [

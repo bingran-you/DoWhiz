@@ -2011,7 +2011,11 @@ fn read_latest_azcopy_log_tail(secrets: &[&str]) -> Option<String> {
     let log_dir = env::var("AZCOPY_LOG_LOCATION")
         .ok()
         .map(PathBuf::from)
-        .or_else(|| env::var("HOME").ok().map(|h| PathBuf::from(h).join(".azcopy")))?;
+        .or_else(|| {
+            env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".azcopy"))
+        })?;
 
     let mut latest: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in fs::read_dir(&log_dir).ok()? {
@@ -2021,10 +2025,7 @@ fn read_latest_azcopy_log_tail(secrets: &[&str]) -> Option<String> {
             continue;
         }
         let modified = entry.metadata().ok().and_then(|m| m.modified().ok())?;
-        if latest
-            .as_ref()
-            .is_none_or(|(ts, _)| modified > *ts)
-        {
+        if latest.as_ref().is_none_or(|(ts, _)| modified > *ts) {
             latest = Some((modified, path));
         }
     }
@@ -2052,7 +2053,11 @@ fn read_latest_azcopy_log_tail(secrets: &[&str]) -> Option<String> {
             .collect();
     }
     let header = format!("(from {}):\n", log_path.display());
-    Some(format!("{}{}", header, redact_sensitive_text(&trimmed, secrets)))
+    Some(format!(
+        "{}{}",
+        header,
+        redact_sensitive_text(&trimmed, secrets)
+    ))
 }
 
 fn promote_downloaded_entry(source: &Path, dest: &Path) -> Result<(), RunTaskError> {
