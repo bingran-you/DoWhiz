@@ -2699,6 +2699,16 @@
                           Leave Organization
                         </button>
                       </div>
+                      <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
+                        <input type="time" id="tpm-cron-time" class="auth-input" value="09:00" style="width: auto;" />
+                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                          <input type="checkbox" id="tpm-cron-weekdays" checked />
+                          Weekdays only
+                        </label>
+                        <button id="setup-tpm-cron-btn" class="auth-btn auth-btn-oauth">
+                          Setup TPM Cron
+                        </button>
+                      </div>
                       <span id="org-sync-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
                     </div>
 
@@ -6084,12 +6094,63 @@
         }
       }
 
+      async function setupTpmCron() {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken || !currentOrganizationName) return;
+
+        const timeInput = document.getElementById('tpm-cron-time');
+        const weekdaysCheckbox = document.getElementById('tpm-cron-weekdays');
+        const setupBtn = document.getElementById('setup-tpm-cron-btn');
+        const syncStatus = document.getElementById('org-sync-status');
+
+        // Parse time input (HH:MM)
+        const [hours, minutes] = (timeInput.value || '09:00').split(':').map(Number);
+        const dayExpr = weekdaysCheckbox.checked ? 'MON-FRI' : '*';
+        const cronExpr = `0 ${minutes} ${hours} * * ${dayExpr}`;
+
+        setupBtn.disabled = true;
+        syncStatus.textContent = 'Setting up cron...';
+        syncStatus.className = 'org-status';
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/api/tpm/setup-cron`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              organization_name: currentOrganizationName,
+              cron_expr: cronExpr
+            })
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to setup cron');
+          }
+
+          const data = await res.json();
+          const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+          const daysStr = weekdaysCheckbox.checked ? 'weekdays' : 'daily';
+          syncStatus.textContent = `TPM cron set for ${timeStr} ${daysStr}! Task ID: ${data.task_id.slice(0, 8)}...`;
+          syncStatus.className = 'org-status success';
+        } catch (err) {
+          syncStatus.textContent = normalizeApiFetchError(err);
+          syncStatus.className = 'org-status error';
+        } finally {
+          setupBtn.disabled = false;
+        }
+      }
+
       function setupOrganizationListeners() {
         const searchInput = document.getElementById('org-join-search-input');
         const resultsEl = document.getElementById('org-join-search-results');
         const joinBtn = document.getElementById('org-join-btn');
         const leaveBtn = document.getElementById('org-leave-btn');
         const triggerSyncBtn = document.getElementById('trigger-tpm-sync-btn');
+        const setupCronBtn = document.getElementById('setup-tpm-cron-btn');
 
         let searchTimeout;
         if (searchInput) {
@@ -6128,6 +6189,7 @@
         if (joinBtn) joinBtn.addEventListener('click', joinOrganization);
         if (leaveBtn) leaveBtn.addEventListener('click', leaveOrganization);
         if (triggerSyncBtn) triggerSyncBtn.addEventListener('click', triggerTpmSync);
+        if (setupCronBtn) setupCronBtn.addEventListener('click', setupTpmCron);
       }
 
       async function loadMemo(accessToken) {
