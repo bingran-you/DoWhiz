@@ -56,3 +56,4 @@ DoWhiz_service/.env.staging
 URL_AND_EMAIL.md
 *.json
 .env-*
+/.codex_recovery
