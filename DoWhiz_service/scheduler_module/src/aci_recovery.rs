@@ -50,10 +50,7 @@ pub async fn recover_orphaned_aci_containers() {
         let container_name = container.container_name.clone();
         tokio::task::spawn_blocking(move || {
             if let Err(err) = recover_single_container(&container) {
-                warn!(
-                    "failed to recover container {}: {}",
-                    container_name, err
-                );
+                warn!("failed to recover container {}: {}", container_name, err);
             }
         });
         // No .await - fire and forget
