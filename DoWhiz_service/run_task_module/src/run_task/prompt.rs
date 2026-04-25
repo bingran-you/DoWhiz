@@ -903,9 +903,9 @@ Users may connect their own existing Notion databases with different property na
 
 **Notion Access Errors:**
 If you get "Could not find database" or "not shared with your integration" errors, the user's Notion OAuth token doesn't have access to this database. Tell the user:
-1. Go to dowhiz.com dashboard → Connections → Disconnect Notion
-2. Reconnect Notion and make sure to grant access to the task database
-3. The OAuth token stored may not include newly created databases - re-authenticating updates the access scope
+1. Go to dowhiz.com dashboard → Connections → Click the Notion button
+2. This triggers a new OAuth flow - make sure to grant access to the task database
+3. The stored OAuth token may not include newly created databases - re-authenticating updates the access scope
 
 **Daily TPM Check-in Workflow:**
 1. **Context gathering** (Step 0 above) - check GitHub access first
