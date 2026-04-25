@@ -828,3 +828,33 @@ Post the TPM summary to a team Discord/Slack channel
 ```
 2026-04-21 manual TPM sync reproduced the same runtime issue. In this run-task workspace, tpm_cli could only list the deeptutor board after manually adding .notion_context.json with workspace_id 104000d2-5179-81f2-88c1-0003e11173a9 and exporting NOTION_API_TOKEN from .notion_env. The board itself is reachable directly at database 348000d2-5179-81ee-b159-c1172ddabe29.
 ```
+
+---
+
+## Notion Integration vs Human Account
+
+**Important distinction:** Oliver exists in Notion as two separate entities:
+
+### 1. Oliver's Human Account (`oliver@dowhiz.com`)
+- A real Notion user account with profile picture
+- Can be invited to share pages/databases like any person
+- Appears in share dialogs as "Oliver at DoWhiz"
+- **Cannot be used for API access** - Notion API does not support human account credentials
+- Sharing a database with this account does **NOT** grant TPM/API access
+
+### 2. DoWhiz Notion Integration (OAuth Bot)
+- Created when users connect Notion via OAuth on the DoWhiz dashboard
+- The integration's access token is stored in `notion_credentials` collection (keyed by `account_id`)
+- **This is what the API uses** - all `tpm_cli` and `notion_api_cli` commands use this token
+- The token has access to whatever pages/databases the user granted during OAuth
+
+### For Custom Databases
+
+Since Oliver uses the **user's OAuth token**, no separate sharing step is needed:
+
+1. User connects Notion via OAuth on DoWhiz dashboard
+2. During OAuth, user selects which pages/databases to grant access to
+3. The user's custom database must be included in that OAuth grant
+4. TPM commands will automatically have access via the user's token
+
+**Common mistake:** Users share their database with `oliver@dowhiz.com` (human account) thinking this grants API access. It does not - Oliver's human account is separate from the OAuth integration that the API uses.
