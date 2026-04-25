@@ -98,8 +98,12 @@ const DOWHIZ_EMAIL_TABLE_WRAP_MARKER: &str = r#"data-dw-table-wrap="true""#;
 const DOWHIZ_EMAIL_TABLE_SCROLL_MARKER: &str = r#"data-dw-table-scroll="true""#;
 const DOWHIZ_EMAIL_TABLE_INNER_MARKER: &str = r#"data-dw-table-inner="true""#;
 const DOWHIZ_EMAIL_DATA_TABLE_ATTR: &str = "data-dw-enhanced-table";
+const DOWHIZ_EMAIL_TWO_COLUMN_TABLE_ATTR: &str = "data-dw-two-column-table";
 const DEFAULT_EMAIL_SUBJECT: &str = "DoWhiz update";
 const EMAIL_PREHEADER_MAX_CHARS: usize = 140;
+const EMAIL_CARD_MAX_WIDTH_PX: usize = 960;
+const TWO_COLUMN_TABLE_LABEL_MIN_WIDTH_PX: usize = 148;
+const TWO_COLUMN_TABLE_VALUE_MIN_WIDTH_PX: usize = 260;
 
 pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
     if is_already_normalized_email(raw_html) {
@@ -180,9 +184,15 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         line-height: 1px;
       }}
 
+      .dw-card-wrap {{
+        width: 100%;
+        max-width: {card_max_width}px;
+        margin: 0 auto;
+      }}
+
       .dw-card {{
         width: 100%;
-        max-width: 780px;
+        table-layout: fixed;
       }}
 
       .dw-card-shell {{
@@ -191,6 +201,7 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         border: 1px solid rgba(16, 18, 22, 0.10);
         border-radius: 16px;
         overflow: hidden;
+        table-layout: fixed;
       }}
 
       .dw-content,
@@ -198,8 +209,6 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
       .dw-content li,
       .dw-content div,
       .dw-content span,
-      .dw-content td,
-      .dw-content th,
       .dw-content blockquote,
       .dw-content a,
       .dw-content code,
@@ -289,6 +298,7 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
       }}
 
       .dw-table-scroll {{
+        display: block;
         width: 100%;
         max-width: 100%;
         overflow-x: auto;
@@ -300,6 +310,7 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
       }}
 
       .dw-table-inner {{
+        display: inline-block;
         min-width: 100%;
       }}
 
@@ -307,10 +318,14 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         width: 100% !important;
         max-width: 100% !important;
         border-collapse: collapse;
+        word-break: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
       }}
 
       .dw-content table.dw-data-table {{
         width: 100% !important;
+        min-width: 100% !important;
         max-width: none !important;
         border-collapse: separate !important;
         border-spacing: 0 !important;
@@ -322,6 +337,10 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         border: 1px solid #e4e8ee;
         padding: 10px 12px;
         vertical-align: top;
+        word-break: normal !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
       }}
 
       .dw-content table.dw-data-table th {{
@@ -494,41 +513,45 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; background-color: #f6f8fb;">
       <tr>
         <td align="center" class="dw-shell-pad" style="padding: 20px 12px 36px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="dw-card" {marker} style="width: 100%; max-width: 780px;">
-            <tr>
-              <td style="padding: 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="dw-card-shell" style="width: 100%; background-color: #ffffff; border: 1px solid rgba(16, 18, 22, 0.10); border-radius: 16px; overflow: hidden;">
-                  <tr>
-                    <td class="dw-card-hero" style="padding: 24px 32px 18px; background-color: #ffffff; border-bottom: 1px solid #e4e8ee;">
-                      <p style="margin: 0 0 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;">
-                        <span style="display: inline-block; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(141, 59, 22, 0.12); background-color: #fff7ee; font-size: 13px; line-height: 1; font-weight: 600; color: #8d3b16;">
-                          DoWhiz digital employee
-                        </span>
-                      </p>
-                      <h1 class="dw-subject" style="margin: 0 0 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 34px; line-height: 1.12; font-weight: 700; letter-spacing: -0.01em; color: #1f1f22;">
-                        {escaped_subject}
-                      </h1>
-                      <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.6; color: #5b616d;">
-                        Reply directly to continue this thread with DoWhiz.
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="dw-card-body" style="padding: 28px 32px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 16px; line-height: 1.76; color: #1f1f22;">
-                      <div class="dw-content" style="font-size: 16px; line-height: 1.76; color: #1f1f22;">
-                        {content_start}{content_html}{content_end}
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="dw-card-footer" style="padding: 0 32px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 13px; line-height: 1.6; color: #838a96;">
-                      Sent by DoWhiz. If you reply, the same task thread will continue.
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+          <center>
+            <div class="dw-card-wrap" style="width: 100%; max-width: {card_max_width}px; margin: 0 auto;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" class="dw-card" {marker} style="width: 100%; table-layout: fixed;">
+                <tr>
+                  <td style="padding: 0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="dw-card-shell" style="width: 100%; background-color: #ffffff; border: 1px solid rgba(16, 18, 22, 0.10); border-radius: 16px; overflow: hidden; table-layout: fixed;">
+                      <tr>
+                        <td class="dw-card-hero" style="padding: 24px 32px 18px; background-color: #ffffff; border-bottom: 1px solid #e4e8ee;">
+                          <p style="margin: 0 0 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;">
+                            <span style="display: inline-block; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(141, 59, 22, 0.12); background-color: #fff7ee; font-size: 13px; line-height: 1; font-weight: 600; color: #8d3b16;">
+                              DoWhiz digital employee
+                            </span>
+                          </p>
+                          <h1 class="dw-subject" style="margin: 0 0 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 34px; line-height: 1.12; font-weight: 700; letter-spacing: -0.01em; color: #1f1f22;">
+                            {escaped_subject}
+                          </h1>
+                          <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.6; color: #5b616d;">
+                            Reply directly to continue this thread with DoWhiz.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="dw-card-body" style="padding: 28px 32px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 16px; line-height: 1.76; color: #1f1f22;">
+                          <div class="dw-content" style="font-size: 16px; line-height: 1.76; color: #1f1f22;">
+                            {content_start}{content_html}{content_end}
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="dw-card-footer" style="padding: 0 32px 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 13px; line-height: 1.6; color: #838a96;">
+                          Sent by DoWhiz. If you reply, the same task thread will continue.
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </center>
         </td>
       </tr>
     </table>
@@ -542,6 +565,7 @@ pub fn normalize_email_html(subject: &str, raw_html: &str) -> String {
         } else {
             format!("    {}\n", extra_styles.trim())
         },
+        card_max_width = EMAIL_CARD_MAX_WIDTH_PX,
         marker = DOWHIZ_EMAIL_SHELL_MARKER,
         content_start = DOWHIZ_EMAIL_CONTENT_START,
         content_html = content_html,
@@ -804,7 +828,7 @@ fn extract_style_blocks(raw_html: &str) -> String {
 }
 
 fn enhance_email_content_html(content_html: &str) -> String {
-    if !content_html.to_ascii_lowercase().contains("<table") {
+    if !needs_content_enhancement_pass(content_html) {
         return content_html.to_string();
     }
 
@@ -813,12 +837,16 @@ fn enhance_email_content_html(content_html: &str) -> String {
         root_attr = DOWHIZ_EMAIL_CONTENT_ROOT_ATTR,
         content_html = content_html
     ));
+    let root = match document.select_first(DOWHIZ_EMAIL_CONTENT_ROOT_SELECTOR) {
+        Ok(root) => root.as_node().clone(),
+        Err(_) => return content_html.to_string(),
+    };
+    let mut changed = relax_narrow_root_wrappers(&root);
     let tables: Vec<NodeRef> = match document.select("table") {
         Ok(nodes) => nodes.map(|node| node.as_node().clone()).collect(),
         Err(_) => return content_html.to_string(),
     };
 
-    let mut changed = false;
     for table in tables {
         if !should_enhance_data_table(&table) {
             continue;
@@ -836,10 +864,124 @@ fn enhance_email_content_html(content_html: &str) -> String {
         return content_html.to_string();
     }
 
-    match document.select_first(DOWHIZ_EMAIL_CONTENT_ROOT_SELECTOR) {
-        Ok(root) => children_as_html(root.as_node()),
-        Err(_) => content_html.to_string(),
+    children_as_html(&root)
+}
+
+fn needs_content_enhancement_pass(content_html: &str) -> bool {
+    let lower = content_html.to_ascii_lowercase();
+    lower.contains("<table")
+        || lower.contains("max-width")
+        || lower.contains("width:")
+        || lower.contains("width=\"")
+        || lower.contains("margin: 0 auto")
+        || lower.contains("margin:0 auto")
+        || lower.contains("margin-left: auto")
+        || lower.contains("margin-right: auto")
+        || lower.contains("align=\"center\"")
+}
+
+fn relax_narrow_root_wrappers(root: &NodeRef) -> bool {
+    let mut changed = false;
+    let mut current = root.clone();
+
+    for _ in 0..4 {
+        let Some(child) = sole_significant_element_child(&current) else {
+            break;
+        };
+        if !should_relax_narrow_root_wrapper(&child) {
+            break;
+        }
+
+        append_style(
+            &child,
+            "width: 100% !important; max-width: none !important; margin-left: 0 !important; margin-right: 0 !important;",
+        );
+        remove_attribute(&child, "width");
+        changed = true;
+        current = child;
     }
+
+    changed
+}
+
+fn sole_significant_element_child(node: &NodeRef) -> Option<NodeRef> {
+    let mut only_child = None;
+    for child in node.children() {
+        if let Some(text) = child.as_text() {
+            if text.borrow().trim().is_empty() {
+                continue;
+            }
+            return None;
+        }
+        if child.as_element().is_none() {
+            continue;
+        }
+        if only_child.replace(child.clone()).is_some() {
+            return None;
+        }
+    }
+    only_child
+}
+
+fn should_relax_narrow_root_wrapper(node: &NodeRef) -> bool {
+    let Some(element) = node.as_element() else {
+        return false;
+    };
+
+    if matches!(
+        element.name.local.as_ref(),
+        "table" | "div" | "section" | "article" | "main"
+    ) {
+        let attrs = element.attributes.borrow();
+        let style = attrs.get("style").unwrap_or("").to_ascii_lowercase();
+        let width_value = style_property_value(&style, "width");
+        let max_width_value = style_property_value(&style, "max-width");
+        let has_width_constraint =
+            width_value.is_some() || max_width_value.is_some() || attrs.get("width").is_some();
+        if !has_width_constraint {
+            return false;
+        }
+
+        let has_centering_hint = style_property_value(&style, "margin")
+            .map(|value| value.contains("auto"))
+            .unwrap_or(false)
+            || style_property_value(&style, "margin-left")
+                .map(|value| value == "auto")
+                .unwrap_or(false)
+            || style_property_value(&style, "margin-right")
+                .map(|value| value == "auto")
+                .unwrap_or(false)
+            || attrs
+                .get("align")
+                .map(|value| value.trim().eq_ignore_ascii_case("center"))
+                .unwrap_or(false);
+
+        let already_full_width = width_value
+            .as_deref()
+            .map(|value| value == "100%")
+            .unwrap_or(false)
+            || max_width_value
+                .as_deref()
+                .map(|value| value == "none")
+                .unwrap_or(false);
+
+        return !already_full_width && (has_centering_hint || max_width_value.is_some());
+    }
+
+    false
+}
+
+fn style_property_value(style: &str, property: &str) -> Option<String> {
+    style.split(';').find_map(|declaration| {
+        let mut parts = declaration.splitn(2, ':');
+        let name = parts.next()?.trim();
+        let value = parts.next()?.trim();
+        if name.eq_ignore_ascii_case(property) && !value.is_empty() {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 fn should_enhance_data_table(table: &NodeRef) -> bool {
@@ -866,17 +1008,25 @@ fn should_enhance_data_table(table: &NodeRef) -> bool {
 
 fn wrap_table_for_mobile(table: &NodeRef, column_count: usize) -> bool {
     let min_width = preferred_table_min_width(column_count);
-    let Some((wrapper, inner)) = build_table_wrapper(min_width, column_count >= 4) else {
-        return false;
-    };
-
     append_class(table, "dw-data-table");
     set_attribute(table, DOWHIZ_EMAIL_DATA_TABLE_ATTR, "true");
+    if column_count == 2 {
+        append_class(table, "dw-two-col-table");
+        set_attribute(table, DOWHIZ_EMAIL_TWO_COLUMN_TABLE_ATTR, "true");
+    }
     append_style(
         table,
         "width: 100% !important; max-width: none !important; border-collapse: separate; border-spacing: 0; table-layout: auto;",
     );
-    style_table_cells(table);
+    style_table_cells(table, column_count);
+    if min_width == 0 {
+        return true;
+    }
+
+    let show_hint = min_width >= 680;
+    let Some((wrapper, inner)) = build_table_wrapper(min_width, show_hint) else {
+        return false;
+    };
     table.insert_before(wrapper);
     inner.append(table.clone());
     true
@@ -889,7 +1039,7 @@ fn build_table_wrapper(min_width: usize, show_hint: bool) -> Option<(NodeRef, No
   <body>
     <div class="dw-table-wrap" {wrap_marker} style="width: 100%; max-width: 100%; margin: 0 0 20px;">
       {hint_html}
-      <div class="dw-table-scroll" {scroll_marker} style="width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; border: 1px solid #e4e8ee; border-radius: 14px; background-color: #ffffff;">
+      <div class="dw-table-scroll" {scroll_marker} style="display: block; width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; border: 1px solid #e4e8ee; border-radius: 14px; background-color: #ffffff;">
         <div class="dw-table-inner" {inner_marker} style="min-width: {min_width}px;"></div>
       </div>
     </div>
@@ -918,12 +1068,12 @@ fn build_table_wrapper(min_width: usize, show_hint: bool) -> Option<(NodeRef, No
     Some((wrapper, inner))
 }
 
-fn style_table_cells(table: &NodeRef) {
+fn style_table_cells(table: &NodeRef, column_count: usize) {
     if let Ok(headers) = table.select("th") {
         for header in headers {
             append_style(
                 header.as_node(),
-                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top; text-align: left; background-color: #f6f8fb; font-weight: 700;",
+                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top; text-align: left; background-color: #f6f8fb; font-weight: 700; white-space: normal; word-break: normal; word-wrap: break-word; overflow-wrap: break-word;",
             );
         }
     }
@@ -931,7 +1081,33 @@ fn style_table_cells(table: &NodeRef) {
         for cell in cells {
             append_style(
                 cell.as_node(),
-                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top;",
+                "padding: 12px 14px; border: 1px solid #e4e8ee; vertical-align: top; white-space: normal; word-break: normal; word-wrap: break-word; overflow-wrap: break-word;",
+            );
+        }
+    }
+    if column_count == 2 {
+        style_two_column_table(table);
+    }
+}
+
+fn style_two_column_table(table: &NodeRef) {
+    if let Ok(rows) = table.select("tr") {
+        for row in rows {
+            let cells: Vec<NodeRef> = row
+                .as_node()
+                .children()
+                .filter(is_rendered_table_cell)
+                .collect();
+            if cells.len() < 2 {
+                continue;
+            }
+            append_style(
+                &cells[0],
+                &format!("min-width: {TWO_COLUMN_TABLE_LABEL_MIN_WIDTH_PX}px; width: 34%;"),
+            );
+            append_style(
+                &cells[1],
+                &format!("min-width: {TWO_COLUMN_TABLE_VALUE_MIN_WIDTH_PX}px;"),
             );
         }
     }
@@ -964,6 +1140,13 @@ fn set_attribute(node: &NodeRef, name: &str, value: &str) {
         .attributes
         .borrow_mut()
         .insert(name, value.to_string());
+}
+
+fn remove_attribute(node: &NodeRef, name: &str) {
+    let Some(element) = node.as_element() else {
+        return;
+    };
+    element.attributes.borrow_mut().remove(name);
 }
 
 fn append_style(node: &NodeRef, style_snippet: &str) {
@@ -1033,7 +1216,12 @@ fn table_cell_span(node: NodeRef) -> Option<usize> {
 }
 
 fn preferred_table_min_width(column_count: usize) -> usize {
-    column_count.saturating_mul(140).clamp(360, 960)
+    match column_count {
+        0 | 1 => 0,
+        2 => 0,
+        3 => 680,
+        _ => column_count.saturating_mul(190).clamp(760, 1120),
+    }
 }
 
 fn children_as_html(node: &NodeRef) -> String {
@@ -1425,12 +1613,14 @@ mod tests {
         );
 
         assert!(normalized.contains(DOWHIZ_EMAIL_SHELL_MARKER));
-        assert!(normalized.contains("max-width: 780px"));
+        assert!(normalized.contains("max-width: 960px"));
         assert!(normalized.contains("overflow-wrap: anywhere"));
         assert!(normalized.contains("DoWhiz digital employee"));
         assert!(normalized.contains("Status update"));
-        assert!(normalized
-            .contains(r#"<div style="max-width: 520px; margin: 0 auto;"><p>Hello team</p></div>"#));
+        assert!(normalized.contains("max-width: none !important"));
+        assert!(normalized.contains("width: 100% !important"));
+        assert!(normalized.contains("margin-left: 0 !important"));
+        assert!(normalized.contains("margin-right: 0 !important"));
     }
 
     #[test]
@@ -1615,7 +1805,7 @@ mod tests {
         assert!(normalized.contains(r#"data-dw-enhanced-table="true""#));
         assert!(normalized.contains(r#"class="dw-data-table""#));
         assert!(normalized.contains("overflow-x: auto"));
-        assert!(normalized.contains("min-width: 560px"));
+        assert!(normalized.contains("min-width: 760px"));
     }
 
     #[test]
@@ -1660,6 +1850,32 @@ mod tests {
         );
 
         assert!(normalized.contains(DOWHIZ_EMAIL_TABLE_WRAP_MARKER));
-        assert!(normalized.contains("min-width: 560px"));
+        assert!(normalized.contains("min-width: 760px"));
+    }
+
+    #[test]
+    fn normalize_email_html_protects_two_column_tables_from_crushing_labels() {
+        let normalized = normalize_email_html(
+            "Decision card",
+            r#"
+            <table>
+              <tr>
+                <td>New Money Action:</td>
+                <td>Starter Only</td>
+              </tr>
+              <tr>
+                <td>Near-Term Timing View:</td>
+                <td>Wait for a cleaner setup with more room after earnings.</td>
+              </tr>
+            </table>
+            "#,
+        );
+
+        assert!(normalized.contains(r#"data-dw-two-column-table="true""#));
+        assert!(normalized.contains(r#"class="dw-data-table dw-two-col-table""#));
+        assert!(normalized.contains("min-width: 148px; width: 34%"));
+        assert!(normalized.contains("min-width: 260px"));
+        assert!(normalized.contains("overflow-wrap: break-word"));
+        assert!(!normalized.contains(DOWHIZ_EMAIL_TABLE_WRAP_MARKER));
     }
 }
