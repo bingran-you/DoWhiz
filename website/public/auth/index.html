@@ -2722,7 +2722,7 @@
                             type="text"
                             id="notion-database-id-input"
                             class="auth-input"
-                            placeholder="Paste Notion database ID..."
+                            placeholder="Paste URL to Notion database..."
                             style="flex: 1; min-width: 200px;"
                           />
                           <button id="set-notion-database-btn" class="auth-btn auth-btn-oauth">Set</button>
@@ -6229,11 +6229,22 @@
           setDatabaseBtn.addEventListener('click', async () => {
             const input = document.getElementById('notion-database-id-input');
             const status = document.getElementById('notion-database-status');
-            const databaseId = input?.value?.trim();
+            let databaseId = input?.value?.trim();
 
             if (!databaseId) {
-              if (status) status.textContent = 'Please enter a database ID';
+              if (status) status.textContent = 'Please enter a database ID or Notion URL';
               return;
+            }
+
+            // Extract database ID from Notion URL if full URL provided
+            if (databaseId.includes('notion.so') || databaseId.includes('notion.site')) {
+              const match = databaseId.match(/([a-f0-9]{32})/);
+              if (match) {
+                databaseId = match[1];
+              } else {
+                if (status) status.textContent = 'Could not extract database ID from URL';
+                return;
+              }
             }
 
             if (!currentOrganizationName) {
