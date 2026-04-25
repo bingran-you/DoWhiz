@@ -1806,13 +1806,14 @@ pub async fn update_organization_database(
     // Update the organization's notion_database_id
     let store = state.account_store.clone();
     let database_id = payload.database_id.clone();
-    let update_result =
-        task::spawn_blocking(move || store.update_organization_notion_database_id(&org_name, &database_id))
-            .await
-            .map_err(|e| {
-                error!("spawn_blocking panicked: {}", e);
-                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
-            });
+    let update_result = task::spawn_blocking(move || {
+        store.update_organization_notion_database_id(&org_name, &database_id)
+    })
+    .await
+    .map_err(|e| {
+        error!("spawn_blocking panicked: {}", e);
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    });
 
     match update_result {
         Ok(Ok(updated_org)) => (
