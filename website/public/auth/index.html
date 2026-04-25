@@ -6245,8 +6245,8 @@
               setDatabaseBtn.disabled = true;
               if (status) status.textContent = 'Updating...';
 
-              const session = await supabaseClient.auth.getSession();
-              const accessToken = session?.data?.session?.access_token;
+              const { data: { session } } = await supabase.auth.getSession();
+              const accessToken = session?.access_token;
 
               const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/database`, {
                 method: 'PUT',
