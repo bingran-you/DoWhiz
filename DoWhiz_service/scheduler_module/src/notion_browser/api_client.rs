@@ -151,6 +151,35 @@ pub struct DatabaseProperty {
     pub id: String,
 }
 
+/// A detailed database property schema with options for select/multi_select types.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabasePropertySchema {
+    pub name: String,
+    pub property_type: String,
+    pub id: String,
+    /// Options for select/multi_select properties
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<SelectOption>,
+}
+
+/// A select/multi_select option.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectOption {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+}
+
+/// Full database schema including detailed property definitions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseSchema {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub properties: Vec<DatabasePropertySchema>,
+}
+
 /// An item (page) from a database query.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseItem {
@@ -897,6 +926,57 @@ impl NotionApiClient {
         })
     }
 
+    /// Get detailed database schema including select/multi_select options.
+    ///
+    /// This is useful for discovering the property names and allowed values
+    /// when working with user-created databases that may have custom schemas.
+    pub fn get_database_schema(
+        &self,
+        workspace_id: &str,
+        database_id: &str,
+    ) -> Result<DatabaseSchema, NotionApiError> {
+        let data = self.api_get(workspace_id, &format!("/databases/{}", database_id))?;
+
+        let title = if let Some(title_arr) = data["title"].as_array() {
+            title_arr
+                .iter()
+                .filter_map(|t| t["plain_text"].as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        } else {
+            "Untitled Database".to_string()
+        };
+
+        let mut properties = Vec::new();
+        if let Some(props) = data["properties"].as_object() {
+            for (name, prop) in props {
+                let prop_type = prop["type"].as_str().unwrap_or("unknown");
+
+                // Extract options for select/multi_select/status types
+                let options = match prop_type {
+                    "select" => extract_select_options(&prop["select"]["options"]),
+                    "multi_select" => extract_select_options(&prop["multi_select"]["options"]),
+                    "status" => extract_select_options(&prop["status"]["options"]),
+                    _ => Vec::new(),
+                };
+
+                properties.push(DatabasePropertySchema {
+                    name: name.clone(),
+                    property_type: prop_type.to_string(),
+                    id: prop["id"].as_str().unwrap_or("").to_string(),
+                    options,
+                });
+            }
+        }
+
+        Ok(DatabaseSchema {
+            id: data["id"].as_str().unwrap_or("").to_string(),
+            title,
+            url: data["url"].as_str().unwrap_or("").to_string(),
+            properties,
+        })
+    }
+
     /// Query a database with optional filters and sorts.
     pub fn query_database(
         &self,
@@ -1193,6 +1273,24 @@ fn extract_page_title(page_data: &Value) -> String {
     }
 
     "Untitled".to_string()
+}
+
+/// Extract select/multi_select options from property definition.
+fn extract_select_options(options_value: &Value) -> Vec<SelectOption> {
+    options_value
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|opt| {
+                    Some(SelectOption {
+                        id: opt["id"].as_str()?.to_string(),
+                        name: opt["name"].as_str()?.to_string(),
+                        color: opt["color"].as_str().map(|s| s.to_string()),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Extract text content from a block.
