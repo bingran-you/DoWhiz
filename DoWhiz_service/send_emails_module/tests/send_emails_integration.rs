@@ -349,7 +349,7 @@ fn send_payload_wraps_data_tables_for_mobile_readability() -> Result<(), Box<dyn
         "normalized html should include the responsive table scroll wrapper"
     );
     assert!(
-        expected_html.contains("min-width: 560px"),
+        expected_html.contains("min-width: 760px"),
         "normalized html should keep four columns readable on narrow screens"
     );
 
@@ -390,6 +390,98 @@ fn send_payload_wraps_data_tables_for_mobile_readability() -> Result<(), Box<dyn
 
     let request = SendEmailParams {
         subject: "Weekly metrics".to_string(),
+        html_path,
+        attachments_dir,
+        from: Some("sender@example.com".to_string()),
+        to: vec!["to@example.com".to_string()],
+        cc: vec![],
+        bcc: vec![],
+        in_reply_to: None,
+        references: None,
+        reply_to: None,
+    };
+
+    let response = send_email(&request)?;
+    assert_eq!(response.message_id, "test-message-id");
+
+    mock.assert();
+    Ok(())
+}
+
+#[test]
+fn send_payload_protects_two_column_table_labels_on_mobile(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _lock = ENV_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+    let temp = TempDir::new()?;
+    let html_path = temp.path().join("reply_email_draft.html");
+    let raw_html = r#"
+        <table>
+          <tr>
+            <td>New Money Action:</td>
+            <td>Starter Only</td>
+          </tr>
+          <tr>
+            <td>Near-Term Timing View:</td>
+            <td>Wait for a cleaner setup with more room after earnings.</td>
+          </tr>
+        </table>
+    "#;
+    fs::write(&html_path, raw_html)?;
+
+    let attachments_dir = temp.path().join("reply_email_attachments");
+    fs::create_dir(&attachments_dir)?;
+
+    let expected_html = normalize_email_html("Decision card", raw_html);
+    assert!(
+        expected_html.contains(r#"data-dw-two-column-table="true""#),
+        "normalized html should explicitly mark two-column data tables"
+    );
+    assert!(
+        expected_html.contains("min-width: 148px; width: 34%"),
+        "normalized html should reserve room for label cells"
+    );
+    assert!(
+        !expected_html.contains(r#"data-dw-table-wrap="true""#),
+        "two-column label/value tables should stay inline on mobile instead of widening the entire email card"
+    );
+
+    let expected_payload = json!({
+        "From": "sender@example.com",
+        "To": "to@example.com",
+        "Bcc": "sender@example.com",
+        "Subject": "Decision card",
+        "TextBody": "New Money Action: | Starter Only\nNear-Term Timing View: | Wait for a cleaner setup with more room after earnings.",
+        "HtmlBody": expected_html,
+    });
+
+    let response_body = json!({
+        "To": "to@example.com",
+        "SubmittedAt": "2024-01-01T00:00:00Z",
+        "MessageID": "test-message-id",
+        "ErrorCode": 0,
+        "Message": "OK",
+    });
+
+    let mut server = Server::new();
+    let api_base_url = server.url();
+    let mock = server
+        .mock("POST", "/email")
+        .match_header("x-postmark-server-token", "test-token")
+        .match_header("accept", "application/json")
+        .match_header("content-type", "application/json")
+        .match_body(Matcher::Json(expected_payload))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(response_body.to_string())
+        .create();
+
+    let _env = EnvGuard::set(&[
+        ("POSTMARK_SERVER_TOKEN", "test-token"),
+        ("POSTMARK_API_BASE_URL", api_base_url.as_str()),
+    ]);
+
+    let request = SendEmailParams {
+        subject: "Decision card".to_string(),
         html_path,
         attachments_dir,
         from: Some("sender@example.com".to_string()),
