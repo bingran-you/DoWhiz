@@ -1,0 +1,9 @@
+L01 | Slack thread: Slack plus Discord onboarding rollout
+L02 | Rachel (PM) - Apr 10: Want onboarding v1 behind rollout flags next Thursday for dogfood. Broad enablement should wait until we know the tone feels right.
+L03 | Devin (Backend) - Apr 10: Slack public welcome plus installer DM path are implemented. Discord public welcome is ready; installer DM still depends on linked-account fallback.
+L04 | Maggie (Ops) - Apr 11: We need a list of target dogfood workspaces and one clear success metric before broad rollout.
+L05 | Rachel (PM) - Apr 11: Success metric is install-to-first-DM within 24 hours. I still need a decision on whether Discord ships with DM fallback off by default.
+L06 | Devin (Backend) - Apr 11: If DM fallback stays off, engineering is ready for dogfood. If it stays on, I need another day to harden identifier lookup.
+L07 | Notes
+L08 | - Dogfood target: Apr 17
+L09 | - Broad rollout not before dogfood review

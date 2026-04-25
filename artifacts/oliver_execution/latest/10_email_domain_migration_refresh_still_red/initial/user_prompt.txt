@@ -1,0 +1,34 @@
+Current UTC timestamp: 2026-04-25T02:58:47.012843+00:00
+Supported source type for this request: pasted_thread
+Source label: Customer email domain migration
+
+Heuristic pre-read:
+- weak_signal=false
+- explicit_blocker_cues=0
+- decision_cues=1
+- owner_cues=5
+- date_cues=2
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Email thread: customer email domain migration
+L02 | Paul (PM) - Nov 3: Need migration complete before the customer advisory board on Nov 20.
+L03 | Gina (Infra) - Nov 3: DNS cutover plan exists. I still need final confirmation from IT on SPF plus DKIM changes for two legacy domains.
+L04 | Mark (IT) - Nov 4: I can review the records Friday, but I do not own the vendor ticket for the EU domain.
+L05 | Sara (CX) - Nov 4: Customer notice draft is ready once we know the exact cutover weekend and support staffing plan.
+L06 | Paul (PM) - Nov 5: Go or no-go review is Nov 14. If the EU domain is not ready we may need phased cutover.
+L07 | Notes
+L08 | - Need vendor ticket owner for EU domain
+L09 | - Need support staffing plan
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

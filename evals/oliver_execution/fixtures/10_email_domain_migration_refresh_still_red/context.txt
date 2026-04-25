@@ -1,0 +1,9 @@
+L01 | Email thread: customer email domain migration
+L02 | Paul (PM) - Nov 3: Need migration complete before the customer advisory board on Nov 20.
+L03 | Gina (Infra) - Nov 3: DNS cutover plan exists. I still need final confirmation from IT on SPF plus DKIM changes for two legacy domains.
+L04 | Mark (IT) - Nov 4: I can review the records Friday, but I do not own the vendor ticket for the EU domain.
+L05 | Sara (CX) - Nov 4: Customer notice draft is ready once we know the exact cutover weekend and support staffing plan.
+L06 | Paul (PM) - Nov 5: Go or no-go review is Nov 14. If the EU domain is not ready we may need phased cutover.
+L07 | Notes
+L08 | - Need vendor ticket owner for EU domain
+L09 | - Need support staffing plan

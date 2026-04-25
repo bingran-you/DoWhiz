@@ -107,6 +107,10 @@ path = "src/bin/task_status_cli.rs"
 name = "investment_eval"
 path = "src/bin/investment_eval.rs"
 
+[[bin]]
+name = "launch_execution_eval"
+path = "src/bin/launch_execution_eval.rs"
+
 [dev-dependencies]
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder"] }
 mockito = "1"

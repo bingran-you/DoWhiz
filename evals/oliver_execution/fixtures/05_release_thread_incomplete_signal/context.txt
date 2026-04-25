@@ -1,0 +1,6 @@
+L01 | Slack snippets: #launch
+L02 | Person A: Can we still ship the billing cleanup before month end?
+L03 | Person B: Maybe. Depends on what Infra says.
+L04 | Person C: Design is not worried.
+L05 | Person A: Let us regroup after the customer call.
+L06 | Person D: Need to make sure the docs are not outdated.

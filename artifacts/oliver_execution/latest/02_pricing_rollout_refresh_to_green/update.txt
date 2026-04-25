@@ -1,0 +1,4 @@
+U01 | Jess (Brand) - Jul 4: Legal approved the disclaimer. Final copy is frozen and screenshots are ready.
+U02 | Mina (Analytics) - Jul 15: QA passed. Attribution matches expected numbers across trial and annual plan flows.
+U03 | Ava (Growth) - Jul 15: Launch email is scheduled for July 22 at 9am PT.
+U04 | Nora (PM) - Jul 15: No open blockers for launch. Board preview deck has been updated.

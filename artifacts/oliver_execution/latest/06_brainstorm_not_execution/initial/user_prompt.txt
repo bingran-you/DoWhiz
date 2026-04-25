@@ -1,0 +1,30 @@
+Current UTC timestamp: 2026-04-25T02:56:46.394086+00:00
+Supported source type for this request: pasted_thread
+Source label: Templates marketplace brainstorm
+
+Heuristic pre-read:
+- weak_signal=true
+- explicit_blocker_cues=0
+- decision_cues=0
+- owner_cues=0
+- date_cues=1
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Notion comment thread export
+L02 | Founder: Thinking we might do a soft launch of the templates marketplace sometime in May.
+L03 | Growth: Could tie it to the webinar, or maybe wait until we have creator payouts figured out.
+L04 | Design: I can mock something next week if we decide this is real.
+L05 | Founder: Not asking for a plan yet, just collecting thoughts.
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

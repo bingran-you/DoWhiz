@@ -1,0 +1,11 @@
+L01 | Slack thread: customer identity migration cutover
+L02 | Omar (PM) - Sep 5: We still want cutover Monday night so Support can wake up on the new auth system Tuesday.
+L03 | Irene (Infra) - Sep 5: Backfill job finished for 98 percent of users. I still see about 11k records with missing org_id and will not know if that matters until tonight.
+L04 | Leo (Backend) - Sep 5: Login API passes smoke tests, but token revocation is not wired for legacy mobile clients.
+L05 | Support lead - Sep 6: We already have 14 internal test accounts that lost workspace access after migration rehearsal.
+L06 | Omar (PM) - Sep 6: I told leadership we are basically ready unless the missing org_id bucket grows.
+L07 | Irene (Infra) - Sep 6: The bucket is smaller now, but I still cannot explain the remaining failures.
+L08 | Security - Sep 6: We have not signed off on rollback timing. If we cut over, we need a tested revert path.
+L09 | Notes
+L10 | - Cutover target: Monday 10pm PT
+L11 | - Need support macro plus incident captain

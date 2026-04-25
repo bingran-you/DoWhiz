@@ -1,0 +1,31 @@
+Current UTC timestamp: 2026-04-25T02:56:45.328145+00:00
+Supported source type for this request: pasted_thread
+Source label: Billing cleanup launch snippets
+
+Heuristic pre-read:
+- weak_signal=true
+- explicit_blocker_cues=0
+- decision_cues=0
+- owner_cues=0
+- date_cues=1
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Slack snippets: #launch
+L02 | Person A: Can we still ship the billing cleanup before month end?
+L03 | Person B: Maybe. Depends on what Infra says.
+L04 | Person C: Design is not worried.
+L05 | Person A: Let us regroup after the customer call.
+L06 | Person D: Need to make sure the docs are not outdated.
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.
