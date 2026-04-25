@@ -31,8 +31,10 @@ pub use timing::{
     clear_timing_log, get_timing_log_path, QueueLatencyCollector, StageStats, TaskTiming,
     TaskTimingBuilder, TimingStats, QUEUE_LATENCY_COLLECTOR, TIMING_COLLECTOR,
 };
-pub use trace::RUN_TASK_TRACE_DIRNAME;
+pub use trace::{
+    load_trace_snapshot, RunTaskTraceSnapshot, RunTaskTraceTimingMs, RUN_TASK_TRACE_DIRNAME,
+};
 pub use types::{
     RunTaskOutput, RunTaskParams, ScheduleRequest, ScheduledSendEmailTask, ScheduledTaskRequest,
-    SchedulerActionRequest, UserIdentities,
+    SchedulerActionRequest, TokenUsage, UserIdentities,
 };

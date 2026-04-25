@@ -785,6 +785,11 @@ pub(super) fn run_codex_task(
         }),
         &trace_env_overrides,
     )?;
+    let _ = trace.set_stage(if use_docker {
+        "executing_codex_docker"
+    } else {
+        "executing_codex_local"
+    });
     let output = if use_docker {
         if let Err(err) = ensure_docker_image_available(&docker_image) {
             let _ = trace.finish(None, false, Some(&err.to_string()), None);
@@ -1520,6 +1525,7 @@ fn run_codex_task_azure_aci(
         }),
         &env_overrides,
     )?;
+    let _ = trace.set_stage("preparing_azure_aci");
     let _ = trace.record_text("aci/prompt_path.txt", &prompt_path.to_string_lossy());
     let env_override_keys: Vec<&str> = env_overrides.iter().map(|(key, _)| key.as_str()).collect();
     let _ = trace.record_json("aci/env_override_keys.json", &env_override_keys);
@@ -1543,6 +1549,7 @@ fn run_codex_task_azure_aci(
             "[run_task] azure_aci ephemeral_share=true task_id={}",
             container_name
         );
+        let _ = trace.set_stage("creating_ephemeral_share");
         timing.start_stage();
         let guard = match EphemeralShareGuard::new(&config, &container_name, &host_workspace_dir) {
             Ok(guard) => Some(guard),
@@ -1591,6 +1598,7 @@ fn run_codex_task_azure_aci(
         "[run_task] azure_aci create container={} resource_group={} image={}",
         container_name, config.resource_group, config.image
     );
+    let _ = trace.set_stage("starting_aci_container");
     let execution = run_azure_aci_execution(
         &config,
         &container_name,
@@ -1605,6 +1613,7 @@ fn run_codex_task_azure_aci(
         cancel_monitor,
         &effective_share,
         &mut timing,
+        &mut trace,
     );
 
     // If shutdown is in progress, skip cleanup to preserve the container for recovery.
@@ -1639,6 +1648,7 @@ fn run_codex_task_azure_aci(
     }
 
     if let Some(ref guard) = ephemeral_guard {
+        let _ = trace.set_stage("downloading_results");
         timing.start_stage();
         if let Err(e) = guard.download_back() {
             eprintln!(
@@ -1661,7 +1671,10 @@ fn run_codex_task_azure_aci(
         Ok(execution) => execution,
         Err(err) => {
             let _ = trace.record_text("logs/combined.log", &output_content);
+            let completed_timing = timing.finish();
+            let _ = trace.record_timing(&completed_timing);
             let _ = trace.finish(exit_status, false, Some(&err.to_string()), None);
+            TIMING_COLLECTOR.record(completed_timing);
             return Err(err);
         }
     };
@@ -1717,6 +1730,8 @@ fn run_codex_task_azure_aci(
             exit_status,
             &err.to_string(),
         ) {
+            let completed_timing = timing.finish();
+            let _ = trace.record_timing(&completed_timing);
             record_codex_success(
                 &mut trace,
                 exit_status,
@@ -1724,7 +1739,7 @@ fn run_codex_task_azure_aci(
                 Some(&recovery_note),
                 token_usage.as_ref(),
             );
-            TIMING_COLLECTOR.record(timing.finish());
+            TIMING_COLLECTOR.record(completed_timing);
             return Ok(RunTaskOutput {
                 reply_html_path: expected_reply_path,
                 reply_attachments_dir,
@@ -1737,12 +1752,15 @@ fn run_codex_task_azure_aci(
                 recovery_note: Some(recovery_note),
             });
         }
+        let completed_timing = timing.finish();
+        let _ = trace.record_timing(&completed_timing);
         let _ = trace.finish(
             exit_status,
             false,
             Some(&err.to_string()),
             token_usage.as_ref(),
         );
+        TIMING_COLLECTOR.record(completed_timing);
         return Err(err);
     }
 
@@ -1754,6 +1772,8 @@ fn run_codex_task_azure_aci(
             &output_tail,
         ) {
             Ok(()) => {
+                let completed_timing = timing.finish();
+                let _ = trace.record_timing(&completed_timing);
                 record_codex_success(
                     &mut trace,
                     exit_status,
@@ -1761,7 +1781,7 @@ fn run_codex_task_azure_aci(
                     None,
                     token_usage.as_ref(),
                 );
-                TIMING_COLLECTOR.record(timing.finish());
+                TIMING_COLLECTOR.record(completed_timing);
 
                 return Ok(RunTaskOutput {
                     reply_html_path: expected_reply_path,
@@ -1777,14 +1797,19 @@ fn run_codex_task_azure_aci(
             }
             Err(err) => err,
         };
+        let completed_timing = timing.finish();
+        let _ = trace.record_timing(&completed_timing);
         let _ = trace.finish(
             exit_status,
             false,
             Some(&err.to_string()),
             token_usage.as_ref(),
         );
+        TIMING_COLLECTOR.record(completed_timing);
         return Err(err);
     }
+    let completed_timing = timing.finish();
+    let _ = trace.record_timing(&completed_timing);
     record_codex_success(
         &mut trace,
         exit_status,
@@ -1793,7 +1818,7 @@ fn run_codex_task_azure_aci(
         token_usage.as_ref(),
     );
 
-    TIMING_COLLECTOR.record(timing.finish());
+    TIMING_COLLECTOR.record(completed_timing);
 
     Ok(RunTaskOutput {
         reply_html_path: expected_reply_path,
@@ -2445,6 +2470,7 @@ fn run_azure_aci_execution(
     cancel_monitor: Option<&ThreadSupersedeMonitor>,
     file_share: &str,
     timing: &mut TaskTimingBuilder,
+    trace: &mut RunTaskTraceRecorder,
 ) -> Result<AzureAciExecutionArtifacts, RunTaskError> {
     if let Some(reason) = cancel_monitor.and_then(ThreadSupersedeMonitor::supersede_reason) {
         return Err(RunTaskError::Canceled {
@@ -2565,6 +2591,7 @@ exit \"$status\"\n",
     );
 
     let create_command = format!("/bin/bash -lc {}", shell_quote(&script));
+    let _ = trace.set_stage("starting_aci_container");
     timing.start_stage();
     match create_aci_container(
         config,
@@ -2617,6 +2644,7 @@ exit \"$status\"\n",
         });
     }
     let poll_timeout = timeout.saturating_sub(elapsed_after_create);
+    let _ = trace.set_stage("executing_codex");
     timing.start_stage();
     let poll_state = poll_aci_state(
         config,
@@ -4123,6 +4151,29 @@ pub fn run_codex_warm_pool(
     );
     let prompt_path = workspace_dir.join(".codex_remote_prompt.txt");
     fs::write(&prompt_path, &prompt)?;
+    let trace_model_name = if request.model_name.trim().is_empty() {
+        env::var("CODEX_MODEL").unwrap_or_else(|_| CODEX_MODEL_NAME.to_string())
+    } else {
+        request.model_name.clone()
+    };
+    let mut trace = RunTaskTraceRecorder::new(
+        workspace_dir,
+        &request.runner,
+        "codex_warm_pool",
+        &trace_model_name,
+        &prompt,
+        timeout,
+        serde_json::json!({
+            "reply_expected": !request.reply_to.is_empty(),
+            "channel": request.channel,
+            "pool_resource_group": pool_manager.config().resource_group,
+            "task_queue": pool_manager.task_queue(),
+            "completion_queue": pool_manager.completion_queue(),
+        }),
+        &[],
+    )?;
+    let _ = trace.set_stage("preparing_warm_pool");
+    let _ = trace.record_text("aci/prompt_path.txt", &prompt_path.to_string_lossy());
 
     // 0b. Create codex config in workspace (will be uploaded to container)
     // Container's CODEX_HOME is set to /app/.workspace/task/.codex
@@ -4151,11 +4202,13 @@ pub fn run_codex_warm_pool(
     }
 
     // 1. Create ephemeral share and upload workspace
+    let _ = trace.set_stage("creating_ephemeral_share");
     timing.start_stage();
     let share_name = format!("task-{}", uuid::Uuid::new_v4().simple());
     create_ephemeral_share(&config, &share_name)?;
     timing.end_ephemeral_create();
 
+    let _ = trace.set_stage("uploading_workspace");
     timing.start_stage();
     let upload_result = upload_workspace_to_share(&config, &share_name, workspace_dir);
     if let Err(e) = &upload_result {
@@ -4164,7 +4217,12 @@ pub fn run_codex_warm_pool(
             e
         );
         let _ = delete_ephemeral_share(&config, &share_name);
-        return Err(upload_result.unwrap_err());
+        let err = upload_result.unwrap_err();
+        let completed_timing = timing.finish();
+        let _ = trace.record_timing(&completed_timing);
+        let _ = trace.finish(None, false, Some(&err.to_string()), None);
+        TIMING_COLLECTOR.record(completed_timing);
+        return Err(err);
     }
     timing.end_ephemeral_upload();
 
@@ -4197,14 +4255,24 @@ pub fn run_codex_warm_pool(
     eprintln!("[run_task] warm_pool task pushed to queue: {}", task_id);
 
     // 5. Wait for completion message
+    let _ = trace.set_stage("executing_codex");
     timing.start_stage();
-    let completion = poll_completion_queue(
+    let completion = match poll_completion_queue(
         pool_manager.storage_account(),
         pool_manager.storage_key(),
         pool_manager.completion_queue(),
         &task_id,
         timeout,
-    )?;
+    ) {
+        Ok(completion) => completion,
+        Err(err) => {
+            let completed_timing = timing.clone().finish();
+            let _ = trace.record_timing(&completed_timing);
+            let _ = trace.finish(None, false, Some(&err.to_string()), None);
+            TIMING_COLLECTOR.record(completed_timing);
+            return Err(err);
+        }
+    };
     timing.end_codex_execution();
 
     eprintln!(
@@ -4213,8 +4281,15 @@ pub fn run_codex_warm_pool(
     );
 
     // 6. Download results
+    let _ = trace.set_stage("downloading_results");
     timing.start_stage();
-    download_workspace_from_share(&config, &share_name, workspace_dir)?;
+    if let Err(err) = download_workspace_from_share(&config, &share_name, workspace_dir) {
+        let completed_timing = timing.clone().finish();
+        let _ = trace.record_timing(&completed_timing);
+        let _ = trace.finish(None, false, Some(&err.to_string()), None);
+        TIMING_COLLECTOR.record(completed_timing);
+        return Err(err);
+    }
     timing.end_result_download();
 
     // 7. Cleanup ephemeral share
@@ -4266,13 +4341,38 @@ pub fn run_codex_warm_pool(
         &reply_html_path,
         completion.exit_code,
         &codex_output,
-    )?;
+    );
+    let recovery_note = match recovery_note {
+        Ok(recovery_note) => recovery_note,
+        Err(err) => {
+            let completed_timing = timing.clone().finish();
+            let _ = trace.record_timing(&completed_timing);
+            let _ = trace.finish(
+                Some(completion.exit_code),
+                false,
+                Some(&err.to_string()),
+                token_usage.as_ref(),
+            );
+            TIMING_COLLECTOR.record(completed_timing);
+            return Err(err);
+        }
+    };
 
     // Extract scheduled tasks and actions from codex output
     let (scheduled_tasks, scheduled_tasks_error) = extract_scheduled_tasks(&codex_output);
     let (scheduler_actions, scheduler_actions_error) = extract_scheduler_actions(&codex_output);
 
-    TIMING_COLLECTOR.record(timing.finish());
+    let completed_timing = timing.finish();
+    let _ = trace.record_timing(&completed_timing);
+    let _ = trace.record_text(
+        "logs/assistant_output_tail.txt",
+        &tail_string(&codex_output, 4000),
+    );
+    if let Some(note) = recovery_note.as_deref() {
+        let _ = trace.record_text("logs/recovery_note.txt", note);
+    }
+    let _ = trace.finish(Some(completion.exit_code), true, None, token_usage.as_ref());
+    TIMING_COLLECTOR.record(completed_timing);
 
     Ok(RunTaskOutput {
         reply_html_path,

@@ -4,8 +4,7 @@ use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
 use mongodb::sync::{Client, Collection};
 use mongodb::IndexModel;
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
 use uuid::Uuid;
 
@@ -14,6 +13,9 @@ use crate::mongo_store::{
     retry_mongo_read, retry_mongo_write,
 };
 
+use super::super::task_view::{
+    default_routine_name, derive_request_summary, deserialize_task_document,
+};
 use super::super::types::{Schedule, ScheduledTask, SchedulerError, TaskKind};
 use super::super::utils::{task_kind_channel, task_kind_label};
 use super::super::{is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task};
@@ -23,7 +25,6 @@ use super::{
 };
 
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
-const REQUEST_SUMMARY_MAX_CHARS: usize = 72;
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 
 #[derive(Debug, Clone)]
@@ -1197,14 +1198,6 @@ fn routine_schedule_fields(schedule: &Schedule) -> (String, Option<String>, Opti
     }
 }
 
-fn deserialize_task_document(document: &Document) -> Result<ScheduledTask, SchedulerError> {
-    let task_json = document.get_str("task_json").map_err(|err| {
-        SchedulerError::Storage(format!("missing task_json for task document: {err}"))
-    })?;
-    serde_json::from_str(task_json)
-        .map_err(|err| SchedulerError::Storage(format!("invalid task_json: {err}")))
-}
-
 fn resolve_owner_scope(path: &Path) -> (String, String) {
     let mut components: Vec<String> = Vec::new();
     for component in path.components() {
@@ -1253,332 +1246,6 @@ fn numeric_field_to_u32(document: &Document, key: &str) -> Option<u32> {
     }
 }
 
-fn derive_request_summary(task_doc: &Document) -> Option<String> {
-    let task_json = task_doc.get_str("task_json").ok()?;
-    let task_value: serde_json::Value = serde_json::from_str(task_json).ok()?;
-    let task_kind = task_value.pointer("/kind/type").and_then(|v| v.as_str())?;
-
-    match task_kind {
-        "send_email" => task_value
-            .pointer("/kind/subject")
-            .and_then(|v| v.as_str())
-            .and_then(normalize_summary_text),
-        "run_task" => {
-            let workspace_dir = task_value
-                .pointer("/kind/workspace_dir")
-                .and_then(|v| v.as_str())?;
-            let channel = task_value
-                .pointer("/kind/channel")
-                .and_then(|v| v.as_str())
-                .or_else(|| task_doc.get_str("channel").ok())
-                .unwrap_or("");
-            let thread_epoch = task_value
-                .pointer("/kind/thread_epoch")
-                .and_then(|v| v.as_u64());
-            derive_run_task_summary(Path::new(workspace_dir), channel, thread_epoch)
-        }
-        _ => None,
-    }
-}
-
-fn derive_run_task_summary(
-    workspace_dir: &Path,
-    channel: &str,
-    thread_epoch: Option<u64>,
-) -> Option<String> {
-    let incoming_dir = workspace_dir.join("incoming_email");
-    if !incoming_dir.exists() {
-        return None;
-    }
-
-    match channel {
-        "email" => derive_email_summary(&incoming_dir),
-        "google_docs" => derive_google_workspace_summary(&incoming_dir, "gdocs", thread_epoch),
-        "google_sheets" => derive_google_workspace_summary(&incoming_dir, "gsheets", thread_epoch),
-        "google_slides" => derive_google_workspace_summary(&incoming_dir, "gslides", thread_epoch),
-        "discord" => derive_discord_summary(&incoming_dir, thread_epoch),
-        "slack" => derive_text_file_summary(&incoming_dir, &["_slack_message.txt"], thread_epoch),
-        "sms" => derive_text_file_summary(&incoming_dir, &["_sms_message.txt"], thread_epoch),
-        "bluebubbles" => {
-            derive_text_file_summary(&incoming_dir, &["_bluebubbles_message.txt"], thread_epoch)
-        }
-        "telegram" => {
-            derive_header_text_file_summary(&incoming_dir, &["_telegram.txt"], thread_epoch)
-        }
-        "whatsapp" => {
-            derive_header_text_file_summary(&incoming_dir, &["_whatsapp.txt"], thread_epoch)
-        }
-        "wechat" => derive_header_text_file_summary(&incoming_dir, &["_wechat.txt"], thread_epoch),
-        "lark" => derive_header_text_file_summary(&incoming_dir, &["_lark.txt"], thread_epoch),
-        _ => None,
-    }
-}
-
-fn derive_email_summary(incoming_dir: &Path) -> Option<String> {
-    let payload_path = incoming_dir.join("postmark_payload.json");
-    let raw_payload = fs::read_to_string(payload_path).ok()?;
-    let payload_value: serde_json::Value = serde_json::from_str(&raw_payload).ok()?;
-
-    payload_value
-        .get("Subject")
-        .and_then(|v| v.as_str())
-        .and_then(normalize_summary_text)
-        .or_else(|| {
-            payload_value
-                .get("StrippedTextReply")
-                .and_then(|v| v.as_str())
-                .and_then(normalize_summary_text)
-        })
-        .or_else(|| {
-            payload_value
-                .get("TextBody")
-                .and_then(|v| v.as_str())
-                .and_then(normalize_summary_text)
-        })
-}
-
-fn derive_google_workspace_summary(
-    incoming_dir: &Path,
-    file_prefix: &str,
-    thread_epoch: Option<u64>,
-) -> Option<String> {
-    let comment_suffix = format!("_{}_comment.json", file_prefix);
-    let comment_path = file_with_epoch_or_latest(incoming_dir, &comment_suffix, thread_epoch);
-    if let Some(comment_path) = comment_path {
-        if let Ok(raw_comment) = fs::read_to_string(comment_path) {
-            if let Ok(comment) = serde_json::from_str::<serde_json::Value>(&raw_comment) {
-                if let Some(summary) = comment
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .and_then(normalize_summary_text)
-                {
-                    return Some(summary);
-                }
-            }
-        }
-    }
-
-    let meta_suffix = format!("_{}_meta.json", file_prefix);
-    let meta_path = file_with_epoch_or_latest(incoming_dir, &meta_suffix, thread_epoch)?;
-    let raw_meta = fs::read_to_string(meta_path).ok()?;
-    let meta: serde_json::Value = serde_json::from_str(&raw_meta).ok()?;
-    let file_name = meta.get("file_name").and_then(|v| v.as_str())?;
-
-    normalize_summary_text(&format!("Comment on {}", file_name))
-}
-
-fn derive_discord_summary(incoming_dir: &Path, thread_epoch: Option<u64>) -> Option<String> {
-    let raw = read_text_by_epoch_or_latest(incoming_dir, "_discord_message.txt", thread_epoch)?;
-    let content = if let Some((_, user_section)) = raw.split_once("User message:\n") {
-        user_section
-    } else {
-        &raw
-    };
-    // Find first line with actual content after stripping Discord mentions
-    normalize_discord_summary_text(content)
-}
-
-/// Strip Discord mentions (<@123>, <@!123>) and find first line with actual content.
-fn normalize_discord_summary_text(raw: &str) -> Option<String> {
-    for line in raw.lines() {
-        let stripped = strip_discord_mentions(line.trim());
-        if !stripped.is_empty() {
-            return clean_summary_line(&stripped);
-        }
-    }
-    None
-}
-
-/// Remove Discord user mentions (<@123456>) and nickname mentions (<@!123456>).
-fn strip_discord_mentions(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        if ch == '<' && chars.peek() == Some(&'@') {
-            // Consume until '>' or end
-            chars.next(); // consume '@'
-            if chars.peek() == Some(&'!') {
-                chars.next(); // consume '!' for nickname mentions
-            }
-            // Skip digits until '>'
-            while let Some(&c) = chars.peek() {
-                chars.next();
-                if c == '>' {
-                    break;
-                }
-            }
-        } else {
-            result.push(ch);
-        }
-    }
-
-    result.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn derive_text_file_summary(
-    incoming_dir: &Path,
-    suffixes: &[&str],
-    thread_epoch: Option<u64>,
-) -> Option<String> {
-    // Use the first suffix for epoch-based lookup
-    let raw = read_text_by_epoch_or_latest(incoming_dir, suffixes[0], thread_epoch)?;
-    normalize_summary_text(&raw)
-}
-
-fn derive_header_text_file_summary(
-    incoming_dir: &Path,
-    suffixes: &[&str],
-    thread_epoch: Option<u64>,
-) -> Option<String> {
-    // Use the first suffix for epoch-based lookup
-    let raw = read_text_by_epoch_or_latest(incoming_dir, suffixes[0], thread_epoch)?;
-    extract_header_file_body_summary(&raw).or_else(|| normalize_summary_text(&raw))
-}
-
-/// Read a file by thread_epoch if available, otherwise fall back to latest file with suffix.
-fn read_text_by_epoch_or_latest(
-    incoming_dir: &Path,
-    suffix: &str,
-    thread_epoch: Option<u64>,
-) -> Option<String> {
-    let path = file_with_epoch_or_latest(incoming_dir, suffix, thread_epoch)?;
-    fs::read_to_string(path).ok()
-}
-
-/// Get file path by thread_epoch if available, otherwise fall back to latest file with suffix.
-/// Finds files ending with suffix, extracts the numeric prefix, and matches against epoch.
-/// Falls back to latest_file_with_suffix if no match found or epoch is None.
-fn file_with_epoch_or_latest(
-    incoming_dir: &Path,
-    suffix: &str,
-    thread_epoch: Option<u64>,
-) -> Option<PathBuf> {
-    if let Some(epoch) = thread_epoch {
-        // Find file matching the epoch by parsing numeric prefix
-        if let Some(path) = find_file_by_epoch(incoming_dir, suffix, epoch) {
-            return Some(path);
-        }
-    }
-    // Fallback to latest file with suffix
-    latest_file_with_suffix(incoming_dir, &[suffix])
-}
-
-/// Find a file by extracting numeric prefix and matching against epoch.
-/// E.g., "0002_lark.txt" with suffix "_lark.txt" → prefix "0002" → 2 matches epoch=2
-fn find_file_by_epoch(incoming_dir: &Path, suffix: &str, epoch: u64) -> Option<PathBuf> {
-    for entry in fs::read_dir(incoming_dir).ok()? {
-        let entry = entry.ok()?;
-        if !entry.file_type().ok()?.is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !name.ends_with(suffix) {
-            continue;
-        }
-        // Strip suffix and parse numeric prefix
-        let prefix = name.strip_suffix(suffix)?;
-        if let Ok(file_epoch) = prefix.parse::<u64>() {
-            if file_epoch == epoch {
-                return Some(entry.path());
-            }
-        }
-    }
-    None
-}
-
-fn read_latest_text_by_suffix(incoming_dir: &Path, suffixes: &[&str]) -> Option<String> {
-    let path = latest_file_with_suffix(incoming_dir, suffixes)?;
-    fs::read_to_string(path).ok()
-}
-
-fn latest_file_with_suffix(incoming_dir: &Path, suffixes: &[&str]) -> Option<PathBuf> {
-    let mut matches: Vec<(String, PathBuf)> = Vec::new();
-
-    for entry in fs::read_dir(incoming_dir).ok()? {
-        let entry = entry.ok()?;
-        if !entry.file_type().ok()?.is_file() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().to_string();
-        if suffixes.iter().any(|suffix| name.ends_with(suffix)) {
-            matches.push((name, entry.path()));
-        }
-    }
-
-    matches.sort_by(|a, b| a.0.cmp(&b.0));
-    matches.pop().map(|(_, path)| path)
-}
-
-fn extract_header_file_body_summary(raw: &str) -> Option<String> {
-    let mut body_started = false;
-
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            body_started = true;
-            continue;
-        }
-
-        if !body_started
-            && (trimmed.starts_with("From:")
-                || trimmed.starts_with("Date:")
-                || trimmed.starts_with("To:")
-                || trimmed.starts_with("Subject:"))
-        {
-            continue;
-        }
-
-        return clean_summary_line(trimmed);
-    }
-
-    None
-}
-
-fn normalize_summary_text(raw: &str) -> Option<String> {
-    let first_line = raw.lines().map(str::trim).find(|line| !line.is_empty())?;
-    clean_summary_line(first_line)
-}
-
-fn clean_summary_line(line: &str) -> Option<String> {
-    let compact = line.split_whitespace().collect::<Vec<_>>().join(" ");
-    if compact.is_empty() {
-        return None;
-    }
-    Some(truncate_summary(&compact, REQUEST_SUMMARY_MAX_CHARS))
-}
-
-fn truncate_summary(value: &str, max_chars: usize) -> String {
-    let mut chars = value.chars();
-    let mut output = String::new();
-
-    for _ in 0..max_chars {
-        match chars.next() {
-            Some(ch) => output.push(ch),
-            None => return output,
-        }
-    }
-
-    if chars.next().is_some() {
-        output.push_str("...");
-    }
-
-    output
-}
-
-fn default_routine_name(channel: &str) -> String {
-    match channel {
-        "slack" => "Scheduled Slack work".to_string(),
-        "discord" => "Scheduled Discord work".to_string(),
-        "email" => "Scheduled email work".to_string(),
-        "google_docs" => "Scheduled Google Docs work".to_string(),
-        "google_sheets" => "Scheduled Google Sheets work".to_string(),
-        "google_slides" => "Scheduled Google Slides work".to_string(),
-        "lark" => "Scheduled Lark work".to_string(),
-        _ => "Scheduled Oliver work".to_string(),
-    }
-}
-
 fn mongo_err(err: mongodb::error::Error) -> SchedulerError {
     SchedulerError::Storage(format!("mongodb error: {err}"))
 }
@@ -1589,18 +1256,12 @@ fn mongo_config_err(err: crate::mongo_store::MongoStoreError) -> SchedulerError 
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::path::PathBuf;
 
     use chrono::{Duration as ChronoDuration, TimeZone, Utc};
-    use mongodb::bson::doc;
     use mongodb::bson::Bson;
-    use tempfile::TempDir;
 
-    use super::{
-        build_task_status_summary, derive_request_summary, normalize_discord_summary_text,
-        resolve_owner_scope, strip_discord_mentions, ExecutionRow,
-    };
+    use super::{build_task_status_summary, resolve_owner_scope, ExecutionRow};
     use crate::channel::Channel;
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
 
@@ -1647,63 +1308,6 @@ mod tests {
         let scope = resolve_owner_scope(&path);
         assert_eq!(scope.0, "user");
         assert_eq!(scope.1, "user-123");
-    }
-
-    #[test]
-    fn derive_request_summary_prefers_send_email_subject() {
-        let task_json = serde_json::json!({
-            "kind": {
-                "type": "send_email",
-                "subject": "Weekly analytics summary and next actions"
-            }
-        })
-        .to_string();
-        let doc = doc! {
-            "task_json": task_json,
-            "channel": "email",
-        };
-
-        let summary = derive_request_summary(&doc);
-        assert_eq!(
-            summary.as_deref(),
-            Some("Weekly analytics summary and next actions")
-        );
-    }
-
-    #[test]
-    fn derive_request_summary_reads_latest_slack_message() {
-        let temp = TempDir::new().expect("tempdir");
-        let incoming_dir = temp.path().join("incoming_email");
-        fs::create_dir_all(&incoming_dir).expect("create incoming_email");
-        fs::write(
-            incoming_dir.join("00001_slack_message.txt"),
-            "Earlier message",
-        )
-        .expect("write old message");
-        fs::write(
-            incoming_dir.join("00002_slack_message.txt"),
-            "Please draft a concise project update for the team.",
-        )
-        .expect("write latest message");
-
-        let task_json = serde_json::json!({
-            "kind": {
-                "type": "run_task",
-                "workspace_dir": temp.path().to_string_lossy(),
-                "channel": "slack"
-            }
-        })
-        .to_string();
-        let doc = doc! {
-            "task_json": task_json,
-            "channel": "slack",
-        };
-
-        let summary = derive_request_summary(&doc);
-        assert_eq!(
-            summary.as_deref(),
-            Some("Please draft a concise project update for the team.")
-        );
     }
 
     #[test]
@@ -1800,186 +1404,5 @@ mod tests {
         assert_eq!(summary.status, "failed");
         assert!(!summary.can_cancel);
         assert!(summary.can_resubmit);
-    }
-
-    #[test]
-    fn derive_request_summary_skips_header_lines_for_telegram_text() {
-        let temp = TempDir::new().expect("tempdir");
-        let incoming_dir = temp.path().join("incoming_email");
-        fs::create_dir_all(&incoming_dir).expect("create incoming_email");
-        fs::write(
-            incoming_dir.join("0001_telegram.txt"),
-            "From: User (123)\nDate: 2026-03-13T20:00:00Z\n\nReview the attached budget and flag risks.",
-        )
-        .expect("write telegram message");
-
-        let task_json = serde_json::json!({
-            "kind": {
-                "type": "run_task",
-                "workspace_dir": temp.path().to_string_lossy(),
-                "channel": "telegram"
-            }
-        })
-        .to_string();
-        let doc = doc! {
-            "task_json": task_json,
-            "channel": "telegram",
-        };
-
-        let summary = derive_request_summary(&doc);
-        assert_eq!(
-            summary.as_deref(),
-            Some("Review the attached budget and flag risks.")
-        );
-    }
-
-    #[test]
-    fn derive_request_summary_uses_thread_epoch_for_lark() {
-        let temp = TempDir::new().expect("tempdir");
-        let incoming_dir = temp.path().join("incoming_email");
-        fs::create_dir_all(&incoming_dir).expect("create incoming_email");
-
-        // Create multiple lark messages
-        fs::write(
-            incoming_dir.join("0002_lark.txt"),
-            "From: ou_user1\nDate: 2026-03-13T10:00:00Z\n\nFirst message about project setup.",
-        )
-        .expect("write first message");
-        fs::write(
-            incoming_dir.join("0003_lark.txt"),
-            "From: ou_user1\nDate: 2026-03-13T11:00:00Z\n\nSecond message about code review.",
-        )
-        .expect("write second message");
-        fs::write(
-            incoming_dir.join("0004_lark.txt"),
-            "From: ou_user1\nDate: 2026-03-13T12:00:00Z\n\nThird message about deployment.",
-        )
-        .expect("write third message");
-
-        // Task with thread_epoch=2 should read 0002_lark.txt
-        let task_json_epoch2 = serde_json::json!({
-            "kind": {
-                "type": "run_task",
-                "workspace_dir": temp.path().to_string_lossy(),
-                "channel": "lark",
-                "thread_epoch": 2
-            }
-        })
-        .to_string();
-        let doc_epoch2 = doc! {
-            "task_json": task_json_epoch2,
-            "channel": "lark",
-        };
-        let summary_epoch2 = derive_request_summary(&doc_epoch2);
-        assert_eq!(
-            summary_epoch2.as_deref(),
-            Some("First message about project setup.")
-        );
-
-        // Task with thread_epoch=3 should read 0003_lark.txt
-        let task_json_epoch3 = serde_json::json!({
-            "kind": {
-                "type": "run_task",
-                "workspace_dir": temp.path().to_string_lossy(),
-                "channel": "lark",
-                "thread_epoch": 3
-            }
-        })
-        .to_string();
-        let doc_epoch3 = doc! {
-            "task_json": task_json_epoch3,
-            "channel": "lark",
-        };
-        let summary_epoch3 = derive_request_summary(&doc_epoch3);
-        assert_eq!(
-            summary_epoch3.as_deref(),
-            Some("Second message about code review.")
-        );
-
-        // Task without thread_epoch should fall back to latest (0004_lark.txt)
-        let task_json_no_epoch = serde_json::json!({
-            "kind": {
-                "type": "run_task",
-                "workspace_dir": temp.path().to_string_lossy(),
-                "channel": "lark"
-            }
-        })
-        .to_string();
-        let doc_no_epoch = doc! {
-            "task_json": task_json_no_epoch,
-            "channel": "lark",
-        };
-        let summary_no_epoch = derive_request_summary(&doc_no_epoch);
-        assert_eq!(
-            summary_no_epoch.as_deref(),
-            Some("Third message about deployment.")
-        );
-    }
-
-    #[test]
-    fn strip_discord_mentions_removes_user_mentions() {
-        assert_eq!(
-            strip_discord_mentions("<@1475574666830680175> hello world"),
-            "hello world"
-        );
-        assert_eq!(
-            strip_discord_mentions("hello <@123456789> world"),
-            "hello world"
-        );
-        assert_eq!(
-            strip_discord_mentions("<@111> <@222> <@333> actual content"),
-            "actual content"
-        );
-    }
-
-    #[test]
-    fn strip_discord_mentions_removes_nickname_mentions() {
-        assert_eq!(
-            strip_discord_mentions("<@!1475574666830680175> hello"),
-            "hello"
-        );
-    }
-
-    #[test]
-    fn strip_discord_mentions_returns_empty_for_only_mentions() {
-        assert_eq!(strip_discord_mentions("<@1475574666830680175>"), "");
-        assert_eq!(strip_discord_mentions("<@123> <@456>"), "");
-    }
-
-    #[test]
-    fn strip_discord_mentions_preserves_non_mention_content() {
-        assert_eq!(
-            strip_discord_mentions("no mentions here"),
-            "no mentions here"
-        );
-        assert_eq!(
-            strip_discord_mentions("email@example.com"),
-            "email@example.com"
-        );
-        assert_eq!(strip_discord_mentions("<not a mention>"), "<not a mention>");
-    }
-
-    #[test]
-    fn normalize_discord_summary_text_skips_mention_only_lines() {
-        let input = "<@1475574666830680175>\nmy actual message";
-        assert_eq!(
-            normalize_discord_summary_text(input),
-            Some("my actual message".to_string())
-        );
-    }
-
-    #[test]
-    fn normalize_discord_summary_text_strips_mention_from_same_line() {
-        let input = "<@1475574666830680175> hi how are you";
-        assert_eq!(
-            normalize_discord_summary_text(input),
-            Some("hi how are you".to_string())
-        );
-    }
-
-    #[test]
-    fn normalize_discord_summary_text_returns_none_for_only_mentions() {
-        let input = "<@1475574666830680175>\n<@9876543210>";
-        assert_eq!(normalize_discord_summary_text(input), None);
     }
 }

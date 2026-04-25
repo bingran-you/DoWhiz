@@ -88,6 +88,7 @@ pub struct TaskTiming {
     pub total: Option<Duration>,
 }
 
+#[derive(Clone)]
 pub struct TaskTimingBuilder {
     task_id: String,
     start: Instant,

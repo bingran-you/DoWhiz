@@ -1,6 +1,6 @@
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc, Weekday};
@@ -18,6 +18,7 @@ use crate::account_store::{
 };
 
 use super::auth::{extract_bearer_token, validate_supabase_token};
+use super::task_ops::get_task_ops;
 
 const DEFAULT_RANGE_DAYS: i64 = 30;
 const MAX_RANGE_DAYS: i64 = 365;
@@ -415,44 +416,16 @@ pub async fn get_dashboard(
     headers: HeaderMap,
     Query(query): Query<DashboardQuery>,
 ) -> impl axum::response::IntoResponse {
-    let token = match extract_bearer_token(&headers) {
-        Some(token) => token,
-        None => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({ "error": "Missing Authorization header" })),
-            )
-                .into_response();
-        }
+    let email = match require_admin_email(&state, &headers).await {
+        Ok(email) => email,
+        Err(response) => return response,
     };
 
-    let auth_user = match validate_supabase_token(&state.supabase_url, &token).await {
-        Ok(user) => user,
-        Err((status, msg)) => {
-            return (status, Json(json!({ "error": msg }))).into_response();
-        }
-    };
-
-    let email = match auth_user.email {
-        Some(email) => email.trim().to_ascii_lowercase(),
-        None => {
-            return (
-                StatusCode::FORBIDDEN,
-                Json(json!({ "error": "Admin email claim required" })),
-            )
-                .into_response();
-        }
-    };
-
-    if !state.admin_emails.contains(&email) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({ "error": "Dashboard is admin-only" })),
-        )
-            .into_response();
-    }
-
-    let (start, end) = match resolve_window(&query) {
+    let (start, end) = match resolve_window(
+        query.start.as_deref(),
+        query.end.as_deref(),
+        query.range.as_deref(),
+    ) {
         Ok(window) => window,
         Err(msg) => {
             return (StatusCode::BAD_REQUEST, Json(json!({ "error": msg }))).into_response();
@@ -530,6 +503,7 @@ pub fn analytics_router(state: AnalyticsState) -> Router {
     Router::new()
         .route("/analytics/track", post(track_event))
         .route("/analytics/dashboard", get(get_dashboard))
+        .route("/analytics/task-ops", get(get_task_ops))
         .with_state(state)
 }
 
@@ -553,13 +527,56 @@ fn normalize_opt(value: Option<String>) -> Option<String> {
         .filter(|raw| !raw.is_empty())
 }
 
-fn resolve_window(query: &DashboardQuery) -> Result<(DateTime<Utc>, DateTime<Utc>), String> {
-    let end = parse_rfc3339_utc(query.end.as_deref()).unwrap_or_else(Utc::now);
-    let start = if let Some(start) = parse_rfc3339_utc(query.start.as_deref()) {
+pub(crate) async fn require_admin_email(
+    state: &AnalyticsState,
+    headers: &HeaderMap,
+) -> Result<String, Response> {
+    let token = extract_bearer_token(headers).ok_or_else(|| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Missing Authorization header" })),
+        )
+            .into_response()
+    })?;
+
+    let auth_user = validate_supabase_token(&state.supabase_url, &token)
+        .await
+        .map_err(|(status, msg)| (status, Json(json!({ "error": msg }))).into_response())?;
+
+    let email = auth_user
+        .email
+        .map(|email| email.trim().to_ascii_lowercase())
+        .filter(|email| !email.is_empty())
+        .ok_or_else(|| {
+            (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "Admin email claim required" })),
+            )
+                .into_response()
+        })?;
+
+    if !state.admin_emails.contains(&email) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Dashboard is admin-only" })),
+        )
+            .into_response());
+    }
+
+    Ok(email)
+}
+
+pub(crate) fn resolve_window(
+    start_raw: Option<&str>,
+    end_raw: Option<&str>,
+    range_raw: Option<&str>,
+) -> Result<(DateTime<Utc>, DateTime<Utc>), String> {
+    let end = parse_rfc3339_utc(end_raw).unwrap_or_else(Utc::now);
+    let start = if let Some(start) = parse_rfc3339_utc(start_raw) {
         start
     } else {
         let mut days = DEFAULT_RANGE_DAYS;
-        if let Some(range) = query.range.as_ref() {
+        if let Some(range) = range_raw {
             let parsed = range
                 .trim()
                 .strip_suffix('d')

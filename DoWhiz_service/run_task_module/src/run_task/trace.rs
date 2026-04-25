@@ -8,13 +8,14 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::errors::RunTaskError;
+use super::timing::TaskTiming;
 use super::types::TokenUsage;
 
 pub const RUN_TASK_TRACE_DIRNAME: &str = ".run_task_trace";
 const TRACE_METADATA_FILENAME: &str = "metadata.json";
 const TRACE_PROMPT_FILENAME: &str = "prompt.txt";
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 struct TraceEnvVarSummary {
     key: String,
     redacted: bool,
@@ -24,7 +25,46 @@ struct TraceEnvVarSummary {
     value_length: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Default)]
+pub struct RunTaskTraceTimingMs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_latency_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setup_latency_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ephemeral_share_create_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ephemeral_share_upload_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aci_cold_start_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_execution_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_download_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_ms: Option<f64>,
+}
+
+impl From<&TaskTiming> for RunTaskTraceTimingMs {
+    fn from(timing: &TaskTiming) -> Self {
+        Self {
+            queue_latency_ms: timing.queue_latency.map(|d| d.as_secs_f64() * 1000.0),
+            setup_latency_ms: timing.setup_latency.map(|d| d.as_secs_f64() * 1000.0),
+            ephemeral_share_create_ms: timing
+                .ephemeral_share_create
+                .map(|d| d.as_secs_f64() * 1000.0),
+            ephemeral_share_upload_ms: timing
+                .ephemeral_share_upload
+                .map(|d| d.as_secs_f64() * 1000.0),
+            aci_cold_start_ms: timing.aci_cold_start.map(|d| d.as_secs_f64() * 1000.0),
+            codex_execution_ms: timing.codex_execution.map(|d| d.as_secs_f64() * 1000.0),
+            result_download_ms: timing.result_download.map(|d| d.as_secs_f64() * 1000.0),
+            total_ms: timing.total.map(|d| d.as_secs_f64() * 1000.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 struct RunTaskTraceMetadata {
     trace_version: u32,
     runner: String,
@@ -39,6 +79,12 @@ struct RunTaskTraceMetadata {
     success: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_stage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stage_updated_at_unix_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timing_ms: Option<RunTaskTraceTimingMs>,
     command_summary: Value,
     env_overrides: Vec<TraceEnvVarSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,6 +98,45 @@ pub(super) struct RunTaskTraceRecorder {
 
 pub(super) fn trace_dir(workspace_dir: &Path) -> PathBuf {
     workspace_dir.join(RUN_TASK_TRACE_DIRNAME)
+}
+
+fn metadata_path(workspace_dir: &Path) -> PathBuf {
+    trace_dir(workspace_dir).join(TRACE_METADATA_FILENAME)
+}
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+pub struct RunTaskTraceSnapshot {
+    pub runner: String,
+    pub backend: String,
+    pub model_name: String,
+    pub deploy_target: String,
+    pub started_at_unix_ms: u64,
+    pub finished_at_unix_ms: Option<u64>,
+    pub success: Option<bool>,
+    pub error: Option<String>,
+    pub current_stage: Option<String>,
+    pub stage_updated_at_unix_ms: Option<u64>,
+    pub timing_ms: Option<RunTaskTraceTimingMs>,
+    pub token_usage: Option<TokenUsage>,
+}
+
+pub fn load_trace_snapshot(workspace_dir: &Path) -> Option<RunTaskTraceSnapshot> {
+    let bytes = fs::read(metadata_path(workspace_dir)).ok()?;
+    let metadata: RunTaskTraceMetadata = serde_json::from_slice(&bytes).ok()?;
+    Some(RunTaskTraceSnapshot {
+        runner: metadata.runner,
+        backend: metadata.backend,
+        model_name: metadata.model_name,
+        deploy_target: metadata.deploy_target,
+        started_at_unix_ms: metadata.started_at_unix_ms,
+        finished_at_unix_ms: metadata.finished_at_unix_ms,
+        success: metadata.success,
+        error: metadata.error,
+        current_stage: metadata.current_stage,
+        stage_updated_at_unix_ms: metadata.stage_updated_at_unix_ms,
+        timing_ms: metadata.timing_ms,
+        token_usage: metadata.token_usage,
+    })
 }
 
 impl RunTaskTraceRecorder {
@@ -88,6 +173,9 @@ impl RunTaskTraceRecorder {
                 exit_status: None,
                 success: None,
                 error: None,
+                current_stage: Some("initializing".to_string()),
+                stage_updated_at_unix_ms: Some(now_unix_ms()),
+                timing_ms: None,
                 command_summary,
                 env_overrides: summarize_env_overrides(env_overrides),
                 token_usage: None,
@@ -107,6 +195,17 @@ impl RunTaskTraceRecorder {
         self.write_text("logs/stderr.log", stderr_output)?;
         self.write_text("logs/combined.log", combined_output)?;
         Ok(())
+    }
+
+    pub(super) fn set_stage(&mut self, stage: &str) -> Result<(), RunTaskError> {
+        self.metadata.current_stage = Some(stage.trim().to_string());
+        self.metadata.stage_updated_at_unix_ms = Some(now_unix_ms());
+        self.persist_metadata()
+    }
+
+    pub(super) fn record_timing(&mut self, timing: &TaskTiming) -> Result<(), RunTaskError> {
+        self.metadata.timing_ms = Some(RunTaskTraceTimingMs::from(timing));
+        self.persist_metadata()
     }
 
     pub(super) fn record_text(&self, rel_path: &str, content: &str) -> Result<(), RunTaskError> {
@@ -136,10 +235,17 @@ impl RunTaskTraceRecorder {
         error: Option<&str>,
         token_usage: Option<&TokenUsage>,
     ) -> Result<(), RunTaskError> {
-        self.metadata.finished_at_unix_ms = Some(now_unix_ms());
+        let finished_at = now_unix_ms();
+        self.metadata.finished_at_unix_ms = Some(finished_at);
         self.metadata.exit_status = exit_status;
         self.metadata.success = Some(success);
         self.metadata.error = error.map(|value| value.to_string());
+        self.metadata.current_stage = Some(if success {
+            "completed".to_string()
+        } else {
+            "failed".to_string()
+        });
+        self.metadata.stage_updated_at_unix_ms = Some(finished_at);
         self.metadata.token_usage = token_usage.cloned();
         self.persist_metadata()
     }

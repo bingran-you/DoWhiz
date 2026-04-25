@@ -133,7 +133,7 @@ Deployment workflows should:
 5. Disable any legacy `systemd` worker unit (for example `dowhiz-oliver.service`) so PM2 remains the only supervisor.
 6. Keep build/deploy deterministic: checkout by trigger commit and pass `deploy_sha` from build job into deploy job so VM and image build use the exact same code revision.
 7. Keep automatic staging releases on pushes to `dev`, and restrict manual release safety gates by branch (`workflow_dispatch` must run from `dev` for staging and `main` for production).
-8. Skip automatic staging workflow runs when changes stay outside deploy inputs (for example docs-only or `website/**` updates).
+8. Backend worker/gateway workflows may skip `website/**` changes; staging frontend deploys use the dedicated frontend workflow, while production website deploys are Vercel-managed.
 9. Use layered image strategy for Azure ACI:
 - `Dockerfile.base` for heavy shared dependencies.
 - `Dockerfile.aci` for runtime assembly from prebuilt binaries.

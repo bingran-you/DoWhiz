@@ -8,6 +8,7 @@ mod reply;
 mod schedule;
 mod snapshot;
 mod store;
+pub(crate) mod task_view;
 mod types;
 mod utils;
 

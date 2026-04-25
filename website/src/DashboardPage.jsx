@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { getDoWhizApiBaseUrl } from './analytics';
 import { supabase } from './app/supabaseClient';
 import './dashboard.css';
@@ -312,16 +312,419 @@ function TrendBars({ points, title, titleHelp }) {
   );
 }
 
+const DASHBOARD_VIEWS = [
+  { label: 'Business', value: 'business' },
+  { label: 'Task Ops', value: 'task_ops' }
+];
+const TASK_OPS_DEFAULT_PAGE_SIZE = 50;
+
+const TASK_OPS_STATUS_OPTIONS = [
+  { label: 'All statuses', value: '' },
+  { label: 'Running', value: 'running' },
+  { label: 'Success', value: 'success' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Superseded', value: 'superseded' },
+  { label: 'Cancelled', value: 'cancelled' }
+];
+
+const TASK_OPS_CHANNEL_LABELS = {
+  email: 'Email',
+  slack: 'Slack',
+  discord: 'Discord',
+  sms: 'SMS',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp',
+  google_docs: 'Google Docs',
+  google_sheets: 'Google Sheets',
+  google_slides: 'Google Slides',
+  bluebubbles: 'iMessage',
+  wechat: 'WeCom',
+  wechat_mp: 'WeChat MP',
+  lark: 'Lark',
+  notion: 'Notion',
+  zoom: 'Zoom'
+};
+
+const TASK_OPS_STAGE_LABELS = {
+  initializing: 'Initializing',
+  preparing_azure_aci: 'Preparing ACI',
+  creating_ephemeral_share: 'Creating share',
+  uploading_workspace: 'Uploading workspace',
+  starting_aci_container: 'Starting container',
+  executing_codex: 'Executing Codex',
+  executing_codex_local: 'Running Codex (local)',
+  executing_codex_docker: 'Running Codex (docker)',
+  executing_claude_local: 'Running Claude',
+  validating_reply_artifact: 'Validating output',
+  downloading_results: 'Downloading results',
+  preparing_warm_pool: 'Preparing warm pool',
+  completed: 'Completed',
+  failed: 'Failed'
+};
+
+const TASK_OPS_CHANNEL_OPTIONS = [
+  { label: 'All channels', value: '' },
+  ...Object.entries(TASK_OPS_CHANNEL_LABELS).map(([value, label]) => ({ value, label }))
+];
+
+const normalizeTaskOpsStatus = (status) => String(status || '').trim().toLowerCase();
+
+const humanizeTaskOpsToken = (value) =>
+  String(value || '')
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((part) => (part.length <= 3 ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(' ');
+
+const formatTaskOpsChannel = (channel) =>
+  TASK_OPS_CHANNEL_LABELS[String(channel || '').trim().toLowerCase()] || humanizeTaskOpsToken(channel) || 'Unknown';
+
+const formatTaskOpsStage = (stage) => {
+  const normalized = String(stage || '').trim().toLowerCase();
+  return TASK_OPS_STAGE_LABELS[normalized] || humanizeTaskOpsToken(normalized) || 'N/A';
+};
+
+const formatTaskOpsDuration = (seconds) => {
+  const total = Number(seconds);
+  if (!Number.isFinite(total)) return 'N/A';
+  if (total < 60) return `${Math.max(0, Math.round(total))}s`;
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = Math.round(total % 60);
+  if (minutes < 60) return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+const formatTaskOpsDateTime = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString();
+};
+
+const formatTaskOpsTiming = (value) => {
+  const timing = Number(value);
+  if (!Number.isFinite(timing)) return 'N/A';
+  if (timing >= 1000) return `${(timing / 1000).toFixed(1)}s`;
+  return `${Math.round(timing)}ms`;
+};
+
+const summarizeTaskOpsError = (message) => {
+  const raw = String(message || '').trim();
+  if (!raw) return '';
+  const firstLine = raw.split('\n').map((line) => line.trim()).find(Boolean) || raw;
+  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine;
+};
+
+function TaskOpsStatusBadge({ status, isRunningLong }) {
+  const normalized = normalizeTaskOpsStatus(status);
+  let tone = 'muted';
+  let label = humanizeTaskOpsToken(normalized) || 'Unknown';
+
+  if (normalized === 'success') {
+    tone = 'success';
+    label = 'Completed';
+  } else if (normalized === 'failed') {
+    tone = 'danger';
+    label = 'Failed';
+  } else if (normalized === 'running') {
+    tone = isRunningLong ? 'warning' : 'info';
+    label = isRunningLong ? 'Running > 1h' : 'Running';
+  } else if (normalized === 'superseded') {
+    tone = 'neutral';
+    label = 'Superseded';
+  } else if (normalized === 'cancelled') {
+    tone = 'neutral';
+    label = 'Cancelled';
+  }
+
+  return <span className={`dash-pill dash-pill-${tone}`}>{label}</span>;
+}
+
+function TaskOpsDetailsModal({ row, onClose }) {
+  if (!row) return null;
+
+  const timingEntries = Object.entries({
+    Queue: row.timing_ms?.queue_latency_ms,
+    Setup: row.timing_ms?.setup_latency_ms,
+    'Share create': row.timing_ms?.ephemeral_share_create_ms,
+    'Share upload': row.timing_ms?.ephemeral_share_upload_ms,
+    'ACI cold start': row.timing_ms?.aci_cold_start_ms,
+    'Codex / Claude': row.timing_ms?.codex_execution_ms,
+    Download: row.timing_ms?.result_download_ms,
+    Total: row.timing_ms?.total_ms
+  }).filter(([, value]) => Number.isFinite(value));
+
+  const metadataRows = [
+    ['Task ID', row.task_id],
+    ['Execution ID', row.execution_id],
+    ['Title', row.title],
+    ['Channel', formatTaskOpsChannel(row.channel)],
+    ['Sender', row.sender_name || row.sender || 'N/A'],
+    ['Status', formatTaskOpsStage(row.status)],
+    ['Current stage', row.current_stage ? formatTaskOpsStage(row.current_stage) : 'N/A'],
+    ['Duration', formatTaskOpsDuration(row.duration_seconds)],
+    ['Started at', formatTaskOpsDateTime(row.started_at)],
+    ['Finished at', formatTaskOpsDateTime(row.finished_at)],
+    ['Created at', formatTaskOpsDateTime(row.created_at)],
+    ['Runner', row.runner || 'N/A'],
+    ['Model', row.model_name || 'N/A'],
+    ['Backend', row.backend || 'N/A'],
+    ['Retry count', row.retry_count],
+    ['Schedule', humanizeTaskOpsToken(row.schedule_type || 'one_shot')],
+    ['Next run', formatTaskOpsDateTime(row.next_run)],
+    ['Run at', formatTaskOpsDateTime(row.run_at)]
+  ];
+
+  return (
+    <div className="dash-modal-shell" onClick={onClose} role="presentation">
+      <div className="dash-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="dash-modal-head">
+          <div>
+            <h3>{row.title}</h3>
+            <p>
+              {formatTaskOpsChannel(row.channel)} · {row.sender_name || row.sender || 'Unknown sender'}
+            </p>
+          </div>
+          <button type="button" className="dash-modal-close" onClick={onClose} aria-label="Close details">
+            ×
+          </button>
+        </div>
+
+        <div className="dash-modal-section">
+          <div className="dash-modal-grid">
+            {metadataRows.map(([label, value]) => (
+              <div className="dash-modal-card" key={`${row.task_id}-${row.execution_id}-${label}`}>
+                <span>{label}</span>
+                <strong>{String(value)}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {row.error_message ? (
+          <div className="dash-modal-section">
+            <h4>Error</h4>
+            <div className="dash-error dash-error-inline">{row.error_message}</div>
+          </div>
+        ) : null}
+
+        <div className="dash-modal-section">
+          <h4>Stage Timing</h4>
+          {!timingEntries.length ? (
+            <EmptyState label="No stage timing captured for this run." />
+          ) : (
+            <div className="dash-modal-grid dash-modal-grid-tight">
+              {timingEntries.map(([label, value]) => (
+                <div className="dash-modal-card" key={`${row.task_id}-${label}`}>
+                  <span>{label}</span>
+                  <strong>{formatTaskOpsTiming(value)}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskOpsView({
+  taskOps,
+  loading,
+  error,
+  statusFilter,
+  channelFilter,
+  searchDraft,
+  onStatusChange,
+  onChannelChange,
+  onSearchChange,
+  onPrevPage,
+  onNextPage,
+  onSelectRow
+}) {
+  const totalPages = Math.max(
+    1,
+    Math.ceil((taskOps?.total_rows || 0) / (taskOps?.page_size || TASK_OPS_DEFAULT_PAGE_SIZE))
+  );
+  const canPrev = (taskOps?.page || 1) > 1;
+  const canNext = (taskOps?.page || 1) < totalPages;
+
+  return (
+    <>
+      <Section
+        title="Task Ops Overview"
+        subtitle="A global run ledger for the latest user-visible work across channels, with live stage status for the newest execution of each task."
+      >
+        {loading ? <EmptyState label="Loading task operations..." /> : null}
+        {error ? <div className="dash-error">{error}</div> : null}
+
+        {!loading && !error && taskOps ? (
+          <>
+            <div className="dash-kpi-grid">
+              <article className="dash-kpi-card">
+                <h3>Total runs</h3>
+                <p>{formatNumber(taskOps.summary.total_runs)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>Running now</h3>
+                <p>{formatNumber(taskOps.summary.running_now)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>Long-running</h3>
+                <p>{formatNumber(taskOps.summary.long_running)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>Failed</h3>
+                <p>{formatNumber(taskOps.summary.failed_runs)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>Success rate</h3>
+                <p>{formatOptionalPercent(taskOps.summary.success_rate)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>Median duration</h3>
+                <p>{formatTaskOpsDuration(taskOps.summary.median_duration_seconds)}</p>
+              </article>
+              <article className="dash-kpi-card">
+                <h3>P95 duration</h3>
+                <p>{formatTaskOpsDuration(taskOps.summary.p95_duration_seconds)}</p>
+              </article>
+            </div>
+
+            <div className="dash-toolbar">
+              <div className="dash-toolbar-group">
+                <label htmlFor="task-ops-status">Status</label>
+                <select id="task-ops-status" value={statusFilter} onChange={(event) => onStatusChange(event.target.value)}>
+                  {TASK_OPS_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value || 'all'} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="dash-toolbar-group">
+                <label htmlFor="task-ops-channel">Channel</label>
+                <select id="task-ops-channel" value={channelFilter} onChange={(event) => onChannelChange(event.target.value)}>
+                  {TASK_OPS_CHANNEL_OPTIONS.map((option) => (
+                    <option key={option.value || 'all'} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="dash-toolbar-group dash-toolbar-search">
+                <label htmlFor="task-ops-search">Search</label>
+                <input
+                  id="task-ops-search"
+                  type="search"
+                  value={searchDraft}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                  placeholder="Task, sender, error, task id"
+                />
+              </div>
+            </div>
+
+            {!taskOps.rows?.length ? (
+              <EmptyState label="No task runs match the current filters." />
+            ) : (
+              <div className="dash-table-wrap">
+                <table className="dash-table dash-table-task-ops">
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Sender</th>
+                      <th>Channel</th>
+                      <th>Stage</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                      <th>Started</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {taskOps.rows.map((row) => (
+                      <tr key={`${row.task_id}-${row.execution_id}`}>
+                        <td>
+                          <div className="dash-row-stack">
+                            <strong>{row.title}</strong>
+                            <span>
+                              {row.task_id.slice(0, 8)} · exec {row.execution_id}
+                            </span>
+                            {row.error_message ? <span>{summarizeTaskOpsError(row.error_message)}</span> : null}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="dash-row-stack">
+                            <strong>{row.sender_name || row.sender || 'Unknown'}</strong>
+                            <span>{row.sender && row.sender_name && row.sender !== row.sender_name ? row.sender : row.runner || 'N/A'}</span>
+                          </div>
+                        </td>
+                        <td>{formatTaskOpsChannel(row.channel)}</td>
+                        <td>
+                          <div className="dash-row-stack">
+                            <strong>{row.current_stage ? formatTaskOpsStage(row.current_stage) : 'N/A'}</strong>
+                            <span>{row.backend || row.model_name || 'No trace yet'}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <TaskOpsStatusBadge status={row.status} isRunningLong={row.is_running_long} />
+                        </td>
+                        <td>{formatTaskOpsDuration(row.duration_seconds)}</td>
+                        <td>{formatTaskOpsDateTime(row.started_at)}</td>
+                        <td>
+                          <button type="button" className="dash-btn dash-btn-secondary" onClick={() => onSelectRow(row)}>
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="dash-pagination">
+              <span>
+                Page {taskOps.page} of {totalPages} · {formatNumber(taskOps.total_rows)} runs
+              </span>
+              <div className="dash-pagination-actions">
+                <button type="button" className="dash-btn dash-btn-secondary" disabled={!canPrev} onClick={onPrevPage}>
+                  Previous
+                </button>
+                <button type="button" className="dash-btn dash-btn-secondary" disabled={!canNext} onClick={onNextPage}>
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </Section>
+    </>
+  );
+}
+
 function DashboardPage() {
+  const [activeView, setActiveView] = useState('business');
   const [range, setRange] = useState('30d');
-  const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [session, setSession] = useState(null);
-  const [error, setError] = useState('');
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [taskOpsLoading, setTaskOpsLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState('');
+  const [taskOpsError, setTaskOpsError] = useState('');
   const [dashboard, setDashboard] = useState(null);
+  const [taskOps, setTaskOps] = useState(null);
+  const [taskOpsStatusFilter, setTaskOpsStatusFilter] = useState('');
+  const [taskOpsChannelFilter, setTaskOpsChannelFilter] = useState('');
+  const [taskOpsSearchDraft, setTaskOpsSearchDraft] = useState('');
+  const [taskOpsPage, setTaskOpsPage] = useState(1);
+  const [selectedTaskRun, setSelectedTaskRun] = useState(null);
+  const deferredTaskOpsSearch = useDeferredValue(taskOpsSearchDraft.trim());
 
   useEffect(() => {
-    document.title = 'DoWhiz Internal Funnel Dashboard';
+    document.title = 'DoWhiz Internal Dashboard';
 
     let robots = document.querySelector('meta[name="robots"]');
     if (!robots) {
@@ -342,11 +745,15 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (activeView !== 'business') {
+      return undefined;
+    }
+
     let cancelled = false;
 
     const loadDashboard = async () => {
-      setLoading(true);
-      setError('');
+      setDashboardLoading(true);
+      setDashboardError('');
 
       const {
         data: { session: currentSession }
@@ -357,7 +764,7 @@ function DashboardPage() {
       setSession(currentSession ?? null);
       if (!currentSession) {
         setDashboard(null);
-        setLoading(false);
+        setDashboardLoading(false);
         return;
       }
 
@@ -385,11 +792,11 @@ function DashboardPage() {
       } catch (fetchError) {
         if (!cancelled) {
           setDashboard(null);
-          setError(fetchError instanceof Error ? fetchError.message : 'Failed to load dashboard data.');
+          setDashboardError(fetchError instanceof Error ? fetchError.message : 'Failed to load dashboard data.');
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          setDashboardLoading(false);
         }
       }
     };
@@ -399,16 +806,105 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [range, refreshTick]);
+  }, [activeView, range, refreshTick]);
+
+  useEffect(() => {
+    if (activeView !== 'task_ops') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const loadTaskOps = async () => {
+      setTaskOpsLoading(true);
+      setTaskOpsError('');
+
+      const {
+        data: { session: currentSession }
+      } = await supabase.auth.getSession();
+
+      if (cancelled) return;
+
+      setSession(currentSession ?? null);
+      if (!currentSession) {
+        setTaskOps(null);
+        setTaskOpsLoading(false);
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({ range, page: String(taskOpsPage) });
+        if (taskOpsStatusFilter) params.set('status', taskOpsStatusFilter);
+        if (taskOpsChannelFilter) params.set('channel', taskOpsChannelFilter);
+        if (deferredTaskOpsSearch) params.set('q', deferredTaskOpsSearch);
+
+        const res = await fetch(`${getDoWhizApiBaseUrl()}/analytics/task-ops?${params.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${currentSession.access_token}`
+          }
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const message =
+            body.error ||
+            (res.status === 403
+              ? 'This dashboard is admin-only. Your authenticated user is not allowlisted.'
+              : 'Failed to load task operations.');
+          throw new Error(message);
+        }
+
+        const payload = await res.json();
+        if (!cancelled) {
+          setTaskOps(payload);
+        }
+      } catch (fetchError) {
+        if (!cancelled) {
+          setTaskOps(null);
+          setTaskOpsError(fetchError instanceof Error ? fetchError.message : 'Failed to load task operations.');
+        }
+      } finally {
+        if (!cancelled) {
+          setTaskOpsLoading(false);
+        }
+      }
+    };
+
+    loadTaskOps();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeView,
+    deferredTaskOpsSearch,
+    range,
+    refreshTick,
+    taskOpsChannelFilter,
+    taskOpsPage,
+    taskOpsStatusFilter
+  ]);
 
   const generatedAtLabel = useMemo(() => {
-    if (!dashboard?.generated_at) {
+    const activePayload = activeView === 'task_ops' ? taskOps : dashboard;
+    if (!activePayload?.generated_at) {
       return null;
     }
-    return new Date(dashboard.generated_at).toLocaleString();
-  }, [dashboard]);
+    return new Date(activePayload.generated_at).toLocaleString();
+  }, [activeView, dashboard, taskOps]);
 
-  if (!loading && !session) {
+  const activeRangeSummary = activeView === 'task_ops' ? taskOps?.range : dashboard?.range;
+  const activeLoading = activeView === 'task_ops' ? taskOpsLoading : dashboardLoading;
+
+  useEffect(() => {
+    setSelectedTaskRun(null);
+  }, [activeView, taskOpsPage, taskOpsStatusFilter, taskOpsChannelFilter, deferredTaskOpsSearch]);
+
+  useEffect(() => {
+    setTaskOpsPage(1);
+  }, [range]);
+
+  if (!activeLoading && !session) {
     return (
       <div className="dash-shell">
         <div className="dash-panel dash-auth-required">
@@ -427,10 +923,11 @@ function DashboardPage() {
       <div className="dash-panel">
         <header className="dash-header">
           <div>
-            <h1>DoWhiz Internal Funnel Dashboard</h1>
+            <h1>DoWhiz Internal Dashboard</h1>
             <p>
-              End-to-end funnel visibility from first touch to paid conversion. Revenue here reflects purchased
-              credits in the selected date range.
+              {activeView === 'task_ops'
+                ? 'A global operator view of user-visible task runs, with sender context, live stage status, duration, and failure detail.'
+                : 'End-to-end funnel visibility from first touch to paid conversion. Revenue here reflects purchased credits in the selected date range.'}
             </p>
           </div>
           <div className="dash-header-controls">
@@ -452,19 +949,34 @@ function DashboardPage() {
           <span>
             Signed in as <strong>{session?.user?.email || 'unknown'}</strong>
           </span>
-          {dashboard?.range ? (
+          {activeRangeSummary ? (
             <span>
-              Window: {new Date(dashboard.range.start).toLocaleDateString()} to{' '}
-              {new Date(dashboard.range.end).toLocaleDateString()} ({dashboard.range.days}d)
+              Window: {new Date(activeRangeSummary.start).toLocaleDateString()} to{' '}
+              {new Date(activeRangeSummary.end).toLocaleDateString()} ({activeRangeSummary.days}d)
             </span>
           ) : null}
           {generatedAtLabel ? <span>Generated: {generatedAtLabel}</span> : null}
         </div>
 
-        {loading ? <EmptyState label="Loading analytics data..." /> : null}
-        {error ? <div className="dash-error">{error}</div> : null}
+        <div className="dash-view-tabs" role="tablist" aria-label="Dashboard views">
+          {DASHBOARD_VIEWS.map((view) => (
+            <button
+              key={view.value}
+              type="button"
+              className={`dash-view-tab ${activeView === view.value ? 'is-active' : ''}`}
+              onClick={() => setActiveView(view.value)}
+              role="tab"
+              aria-selected={activeView === view.value}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
 
-        {!loading && !error && dashboard ? (
+        {activeView === 'business' && dashboardLoading ? <EmptyState label="Loading analytics data..." /> : null}
+        {activeView === 'business' && dashboardError ? <div className="dash-error">{dashboardError}</div> : null}
+
+        {activeView === 'business' && !dashboardLoading && !dashboardError && dashboard ? (
           <>
             <Section title="Executive KPI Row" subtitle="Top-line conversion, activation, paid, and retention indicators.">
               <div className="dash-kpi-grid">
@@ -1039,7 +1551,34 @@ function DashboardPage() {
             </Section>
           </>
         ) : null}
+
+        {activeView === 'task_ops' ? (
+          <TaskOpsView
+            taskOps={taskOps}
+            loading={taskOpsLoading}
+            error={taskOpsError}
+            statusFilter={taskOpsStatusFilter}
+            channelFilter={taskOpsChannelFilter}
+            searchDraft={taskOpsSearchDraft}
+            onStatusChange={(value) => {
+              setTaskOpsStatusFilter(value);
+              setTaskOpsPage(1);
+            }}
+            onChannelChange={(value) => {
+              setTaskOpsChannelFilter(value);
+              setTaskOpsPage(1);
+            }}
+            onSearchChange={(value) => {
+              setTaskOpsSearchDraft(value);
+              setTaskOpsPage(1);
+            }}
+            onPrevPage={() => setTaskOpsPage((page) => Math.max(1, page - 1))}
+            onNextPage={() => setTaskOpsPage((page) => page + 1)}
+            onSelectRow={setSelectedTaskRun}
+          />
+        ) : null}
       </div>
+      <TaskOpsDetailsModal row={selectedTaskRun} onClose={() => setSelectedTaskRun(null)} />
     </div>
   );
 }

@@ -130,6 +130,7 @@ pub(super) fn run_claude_task(
         }),
         &env_overrides,
     )?;
+    let _ = trace.set_stage("executing_claude_local");
     let output = match run_claude_command(
         request.workspace_dir,
         &prompt,
@@ -203,6 +204,7 @@ pub(super) fn run_claude_task(
     let expected_reply_path =
         resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
     if !request.reply_to.is_empty() {
+        let _ = trace.set_stage("validating_reply_artifact");
         let err = match ensure_expected_reply_artifact(
             request.workspace_dir,
             &expected_reply_path,

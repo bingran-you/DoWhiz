@@ -18,6 +18,7 @@ mod scheduler;
 mod server;
 pub mod startup_workspace;
 mod state;
+pub mod task_ops;
 mod workspace;
 
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
