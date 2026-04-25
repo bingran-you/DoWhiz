@@ -41,6 +41,7 @@ fn main() -> ExitCode {
         "update-task" => cmd_update_task(&args[2..]),
         "list-tasks" => cmd_list_tasks(&args[2..]),
         "list-users" => cmd_list_users(&args[2..]),
+        "get-schema" => cmd_get_schema(&args[2..]),
         "trigger-sync" => cmd_trigger_sync(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
@@ -101,6 +102,9 @@ Task Board Commands:
 
   list-users        List users in the Notion workspace
     (No arguments - reads workspace from .notion_context.json)
+
+  get-schema        Get database schema (property names, types, and options)
+    --database-id <id>       Notion database ID (required)
 
   trigger-sync      Trigger immediate TPM check-in (one-shot task)
     --user-id <uuid>         Account UUID (required)
@@ -935,6 +939,84 @@ fn cmd_list_users(_args: &[String]) -> ExitCode {
             "name": u.name,
             "email": u.email
         })).collect::<Vec<_>>()
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
+}
+
+/// Get database schema including property names, types, and select options.
+fn cmd_get_schema(args: &[String]) -> ExitCode {
+    let mut database_id: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--database-id" => {
+                i += 1;
+                database_id = args.get(i).cloned();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(database_id) = database_id else {
+        eprintln!("Error: --database-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let workspace_id = get_workspace_id();
+    let Some(workspace_id) = workspace_id else {
+        eprintln!("Error: workspace_id is required (set via .notion_context.json)");
+        return ExitCode::FAILURE;
+    };
+
+    let employee_id = match env::var("EMPLOYEE_ID") {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("Error: EMPLOYEE_ID environment variable is required");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let client = match NotionApiClient::from_env(&employee_id) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Failed to create Notion client: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let schema = match client.get_database_schema(&workspace_id, &database_id) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to get database schema: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Build output with properties grouped by type
+    let properties: Vec<Value> = schema
+        .properties
+        .iter()
+        .map(|p| {
+            let mut prop_json = json!({
+                "name": p.name,
+                "type": p.property_type,
+            });
+            if !p.options.is_empty() {
+                prop_json["options"] = json!(p.options.iter().map(|o| &o.name).collect::<Vec<_>>());
+            }
+            prop_json
+        })
+        .collect();
+
+    let output = json!({
+        "success": true,
+        "database_id": schema.id,
+        "title": schema.title,
+        "url": schema.url,
+        "properties": properties
     });
     println!("{}", serde_json::to_string_pretty(&output).unwrap());
     ExitCode::SUCCESS

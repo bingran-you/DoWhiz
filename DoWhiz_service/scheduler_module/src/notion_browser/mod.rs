@@ -14,8 +14,9 @@ pub mod oauth_store;
 pub mod store;
 
 pub use api_client::{
-    BlockInput, DatabaseItem, DatabaseProperty, NotionApiClient, NotionApiError, NotionBlock,
-    NotionComment, NotionDatabase, NotionPage, PageContent,
+    BlockInput, DatabaseItem, DatabaseProperty, DatabasePropertySchema, DatabaseSchema,
+    NotionApiClient, NotionApiError, NotionBlock, NotionComment, NotionDatabase, NotionPage,
+    PageContent, SelectOption,
 };
 pub use models::{NotionMention, NotionNotification, NotionPageContext};
 pub use oauth_store::{NotionOAuthStore, NotionOAuthToken};
