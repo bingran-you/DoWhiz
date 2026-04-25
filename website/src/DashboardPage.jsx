@@ -544,12 +544,8 @@ function TaskOpsView({
   onNextPage,
   onSelectRow
 }) {
-  const totalPages = Math.max(
-    1,
-    Math.ceil((taskOps?.total_rows || 0) / (taskOps?.page_size || TASK_OPS_DEFAULT_PAGE_SIZE))
-  );
   const canPrev = (taskOps?.page || 1) > 1;
-  const canNext = (taskOps?.page || 1) < totalPages;
+  const canNext = Boolean(taskOps?.has_next_page);
 
   return (
     <>
@@ -687,7 +683,7 @@ function TaskOpsView({
 
             <div className="dash-pagination">
               <span>
-                Page {taskOps.page} of {totalPages} · {formatNumber(taskOps.total_rows)} runs
+                Page {taskOps.page} · showing up to {formatNumber(taskOps.page_size || TASK_OPS_DEFAULT_PAGE_SIZE)} recent tasks
               </span>
               <div className="dash-pagination-actions">
                 <button type="button" className="dash-btn dash-btn-secondary" disabled={!canPrev} onClick={onPrevPage}>

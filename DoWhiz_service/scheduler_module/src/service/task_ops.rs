@@ -9,7 +9,7 @@ use mongodb::sync::Collection;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::task;
 
@@ -27,6 +27,8 @@ const MAX_PAGE_SIZE: usize = 100;
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 const TASK_BATCH_SIZE: usize = 500;
 const TRACE_MATCH_TOLERANCE_MS: i64 = 10 * 60 * 1000;
+const EXECUTION_SCAN_CHUNK_SIZE: i64 = 250;
+const MAX_EXECUTION_SCAN_DOCS: usize = 5000;
 
 #[derive(Debug, Deserialize)]
 pub struct TaskOpsQuery {
@@ -96,7 +98,7 @@ pub struct TaskOpsResponse {
     pub summary: TaskOpsSummary,
     pub page: usize,
     pub page_size: usize,
-    pub total_rows: usize,
+    pub has_next_page: bool,
     pub rows: Vec<TaskOpsRow>,
 }
 
@@ -128,6 +130,12 @@ struct TraceSnapshotView {
     stage_updated_at: Option<DateTime<Utc>>,
     timing_ms: Option<run_task_module::RunTaskTraceTimingMs>,
     token_usage: Option<run_task_module::TokenUsage>,
+}
+
+#[derive(Debug, Clone)]
+struct TaskOpsPageSlice {
+    rows: Vec<TaskOpsRow>,
+    has_next_page: bool,
 }
 
 pub fn task_ops_router(state: AnalyticsState) -> Router {
@@ -202,11 +210,13 @@ pub async fn get_task_ops(
     };
 
     tracing::info!(
-        "analytics.task_ops generated for admin={} range={}..{} rows={}",
+        "analytics.task_ops generated for admin={} range={}..{} page={} page_size={} has_next_page={}",
         admin_email,
         start.to_rfc3339(),
         end.to_rfc3339(),
-        response.total_rows
+        response.page,
+        response.page_size,
+        response.has_next_page
     );
     (axum::http::StatusCode::OK, Json(response)).into_response()
 }
@@ -225,43 +235,18 @@ fn load_task_ops_snapshot(
     let executions = db.collection::<Document>("task_executions");
     let tasks = db.collection::<Document>("tasks");
 
-    let execution_docs = load_execution_docs(&executions, start, end)?;
-    let deduped_executions = dedupe_execution_docs(execution_docs);
-    let latest_execution_ids = latest_execution_ids_by_task(&deduped_executions);
-    let task_records = load_task_records(&tasks, &deduped_executions)?;
-
-    let mut rows = Vec::new();
-    for execution in deduped_executions {
-        let Some(task_record) = task_records.get(&execution.task_id) else {
-            continue;
-        };
-        if !matches!(task_record.task.kind, TaskKind::RunTask(_)) {
-            continue;
-        }
-
-        let row = build_task_ops_row(
-            &execution,
-            task_record,
-            latest_execution_ids
-                .get(execution.task_id.as_str())
-                .copied()
-                .unwrap_or_default(),
-        );
-        if !row_matches_filters(&row, status_filter, channel_filter, search_query) {
-            continue;
-        }
-        rows.push(row);
-    }
-
-    let summary = build_summary(&rows);
-    let total_rows = rows.len();
-    let start_index = page.saturating_sub(1).saturating_mul(page_size);
-    let end_index = (start_index + page_size).min(total_rows);
-    let paged_rows = if start_index >= total_rows {
-        Vec::new()
-    } else {
-        rows[start_index..end_index].to_vec()
-    };
+    let summary = load_summary(&executions, start, end, status_filter)?;
+    let page_slice = load_task_ops_page(
+        &executions,
+        &tasks,
+        start,
+        end,
+        page,
+        page_size,
+        status_filter,
+        channel_filter,
+        search_query,
+    )?;
 
     Ok(TaskOpsResponse {
         generated_at: Utc::now().to_rfc3339(),
@@ -273,28 +258,36 @@ fn load_task_ops_snapshot(
         summary,
         page,
         page_size,
-        total_rows,
-        rows: paged_rows,
+        has_next_page: page_slice.has_next_page,
+        rows: page_slice.rows,
     })
 }
 
-fn load_execution_docs(
+fn load_execution_docs_chunk(
     collection: &Collection<Document>,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
+    status_filter: Option<&str>,
+    skip: usize,
+    limit: i64,
 ) -> Result<Vec<ExecutionDoc>, String> {
-    let filter = doc! {
+    let mut filter = doc! {
         "started_at": {
             "$gte": BsonDateTime::from_chrono(start),
             "$lte": BsonDateTime::from_chrono(end),
         }
     };
+    if let Some(status_filter) = status_filter {
+        filter.insert("status", status_filter);
+    }
     // Cosmos Mongo API requires a composite index for the previous
     // started_at + execution_id order-by. We only need the DB to order by
     // started_at; execution_id is already used as a stable secondary sort
     // after the rows are loaded into memory.
     let options = FindOptions::builder()
         .sort(doc! { "started_at": -1 })
+        .skip(skip as u64)
+        .limit(limit)
         .build();
     let cursor = retry_mongo_read("task_ops.execution_docs", || {
         collection.find(filter.clone(), options.clone())
@@ -339,36 +332,6 @@ fn parse_execution_doc(document: &Document) -> Result<ExecutionDoc, String> {
     })
 }
 
-fn dedupe_execution_docs(rows: Vec<ExecutionDoc>) -> Vec<ExecutionDoc> {
-    let mut deduped = Vec::new();
-    let mut by_key: HashMap<String, usize> = HashMap::new();
-
-    for row in rows {
-        let key = format!(
-            "{}|{}|{}",
-            row.task_id,
-            row.execution_id,
-            row.started_at.timestamp_millis()
-        );
-        if let Some(existing_index) = by_key.get(&key).copied() {
-            if prefer_execution_row(&row, &deduped[existing_index]) {
-                deduped[existing_index] = row;
-            }
-            continue;
-        }
-        by_key.insert(key, deduped.len());
-        deduped.push(row);
-    }
-
-    deduped.sort_by(|left, right| {
-        right
-            .started_at
-            .cmp(&left.started_at)
-            .then_with(|| right.execution_id.cmp(&left.execution_id))
-    });
-    deduped
-}
-
 fn prefer_execution_row(candidate: &ExecutionDoc, existing: &ExecutionDoc) -> bool {
     let candidate_rank = owner_scope_rank(&candidate.owner_scope_kind);
     let existing_rank = owner_scope_rank(&existing.owner_scope_kind);
@@ -390,6 +353,34 @@ fn prefer_execution_row(candidate: &ExecutionDoc, existing: &ExecutionDoc) -> bo
     existing_error && !candidate_error
 }
 
+#[cfg(test)]
+fn dedupe_latest_task_executions(mut rows: Vec<ExecutionDoc>) -> Vec<ExecutionDoc> {
+    rows.sort_by(|left, right| {
+        right
+            .started_at
+            .cmp(&left.started_at)
+            .then_with(|| right.execution_id.cmp(&left.execution_id))
+    });
+
+    let mut deduped: Vec<ExecutionDoc> = Vec::new();
+    let mut by_task_id: HashMap<String, usize> = HashMap::new();
+    for row in rows {
+        if let Some(existing_index) = by_task_id.get(&row.task_id).copied() {
+            let existing = &deduped[existing_index];
+            if row.execution_id == existing.execution_id
+                && row.started_at == existing.started_at
+                && prefer_execution_row(&row, existing)
+            {
+                deduped[existing_index] = row;
+            }
+            continue;
+        }
+        by_task_id.insert(row.task_id.clone(), deduped.len());
+        deduped.push(row);
+    }
+    deduped
+}
+
 fn owner_scope_rank(owner_scope_kind: &str) -> i32 {
     match owner_scope_kind {
         "account" => 3,
@@ -398,27 +389,10 @@ fn owner_scope_rank(owner_scope_kind: &str) -> i32 {
     }
 }
 
-fn latest_execution_ids_by_task(rows: &[ExecutionDoc]) -> HashMap<String, i64> {
-    let mut latest = HashMap::new();
-    for row in rows {
-        latest
-            .entry(row.task_id.clone())
-            .or_insert(row.execution_id);
-    }
-    latest
-}
-
-fn load_task_records(
+fn load_task_records_for_ids(
     collection: &Collection<Document>,
-    execution_docs: &[ExecutionDoc],
+    task_ids: &[String],
 ) -> Result<HashMap<String, TaskRecord>, String> {
-    let task_ids: Vec<String> = execution_docs
-        .iter()
-        .map(|row| row.task_id.clone())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-
     let mut by_task_id: HashMap<String, TaskRecord> = HashMap::new();
     for chunk in task_ids.chunks(TASK_BATCH_SIZE) {
         let filter = doc! {
@@ -497,18 +471,98 @@ fn bool_rank(value: bool) -> i32 {
     }
 }
 
-fn build_task_ops_row(
-    execution: &ExecutionDoc,
-    task_record: &TaskRecord,
-    latest_execution_id: i64,
-) -> TaskOpsRow {
+fn load_task_ops_page(
+    executions: &Collection<Document>,
+    tasks: &Collection<Document>,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    page: usize,
+    page_size: usize,
+    status_filter: Option<&str>,
+    channel_filter: Option<&str>,
+    search_query: Option<&str>,
+) -> Result<TaskOpsPageSlice, String> {
+    let start_index = page.saturating_sub(1).saturating_mul(page_size);
+    let desired_count = start_index + page_size + 1;
+    let mut scanned_docs = 0usize;
+    let mut exhausted = false;
+    let mut latest_by_task_id: HashMap<String, usize> = HashMap::new();
+    let mut latest_executions: Vec<ExecutionDoc> = Vec::new();
+    let mut task_records: HashMap<String, TaskRecord> = HashMap::new();
+    let mut filtered_rows: Vec<TaskOpsRow> = Vec::new();
+
+    while filtered_rows.len() < desired_count
+        && scanned_docs < MAX_EXECUTION_SCAN_DOCS
+        && !exhausted
+    {
+        let chunk = load_execution_docs_chunk(
+            executions,
+            start,
+            end,
+            status_filter,
+            scanned_docs,
+            EXECUTION_SCAN_CHUNK_SIZE,
+        )?;
+        if chunk.is_empty() {
+            exhausted = true;
+            break;
+        }
+        scanned_docs += chunk.len();
+        if chunk.len() < EXECUTION_SCAN_CHUNK_SIZE as usize {
+            exhausted = true;
+        }
+
+        let mut new_task_ids = Vec::new();
+        for row in chunk {
+            if let Some(existing_index) = latest_by_task_id.get(&row.task_id).copied() {
+                let existing = &latest_executions[existing_index];
+                if row.execution_id == existing.execution_id
+                    && row.started_at == existing.started_at
+                    && prefer_execution_row(&row, existing)
+                {
+                    latest_executions[existing_index] = row;
+                }
+                continue;
+            }
+
+            latest_by_task_id.insert(row.task_id.clone(), latest_executions.len());
+            new_task_ids.push(row.task_id.clone());
+            latest_executions.push(row);
+        }
+
+        if !new_task_ids.is_empty() {
+            let fresh_records = load_task_records_for_ids(tasks, &new_task_ids)?;
+            task_records.extend(fresh_records);
+        }
+
+        filtered_rows = build_filtered_rows(
+            &latest_executions,
+            &task_records,
+            channel_filter,
+            search_query,
+        );
+    }
+
+    let has_next_page = filtered_rows.len() > start_index + page_size || !exhausted;
+    let rows = filtered_rows
+        .into_iter()
+        .skip(start_index)
+        .take(page_size)
+        .collect();
+
+    Ok(TaskOpsPageSlice {
+        rows,
+        has_next_page,
+    })
+}
+
+fn build_task_ops_row(execution: &ExecutionDoc, task_record: &TaskRecord) -> TaskOpsRow {
     let request_summary = derive_request_summary(&task_record.doc);
     let sender_summary = derive_task_sender_summary(&task_record.doc);
     let (schedule_type, next_run, run_at) = schedule_fields(&task_record.task);
     let (runner, model_name, workspace_dir) = run_task_fields(&task_record.task);
     let trace = workspace_dir
         .as_ref()
-        .filter(|_| execution.execution_id == latest_execution_id)
         .and_then(|path| load_trace_snapshot_for_execution(path.as_path(), execution));
     let duration_seconds = execution.finished_at.map(|finished_at| {
         finished_at
@@ -629,64 +683,114 @@ fn row_matches_filters(
     true
 }
 
-fn build_summary(rows: &[TaskOpsRow]) -> TaskOpsSummary {
-    let total_runs = rows.len();
-    let running_now = rows.iter().filter(|row| row.status == "running").count();
-    let long_running = rows.iter().filter(|row| row.is_running_long).count();
-    let successful_runs = rows
-        .iter()
-        .filter(|row| row.status == "success" || row.status == "superseded")
-        .count();
-    let failed_runs = rows
-        .iter()
-        .filter(|row| {
-            row.status == "failed" || row.status == "cancelled" || row.status == "expired"
-        })
-        .count();
+fn build_filtered_rows(
+    executions: &[ExecutionDoc],
+    task_records: &HashMap<String, TaskRecord>,
+    channel_filter: Option<&str>,
+    search_query: Option<&str>,
+) -> Vec<TaskOpsRow> {
+    let mut rows = Vec::new();
+    for execution in executions {
+        let Some(task_record) = task_records.get(&execution.task_id) else {
+            continue;
+        };
+        if !matches!(task_record.task.kind, TaskKind::RunTask(_)) {
+            continue;
+        }
+
+        let row = build_task_ops_row(execution, task_record);
+        if !row_matches_filters(&row, None, channel_filter, search_query) {
+            continue;
+        }
+        rows.push(row);
+    }
+    rows
+}
+
+fn load_summary(
+    executions: &Collection<Document>,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    status_filter: Option<&str>,
+) -> Result<TaskOpsSummary, String> {
+    let base_filter = date_range_filter(start, end);
+    let total_runs = count_execution_docs(
+        executions,
+        with_optional_status(base_filter.clone(), status_filter),
+    )?;
+    let running_now = count_execution_docs(executions, doc! { "status": "running" })?;
+    let long_running = count_execution_docs(
+        executions,
+        doc! {
+            "status": "running",
+            "started_at": { "$lt": BsonDateTime::from_chrono(Utc::now() - chrono::Duration::seconds(LONG_RUNNING_WARNING_SECS)) }
+        },
+    )?;
+    let successful_runs = count_execution_docs(
+        executions,
+        merge_filters(
+            &base_filter,
+            &doc! { "status": { "$in": ["success", "superseded"] } },
+        ),
+    )?;
+    let failed_runs = count_execution_docs(
+        executions,
+        merge_filters(
+            &base_filter,
+            &doc! { "status": { "$in": ["failed", "cancelled", "expired"] } },
+        ),
+    )?;
     let success_rate = if successful_runs + failed_runs == 0 {
         None
     } else {
         Some(successful_runs as f64 / (successful_runs + failed_runs) as f64)
     };
 
-    let mut durations: Vec<i64> = rows
-        .iter()
-        .filter_map(|row| row.duration_seconds)
-        .filter(|value| *value >= 0)
-        .collect();
-    durations.sort_unstable();
-    let median_duration_seconds = median(&durations);
-    let p95_duration_seconds = percentile(&durations, 95);
-
-    TaskOpsSummary {
+    Ok(TaskOpsSummary {
         total_runs,
         running_now,
         long_running,
         successful_runs,
         failed_runs,
         success_rate,
-        median_duration_seconds,
-        p95_duration_seconds,
+        median_duration_seconds: None,
+        p95_duration_seconds: None,
+    })
+}
+
+fn date_range_filter(start: DateTime<Utc>, end: DateTime<Utc>) -> Document {
+    doc! {
+        "started_at": {
+            "$gte": BsonDateTime::from_chrono(start),
+            "$lte": BsonDateTime::from_chrono(end),
+        }
     }
 }
 
-fn percentile(sorted_values: &[i64], percentile: usize) -> Option<i64> {
-    if sorted_values.is_empty() {
-        return None;
+fn with_optional_status(mut filter: Document, status_filter: Option<&str>) -> Document {
+    if let Some(status_filter) = status_filter {
+        filter.insert("status", status_filter);
     }
-    let clamped = percentile.clamp(0, 100);
-    let span = sorted_values.len().saturating_sub(1) as f64;
-    let index = ((span * clamped as f64) / 100.0).ceil() as usize;
-    sorted_values.get(index).copied()
+    filter
 }
 
-fn median(sorted_values: &[i64]) -> Option<i64> {
-    if sorted_values.is_empty() {
-        return None;
+fn merge_filters(base: &Document, extra: &Document) -> Document {
+    let mut merged = base.clone();
+    for (key, value) in extra {
+        merged.insert(key.to_string(), value.clone());
     }
-    sorted_values
-        .get((sorted_values.len().saturating_sub(1)) / 2)
-        .copied()
+    merged
+}
+
+fn count_execution_docs(
+    collection: &Collection<Document>,
+    filter: Document,
+) -> Result<usize, String> {
+    retry_mongo_read("task_ops.execution_count", || {
+        collection.count_documents(filter.clone(), None)
+    })
+    .map(|count| count as usize)
+    .map_err(|err| format!("failed to count task executions: {err}"))
 }
 
 fn default_title(task: &ScheduledTask, channel: &str) -> String {
@@ -769,8 +873,9 @@ fn normalize_filter(value: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
+    use std::collections::HashMap;
 
-    use super::{build_summary, dedupe_execution_docs, ExecutionDoc, TaskOpsRow};
+    use super::{build_filtered_rows, dedupe_latest_task_executions, ExecutionDoc, TaskOpsRow};
 
     fn sample_execution(
         task_id: &str,
@@ -792,19 +897,19 @@ mod tests {
     }
 
     #[test]
-    fn dedupe_execution_docs_prefers_account_scope() {
+    fn dedupe_latest_execution_prefers_account_scope() {
         let started_at = Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 0).unwrap();
         let rows = vec![
             sample_execution("task-1", 100, "user", started_at, "success"),
             sample_execution("task-1", 100, "account", started_at, "success"),
         ];
-        let deduped = dedupe_execution_docs(rows);
+        let deduped = dedupe_latest_task_executions(rows);
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].owner_scope_kind, "account");
     }
 
     #[test]
-    fn build_summary_computes_success_rate_and_percentiles() {
+    fn build_filtered_rows_is_empty_without_task_records() {
         let rows = vec![
             TaskOpsRow {
                 task_id: "a".to_string(),
@@ -878,12 +983,30 @@ mod tests {
             },
         ];
 
-        let summary = build_summary(&rows);
-        assert_eq!(summary.total_runs, 2);
-        assert_eq!(summary.successful_runs, 1);
-        assert_eq!(summary.failed_runs, 1);
-        assert_eq!(summary.success_rate, Some(0.5));
-        assert_eq!(summary.median_duration_seconds, Some(300));
-        assert_eq!(summary.p95_duration_seconds, Some(600));
+        let filtered = build_filtered_rows(&[], &HashMap::new(), None, None);
+        assert!(filtered.is_empty());
+        let durations: Vec<i64> = rows.iter().filter_map(|row| row.duration_seconds).collect();
+        assert_eq!(durations, vec![300, 600]);
+    }
+
+    #[test]
+    fn dedupe_latest_task_executions_prefers_account_scope_for_same_latest_execution() {
+        let started_at = Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 0).unwrap();
+        let rows = vec![
+            sample_execution("task-1", 100, "user", started_at, "success"),
+            sample_execution("task-1", 100, "account", started_at, "success"),
+            sample_execution(
+                "task-1",
+                99,
+                "account",
+                started_at - chrono::Duration::minutes(10),
+                "failed",
+            ),
+        ];
+
+        let deduped = dedupe_latest_task_executions(rows);
+        assert_eq!(deduped.len(), 1);
+        assert_eq!(deduped[0].owner_scope_kind, "account");
+        assert_eq!(deduped[0].execution_id, 100);
     }
 }

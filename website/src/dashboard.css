@@ -17,6 +17,10 @@
   color: var(--dash-text);
 }
 
+body.dw-shared-nav .dash-shell {
+  padding-top: 108px;
+}
+
 .dash-panel {
   max-width: 1400px;
   margin: 0 auto;
@@ -666,6 +670,10 @@
 @media (max-width: 780px) {
   .dash-shell {
     padding: 12px;
+  }
+
+  body.dw-shared-nav .dash-shell {
+    padding-top: 92px;
   }
 
   .dash-panel {
