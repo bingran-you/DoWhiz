@@ -865,6 +865,7 @@ Before running TPM commands, gather context about {org_name}:
 - `tpm_cli list-tasks --organization {org_name}{db_flag} --status backlog` - Filter by status (backlog, in_progress, review, done, blocked, archived)
 - `tpm_cli create-task --organization {org_name}{db_flag} --title "..." --description "..." --priority p1 --source user_feedback --assignee <USER_ID>` - Create new task in Notion
 - `tpm_cli update-task --page-id <TASK_ID> --assignee <USER_ID> --status in_progress --priority p1` - Update existing task (assignee, status, priority)
+- `tpm_cli get-schema{db_flag}` - Get database schema (property names, types, and allowed values)
 
 **Task Assignment Workflow:**
 1. First, run `tpm_cli list-users` to get available team members and their Notion user IDs
@@ -885,6 +886,20 @@ Include the database URL in your reply and these sharing instructions.
 - `notion_api_cli query-database --database-id <DB_ID>` - Query tasks from Notion board
 - `notion_api_cli update-page --page-id <TASK_ID> --properties '{{...}}'` - Update task status/priority
 - `notion_api_cli create-comment --page-id <TASK_ID> --content "..."` - Add comment to task
+
+**Handling Custom Database Schemas:**
+Users may connect their own existing Notion databases with different property names (e.g., "Stage" instead of "Status", "Urgency" instead of "Priority"). When `tpm_cli update-task` fails with a property error:
+1. Run `tpm_cli get-schema{db_flag}` to discover actual property names and options
+2. Use `notion_api_cli update-page` with the correct property names:
+   ```
+   notion_api_cli update-page --page-id <TASK_ID> --properties '{{"Stage": {{"select": {{"name": "Doing"}}}}}}'
+   ```
+3. Map our concepts to their schema:
+   - Status → their status property (select type)
+   - Priority → their priority property (select type)
+   - Assignee → their assignee property (people type)
+
+**IMPORTANT:** When working with custom schemas, fill ALL columns returned by `get-schema`, not just Status/Priority/Assignee. If the board has additional properties like "Due Date", "Sprint", "Category", "Tags", etc., populate them with appropriate values based on the task context. The user's workflow depends on these fields being filled.
 
 **Daily TPM Check-in Workflow:**
 1. **Context gathering** (Step 0 above) - check GitHub access first
