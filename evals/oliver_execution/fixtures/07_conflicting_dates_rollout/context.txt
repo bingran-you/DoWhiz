@@ -1,0 +1,9 @@
+L01 | Slack thread: Chrome extension rollout
+L02 | Tessa (PM) - May 1: Original plan was GA on May 20 after beta closes.
+L03 | Ron (Eng) - May 2: We found a permissions regression in Chrome 137. I do not think May 20 survives if Google does not respond this week.
+L04 | Tessa (PM) - May 3: Leadership still wants customer comms drafted for May 20, but that is now a placeholder not a promise.
+L05 | Mia (Marketing) - May 3: I can prep comms either way. I need five days once the date is real.
+L06 | Ron (Eng) - May 4: I opened the Chrome review ticket. No ETA from Google yet.
+L07 | Notes
+L08 | - Possible window: week of May 20 or week of June 3 depending on Chrome review
+L09 | - Beta feedback summary still pending

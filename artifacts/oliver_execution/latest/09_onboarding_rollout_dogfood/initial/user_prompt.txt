@@ -1,0 +1,34 @@
+Current UTC timestamp: 2026-04-25T02:58:06.628706+00:00
+Supported source type for this request: pasted_thread
+Source label: Slack and Discord onboarding rollout
+
+Heuristic pre-read:
+- weak_signal=false
+- explicit_blocker_cues=0
+- decision_cues=1
+- owner_cues=5
+- date_cues=2
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Slack thread: Slack plus Discord onboarding rollout
+L02 | Rachel (PM) - Apr 10: Want onboarding v1 behind rollout flags next Thursday for dogfood. Broad enablement should wait until we know the tone feels right.
+L03 | Devin (Backend) - Apr 10: Slack public welcome plus installer DM path are implemented. Discord public welcome is ready; installer DM still depends on linked-account fallback.
+L04 | Maggie (Ops) - Apr 11: We need a list of target dogfood workspaces and one clear success metric before broad rollout.
+L05 | Rachel (PM) - Apr 11: Success metric is install-to-first-DM within 24 hours. I still need a decision on whether Discord ships with DM fallback off by default.
+L06 | Devin (Backend) - Apr 11: If DM fallback stays off, engineering is ready for dogfood. If it stays on, I need another day to harden identifier lookup.
+L07 | Notes
+L08 | - Dogfood target: Apr 17
+L09 | - Broad rollout not before dogfood review
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

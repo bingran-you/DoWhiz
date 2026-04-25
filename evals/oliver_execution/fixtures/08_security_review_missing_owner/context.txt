@@ -1,0 +1,9 @@
+L01 | Email thread: healthcare export launch
+L02 | Kim (PM) - Oct 7: Need the CSV export live for pilot clinics by Oct 28.
+L03 | Arjun (Backend) - Oct 7: API and download jobs are done in staging.
+L04 | Mei (Compliance) - Oct 8: Security review found PHI exposure risk in the emailed download link. We need a decision on whether links expire in 15 minutes or require portal login.
+L05 | Kim (PM) - Oct 8: That decision blocks launch. I assumed Security would name the approver.
+L06 | Ops - Oct 8: Clinic onboarding doc is ready once we know the final access flow.
+L07 | Notes
+L08 | - pilot clinics target Oct 28
+L09 | - security approver not named

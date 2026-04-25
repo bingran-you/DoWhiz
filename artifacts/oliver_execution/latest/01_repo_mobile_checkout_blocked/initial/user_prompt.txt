@@ -1,0 +1,42 @@
+Current UTC timestamp: 2026-04-25T02:53:25.644120+00:00
+Supported source type for this request: pasted_thread
+Source label: Q2 mobile checkout launch thread
+
+Heuristic pre-read:
+- weak_signal=false
+- explicit_blocker_cues=2
+- decision_cues=3
+- owner_cues=9
+- date_cues=3
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Slack thread: #launch-war-room
+L02 | Maya (PM) - Apr 16: We still want to launch the mobile checkout refresh before the partner webinar on June 14. Goal is to reduce drop-off and have the webinar point to the new flow.
+L03 | Jon (Eng) - Apr 16: Implementation is mostly done. Payments callback retries are still failing in staging after about 20 minutes, and that blocks QA from signing off.
+L04 | Priya (Design) - Apr 17: Final screenshots are ready once Product approves the fallback copy for the payment error state.
+L05 | Lena (Lifecycle) - Apr 17: Email plus in-app launch comms draft is 80 percent there. I need the final launch date and approved screenshots.
+L06 | Maya (PM) - Apr 18: We need a go or no-go review by June 11. Owners should come with status, blockers, and what they need from others.
+L07 | Jon (Eng) - Apr 19: I can own the callback fix, but I need Infra to confirm whether the retry queue config can change before code freeze.
+L08 | Sam (Infra) - Apr 19: I have not checked the retry queue setting yet. I should know by Tuesday.
+L09 | QA note - Apr 20: Regression pass is blocked until callback retries are stable in staging.
+L10 | Product comment - Apr 20: Fallback copy still needs approval from legal because of the refund language.
+L11 | Launch checklist excerpt
+L12 | - Engineering fix callback retries in staging
+L13 | - QA regression pass
+L14 | - Final screenshots approved
+L15 | - Lifecycle email plus in-app message scheduled
+L16 | - Webinar deck updated
+L17 | - Go or no-go review on June 11
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

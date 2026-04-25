@@ -1,0 +1,11 @@
+L01 | Email thread: retail partner API launch
+L02 | Dana (PM) - Aug 4: Target is the week of Aug 25 for the first live retailer. We need the partner sandbox certification, internal monitoring, and the Support runbook.
+L03 | Victor (Eng) - Aug 4: Internal API work is done except rate-limit tuning after the partner load test.
+L04 | Priyanka (Partner Eng) - Aug 5: Retailer says they can run certification sometime next week but they have not confirmed a day.
+L05 | Zoe (Support) - Aug 5: Runbook draft exists. I still need the known failure codes from Engineering.
+L06 | Dana (PM) - Aug 6: If retailer certification slips past Aug 19, we probably miss launch week.
+L07 | Victor (Eng) - Aug 6: Monitoring dashboard is half done. I can finish after we know the certification date.
+L08 | Notes
+L09 | - Target week of Aug 25
+L10 | - External certification date not committed
+L11 | - Support runbook needs failure codes

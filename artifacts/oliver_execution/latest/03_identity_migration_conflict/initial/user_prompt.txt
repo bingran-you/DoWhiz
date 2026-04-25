@@ -1,0 +1,36 @@
+Current UTC timestamp: 2026-04-25T02:55:27.223091+00:00
+Supported source type for this request: pasted_thread
+Source label: Customer identity migration cutover
+
+Heuristic pre-read:
+- weak_signal=false
+- explicit_blocker_cues=3
+- decision_cues=1
+- owner_cues=7
+- date_cues=2
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Slack thread: customer identity migration cutover
+L02 | Omar (PM) - Sep 5: We still want cutover Monday night so Support can wake up on the new auth system Tuesday.
+L03 | Irene (Infra) - Sep 5: Backfill job finished for 98 percent of users. I still see about 11k records with missing org_id and will not know if that matters until tonight.
+L04 | Leo (Backend) - Sep 5: Login API passes smoke tests, but token revocation is not wired for legacy mobile clients.
+L05 | Support lead - Sep 6: We already have 14 internal test accounts that lost workspace access after migration rehearsal.
+L06 | Omar (PM) - Sep 6: I told leadership we are basically ready unless the missing org_id bucket grows.
+L07 | Irene (Infra) - Sep 6: The bucket is smaller now, but I still cannot explain the remaining failures.
+L08 | Security - Sep 6: We have not signed off on rollback timing. If we cut over, we need a tested revert path.
+L09 | Notes
+L10 | - Cutover target: Monday 10pm PT
+L11 | - Need support macro plus incident captain
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

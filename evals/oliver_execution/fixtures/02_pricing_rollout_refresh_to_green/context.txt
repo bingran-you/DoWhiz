@@ -1,0 +1,12 @@
+L01 | Email thread: Q3 pricing page rollout
+L02 | Nora (PM) - Jul 1: We want the pricing page refresh live by July 22 before the board preview on July 24. Goal is to improve self-serve conversion and align the new annual plan messaging.
+L03 | Eli (Eng) - Jul 1: New page implementation is done in staging. Remaining work is analytics QA for signup attribution and the final copy merge.
+L04 | Ava (Growth) - Jul 2: Launch email draft is ready once final screenshots land.
+L05 | Mina (Analytics) - Jul 2: Attribution events are firing in staging, but I still need one clean QA pass after copy is frozen.
+L06 | Nora (PM) - Jul 3: No blocker yet, but we need final copy approval by Friday and analytics QA closed by July 18.
+L07 | Jess (Brand) - Jul 3: Legal has one comment on the annual-plan disclaimer. I expect a final answer tomorrow.
+L08 | Checklist
+L09 | - final copy approved
+L10 | - screenshots exported
+L11 | - analytics QA pass complete
+L12 | - launch email scheduled

@@ -1,0 +1,34 @@
+Current UTC timestamp: 2026-04-25T02:56:47.123776+00:00
+Supported source type for this request: pasted_thread
+Source label: Chrome extension rollout
+
+Heuristic pre-read:
+- weak_signal=false
+- explicit_blocker_cues=1
+- decision_cues=0
+- owner_cues=5
+- date_cues=4
+
+Previous launch execution plan summary:
+none
+
+Primary launch context:
+L01 | Slack thread: Chrome extension rollout
+L02 | Tessa (PM) - May 1: Original plan was GA on May 20 after beta closes.
+L03 | Ron (Eng) - May 2: We found a permissions regression in Chrome 137. I do not think May 20 survives if Google does not respond this week.
+L04 | Tessa (PM) - May 3: Leadership still wants customer comms drafted for May 20, but that is now a placeholder not a promise.
+L05 | Mia (Marketing) - May 3: I can prep comms either way. I need five days once the date is real.
+L06 | Ron (Eng) - May 4: I opened the Chrome review ticket. No ETA from Google yet.
+L07 | Notes
+L08 | - Possible window: week of May 20 or week of June 3 depending on Chrome review
+L09 | - Beta feedback summary still pending
+
+Latest incremental update:
+None
+
+Instructions:
+1. Extract the narrowest believable launch execution record from the provided context.
+2. If a prior plan is provided, refresh it using the latest context and preserve stable titles when the same item still exists.
+3. Treat missing owners, missing dates, stale updates, unresolved blockers, and unresolved decisions as first-class output signals.
+4. Keep evidence visible and specific.
+5. If the thread is incomplete, brainstorming, or not truly execution-critical yet, prefer sparse arrays and explicit uncertainty over elaborate structure.

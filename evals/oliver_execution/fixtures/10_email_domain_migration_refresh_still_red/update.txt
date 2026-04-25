@@ -1,0 +1,3 @@
+U01 | Mark (IT) - Nov 8: US domains passed. EU vendor says they cannot finish validation before Nov 18.
+U02 | Gina (Infra) - Nov 8: If EU stays late we can cut over US only, but that breaks the single-announcement plan.
+U03 | Paul (PM) - Nov 8: Leadership asked whether phased cutover is acceptable. No decision yet.
