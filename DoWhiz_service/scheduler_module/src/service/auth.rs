@@ -1742,6 +1742,96 @@ pub async fn get_organization_member_count(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrganizationDatabaseRequest {
+    pub database_id: String,
+}
+
+/// PUT /auth/organization/:name/database - Update organization's Notion database ID
+///
+/// Allows connecting an existing Notion database to an organization for TPM workflows.
+/// The user must be a member of the organization to update its database.
+pub async fn update_organization_database(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+    Json(payload): Json<UpdateOrganizationDatabaseRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    // Verify user belongs to an organization
+    let Some(account_org_id) = account.organization_id else {
+        return json_error_response(
+            StatusCode::BAD_REQUEST,
+            "You must be a member of an organization to update its database",
+        );
+    };
+
+    // Fetch the organization to verify it exists and user belongs to it
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    // Verify user belongs to this organization
+    if account_org_id != org.id {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "You are not a member of this organization",
+        );
+    }
+
+    // Update the organization's notion_database_id
+    let store = state.account_store.clone();
+    let database_id = payload.database_id.clone();
+    let update_result =
+        task::spawn_blocking(move || store.update_organization_notion_database_id(&org_name, &database_id))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
+
+    match update_result {
+        Ok(Ok(updated_org)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "organization_name": updated_org.name,
+                "notion_database_id": updated_org.notion_database_id,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to update organization database: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
 /// POST /api/tpm/setup-cron - Set up TPM cron job for an organization
 ///
 /// Called when the first member joins an organization. Triggers `tpm_cli setup-tpm-cron`
@@ -7160,6 +7250,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/auth/organization/:name/member-count",
             get(get_organization_member_count),
+        )
+        .route(
+            "/auth/organization/:name/database",
+            put(update_organization_database),
         )
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))
