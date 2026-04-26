@@ -12,24 +12,17 @@ import time
 from pathlib import Path
 
 
-REQUIRED_HEADERS = [
-    "Request framing",
-    "Verified facts",
-    "Derived metrics",
-    "Inference / judgment",
-    "Scenario analysis",
-    "Timing / execution",
-    "Final recommendation",
-    "Sources",
-    "Disclaimer",
+REQUIRED_SECTIONS = [
+    "Decision Card",
+    "Dual-Horizon Framing",
+    "Verified Facts",
+    "Derived Metrics",
+    "Scenarios",
+    "Triggers",
+    "Judgment",
 ]
-
-RATINGS = ("Buy", "Wait", "Sell")
-ENTRY_APPROACHES = ("Buy now", "Starter only", "Wait", "Avoid for now")
-CONFIDENCE_LEVELS = ("Low", "Medium", "High")
-
 EVAL_SLUGS = {
-    1: "generic-summary-failure-mode",
+    1: "default-dual-horizon",
     2: "horizon-awareness",
     3: "wrong-premise-correction",
     4: "uncertainty-handling",
@@ -58,10 +51,6 @@ def load_evals() -> dict[int, dict]:
     return {item["id"]: item for item in payload["evals"]}
 
 
-def normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
-
-
 def section_map(text: str) -> dict[str, str]:
     matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", text))
     sections: dict[str, str] = {}
@@ -73,44 +62,26 @@ def section_map(text: str) -> dict[str, str]:
     return sections
 
 
-def extract_field(section_text: str, label: str) -> str | None:
-    pattern = re.compile(
-        rf"(?im)^\s*-\s*`?{re.escape(label)}`?\s*:\s*(.+?)\s*$"
-    )
-    match = pattern.search(section_text)
-    return match.group(1).strip() if match else None
+def get_section_by_prefix(sections: dict[str, str], prefix: str) -> str:
+    for header, content in sections.items():
+        if header.lower().startswith(prefix.lower()):
+            return content
+    return ""
 
 
-def clean_field_value(value: str | None) -> str | None:
-    if value is None:
-        return None
-    cleaned = value.strip()
-    cleaned = re.sub(r"^`+", "", cleaned)
-    cleaned = re.sub(r"`+$", "", cleaned)
-    return cleaned.strip()
+def count_markdown_links(text: str) -> int:
+    return len(re.findall(r"\]\(https?://", text))
 
 
-def pick_choice(value: str | None, choices: tuple[str, ...]) -> str | None:
-    cleaned = clean_field_value(value)
-    if not cleaned:
-        return None
-    for choice in choices:
-        if cleaned.lower().startswith(choice.lower()):
-            return choice
-    return None
-
-
-def has_formula(metrics_section: str) -> bool:
-    lines = [line.strip() for line in metrics_section.splitlines() if line.strip()]
-    for line in lines:
-        if "=" in line or "not reliably derivable" in line.lower():
-            return True
-    return False
-
-
-def contains_any(text: str, phrases: tuple[str, ...]) -> bool:
+def contains_in_order(text: str, markers: list[str]) -> bool:
     lower = text.lower()
-    return any(phrase.lower() in lower for phrase in phrases)
+    start = 0
+    for marker in markers:
+        idx = lower.find(marker.lower(), start)
+        if idx == -1:
+            return False
+        start = idx + len(marker)
+    return True
 
 
 def make_expectation(text: str, passed: bool, evidence: str) -> dict:
@@ -121,301 +92,268 @@ def make_expectation(text: str, passed: bool, evidence: str) -> dict:
     }
 
 
-def grade_generic(output_text: str) -> tuple[list[dict], dict[str, str | None]]:
+def grade_generic(output_text: str) -> tuple[list[dict], dict[str, str | int | None]]:
     sections = section_map(output_text)
     expectations: list[dict] = []
 
-    headers_present = all(header in sections for header in REQUIRED_HEADERS)
-    missing_headers = [header for header in REQUIRED_HEADERS if header not in sections]
+    missing_sections = []
+    for header in REQUIRED_SECTIONS:
+        if not get_section_by_prefix(sections, header):
+            missing_sections.append(header)
+
     expectations.append(
         make_expectation(
-            "The answer uses the required section structure with Request framing, Verified facts, Derived metrics, Inference / judgment, Scenario analysis, Timing / execution, Final recommendation, Sources, and Disclaimer.",
-            headers_present,
-            "All required headers present."
-            if headers_present
-            else f"Missing headers: {', '.join(missing_headers)}.",
+            "The answer uses the required memo structure with Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment.",
+            not missing_sections,
+            "All required sections are present."
+            if not missing_sections
+            else f"Missing sections: {', '.join(missing_sections)}.",
         )
     )
 
-    request_section = sections.get("Request framing", "")
-    derived_section = sections.get("Derived metrics", "")
-    scenario_section = sections.get("Scenario analysis", "")
-    timing_section = sections.get("Timing / execution", "")
-    final_section = sections.get("Final recommendation", "")
-    sources_section = sections.get("Sources", "")
-    disclaimer_section = sections.get("Disclaimer", "")
+    decision_card = get_section_by_prefix(sections, "Decision Card")
+    dual_horizon = get_section_by_prefix(sections, "Dual-Horizon Framing")
+    verified_facts = get_section_by_prefix(sections, "Verified Facts")
+    derived_metrics = get_section_by_prefix(sections, "Derived Metrics")
+    scenarios = get_section_by_prefix(sections, "Scenarios")
+    triggers = get_section_by_prefix(sections, "Triggers")
+    judgment = get_section_by_prefix(sections, "Judgment")
 
-    rating_value = clean_field_value(extract_field(final_section, "Rating"))
-    rating_choice = pick_choice(rating_value, RATINGS)
-    entry_value = clean_field_value(extract_field(final_section, "Entry approach"))
-    entry_choice = pick_choice(entry_value, ENTRY_APPROACHES)
-    confidence_value = clean_field_value(extract_field(final_section, "Confidence"))
-    confidence_choice = pick_choice(confidence_value, CONFIDENCE_LEVELS)
-    current_action = clean_field_value(extract_field(timing_section, "Current action"))
-    current_action_choice = pick_choice(current_action, ENTRY_APPROACHES)
-    request_horizon = clean_field_value(extract_field(request_section, "Horizon"))
-    final_horizon = clean_field_value(extract_field(final_section, "Horizon"))
-
-    final_fields = {
-        "Rating": rating_value,
-        "Horizon": final_horizon,
-        "Confidence": confidence_value,
-        "Entry approach": entry_value,
-        "Add criteria": clean_field_value(extract_field(final_section, "Add criteria")),
-        "Invalidation criteria": clean_field_value(extract_field(final_section, "Invalidation criteria")),
-        "Biggest near-term risk": clean_field_value(extract_field(final_section, "Biggest near-term risk")),
-        "Biggest long-term strength": clean_field_value(extract_field(final_section, "Biggest long-term strength")),
-    }
-    missing_final_fields = [name for name, value in final_fields.items() if not value]
+    decision_card_ok = all(
+        marker in decision_card
+        for marker in [
+            "| Audience | Action | Confidence |",
+            "| New money |",
+            "| Existing holder |",
+            "**One-line rationale:**",
+        ]
+    )
     expectations.append(
         make_expectation(
-            "The answer includes a final recommendation block with Rating, Horizon, Confidence, Entry approach, Add criteria, Invalidation criteria, Biggest near-term risk, and Biggest long-term strength.",
-            not missing_final_fields,
-            "All final recommendation fields are present."
-            if not missing_final_fields
-            else f"Missing final recommendation fields: {', '.join(missing_final_fields)}.",
+            "The answer includes a Decision Card with separate new-money and existing-holder rows plus a one-line rationale.",
+            decision_card_ok,
+            "Decision Card table and rationale are present."
+            if decision_card_ok
+            else "Decision Card is missing the audience table or the one-line rationale.",
         )
     )
 
-    rating_and_entry_ok = (
-        rating_choice is not None
-        and entry_choice is not None
-        and current_action_choice is not None
-        and current_action_choice == entry_choice
+    dual_horizon_ok = all(
+        marker in dual_horizon
+        for marker in [
+            "### Near-Term Timing View",
+            "### Long-Term Ownership View",
+        ]
     )
     expectations.append(
         make_expectation(
-            "The answer includes exactly one final rating from Buy, Wait, or Sell and one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now.",
-            rating_and_entry_ok,
-            (
-                f"Rating={rating_choice}, entry approach={entry_choice}, current action={current_action_choice}."
-                if rating_and_entry_ok
-                else f"Could not validate a consistent rating and action. Rating={rating_value!r}, entry={entry_value!r}, current action={current_action!r}."
-            ),
+            "The answer includes both the near-term timing view and the long-term ownership view.",
+            dual_horizon_ok,
+            "Both dual-horizon sub-sections are present."
+            if dual_horizon_ok
+            else "Dual-Horizon Framing is missing one of the required sub-sections.",
         )
     )
 
-    fact_metric_inference_ok = (
-        "Verified facts" in sections
-        and "Derived metrics" in sections
-        and "Inference / judgment" in sections
-        and has_formula(derived_section)
-    )
+    citations_ok = count_markdown_links(output_text) >= 3 and "](http" in verified_facts
     expectations.append(
         make_expectation(
-            "The answer separates verified facts, derived metrics, and inference rather than collapsing them into one blended summary.",
-            fact_metric_inference_ok,
-            "Separate sections are present and the derived metrics section includes explicit arithmetic or an explicit non-derivable statement."
-            if fact_metric_inference_ok
-            else "The answer is missing one of the separation sections or the derived metrics section lacks explicit formulas.",
+            "The answer cites at least three clickable sources and keeps citations in the Verified Facts block.",
+            citations_ok,
+            "At least three markdown links are present and Verified Facts includes citations."
+            if citations_ok
+            else "The memo has fewer than three markdown links or the Verified Facts section lacks clickable citations.",
         )
     )
 
-    scenario_ok = all(label.lower() in scenario_section.lower() for label in ("Bull case", "Base case", "Bear case"))
+    derived_metrics_ok = (
+        "| Metric | Value | Formula / Inputs |" in derived_metrics
+        and (
+            "/" in derived_metrics
+            or "=" in derived_metrics
+            or "not reliably derivable" in derived_metrics.lower()
+        )
+    )
     expectations.append(
         make_expectation(
-            "The answer includes Bull case, Base case, and Bear case.",
-            scenario_ok,
-            "Bull, Base, and Bear case lines are present."
-            if scenario_ok
-            else "The scenario analysis section does not include all of Bull case, Base case, and Bear case.",
+            "The answer includes a Derived Metrics table with formulas or an explicit non-derivable note.",
+            derived_metrics_ok,
+            "Derived Metrics includes formula-bearing rows."
+            if derived_metrics_ok
+            else "Derived Metrics is missing the standard table header or formula-like content.",
         )
     )
 
-    add_criteria = clean_field_value(extract_field(timing_section, "Add criteria")) or clean_field_value(extract_field(final_section, "Add criteria"))
-    invalidation_criteria = clean_field_value(extract_field(timing_section, "Invalidation criteria")) or clean_field_value(extract_field(final_section, "Invalidation criteria"))
-    timing_logic_ok = (
-        current_action_choice is not None
-        and clean_field_value(extract_field(timing_section, "Why now")) is not None
-        and add_criteria is not None
-        and invalidation_criteria is not None
+    scenarios_ok = all(
+        marker in scenarios
+        for marker in [
+            "### Bull Case",
+            "### Base Case",
+            "### Bear Case",
+        ]
     )
     expectations.append(
         make_expectation(
-            "The answer includes explicit add criteria and invalidation criteria instead of only vague language.",
-            timing_logic_ok,
-            "Timing / execution includes current action, why now, add criteria, and invalidation criteria."
-            if timing_logic_ok
-            else "Timing / execution is missing the direct current action, why now, add criteria, or invalidation criteria.",
+            "The answer includes Bull Case, Base Case, and Bear Case.",
+            scenarios_ok,
+            "All scenario sub-sections are present."
+            if scenarios_ok
+            else "The Scenarios section is missing one of Bull/Base/Bear.",
         )
     )
 
-    sources_ok = len([line for line in sources_section.splitlines() if line.strip().startswith("-")]) >= 1
+    triggers_ok = (
+        "Upgrade to Buy" in triggers
+        and "Add" in triggers
+        and ("Trim/Exit" in triggers or "Trim" in triggers or "Exit" in triggers)
+    )
     expectations.append(
         make_expectation(
-            "The answer names the public sources behind the main claims.",
-            sources_ok,
-            "Sources section lists public sources."
-            if sources_ok
-            else "Sources section is missing or empty.",
+            "The answer includes quantified trigger conditions for upgrade/add plus trim or exit.",
+            triggers_ok,
+            "Triggers section contains upgrade/add and trim/exit markers."
+            if triggers_ok
+            else "Triggers section is missing upgrade/add or trim/exit conditions.",
         )
     )
 
-    disclaimer_ok = "public-information-based research only" in disclaimer_section.lower()
+    judgment_ok = "confidence" in judgment.lower()
     expectations.append(
         make_expectation(
-            "The answer includes the research-only disclaimer.",
-            disclaimer_ok,
-            "Disclaimer section contains the research-only disclaimer."
-            if disclaimer_ok
-            else "Disclaimer section is missing the required disclaimer text.",
+            "The Judgment section states confidence explicitly.",
+            judgment_ok,
+            "Judgment names confidence."
+            if judgment_ok
+            else "Judgment does not state confidence explicitly.",
+        )
+    )
+
+    summary_first_ok = contains_in_order(
+        output_text,
+        [
+            "## Decision Card",
+            "## Dual-Horizon Framing",
+            "## Verified Facts",
+            "## Derived Metrics",
+            "## Scenarios",
+            "## Triggers",
+            "## Judgment",
+        ],
+    )
+    expectations.append(
+        make_expectation(
+            "The memo keeps the scan-first section order from the skill template.",
+            summary_first_ok,
+            "Section order matches the template."
+            if summary_first_ok
+            else "Section order does not follow the template.",
         )
     )
 
     context = {
-        "request_horizon": request_horizon,
-        "final_horizon": final_horizon,
-        "question_type": clean_field_value(extract_field(request_section, "Question type")),
-        "confidence_choice": confidence_choice,
-        "scenario_section": scenario_section,
-        "timing_section": timing_section,
         "output_text": output_text,
+        "judgment": judgment,
     }
 
     return expectations, context
 
 
-def grade_eval_specific(eval_id: int, output_text: str, context: dict[str, str | None]) -> list[dict]:
+def grade_eval_specific(eval_id: int, output_text: str, context: dict[str, str | int | None]) -> list[dict]:
     lower = output_text.lower()
     expectations: list[dict] = []
 
     if eval_id == 1:
-        inferred_horizon = contains_any(
-            " ".join(filter(None, [context.get("request_horizon"), context.get("final_horizon")])),
-            ("inferred",),
-        )
+        dual_horizon_ok = "### near-term timing view" in lower and "### long-term ownership view" in lower
         expectations.append(
             make_expectation(
-                "Because the prompt does not state a horizon, the answer marks the horizon as inferred.",
-                inferred_horizon,
-                f"Horizon fields: request={context.get('request_horizon')!r}, final={context.get('final_horizon')!r}."
-                if inferred_horizon
-                else f"Horizon fields do not show an inferred marker: request={context.get('request_horizon')!r}, final={context.get('final_horizon')!r}.",
+                "Because the prompt does not state a horizon, the answer still provides both near-term timing and long-term ownership views.",
+                dual_horizon_ok,
+                "Both horizon sections are present."
+                if dual_horizon_ok
+                else "The memo does not preserve both horizon views when the prompt leaves horizon unspecified.",
             )
         )
 
     if eval_id == 2:
-        horizon_text = " ".join(filter(None, [context.get("request_horizon"), context.get("final_horizon")]))
-        horizon_ok = contains_any(horizon_text, ("3-month", "3 month", "3 months", "medium-term"))
+        horizon_ok = any(
+            phrase in lower for phrase in ["3-month", "3 month", "3 months", "three-month"]
+        )
         expectations.append(
             make_expectation(
-                "The answer recognizes the stated 3-month holding period in the horizon framing rather than inferring a generic long-term horizon.",
+                "The answer recognizes the stated 3-month holding period in the memo itself.",
                 horizon_ok,
-                f"Horizon fields: request={context.get('request_horizon')!r}, final={context.get('final_horizon')!r}."
+                "The memo references the 3-month horizon."
                 if horizon_ok
-                else f"Horizon fields do not reflect the stated 3-month holding period: request={context.get('request_horizon')!r}, final={context.get('final_horizon')!r}.",
+                else "The memo does not explicitly reflect the stated 3-month holding period.",
             )
         )
 
-        question_type = context.get("question_type") or ""
-        question_type_ok = not question_type.lower().startswith("long-term accumulation")
-        expectations.append(
-            make_expectation(
-                "The answer classifies the question type as medium-term investment, short-term trade, or event-driven timing rather than long-term accumulation.",
-                question_type_ok and bool(question_type),
-                f"Question type: {question_type!r}."
-                if question_type_ok and question_type
-                else f"Question type falls back to an inappropriate long-term label: {question_type!r}.",
-            )
-        )
-
-        tactical_timing_ok = contains_any(
-            (context.get("timing_section") or "") + "\n" + output_text,
-            (
+        tactical_timing_ok = any(
+            phrase in lower
+            for phrase in [
                 "this week",
+                "next 1",
+                "next 2 quarters",
                 "next few",
-                "next several",
                 "entry this week",
-                "over the next",
-                "3-month",
-                "3 month",
-                "window is short",
-                "earnings and sentiment matter",
-                "earnings reaction window",
-            ),
+                "short window",
+            ]
         )
         expectations.append(
             make_expectation(
-                "The answer includes explicit timing or execution logic for this week instead of only a broad long-term accumulation answer.",
+                "The answer includes explicit tactical timing logic for the short holding window.",
                 tactical_timing_ok,
-                "The answer discusses the short tactical window or comparable near-term timing logic."
+                "The memo discusses the tactical window explicitly."
                 if tactical_timing_ok
-                else "The answer does not mention a short tactical window or comparable near-term timing logic.",
+                else "The memo does not explicitly discuss the short tactical window.",
             )
         )
 
     if eval_id == 3:
-        question_type = context.get("question_type") or ""
+        premise_corrected = (
+            "may 20, 2026" in lower
+            or "may 20 2026" in lower
+            or ("may 27" in lower and any(keyword in lower for keyword in ["estimated", "unconfirmed", "not confirmed"]))
+        )
         expectations.append(
             make_expectation(
-                "The answer classifies the question as event-driven timing.",
-                question_type.lower().startswith("event-driven timing"),
-                f"Question type: {question_type!r}."
-                if question_type.lower().startswith("event-driven timing")
-                else f"Question type does not classify the prompt as event-driven timing: {question_type!r}.",
-            )
-        )
-
-        correction_keywords = (
-            "estimated",
-            "estimate",
-            "not confirmed",
-            "unconfirmed",
-            "currently expected",
-            "calendar",
-            "consensus",
-            "according to",
-            "could not confirm",
-            "has not officially confirmed",
-            "scheduled for",
-        )
-        other_date_match = re.search(
-            r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b",
-            lower,
-        )
-        may_27_qualified = "may 27" in lower and contains_any(lower, correction_keywords)
-        alternate_date = other_date_match is not None and other_date_match.group(0) != "may 27"
-        premise_corrected = may_27_qualified or alternate_date or contains_any(lower, ("could not confirm", "unconfirmed"))
-        expectations.append(
-            make_expectation(
-                "The answer does not uncritically accept the user's May 27 earnings-date premise. It either corrects the date with sourced conflicting information or explicitly marks the date as estimated or unconfirmed.",
+                "The answer does not silently accept the user's May 27 earnings-date premise.",
                 premise_corrected,
-                "The output either qualifies May 27 as estimated or unconfirmed, or provides a different date."
+                "The memo either corrects the date or qualifies May 27."
                 if premise_corrected
-                else "The output does not clearly correct or qualify the user's May 27 earnings-date premise.",
+                else "The memo does not clearly correct or qualify the May 27 premise.",
             )
         )
 
-        pre_earnings_timing_ok = contains_any(
-            context.get("timing_section") or "",
-            ("earnings", "pre-earnings", "before earnings", "into earnings"),
-        )
+        earnings_timing_ok = "earnings" in lower and "near-term timing view" in lower
         expectations.append(
             make_expectation(
-                "The answer gives a direct pre-earnings timing view with one explicit entry approach from Buy now, Starter only, Wait, or Avoid for now.",
-                pre_earnings_timing_ok,
-                "Timing / execution explicitly addresses the pre-earnings setup."
-                if pre_earnings_timing_ok
-                else "Timing / execution does not clearly address the pre-earnings setup.",
+                "The answer gives a direct pre-earnings timing view.",
+                earnings_timing_ok,
+                "The memo ties its timing view to the earnings event."
+                if earnings_timing_ok
+                else "The memo does not clearly tie the timing view to the earnings event.",
             )
         )
 
     if eval_id == 4:
-        confidence_choice = context.get("confidence_choice") or ""
-        lowered_confidence = confidence_choice in {"Low", "Medium"}
+        lowered_confidence = any(
+            phrase in (context.get("judgment") or "").lower()
+            for phrase in ["low confidence", "medium confidence"]
+        )
         expectations.append(
             make_expectation(
                 "The answer does not use High confidence for this weaker or messier case.",
                 lowered_confidence,
-                f"Confidence: {confidence_choice!r}."
+                "Judgment uses Low or Medium confidence."
                 if lowered_confidence
-                else f"Confidence is too high for the messy-case eval: {confidence_choice!r}.",
+                else "Judgment does not clearly degrade confidence for the weaker case.",
             )
         )
 
-        explicit_uncertainty = contains_any(
-            lower,
-            (
+        explicit_uncertainty = any(
+            phrase in lower
+            for phrase in [
                 "uncertain",
                 "mixed",
                 "messy",
@@ -425,21 +363,18 @@ def grade_eval_specific(eval_id: int, output_text: str, context: dict[str, str |
                 "speculative",
                 "not reliably derivable",
                 "noisy",
-                "liquidity remains",
                 "funding risk",
                 "dilution",
-                "headline-driven",
-                "headline-sensitive",
                 "volatile",
-            ),
+            ]
         )
         expectations.append(
             make_expectation(
-                "The answer explicitly acknowledges uncertainty, mixed evidence, missing inputs, or metrics that are not reliably derivable instead of pretending certainty.",
+                "The answer explicitly acknowledges uncertainty, mixed evidence, or missing inputs.",
                 explicit_uncertainty,
-                "The output explicitly names uncertainty, mixed evidence, or missing inputs."
+                "The memo names uncertainty or missing inputs."
                 if explicit_uncertainty
-                else "The output does not explicitly acknowledge uncertainty, mixed evidence, or missing inputs.",
+                else "The memo does not explicitly acknowledge uncertainty or missing inputs.",
             )
         )
 
@@ -504,11 +439,9 @@ def run_eval_case(eval_case: dict, workspace_dir: Path, iteration: str, reasonin
 
     wrapped_prompt = (
         f"Read and follow this skill exactly before answering: {skill_dir() / 'SKILL.md'}. "
-        "Do not modify repository files. Return only the final investment memo. "
-        "Keep the research bounded: prefer one primary company or fund source, one reliable market-data source, and at most one additional public source if needed for timing or catalyst context. "
-        "If a primary source is blocked or stale, say so and move on instead of exhaustively searching for more sources. "
-        "Use the exact section headers and field names from the skill. Do not rename them or compress them into a custom short memo, even for tactical prompts. "
-        "Prioritize memo quality, explicit rating and timing, and auditable metric presentation over exhaustive source hunting.\n\n"
+        "Do not modify repository files. Return only the final markdown investment memo. "
+        "Keep the response in the exact one-page structure from the skill template, including the Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment sections. "
+        "Use clickable markdown links in Verified Facts and keep Derived Metrics formula-driven rather than source-dumped.\n\n"
         f"{notes_block}"
         f"User request:\n{eval_case['prompt']}\n"
     )
@@ -521,126 +454,81 @@ def run_eval_case(eval_case: dict, workspace_dir: Path, iteration: str, reasonin
     }
     metadata_path.write_text(json.dumps(metadata, indent=2))
 
-    start = time.time()
+    started_at = time.time()
     completed = run_codex(wrapped_prompt, output_path, transcript_path, reasoning_effort)
-    duration_seconds = time.time() - start
-
-    timing_payload = {
-        "return_code": completed.returncode,
-        "duration_ms": round(duration_seconds * 1000),
-        "total_duration_seconds": round(duration_seconds, 2),
-    }
-    timing_path.write_text(json.dumps(timing_payload, indent=2))
-
-    if completed.returncode == 0 and output_path.exists():
-        output_text = output_path.read_text()
-        grading = grade_output(eval_case["id"], output_text)
-    else:
-        failure_message = "Codex exec failed before producing output."
-        if transcript_path.exists():
-            failure_message = normalize(transcript_path.read_text())[:500] or failure_message
-        grading = {
-            "expectations": [
-                make_expectation(
-                    expectation,
-                    False,
-                    f"Execution failed: {failure_message}",
-                )
-                for expectation in eval_case["expectations"]
-            ],
-            "summary": {
-                "passed": 0,
-                "failed": len(eval_case["expectations"]),
-                "total": len(eval_case["expectations"]),
-                "pass_rate": 0.0,
+    duration_ms = int((time.time() - started_at) * 1000)
+    timing_path.write_text(
+        json.dumps(
+            {
+                "duration_ms": duration_ms,
+                "total_duration_seconds": round(duration_ms / 1000, 1),
             },
-        }
+            indent=2,
+        )
+    )
 
-    grading["timing"] = timing_payload
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"codex exec failed for eval {eval_case['id']} with code {completed.returncode}"
+        )
+
+    output_text = output_path.read_text()
+    grading = grade_output(eval_case["id"], output_text)
     grading_path.write_text(json.dumps(grading, indent=2))
 
     return {
         "eval_id": eval_case["id"],
         "eval_name": slug,
-        "return_code": completed.returncode,
-        "grading": grading["summary"],
+        "grading": grading,
         "output_path": str(output_path),
         "transcript_path": str(transcript_path),
     }
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--workspace-dir",
-        default=str(default_workspace_dir()),
-        help="Directory for regression artifacts",
-    )
-    parser.add_argument(
-        "--iteration",
-        default="iteration-1",
-        help="Iteration directory name under the workspace",
-    )
-    parser.add_argument(
-        "--eval-ids",
-        nargs="*",
-        type=int,
-        default=None,
-        help="Optional subset of eval ids to run",
-    )
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--eval-ids", nargs="*", type=int)
+    parser.add_argument("--workspace-dir", type=Path, default=default_workspace_dir())
+    parser.add_argument("--iteration", default="iteration-1")
     parser.add_argument(
         "--reasoning-effort",
         default="high",
-        choices=["low", "medium", "high"],
-        help="Reasoning effort passed to codex exec",
+        choices=["minimal", "low", "medium", "high"],
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
-    evals_by_id = load_evals()
-    eval_ids = args.eval_ids or sorted(evals_by_id)
-    workspace_dir = Path(args.workspace_dir)
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    evals = load_evals()
+    selected_ids = args.eval_ids or sorted(evals)
+    selected = [evals[eval_id] for eval_id in selected_ids]
 
-    results = []
-    for eval_id in eval_ids:
-        if eval_id not in evals_by_id:
-            print(f"Unknown eval id: {eval_id}", file=sys.stderr)
-            return 1
-        print(f"Running eval {eval_id}: {EVAL_SLUGS.get(eval_id, f'eval-{eval_id}')}", file=sys.stderr)
-        result = run_eval_case(
-            eval_case=evals_by_id[eval_id],
-            workspace_dir=workspace_dir,
-            iteration=args.iteration,
-            reasoning_effort=args.reasoning_effort,
-        )
-        print(
-            f"  return_code={result['return_code']} pass_rate={result['grading']['pass_rate']}",
-            file=sys.stderr,
-        )
-        results.append(result)
+    args.workspace_dir.mkdir(parents=True, exist_ok=True)
 
-    overall_passed = sum(item["grading"]["passed"] for item in results)
-    overall_total = sum(item["grading"]["total"] for item in results)
+    results = [
+        run_eval_case(eval_case, args.workspace_dir, args.iteration, args.reasoning_effort)
+        for eval_case in selected
+    ]
+
     summary = {
-        "iteration": args.iteration,
-        "workspace_dir": str(workspace_dir),
-        "results": results,
-        "overall": {
-            "passed": overall_passed,
-            "failed": overall_total - overall_passed,
-            "total": overall_total,
-            "pass_rate": round(overall_passed / overall_total, 4) if overall_total else 0.0,
-        },
+        "results": [
+            {
+                "eval_id": result["eval_id"],
+                "eval_name": result["eval_name"],
+                "summary": result["grading"]["summary"],
+                "output_path": result["output_path"],
+                "transcript_path": result["transcript_path"],
+            }
+            for result in results
+        ]
     }
-
-    summary_path = workspace_dir / args.iteration / "summary.json"
+    summary_path = args.workspace_dir / args.iteration / "summary.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2))
-    print(json.dumps(summary, indent=2))
+    print(summary_path)
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

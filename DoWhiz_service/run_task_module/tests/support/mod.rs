@@ -140,130 +140,92 @@ pub enum FakeCodexMode {
 
 const STRUCTURED_INVESTMENT_REPLY_HTML: &str = r#"
 <section>
-  <h2>Request Framing</h2>
-  <ul>
-    <li><strong>Ticker:</strong> NVDA</li>
-    <li><strong>Name:</strong> NVIDIA</li>
-    <li><strong>Type:</strong> Stock</li>
-    <li><strong>Research Mode:</strong> Deep research</li>
-    <li><strong>User Objective:</strong> Decide whether initiating now is attractive (stated)</li>
-    <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
-    <li><strong>Question Type:</strong> Long-term accumulation</li>
-  </ul>
-</section>
-<section class="dw-investment-card">
-  <div class="dw-investment-kicker">Decision-ready memo</div>
-  <h2>Decision Card</h2>
-  <ul class="dw-investment-list">
-    <li><strong>New Money Action:</strong> Starter Only</li>
-    <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
-    <li><strong>Near-Term Timing View:</strong> Wait for a cleaner post-earnings setup because expectations are already demanding.</li>
-    <li><strong>Long-Term Ownership View:</strong> Still worth owning if AI compute demand and margin durability remain intact.</li>
-    <li><strong>Confidence:</strong> Medium</li>
-    <li><strong>One-Line Rationale:</strong> The business is elite, but near-term upside needs another strong report to beat what the market already expects.</li>
-  </ul>
+  <p><strong>As of:</strong> 2026-04-26 · <strong>Price:</strong> $202.06</p>
+  <p><strong>Investor question:</strong> Give me deep research on NVDA and tell me whether now is a good time to buy.</p>
 </section>
 <section>
-  <h2>Why in 3 bullets</h2>
-  <ul>
-    <li><strong>What Is Priced In:</strong> Continued data-center strength, durable gross margin, and another clean beat.</li>
-    <li><strong>What Keeps This From Being Stronger:</strong> The setup leaves little room for merely good results.</li>
-    <li><strong>What Would Change The View:</strong> Better evidence that demand durability is widening faster than valuation expectations.</li>
-  </ul>
+  <h2>Decision Card</h2>
+  <table>
+    <tr>
+      <th>Audience</th>
+      <th>Action</th>
+      <th>Confidence</th>
+    </tr>
+    <tr>
+      <td>New money</td>
+      <td>Wait</td>
+      <td>Medium</td>
+    </tr>
+    <tr>
+      <td>Existing holder</td>
+      <td>Hold</td>
+      <td>Medium</td>
+    </tr>
+  </table>
+  <p><strong>One-line rationale:</strong> NVIDIA remains an elite business, but new buyers still face a demanding setup into the next print while existing holders already own the secular upside.</p>
 </section>
-<section class="dw-trigger-grid">
-  <h2>Trigger Block</h2>
-  <ul class="dw-trigger-list">
-    <li><strong>Upgrade / Add Triggers:</strong> Another beat plus guidance that still shows durable AI spending and margin resilience.</li>
-    <li><strong>Stay Wait Unless:</strong> The next report materially beats what is already priced in or the stock resets without a thesis break.</li>
-    <li><strong>Invalidation Criteria:</strong> Demand slows, customer digestion extends, or gross-margin structure deteriorates.</li>
-  </ul>
+<section>
+  <h2>Dual-Horizon Framing</h2>
+  <h3>Near-Term Timing View</h3>
+  <p>The next earnings print is still the key catalyst, so new money should wait for either a cleaner post-print setup or better evidence that expectations remain too low.</p>
+  <h3>Long-Term Ownership View</h3>
+  <p>Existing holders can keep owning the AI platform thesis as long as demand durability and margin structure remain intact.</p>
 </section>
 <section>
   <h2>Verified Facts</h2>
   <ul>
     <li>
-      NVIDIA's latest filings and prepared remarks showed data-center revenue still dominating the growth story.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a>
-        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
-      </div>
+      FY2026 revenue was $215.9B. <a href="https://investor.nvidia.com/">NVIDIA IR</a>
     </li>
     <li>
-      Market-data cross-checks still show the stock trading at a premium versus the broader index.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
-      </div>
+      Q4 FY2026 revenue was $68.1B with GAAP diluted EPS of $1.76. <a href="https://www.sec.gov/">SEC EDGAR</a>
+    </li>
+    <li>
+      The stock closed at $202.06 on April 20, 2026. <a href="https://www.nasdaq.com/">Nasdaq</a>
     </li>
   </ul>
 </section>
 <section>
   <h2>Derived Metrics</h2>
+  <table>
+    <tr>
+      <th>Metric</th>
+      <th>Value</th>
+      <th>Formula / Inputs</th>
+    </tr>
+    <tr>
+      <td>P/E (TTM)</td>
+      <td>41.2x</td>
+      <td>$202.06 / TTM diluted EPS $4.90</td>
+    </tr>
+    <tr>
+      <td>Revenue YoY (Q4)</td>
+      <td>21.0%</td>
+      <td>$68.1B / $56.3B − 1</td>
+    </tr>
+  </table>
+</section>
+<section>
+  <h2>Scenarios</h2>
+  <h3>Bull Case</h3>
+  <p>Revenue stays above $70B and gross margin holds above 74%.</p>
+  <h3>Base Case</h3>
+  <p>Revenue remains near the current run-rate and valuation stays elevated but stable.</p>
+  <h3>Bear Case</h3>
+  <p>Customer digestion pushes revenue below $64B or gross margin slips under 71%.</p>
+</section>
+<section>
+  <h2>Triggers — Verdict Movement</h2>
   <ul>
-    <li>
-      Forward P/E: share price / next-twelve-month EPS consensus = roughly 31x, which keeps the burden of proof high.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a>
-        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
-      </div>
-    </li>
+    <li><strong>Upgrade to Buy (new money):</strong> Revenue above $70B and gross margin above 74%.</li>
+    <li><strong>Add (existing holder):</strong> Pullback of at least 12% without a fundamental reset.</li>
+    <li><strong>Trim:</strong> Two consecutive quarters of margin pressure.</li>
+    <li><strong>Exit:</strong> A major customer capex reset or export-control shock.</li>
   </ul>
 </section>
 <section>
-  <h2>Expectations</h2>
-  <ul>
-    <li>
-      <strong>What the Next Catalyst Must Show:</strong> Revenue and margin strength that remains clearly ahead of the already-bullish setup.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">Transcript</a>
-        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
-      </div>
-    </li>
-    <li>
-      <strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Guidance that confirms growth but not enough incremental upside to justify the current multiple.
-    </li>
-  </ul>
-</section>
-<section>
-  <h2>Opportunity-Cost / Peer Check</h2>
-  <ul>
-    <li>
-      Versus buying the index, NVIDIA still offers better direct AI exposure, but it also carries much more single-report expectation risk.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
-        <a class="dw-evidence-chip" data-source-tier="reference" href="https://www.nasdaq.com">Quote</a>
-      </div>
-    </li>
-  </ul>
-</section>
-<section>
-  <h2>Inference / Judgment</h2>
-  <ul>
-    <li>Judgment: the company remains best-in-class, but the near-term setup is still more "great business, demanding setup" than clear asymmetric entry.</li>
-  </ul>
-</section>
-<section>
-  <h2>Scenario Analysis</h2>
-  <p><strong>Bull Case:</strong> Demand and margins stay stronger than the market already expects.</p>
-  <p><strong>Base Case:</strong> Fundamentals stay solid, but upside is constrained by how much is already priced in.</p>
-  <p><strong>Bear Case:</strong> Customers digest capacity longer than expected and valuation compresses.</p>
-</section>
-<section class="dw-source-note">
-  <h2>Source Notes</h2>
-  <ul>
-    <li>
-      Primary, independent, and reference sources were cross-checked instead of relying only on company-controlled material.
-      <div class="dw-evidence-row">
-        <a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a>
-        <a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a>
-        <a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a>
-      </div>
-    </li>
-  </ul>
-</section>
-<section>
-  <h2>Disclaimer</h2>
-  <p>Public-information-based research only, not personalized investment advice or trade execution.</p>
+  <h2>Judgment</h2>
+  <p><em>Inference, Medium confidence.</em> NVIDIA still looks stronger as an owned compounder than as a fresh pre-earnings entry because the setup leaves less room for a merely good report.</p>
 </section>
 "#;
 
