@@ -73,13 +73,10 @@ const LINKED_EVIDENCE_SECTIONS: &[&str] = &[
     "source notes",
 ];
 
-const FINANCE_CONTEXT_KEYWORDS: &[&str] = &[
-    "stock",
-    "etf",
-    "ticker",
-    "earnings",
-    "position",
-    "shares",
+const INVESTMENT_INSTRUMENT_KEYWORDS: &[&str] =
+    &["stock", "etf", "ticker", "earnings", "position", "shares"];
+
+const INVESTMENT_FUNDAMENTAL_KEYWORDS: &[&str] = &[
     "valuation",
     "market cap",
     "revenue",
@@ -95,16 +92,14 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "worth buying",
     "buy before",
     "sell before",
-    "deep research",
-    "analyze",
-    "analysis",
     "investment",
     "investing",
     "starter position",
     "starter only",
     "buy now",
-    "wait",
 ];
+
+const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze", "analysis"];
 
 const NEW_MONEY_ACTIONS: &[&str] = &["buy", "wait", "starter only", "avoid for now"];
 const EXISTING_HOLDER_ACTIONS: &[&str] = &["hold", "add", "trim", "exit", "hold / do not add"];
@@ -369,20 +364,26 @@ fn reply_artifact_present(reply_path: &Path) -> bool {
 
 fn is_investment_request(raw: &str) -> bool {
     let normalized = normalize_search_text(raw);
-    let has_finance_context = FINANCE_CONTEXT_KEYWORDS
+    let has_instrument_context = INVESTMENT_INSTRUMENT_KEYWORDS
+        .iter()
+        .any(|keyword| normalized.contains(keyword));
+    let has_fundamental_context = INVESTMENT_FUNDAMENTAL_KEYWORDS
         .iter()
         .any(|keyword| normalized.contains(keyword));
     let has_investment_intent = INVESTMENT_INTENT_KEYWORDS
         .iter()
         .any(|keyword| normalized.contains(keyword));
+    let has_investment_research = INVESTMENT_RESEARCH_KEYWORDS
+        .iter()
+        .any(|keyword| normalized.contains(keyword));
     let has_probable_ticker = contains_probable_ticker(raw);
 
-    (has_finance_context && has_investment_intent)
+    (has_instrument_context && (has_investment_intent || has_investment_research))
         || (has_probable_ticker
-            && (has_investment_intent
-                || normalized.contains("earnings")
-                || normalized.contains("position")
-                || normalized.contains("deep research")))
+            && (has_instrument_context
+                || has_investment_intent
+                || has_investment_research
+                || has_fundamental_context))
 }
 
 fn contains_probable_ticker(raw: &str) -> bool {
@@ -477,8 +478,14 @@ mod tests {
         assert!(is_investment_request(
             "Is NVDA a buy this week for a 3-month position?"
         ));
+        assert!(is_investment_request(
+            "Please analyze Tesla stock and tell me if it is worth buying now."
+        ));
         assert!(!is_investment_request(
             "Please buy an NVDA GPU and compare keyboard options."
+        ));
+        assert!(!is_investment_request(
+            "Use Ray Dalio's framework to analyze where we are in the cycle now, explain high valuations in parts of the equity market, and make a PowerPoint slide about potential bubbles in the AI industry."
         ));
     }
 
