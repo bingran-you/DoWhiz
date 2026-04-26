@@ -3,6 +3,7 @@ use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
 use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
 use mongodb::sync::{Client, Collection};
 use mongodb::IndexModel;
+use run_task_module::{query_aci_container_status, AciContainerStatus};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -414,6 +415,7 @@ impl MongoSchedulerStore {
             .max();
         let stale_before = now - stale_after;
         let stale_timeout_secs = stale_after.num_seconds();
+        let aci_resource_group = std::env::var("RUN_TASK_AZURE_ACI_RESOURCE_GROUP").ok();
 
         let mut summary = ExecutionReconciliationSummary::default();
         for row in rows.iter().filter(|row| row.status == "running") {
@@ -441,6 +443,35 @@ impl MongoSchedulerStore {
                         latest_started_at.expect("checked above").to_rfc3339()
                     ),
                 ))
+            } else if let Some(ref rg) = aci_resource_group {
+                // Check if ACI container still exists - if not, mark execution as failed
+                match query_aci_container_status(task_id, rg) {
+                    AciContainerStatus::NotFound => Some((
+                        "failed",
+                        "reconciled stale running execution; ACI container not found".to_string(),
+                    )),
+                    AciContainerStatus::Terminal(state) => Some((
+                        "failed",
+                        format!(
+                            "reconciled stale running execution; ACI container terminated with state: {}",
+                            state
+                        ),
+                    )),
+                    _ => {
+                        // Container still running or error querying - fall through to stale check
+                        if row.started_at <= stale_before {
+                            Some((
+                                "failed",
+                                format!(
+                                    "reconciled stale running execution after worker restart; execution exceeded {}s without a terminal status",
+                                    stale_timeout_secs
+                                ),
+                            ))
+                        } else {
+                            None
+                        }
+                    }
+                }
             } else if row.started_at <= stale_before {
                 Some((
                     "failed",
