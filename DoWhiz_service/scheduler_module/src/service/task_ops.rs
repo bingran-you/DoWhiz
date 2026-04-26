@@ -235,7 +235,9 @@ fn load_task_ops_snapshot(
     let executions = db.collection::<Document>("task_executions");
     let tasks = db.collection::<Document>("tasks");
 
-    let summary = load_summary(&executions, start, end, status_filter)?;
+    // Fetch all execution docs once and compute summary in memory
+    let all_executions = load_all_execution_docs_for_summary(&executions, start, end)?;
+    let summary = compute_summary_from_docs(&all_executions, status_filter);
     let page_slice = load_task_ops_page(
         &executions,
         &tasks,
@@ -707,90 +709,134 @@ fn build_filtered_rows(
     rows
 }
 
-fn load_summary(
-    executions: &Collection<Document>,
+/// Minimal execution data needed for summary computation.
+#[derive(Debug, Clone)]
+struct SummaryExecutionDoc {
+    status: String,
+    started_at: DateTime<Utc>,
+    finished_at: Option<DateTime<Utc>>,
+}
+
+/// Fetch all execution docs in the date range with minimal fields for summary computation.
+fn load_all_execution_docs_for_summary(
+    collection: &Collection<Document>,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
+) -> Result<Vec<SummaryExecutionDoc>, String> {
+    let filter = doc! {
+        "started_at": {
+            "$gte": BsonDateTime::from_chrono(start),
+            "$lte": BsonDateTime::from_chrono(end),
+        }
+    };
+    let options = FindOptions::builder()
+        .projection(doc! { "status": 1, "started_at": 1, "finished_at": 1 })
+        .build();
+
+    let cursor = retry_mongo_read("task_ops.summary_docs", || {
+        collection.find(filter.clone(), options.clone())
+    })
+    .map_err(|err| format!("failed to query task executions for summary: {err}"))?;
+
+    let mut docs = Vec::new();
+    for row in cursor {
+        let document = row.map_err(|err| format!("failed to read summary execution row: {err}"))?;
+        let status = document.get_str("status").unwrap_or("unknown").to_string();
+        let started_at = document
+            .get_datetime("started_at")
+            .map(|value| value.to_chrono())
+            .unwrap_or_else(|_| Utc::now());
+        let finished_at = match document.get("finished_at") {
+            Some(Bson::DateTime(value)) => Some(value.to_chrono()),
+            _ => None,
+        };
+        docs.push(SummaryExecutionDoc {
+            status,
+            started_at,
+            finished_at,
+        });
+    }
+    Ok(docs)
+}
+
+/// Compute summary stats from pre-fetched execution docs.
+fn compute_summary_from_docs(
+    docs: &[SummaryExecutionDoc],
     status_filter: Option<&str>,
-) -> Result<TaskOpsSummary, String> {
-    let base_filter = date_range_filter(start, end);
-    let total_runs = count_execution_docs(
-        executions,
-        with_optional_status(base_filter.clone(), status_filter),
-    )?;
-    let running_now = count_execution_docs(executions, doc! { "status": "running" })?;
-    let long_running = count_execution_docs(
-        executions,
-        doc! {
-            "status": "running",
-            "started_at": { "$lt": BsonDateTime::from_chrono(Utc::now() - chrono::Duration::seconds(LONG_RUNNING_WARNING_SECS)) }
-        },
-    )?;
-    let successful_runs = count_execution_docs(
-        executions,
-        merge_filters(
-            &base_filter,
-            &doc! { "status": { "$in": ["success", "superseded"] } },
-        ),
-    )?;
-    let failed_runs = count_execution_docs(
-        executions,
-        merge_filters(
-            &base_filter,
-            &doc! { "status": { "$in": ["failed", "cancelled", "expired"] } },
-        ),
-    )?;
+) -> TaskOpsSummary {
+    let now = Utc::now();
+    let long_running_threshold = now - chrono::Duration::seconds(LONG_RUNNING_WARNING_SECS);
+
+    let mut total_runs = 0usize;
+    let mut running_now = 0usize;
+    let mut long_running = 0usize;
+    let mut successful_runs = 0usize;
+    let mut failed_runs = 0usize;
+    let mut durations: Vec<i64> = Vec::new();
+
+    for doc in docs {
+        // Apply status filter for total_runs count
+        let matches_filter = status_filter
+            .map(|f| doc.status.to_ascii_lowercase() == f)
+            .unwrap_or(true);
+        if matches_filter {
+            total_runs += 1;
+        }
+
+        // Running stats (not affected by status_filter)
+        if doc.status == "running" {
+            running_now += 1;
+            if doc.started_at < long_running_threshold {
+                long_running += 1;
+            }
+        }
+
+        // Success/failure counts
+        match doc.status.as_str() {
+            "success" | "superseded" => successful_runs += 1,
+            "failed" | "cancelled" | "expired" => failed_runs += 1,
+            _ => {}
+        }
+
+        // Collect durations for median/p95
+        if let Some(finished_at) = doc.finished_at {
+            let duration = finished_at.signed_duration_since(doc.started_at).num_seconds();
+            if duration >= 0 {
+                durations.push(duration);
+            }
+        }
+    }
+
     let success_rate = if successful_runs + failed_runs == 0 {
         None
     } else {
         Some(successful_runs as f64 / (successful_runs + failed_runs) as f64)
     };
 
-    Ok(TaskOpsSummary {
+    // Compute median and p95 duration
+    durations.sort_unstable();
+    let median_duration_seconds = if durations.is_empty() {
+        None
+    } else {
+        Some(durations[durations.len() / 2])
+    };
+    let p95_duration_seconds = if durations.is_empty() {
+        None
+    } else {
+        let p95_idx = ((durations.len() as f64) * 0.95).ceil() as usize;
+        Some(durations[p95_idx.saturating_sub(1).min(durations.len() - 1)])
+    };
+
+    TaskOpsSummary {
         total_runs,
         running_now,
         long_running,
         successful_runs,
         failed_runs,
         success_rate,
-        median_duration_seconds: None,
-        p95_duration_seconds: None,
-    })
-}
-
-fn date_range_filter(start: DateTime<Utc>, end: DateTime<Utc>) -> Document {
-    doc! {
-        "started_at": {
-            "$gte": BsonDateTime::from_chrono(start),
-            "$lte": BsonDateTime::from_chrono(end),
-        }
+        median_duration_seconds,
+        p95_duration_seconds,
     }
-}
-
-fn with_optional_status(mut filter: Document, status_filter: Option<&str>) -> Document {
-    if let Some(status_filter) = status_filter {
-        filter.insert("status", status_filter);
-    }
-    filter
-}
-
-fn merge_filters(base: &Document, extra: &Document) -> Document {
-    let mut merged = base.clone();
-    for (key, value) in extra {
-        merged.insert(key.to_string(), value.clone());
-    }
-    merged
-}
-
-fn count_execution_docs(
-    collection: &Collection<Document>,
-    filter: Document,
-) -> Result<usize, String> {
-    retry_mongo_read("task_ops.execution_count", || {
-        collection.count_documents(filter.clone(), None)
-    })
-    .map(|count| count as usize)
-    .map_err(|err| format!("failed to count task executions: {err}"))
 }
 
 fn default_title(task: &ScheduledTask, channel: &str) -> String {
