@@ -57,3 +57,6 @@ URL_AND_EMAIL.md
 *.json
 .env-*
 /.codex_recovery
+
+# Memory
+CLAUDE.md
