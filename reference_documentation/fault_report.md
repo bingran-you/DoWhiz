@@ -211,29 +211,13 @@ However, this **only works if an ACI container was actually created**. In this c
 
 **File:** `scheduler_module/src/scheduler/store/mongo.rs`
 
-```rust
-// In reconcile_stale_running_executions_for_task()
-let aci_resource_group = std::env::var("RUN_TASK_AZURE_ACI_RESOURCE_GROUP").ok();
+**Reconciliation flow:**
+1. Get `workspace_dir` from task's `task_json` field in `tasks` collection
+2. Query `aci_containers` collection by `workspace_path` to find container record
+3. If found → call `query_aci_container_status(container_name, resource_group)` with actual container name
+4. If not found → apply 60-minute grace period, then mark failed
 
-for row in rows.iter().filter(|row| row.status == "running") {
-    // ... existing superseded checks ...
-    
-    // NEW: Check if ACI container exists
-    if let Some(ref rg) = aci_resource_group {
-        match query_aci_container_status(task_id, rg) {
-            AciContainerStatus::NotFound => Some((
-                "failed",
-                "reconciled stale running execution; ACI container not found".to_string(),
-            )),
-            AciContainerStatus::Terminal(state) => Some((
-                "failed",
-                format!("reconciled stale running execution; ACI container terminated with state: {}", state),
-            )),
-            _ => { /* fall through to stale timeout check */ }
-        }
-    }
-}
-```
+**Why workspace lookup:** ACI containers are named `dwz-codex-{timestamp}-{pid}-{seq}`, not by task_id. The `aci_containers` collection stores `container_name` + `workspace_path`. We join on workspace_path to get the real container name.
 
 **Effect:** Stale executions are now detected within 10 minutes (reconciliation interval) instead of 20 hours (stale timeout).
 
