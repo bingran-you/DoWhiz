@@ -10,7 +10,8 @@ This runner does not grade an intermediate model transcript. It invokes the
 4. writes `reply_email_draft.html`
 5. renders the final user-visible email artifact to `final_rendered_email.html`
 
-The grader then checks the final rendered email artifact.
+The grader then checks the final rendered email artifact against the updated
+U.S. equity decision-memo contract.
 """
 
 from __future__ import annotations
@@ -29,71 +30,38 @@ SKILL_ROOT = Path(__file__).resolve().parents[1]
 EVALS_ROOT = SKILL_ROOT / "evals"
 WORKSPACE_ROOT = SKILL_ROOT.parent.parent / "us-equity-daily-monitor-workspace"
 REQUIRED_LABELS = [
-    "request framing",
-    "ticker:",
-    "name:",
-    "type:",
-    "research mode:",
-    "user objective:",
-    "horizon basis:",
-    "question type:",
+    "as of:",
+    "price:",
+    "investor question:",
     "decision card",
-    "new money action:",
-    "existing holder action:",
-    "near-term timing view:",
-    "long-term ownership view:",
-    "confidence:",
+    "audience",
+    "action",
+    "confidence",
+    "new money",
+    "existing holder",
     "one-line rationale:",
-    "why in 3 bullets",
-    "what is priced in:",
-    "what keeps this from being stronger:",
-    "what would change the view:",
-    "trigger block",
-    "upgrade / add triggers:",
-    "stay wait unless:",
-    "invalidation criteria:",
+    "dual-horizon framing",
+    "near-term timing view",
+    "long-term ownership view",
     "verified facts",
     "derived metrics",
-    "expectations",
-    "what the next catalyst must show:",
-    "what could disappoint even if fundamentals are fine:",
-    "opportunity-cost / peer check",
-    "inference / judgment",
-    "bull case:",
-    "base case:",
-    "bear case:",
-    "source notes",
-    "disclaimer",
+    "scenarios",
+    "bull case",
+    "base case",
+    "bear case",
+    "triggers",
+    "judgment",
 ]
-SUMMARY_FIRST_HEADINGS = [
-    "request framing",
+SECTION_ORDER = [
     "decision card",
-    "why in 3 bullets",
-    "trigger block",
-    "verified facts",
-]
-SECTION_HEADINGS = [
-    "request framing",
-    "decision card",
-    "why in 3 bullets",
-    "trigger block",
+    "dual-horizon framing",
     "verified facts",
     "derived metrics",
-    "expectations",
-    "opportunity-cost / peer check",
-    "inference / judgment",
-    "scenario analysis",
-    "source notes",
-    "disclaimer",
+    "scenarios",
+    "triggers",
+    "judgment",
 ]
-LINKED_EVIDENCE_SECTIONS = [
-    "verified facts",
-    "derived metrics",
-    "expectations",
-    "source notes",
-]
-NEW_MONEY_ACTIONS = ["buy", "wait", "starter only", "avoid for now"]
-EXISTING_HOLDER_ACTIONS = ["hold", "add", "trim", "exit", "hold / do not add"]
+LINKED_EVIDENCE_SECTIONS = ["verified facts"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -129,10 +97,11 @@ def contains_in_order(text: str, markers: list[str]) -> bool:
     return True
 
 
-def find_field_value(text: str, label: str, allowed: list[str]) -> str | None:
-    for value in allowed:
-        if f"{label}: {value}" in text:
-            return value
+def find_heading_position(html_lower: str, heading: str) -> int | None:
+    for marker in [f">{heading}", f">{heading} "]:
+        idx = html_lower.find(marker)
+        if idx != -1:
+            return idx
     return None
 
 
@@ -142,21 +111,13 @@ def extract_section(html_lower: str, heading: str) -> str | None:
         return None
     section_start = start + 1
     end = len(html_lower)
-    for next_heading in SECTION_HEADINGS:
+    for next_heading in SECTION_ORDER:
         if next_heading == heading:
             continue
         idx = find_heading_position(html_lower[section_start:], next_heading)
         if idx is not None:
             end = min(end, section_start + idx)
     return html_lower[start:end]
-
-
-def find_heading_position(html_lower: str, heading: str) -> int | None:
-    for marker in [f">{heading}</", f">{heading}<"]:
-        idx = html_lower.find(marker)
-        if idx != -1:
-            return idx
-    return None
 
 
 def section_contains_link(html_lower: str, heading: str) -> bool:
@@ -166,20 +127,40 @@ def section_contains_link(html_lower: str, heading: str) -> bool:
     return 'href="http' in section or "href='http" in section
 
 
-def count_evidence_chips(html_lower: str) -> int:
-    return html_lower.count("dw-evidence-chip")
+def count_clickable_links(html_lower: str) -> int:
+    return html_lower.count('href="http') + html_lower.count("href='http")
 
 
-def has_source_tier(html_lower: str, tier: str) -> bool:
-    return f'data-source-tier="{tier}"' in html_lower or f"data-source-tier='{tier}'" in html_lower
+def derived_metrics_has_formula(html_lower: str) -> bool:
+    section = extract_section(html_lower, "derived metrics")
+    if not section:
+        return False
+    text = normalize_text(section)
+    return (
+        "/" in text
+        or "=" in text
+        or "not reliably derivable" in text
+        or "formula" in text
+        or "<table" in section
+    )
 
 
-def extract_field(text: str, label: str) -> str | None:
-    pattern = re.compile(rf"{re.escape(label)}\s*:\s*([^<\n\r]+)", re.IGNORECASE)
-    match = pattern.search(text)
-    if not match:
-        return None
-    return match.group(1).strip().lower()
+def triggers_section_has_required_markers(html_lower: str) -> bool:
+    section = extract_section(html_lower, "triggers")
+    if not section:
+        return False
+    text = normalize_text(section)
+    has_upgrade = "upgrade to buy" in text
+    has_add = "add" in text
+    has_trim_or_exit = "trim/exit" in text or "trim" in text or "exit" in text
+    return has_upgrade and has_add and has_trim_or_exit
+
+
+def extract_confidence_phrase(text: str) -> str | None:
+    for phrase in ["low confidence", "medium confidence", "high confidence"]:
+        if phrase in text:
+            return phrase
+    return None
 
 
 def audit_artifact(artifact_html: str) -> dict[str, Any]:
@@ -187,27 +168,27 @@ def audit_artifact(artifact_html: str) -> dict[str, Any]:
     html_lower = artifact_html.lower()
     missing_labels = [label for label in REQUIRED_LABELS if label not in text]
     decision_card_pos = text.find("decision card")
-
     return {
         "normalized_text": text,
         "missing_labels": missing_labels,
-        "new_money_action": find_field_value(text, "new money action", NEW_MONEY_ACTIONS),
-        "existing_holder_action": find_field_value(
-            text, "existing holder action", EXISTING_HOLDER_ACTIONS
+        "decision_card_rows_ok": all(
+            label in text
+            for label in ["audience", "action", "confidence", "new money", "existing holder"]
         ),
-        "summary_first_ok": contains_in_order(text, SUMMARY_FIRST_HEADINGS),
-        "decision_card_near_top": decision_card_pos != -1 and decision_card_pos < 900,
-        "evidence_chip_count": count_evidence_chips(html_lower),
-        "source_tiers": {
-            tier: has_source_tier(html_lower, tier)
-            for tier in ["primary", "independent", "reference"]
-        },
+        "dual_horizon_ok": all(
+            label in text for label in ["near-term timing view", "long-term ownership view"]
+        ),
+        "scenarios_ok": all(label in text for label in ["bull case", "base case", "bear case"]),
+        "triggers_ok": triggers_section_has_required_markers(html_lower),
+        "derived_metrics_ok": derived_metrics_has_formula(html_lower),
+        "summary_first_ok": contains_in_order(text, SECTION_ORDER),
+        "decision_card_near_top": decision_card_pos != -1 and decision_card_pos < 700,
+        "clickable_link_count": count_clickable_links(html_lower),
         "linked_evidence_sections": {
             heading: section_contains_link(html_lower, heading)
             for heading in LINKED_EVIDENCE_SECTIONS
         },
-        "confidence": extract_field(text, "confidence"),
-        "html_lower": html_lower,
+        "confidence_phrase": extract_confidence_phrase(text),
     }
 
 
@@ -294,11 +275,13 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         if audit["missing_labels"]:
             failed_reasons.append(f"missing labels: {', '.join(audit['missing_labels'])}")
         if not audit["summary_first_ok"]:
-            failed_reasons.append("summary-first order missing")
-        if not audit["new_money_action"]:
-            failed_reasons.append("new money action missing or invalid")
-        if audit["evidence_chip_count"] < 4:
-            failed_reasons.append("evidence chips missing")
+            failed_reasons.append("section order missing")
+        if not audit["decision_card_rows_ok"]:
+            failed_reasons.append("decision card rows missing")
+        if audit["clickable_link_count"] < 3:
+            failed_reasons.append("citations missing")
+        if audit["derived_metrics_ok"]:
+            failed_reasons.append("generic fixture unexpectedly contains metric structure")
         checks.append(
             {
                 "name": "generic_commentary_fixture_rejected",
@@ -312,22 +295,21 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         checks.append(
             {
                 "name": "required_contract_labels_present",
-                "passed": not audit["missing_labels"],
+                "passed": not audit["missing_labels"] and audit["derived_metrics_ok"],
                 "detail": "ok"
-                if not audit["missing_labels"]
-                else f"missing: {', '.join(audit['missing_labels'])}",
+                if not audit["missing_labels"] and audit["derived_metrics_ok"]
+                else (
+                    f"missing={audit['missing_labels']} derived_metrics_ok={audit['derived_metrics_ok']}"
+                ),
             }
         )
 
-    if case.get("require_actions"):
+    if case.get("require_decision_card"):
         checks.append(
             {
-                "name": "new_money_vs_existing_holder_actions",
-                "passed": bool(audit["new_money_action"] and audit["existing_holder_action"]),
-                "detail": (
-                    f"new_money={audit['new_money_action'] or '(missing)'} "
-                    f"existing_holder={audit['existing_holder_action'] or '(missing)'}"
-                ),
+                "name": "decision_card_rows_present",
+                "passed": audit["decision_card_rows_ok"],
+                "detail": "ok" if audit["decision_card_rows_ok"] else "missing audience/action/confidence rows",
             }
         )
 
@@ -335,47 +317,43 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         checks.append(
             {
                 "name": "dual_horizon_present",
-                "passed": "near-term timing view:" in text and "long-term ownership view:" in text,
+                "passed": audit["dual_horizon_ok"],
                 "detail": "ok"
-                if "near-term timing view:" in text and "long-term ownership view:" in text
+                if audit["dual_horizon_ok"]
                 else "near-term or long-term view missing",
             }
         )
 
-    if case.get("require_expectations"):
-        expectations_ok = (
-            "what is priced in:" in text
-            and "what the next catalyst must show:" in text
-            and "what could disappoint even if fundamentals are fine:" in text
-        )
+    if case.get("require_scenarios"):
         checks.append(
             {
-                "name": "expectations_layer_present",
-                "passed": expectations_ok,
-                "detail": "ok" if expectations_ok else "expectations layer missing pieces",
+                "name": "scenario_block_present",
+                "passed": audit["scenarios_ok"],
+                "detail": "ok" if audit["scenarios_ok"] else "bull/base/bear missing",
             }
         )
 
-    if case.get("require_evidence_chips"):
+    if case.get("require_triggers"):
+        checks.append(
+            {
+                "name": "trigger_block_present",
+                "passed": audit["triggers_ok"],
+                "detail": "ok"
+                if audit["triggers_ok"]
+                else "missing upgrade/add plus trim or exit conditions",
+            }
+        )
+
+    if case.get("require_citations"):
         linked_sections_ok = all(audit["linked_evidence_sections"].values())
         checks.append(
             {
-                "name": "clickable_evidence_present",
-                "passed": audit["evidence_chip_count"] >= 4 and linked_sections_ok,
+                "name": "clickable_citations_present",
+                "passed": audit["clickable_link_count"] >= 3 and linked_sections_ok,
                 "detail": (
-                    f"chips={audit['evidence_chip_count']} "
+                    f"links={audit['clickable_link_count']} "
                     f"linked_sections={audit['linked_evidence_sections']}"
                 ),
-            }
-        )
-
-    if case.get("require_source_tiers"):
-        tiers_ok = all(audit["source_tiers"].values())
-        checks.append(
-            {
-                "name": "tiered_sources_present",
-                "passed": tiers_ok,
-                "detail": f"tiers={audit['source_tiers']}",
             }
         )
 
@@ -388,17 +366,6 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
                     f"summary_first_ok={audit['summary_first_ok']} "
                     f"decision_card_near_top={audit['decision_card_near_top']}"
                 ),
-            }
-        )
-
-    if case.get("require_opportunity_cost"):
-        checks.append(
-            {
-                "name": "opportunity_cost_present",
-                "passed": "opportunity-cost / peer check" in text,
-                "detail": "ok"
-                if "opportunity-cost / peer check" in text
-                else "opportunity-cost block missing",
             }
         )
 
@@ -423,13 +390,13 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
         )
 
     if case.get("allowed_confidence"):
-        confidence = audit["confidence"] or ""
-        allowed = [value.lower() for value in case["allowed_confidence"]]
+        confidence_phrase = audit["confidence_phrase"] or ""
+        allowed = [f"{value.lower()} confidence" for value in case["allowed_confidence"]]
         checks.append(
             {
                 "name": "confidence_degrades_for_weaker_case",
-                "passed": any(value in confidence for value in allowed),
-                "detail": f"confidence={confidence or '(missing)'}",
+                "passed": any(value in confidence_phrase for value in allowed),
+                "detail": f"confidence={confidence_phrase or '(missing)'}",
             }
         )
 

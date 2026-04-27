@@ -1678,100 +1678,95 @@ mod tests {
         let normalized = normalize_email_html(
             "NVDA investment memo",
             r#"
-            <section><h2>Request Framing</h2><ul>
-              <li><strong>Ticker:</strong> NVDA</li>
-              <li><strong>Name:</strong> NVIDIA</li>
-              <li><strong>Type:</strong> Stock</li>
-              <li><strong>Research Mode:</strong> Deep research</li>
-              <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
-              <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
-              <li><strong>Question Type:</strong> Long-term accumulation</li>
-            </ul></section>
-            <section class="dw-investment-card">
+            <section>
+              <p><strong>As of:</strong> 2026-04-26 · <strong>Price:</strong> $202.06</p>
+              <p><strong>Investor question:</strong> Give me deep research on NVDA and tell me whether now is a good time to buy.</p>
+            </section>
+            <section>
               <h2>Decision Card</h2>
-              <ul class="dw-investment-list">
-                <li><strong>New Money Action:</strong> Wait</li>
-                <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
-                <li><strong>Near-Term Timing View:</strong> Wait for a cleaner setup.</li>
-                <li><strong>Long-Term Ownership View:</strong> Attractive if execution remains strong.</li>
-                <li><strong>Confidence:</strong> Medium</li>
-                <li><strong>One-Line Rationale:</strong> Great business, expensive setup.</li>
+              <table>
+                <tr><th>Audience</th><th>Action</th><th>Confidence</th></tr>
+                <tr><td>New money</td><td>Wait</td><td>Medium</td></tr>
+                <tr><td>Existing holder</td><td>Hold</td><td>Medium</td></tr>
+              </table>
+              <p><strong>One-line rationale:</strong> Great business, but the setup still gives fresh money less room for error than existing holders.</p>
+            </section>
+            <section>
+              <h2>Dual-Horizon Framing</h2>
+              <h3>Near-Term Timing View</h3>
+              <p>Wait for a cleaner setup.</p>
+              <h3>Long-Term Ownership View</h3>
+              <p>Attractive if execution remains strong.</p>
+            </section>
+            <section>
+              <h2>Verified Facts</h2>
+              <ul>
+                <li>Fact one. <a href="https://investor.nvidia.com">NVIDIA IR</a></li>
+                <li>Fact two. <a href="https://www.reuters.com">Reuters</a></li>
+                <li>Fact three. <a href="https://finance.yahoo.com">Yahoo Finance</a></li>
               </ul>
             </section>
-            <section><h2>Why in 3 bullets</h2><ul>
-              <li><strong>What Is Priced In:</strong> Another strong quarter.</li>
-              <li><strong>What Keeps This From Being Stronger:</strong> Little room for error.</li>
-              <li><strong>What Would Change The View:</strong> Cleaner valuation or stronger evidence.</li>
-            </ul></section>
-            <section class="dw-trigger-grid"><h2>Trigger Block</h2><ul>
-              <li><strong>Upgrade / Add Triggers:</strong> Durable beat plus guidance.</li>
-              <li><strong>Stay Wait Unless:</strong> Setup de-risks.</li>
-              <li><strong>Invalidation Criteria:</strong> Margin guide weakens.</li>
-            </ul></section>
-            <section><h2>Verified Facts</h2><ul><li>Fact one.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li></ul></section>
-            <section><h2>Derived Metrics</h2><ul><li>Metric: price / eps = 10x<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
-            <section><h2>Expectations</h2><ul>
-              <li><strong>What the Next Catalyst Must Show:</strong> Demand and margin durability.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a></div></li>
-              <li><strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Good but not great guidance.</li>
-            </ul></section>
-            <section><h2>Opportunity-Cost / Peer Check</h2><ul><li>Buying the index has lower single-report risk.</li></ul></section>
-            <section><h2>Inference / Judgment</h2><ul><li>Judgment.</li></ul></section>
-            <section><h2>Scenario Analysis</h2>
-              <p><strong>Bull Case:</strong> Demand stays strong.</p>
-              <p><strong>Base Case:</strong> Growth normalizes.</p>
-              <p><strong>Bear Case:</strong> Spending slows.</p>
+            <section>
+              <h2>Derived Metrics</h2>
+              <table>
+                <tr><th>Metric</th><th>Value</th><th>Formula / Inputs</th></tr>
+                <tr><td>P/E (TTM)</td><td>41.2x</td><td>$202.06 / TTM diluted EPS $4.90</td></tr>
+              </table>
             </section>
-            <section class="dw-source-note"><h2>Source Notes</h2><ul><li>Cross-checked primary, independent, and reference sources.<div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
-            <section><h2>Disclaimer</h2><p>Public-information-based research only, not personalized investment advice or trade execution.</p></section>
+            <section>
+              <h2>Scenarios</h2>
+              <h3>Bull Case</h3>
+              <p>Demand stays strong.</p>
+              <h3>Base Case</h3>
+              <p>Growth normalizes.</p>
+              <h3>Bear Case</h3>
+              <p>Spending slows.</p>
+            </section>
+            <section>
+              <h2>Triggers — Verdict Movement</h2>
+              <ul>
+                <li><strong>Upgrade to Buy (new money):</strong> Durable beat plus guidance.</li>
+                <li><strong>Add (existing holder):</strong> Pullback without a thesis break.</li>
+                <li><strong>Trim/Exit:</strong> Margin guide weakens.</li>
+              </ul>
+            </section>
+            <section><h2>Judgment</h2><p><em>Inference, Medium confidence.</em> Judgment.</p></section>
             "#,
         );
 
         let text = plain_text_body_from_html(&normalized);
         for label in [
-            "Request Framing",
-            "Ticker:",
-            "Name:",
-            "Type:",
-            "Research Mode:",
-            "User Objective:",
-            "Horizon Basis:",
-            "Question Type:",
+            "As of:",
+            "Price:",
+            "Investor question:",
             "Decision Card",
-            "New Money Action:",
-            "Existing Holder Action:",
-            "Near-Term Timing View:",
-            "Long-Term Ownership View:",
-            "Confidence:",
-            "One-Line Rationale:",
-            "Why in 3 bullets",
-            "What Is Priced In:",
-            "What Keeps This From Being Stronger:",
-            "What Would Change The View:",
-            "Trigger Block",
-            "Upgrade / Add Triggers:",
-            "Stay Wait Unless:",
-            "Invalidation Criteria:",
+            "Audience",
+            "Action",
+            "Confidence",
+            "New money",
+            "Existing holder",
+            "One-line rationale:",
+            "Dual-Horizon Framing",
+            "Near-Term Timing View",
+            "Long-Term Ownership View",
             "Verified Facts",
             "Derived Metrics",
-            "Expectations",
-            "What the Next Catalyst Must Show:",
-            "What Could Disappoint Even If Fundamentals Are Fine:",
-            "Opportunity-Cost / Peer Check",
-            "Inference / Judgment",
-            "Bull Case:",
-            "Base Case:",
-            "Bear Case:",
-            "Source Notes",
-            "Disclaimer",
+            "Scenarios",
+            "Bull Case",
+            "Base Case",
+            "Bear Case",
+            "Triggers",
+            "Judgment",
         ] {
             assert!(
                 normalized.contains(label) || text.contains(label),
                 "expected normalized email content to preserve label {label}"
             );
         }
-        assert!(normalized.contains("dw-investment-card"));
-        assert!(normalized.contains("dw-evidence-chip"));
-        assert!(normalized.contains(r#"data-source-tier="primary""#));
+        assert!(
+            normalized.matches("href=\"http").count() + normalized.matches("href='http").count()
+                >= 3
+        );
     }
 
     #[test]

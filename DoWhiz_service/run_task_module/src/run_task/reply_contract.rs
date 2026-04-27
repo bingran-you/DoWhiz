@@ -7,76 +7,54 @@ use super::errors::RunTaskError;
 
 // NOTE: Investment contract validation disabled - see ensure_expected_reply_artifact()
 #[allow(dead_code)]
-const REQUIRED_INVESTMENT_MARKERS: &[(&str, bool)] = &[
-    ("Request Framing", false),
-    ("Ticker", true),
-    ("Name", true),
-    ("Type", true),
-    ("Research Mode", true),
-    ("User Objective", true),
-    ("Horizon Basis", true),
-    ("Question Type", true),
-    ("Decision Card", false),
-    ("New Money Action", true),
-    ("Existing Holder Action", true),
-    ("Near-Term Timing View", true),
-    ("Long-Term Ownership View", true),
-    ("Confidence", true),
-    ("One-Line Rationale", true),
-    ("Why in 3 bullets", false),
-    ("What Is Priced In", true),
-    ("What Keeps This From Being Stronger", true),
-    ("What Would Change The View", true),
-    ("Trigger Block", false),
-    ("Upgrade / Add Triggers", true),
-    ("Stay Wait Unless", true),
-    ("Invalidation Criteria", true),
-    ("Verified Facts", false),
-    ("Derived Metrics", false),
-    ("Expectations", false),
-    ("What the Next Catalyst Must Show", true),
-    ("What Could Disappoint Even If Fundamentals Are Fine", true),
-    ("Opportunity-Cost / Peer Check", false),
-    ("Inference / Judgment", false),
-    ("Bull Case", true),
-    ("Base Case", true),
-    ("Bear Case", true),
-    ("Source Notes", false),
-    ("Disclaimer", false),
+const REQUIRED_INVESTMENT_MARKERS: &[&str] = &[
+    "As of:",
+    "Price:",
+    "Investor question:",
+    "Decision Card",
+    "Audience",
+    "Action",
+    "Confidence",
+    "New money",
+    "Existing holder",
+    "One-line rationale:",
+    "Dual-Horizon Framing",
+    "Near-Term Timing View",
+    "Long-Term Ownership View",
+    "Verified Facts",
+    "Derived Metrics",
+    "Scenarios",
+    "Bull Case",
+    "Base Case",
+    "Bear Case",
+    "Triggers",
+    "Judgment",
 ];
 
 #[allow(dead_code)]
 const SUMMARY_FIRST_HEADINGS: &[&str] = &[
-    "request framing",
     "decision card",
-    "why in 3 bullets",
-    "trigger block",
+    "dual-horizon framing",
     "verified facts",
+    "derived metrics",
+    "scenarios",
+    "triggers",
+    "judgment",
 ];
 
 #[allow(dead_code)]
 const SECTION_HEADINGS: &[&str] = &[
-    "request framing",
     "decision card",
-    "why in 3 bullets",
-    "trigger block",
+    "dual-horizon framing",
     "verified facts",
     "derived metrics",
-    "expectations",
-    "opportunity-cost / peer check",
-    "inference / judgment",
-    "scenario analysis",
-    "source notes",
-    "disclaimer",
+    "scenarios",
+    "triggers",
+    "judgment",
 ];
 
 #[allow(dead_code)]
-const LINKED_EVIDENCE_SECTIONS: &[&str] = &[
-    "verified facts",
-    "derived metrics",
-    "expectations",
-    "source notes",
-];
+const LINKED_EVIDENCE_SECTIONS: &[&str] = &["verified facts"];
 
 #[allow(dead_code)]
 const INVESTMENT_INSTRUMENT_KEYWORDS: &[&str] =
@@ -109,11 +87,6 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
 
 #[allow(dead_code)]
 const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze", "analysis"];
-
-#[allow(dead_code)]
-const NEW_MONEY_ACTIONS: &[&str] = &["buy", "wait", "starter only", "avoid for now"];
-#[allow(dead_code)]
-const EXISTING_HOLDER_ACTIONS: &[&str] = &["hold", "add", "trim", "exit", "hold / do not add"];
 
 pub(super) fn ensure_expected_reply_artifact(
     _workspace_dir: &Path,
@@ -180,34 +153,37 @@ fn investment_contract_violations(
 
     if !contains_markers_in_order(&normalized_reply, SUMMARY_FIRST_HEADINGS) {
         violations.push(
-            "summary-first section order must be Request Framing -> Decision Card -> Why in 3 bullets -> Trigger Block -> Verified Facts"
+            "summary-first section order must be Decision Card -> Dual-Horizon Framing -> Verified Facts -> Derived Metrics -> Scenarios -> Triggers -> Judgment"
                 .to_string(),
         );
     }
 
-    if let Some(issue) = validate_action_field(&reply_body, "New Money Action", NEW_MONEY_ACTIONS) {
-        violations.push(issue);
-    }
-    if let Some(issue) = validate_action_field(
-        &reply_body,
-        "Existing Holder Action",
-        EXISTING_HOLDER_ACTIONS,
-    ) {
-        violations.push(issue);
+    if !decision_card_has_required_rows(&normalized_reply) {
+        violations.push(
+            "decision card must show separate `New money` and `Existing holder` rows with action/confidence context"
+                .to_string(),
+        );
     }
 
-    let evidence_chip_count = lowered_reply.matches("dw-evidence-chip").count();
-    if evidence_chip_count < 4 {
+    if !derived_metrics_has_formula(&reply_body, &lowered_reply) {
+        violations.push(
+            "derived metrics must include at least one formula-like expression or an explicit non-derivable note"
+                .to_string(),
+        );
+    }
+
+    if !triggers_section_has_threshold_markers(&lowered_reply) {
+        violations.push(
+            "triggers section must include upgrade/add plus trim or exit conditions".to_string(),
+        );
+    }
+
+    let clickable_link_count = count_clickable_links(&lowered_reply);
+    if clickable_link_count < 3 {
         violations.push(format!(
-            "expected at least 4 evidence chips, found {}",
-            evidence_chip_count
+            "expected at least 3 clickable source links, found {}",
+            clickable_link_count
         ));
-    }
-
-    for tier in ["primary", "independent", "reference"] {
-        if !contains_source_tier(&lowered_reply, tier) {
-            violations.push(format!("missing source tier evidence chip: {}", tier));
-        }
     }
 
     for heading in LINKED_EVIDENCE_SECTIONS {
@@ -230,13 +206,8 @@ fn investment_contract_violations(
 fn missing_required_markers(normalized_reply: &str) -> Vec<String> {
     let mut missing = Vec::new();
 
-    for (label, require_colon) in REQUIRED_INVESTMENT_MARKERS {
-        let present = if *require_colon {
-            normalized_reply.contains(&format!("{}:", label.to_ascii_lowercase()))
-        } else {
-            normalized_reply.contains(&label.to_ascii_lowercase())
-        };
-        if !present {
+    for label in REQUIRED_INVESTMENT_MARKERS {
+        if !normalized_reply.contains(&label.to_ascii_lowercase()) {
             missing.push((*label).to_string());
         }
     }
@@ -258,60 +229,49 @@ fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
 }
 
 #[allow(dead_code)]
-fn validate_action_field(raw_html: &str, label: &str, allowed_values: &[&str]) -> Option<String> {
-    let value = extract_labeled_value(raw_html, label)?;
-    let value = normalize_action_value(&value);
-
-    if allowed_values
-        .iter()
-        .any(|candidate| normalize_action_value(candidate) == value)
-    {
-        return None;
-    }
-
-    Some(format!(
-        "`{}` must be one of: {}",
-        label,
-        allowed_values.join(", ")
-    ))
+fn decision_card_has_required_rows(normalized_reply: &str) -> bool {
+    [
+        "audience",
+        "action",
+        "confidence",
+        "new money",
+        "existing holder",
+    ]
+    .iter()
+    .all(|marker| normalized_reply.contains(marker))
 }
 
 #[allow(dead_code)]
-fn extract_labeled_value(raw_html: &str, label: &str) -> Option<String> {
-    let lower = raw_html.to_ascii_lowercase();
-    let marker = format!("{}:", label.to_ascii_lowercase());
-    let start = lower.find(&marker)?;
-    let tail = &raw_html[start..];
-    let lower_tail = &lower[start..];
-    let mut end = tail.len();
-    for boundary in ["</li", "</p", "</div", "<br", "\n"] {
-        if let Some(idx) = lower_tail.find(boundary) {
-            end = end.min(idx);
-        }
-    }
-    let fragment = rough_html_to_text(&tail[..end]);
-    let lowered_fragment = fragment.to_ascii_lowercase();
-    let marker_index = lowered_fragment.find(&marker)?;
-    let value = fragment[marker_index + marker.len()..].trim();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value.to_string())
-    }
+fn derived_metrics_has_formula(raw_html: &str, lowered_reply: &str) -> bool {
+    let Some(section) = extract_section(lowered_reply, "derived metrics") else {
+        return false;
+    };
+    let section_text = rough_html_to_text(section).to_ascii_lowercase();
+    section_text.contains('/')
+        || section_text.contains('=')
+        || section_text.contains("not reliably derivable")
+        || section_text.contains("formula")
+        || raw_html.to_ascii_lowercase().contains("<table")
 }
 
 #[allow(dead_code)]
-fn normalize_action_value(raw: &str) -> String {
-    raw.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_ascii_lowercase()
+fn triggers_section_has_threshold_markers(lowered_reply: &str) -> bool {
+    let Some(section) = extract_section(lowered_reply, "triggers") else {
+        return false;
+    };
+    let section_text = rough_html_to_text(section).to_ascii_lowercase();
+    let has_upgrade = section_text.contains("upgrade to buy");
+    let has_add = section_text.contains("add");
+    let has_trim_or_exit = section_text.contains("trim/exit")
+        || section_text.contains("trim")
+        || section_text.contains("exit");
+
+    has_upgrade && has_add && has_trim_or_exit
 }
 
 #[allow(dead_code)]
-fn contains_source_tier(lowered_reply: &str, tier: &str) -> bool {
-    lowered_reply.contains(&format!("data-source-tier=\"{}\"", tier))
-        || lowered_reply.contains(&format!("data-source-tier='{}'", tier))
+fn count_clickable_links(lowered_reply: &str) -> usize {
+    lowered_reply.matches("href=\"http").count() + lowered_reply.matches("href='http").count()
 }
 
 #[allow(dead_code)]
@@ -342,7 +302,7 @@ fn extract_section<'a>(lowered_reply: &'a str, heading: &str) -> Option<&'a str>
 
 #[allow(dead_code)]
 fn find_heading_position(lowered_reply: &str, heading: &str) -> Option<usize> {
-    for marker in [format!(">{}</", heading), format!(">{}<", heading)] {
+    for marker in [format!(">{}", heading), format!(">{} ", heading)] {
         if let Some(idx) = lowered_reply.find(&marker) {
             return Some(idx);
         }
@@ -530,48 +490,62 @@ mod tests {
         let workspace = write_workspace(
             "Give me deep research on NVDA and tell me whether now is a good time to buy.",
             r#"
-            <section><h2>Request Framing</h2><ul>
-              <li><strong>Ticker:</strong> NVDA</li>
-              <li><strong>Name:</strong> NVIDIA</li>
-              <li><strong>Type:</strong> Stock</li>
-              <li><strong>Research Mode:</strong> Deep research</li>
-              <li><strong>User Objective:</strong> Decide whether now is actionable (stated)</li>
-              <li><strong>Horizon Basis:</strong> Dual-horizon default because the user did not specify one (inferred)</li>
-              <li><strong>Question Type:</strong> Long-term accumulation</li>
-            </ul></section>
-            <section class="dw-investment-card"><h2>Decision Card</h2><ul>
-              <li><strong>New Money Action:</strong> Starter Only</li>
-              <li><strong>Existing Holder Action:</strong> Hold / Do not add</li>
-              <li><strong>Near-Term Timing View:</strong> Wait for a cleaner post-earnings setup.</li>
-              <li><strong>Long-Term Ownership View:</strong> Attractive if AI demand durability remains intact.</li>
-              <li><strong>Confidence:</strong> Medium</li>
-              <li><strong>One-Line Rationale:</strong> Quality is high, but expectations and valuation leave a thin near-term margin for error.</li>
-            </ul></section>
-            <section><h2>Why in 3 bullets</h2><ul>
-              <li><strong>What Is Priced In:</strong> Sustained AI spending and another strong quarter.</li>
-              <li><strong>What Keeps This From Being Stronger:</strong> Valuation already assumes very little execution slippage.</li>
-              <li><strong>What Would Change The View:</strong> Better evidence that demand durability is outrunning already-high expectations.</li>
-            </ul></section>
-            <section><h2>Trigger Block</h2><ul>
-              <li><strong>Upgrade / Add Triggers:</strong> Strong beat plus durable margin guidance.</li>
-              <li><strong>Stay Wait Unless:</strong> Setup de-risks after earnings or valuation resets.</li>
-              <li><strong>Invalidation Criteria:</strong> Demand or gross margin thesis weakens materially.</li>
-            </ul></section>
-            <section><h2>Verified Facts</h2><ul><li>Revenue grew. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li></ul></section>
-            <section><h2>Derived Metrics</h2><ul><li>Forward P/E: price / forward EPS = 31x. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://www.sec.gov">Filing</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
-            <section><h2>Expectations</h2><ul>
-              <li><strong>What the Next Catalyst Must Show:</strong> Sustained data-center demand plus margin resilience. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a></div></li>
-              <li><strong>What Could Disappoint Even If Fundamentals Are Fine:</strong> Guidance that is merely good rather than exceptional.</li>
-            </ul></section>
-            <section><h2>Opportunity-Cost / Peer Check</h2><ul><li>NVIDIA still has the strongest AI platform position, but buying the index avoids single-report valuation compression. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="reference" href="https://www.nasdaq.com">Quote</a></div></li></ul></section>
-            <section><h2>Inference / Judgment</h2><ul><li>Judgment.</li></ul></section>
-            <section><h2>Scenario Analysis</h2>
-              <p><strong>Bull Case:</strong> Demand remains strong.</p>
-              <p><strong>Base Case:</strong> Growth normalizes.</p>
-              <p><strong>Bear Case:</strong> Spending slows.</p>
+            <section>
+              <p><strong>As of:</strong> 2026-04-26 · <strong>Price:</strong> $202.06</p>
+              <p><strong>Investor question:</strong> Give me deep research on NVDA and tell me whether now is a good time to buy.</p>
             </section>
-            <section><h2>Source Notes</h2><ul><li>Primary, independent, and reference sources were cross-checked. <div class="dw-evidence-row"><a class="dw-evidence-chip" data-source-tier="primary" href="https://investor.nvidia.com">IR</a><a class="dw-evidence-chip" data-source-tier="independent" href="https://www.reuters.com">Reuters</a><a class="dw-evidence-chip" data-source-tier="reference" href="https://finance.yahoo.com">Quote</a></div></li></ul></section>
-            <section><h2>Disclaimer</h2><p>Public-information-based research only, not personalized investment advice or trade execution.</p></section>
+            <section>
+              <h2>Decision Card</h2>
+              <table>
+                <tr><th>Audience</th><th>Action</th><th>Confidence</th></tr>
+                <tr><td>New money</td><td>Wait</td><td>Medium</td></tr>
+                <tr><td>Existing holder</td><td>Hold</td><td>Medium</td></tr>
+              </table>
+              <p><strong>One-line rationale:</strong> NVIDIA remains a high-quality business, but the near-term setup still asks new buyers to pay up ahead of another demanding print.</p>
+            </section>
+            <section>
+              <h2>Dual-Horizon Framing</h2>
+              <h3>Near-Term Timing View</h3>
+              <p>The next earnings print is the dominant catalyst, so new money should wait for a cleaner post-print setup.</p>
+              <h3>Long-Term Ownership View</h3>
+              <p>Existing holders can keep owning the secular AI demand story as long as margin durability and customer spending remain intact.</p>
+            </section>
+            <section>
+              <h2>Verified Facts</h2>
+              <ul>
+                <li>FY2026 revenue reached $215.9B. <a href="https://investor.nvidia.com/">NVIDIA IR</a></li>
+                <li>Q4 FY2026 revenue was $68.1B with GAAP diluted EPS of $1.76. <a href="https://www.sec.gov/">SEC EDGAR</a></li>
+                <li>The stock closed at $202.06 on April 20, 2026. <a href="https://www.nasdaq.com/">Nasdaq</a></li>
+              </ul>
+            </section>
+            <section>
+              <h2>Derived Metrics</h2>
+              <table>
+                <tr><th>Metric</th><th>Value</th><th>Formula / Inputs</th></tr>
+                <tr><td>P/E (TTM)</td><td>41.2x</td><td>$202.06 / TTM diluted EPS $4.90</td></tr>
+              </table>
+            </section>
+            <section>
+              <h2>Scenarios</h2>
+              <h3>Bull Case</h3>
+              <p>Revenue stays above $70B and gross margin holds above 74%.</p>
+              <h3>Base Case</h3>
+              <p>Revenue remains near the current run-rate and valuation stays elevated but stable.</p>
+              <h3>Bear Case</h3>
+              <p>Customer digestion pushes revenue below $64B or gross margin slips under 71%.</p>
+            </section>
+            <section>
+              <h2>Triggers — Verdict Movement</h2>
+              <ul>
+                <li><strong>Upgrade to Buy (new money):</strong> Revenue above $70B and gross margin above 74%.</li>
+                <li><strong>Add (existing holder):</strong> Pullback of at least 12% without a fundamental reset.</li>
+                <li><strong>Trim/Exit:</strong> Two consecutive quarters of margin pressure or a major customer capex reset.</li>
+              </ul>
+            </section>
+            <section>
+              <h2>Judgment</h2>
+              <p><em>Inference, Medium confidence.</em> The business still looks strong, but the setup is more compelling for holders than for fresh capital right before the next catalyst.</p>
+            </section>
             "#,
         );
         let reply_path = workspace.join("reply_email_draft.html");

@@ -537,45 +537,34 @@ fn build_investment_capabilities_section() -> &'static str {
     r#"Investment research requests:
 - When the user asks about one U.S. stock or one U.S. ETF, asks whether now is a good time to buy, asks about buying before earnings, or wants a decision-useful investment view, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
 - Keep the final user-visible reply structured and scan-first. Do not collapse it into generic commentary or one long research wall.
-- For email replies, preserve these exact visible labels in `reply_email_draft.html`:
-  - `Request Framing`
-  - `Ticker:`
-  - `Name:`
-  - `Type:`
-  - `Research Mode:`
-  - `User Objective:`
-  - `Horizon Basis:`
-  - `Question Type:`
+- For email replies, render the memo structure from the skill in semantic HTML inside `reply_email_draft.html`.
+- Keep these visible sections and labels in the HTML body:
+  - `As of:`
+  - `Price:`
+  - `Investor question:`
   - `Decision Card`
-  - `New Money Action:`
-  - `Existing Holder Action:`
-  - `Near-Term Timing View:`
-  - `Long-Term Ownership View:`
-  - `Confidence:`
-  - `One-Line Rationale:`
-  - `Why in 3 bullets`
-  - `What Is Priced In:`
-  - `What Keeps This From Being Stronger:`
-  - `What Would Change The View:`
-  - `Trigger Block`
-  - `Upgrade / Add Triggers:`
-  - `Stay Wait Unless:`
-  - `Invalidation Criteria:`
+  - `Audience`
+  - `Action`
+  - `Confidence`
+  - `New money`
+  - `Existing holder`
+  - `One-line rationale:`
+  - `Dual-Horizon Framing`
+  - `Near-Term Timing View`
+  - `Long-Term Ownership View`
   - `Verified Facts`
   - `Derived Metrics`
-  - `Expectations`
-  - `What the Next Catalyst Must Show:`
-  - `What Could Disappoint Even If Fundamentals Are Fine:`
-  - `Opportunity-Cost / Peer Check`
-  - `Inference / Judgment`
-  - `Scenario Analysis`
-  - `Bull Case:`
-  - `Base Case:`
-  - `Bear Case:`
-  - `Source Notes`
-  - `Disclaimer`
-- Material factual and derived-metric claims must keep clickable source links near the claim, preferably as compact evidence chips such as `<a class="dw-evidence-chip" data-source-tier="primary|independent|reference" href="https://...">...</a>`.
-- Use a mix of source tiers: primary filings/IR, at least one reputable independent external source when relevant, and at least one quote/reference source for market-data cross-checking.
+  - `Scenarios`
+  - `Bull Case`
+  - `Base Case`
+  - `Bear Case`
+  - `Triggers`
+  - `Upgrade to Buy`
+  - `Add`
+  - `Trim` or `Trim/Exit`
+  - `Judgment`
+- Keep clickable source links near the factual claims they support. Compact chip-style links are fine, but regular inline links are also acceptable if they stay close to the claim.
+- Use a mix of source tiers: at least one primary filing or IR source, plus independent or reference cross-checks when relevant.
 - If the user states a conflicting earnings date or similar factual premise, correct it explicitly in the final reply instead of silently accepting it.
 
 "#
@@ -1677,10 +1666,12 @@ mod tests {
         );
 
         assert!(prompt.contains(".agents/skills/us-equity-daily-monitor/SKILL.md"));
-        assert!(prompt.contains("New Money Action"));
-        assert!(prompt.contains("Existing Holder Action"));
-        assert!(prompt.contains("What Is Priced In"));
-        assert!(prompt.contains("dw-evidence-chip"));
+        assert!(prompt.contains("Decision Card"));
+        assert!(prompt.contains("Dual-Horizon Framing"));
+        assert!(prompt.contains("New money"));
+        assert!(prompt.contains("Existing holder"));
+        assert!(prompt.contains("Investor question"));
+        assert!(prompt.contains("clickable source links"));
         assert!(prompt.contains("final user-visible reply structured"));
     }
 
