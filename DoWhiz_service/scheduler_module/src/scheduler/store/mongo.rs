@@ -3,7 +3,7 @@ use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
 use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
 use mongodb::sync::{Client, Collection};
 use mongodb::IndexModel;
-use run_task_module::{query_aci_container_status, AciContainerStatus};
+use run_task_module::{find_aci_container_by_workspace, query_aci_container_status, AciContainerStatus};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -403,6 +403,28 @@ impl MongoSchedulerStore {
         Ok(())
     }
 
+    /// Get workspace_dir from a task's task_json field.
+    /// Returns None if task not found or workspace_dir cannot be parsed.
+    fn get_task_workspace_dir(&self, task_id: &str) -> Option<String> {
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": task_id,
+        };
+        let doc = retry_mongo_read("tasks.find_one_for_workspace", || {
+            self.tasks.find_one(filter.clone(), None)
+        })
+        .ok()??;
+
+        let task_json = doc.get_str("task_json").ok()?;
+        let parsed: serde_json::Value = serde_json::from_str(task_json).ok()?;
+        parsed
+            .get("kind")?
+            .get("workspace_dir")?
+            .as_str()
+            .map(|s| s.to_string())
+    }
+
     pub(crate) fn reconcile_stale_running_executions(
         &self,
         now: chrono::DateTime<Utc>,
@@ -483,12 +505,50 @@ impl MongoSchedulerStore {
                     ),
                 ))
             } else if let Some(ref rg) = aci_resource_group {
-                // Check if ACI container still exists - if not, mark execution as failed
-                // and disable the task to prevent infinite retry loops
-                match query_aci_container_status(task_id, rg) {
-                    AciContainerStatus::NotFound => {
-                        // Grace period: ephemeral share upload can take 10-15+ minutes,
-                        // so don't auto-disable tasks that might still be setting up
+                // Look up ACI container by workspace_dir from tasks
+                let workspace_dir = self.get_task_workspace_dir(task_id);
+                let container_record = workspace_dir
+                    .as_ref()
+                    .and_then(|ws| find_aci_container_by_workspace(ws));
+
+                match container_record {
+                    Some(record) => {
+                        // Container found in registry, check its actual Azure status
+                        match query_aci_container_status(&record.container_name, rg) {
+                            AciContainerStatus::NotFound => {
+                                // Container was registered but no longer exists in Azure
+                                // This means it completed but execution wasn't marked done (crash/restart)
+                                Some((
+                                    "failed",
+                                    "reconciled stale running execution; ACI container was registered but no longer exists in Azure".to_string(),
+                                ))
+                            }
+                            AciContainerStatus::Terminal(state) => Some((
+                                "failed",
+                                format!(
+                                    "reconciled stale running execution; ACI container terminated with state: {}",
+                                    state
+                                ),
+                            )),
+                            _ => {
+                                // Container still running or error querying - fall through to stale check
+                                if row.started_at <= stale_before {
+                                    Some((
+                                        "failed",
+                                        format!(
+                                            "reconciled stale running execution after worker restart; execution exceeded {}s without a terminal status",
+                                            stale_timeout_secs
+                                        ),
+                                    ))
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        // No container registered for this workspace
+                        // Either: never created (danger zone) or already deregistered (completed)
                         let aci_grace_period = ChronoDuration::minutes(60);
                         let execution_age = now - row.started_at;
 
@@ -517,27 +577,6 @@ impl MongoSchedulerStore {
                                 execution_age,
                                 aci_grace_period
                             );
-                            None
-                        }
-                    }
-                    AciContainerStatus::Terminal(state) => Some((
-                        "failed",
-                        format!(
-                            "reconciled stale running execution; ACI container terminated with state: {}",
-                            state
-                        ),
-                    )),
-                    _ => {
-                        // Container still running or error querying - fall through to stale check
-                        if row.started_at <= stale_before {
-                            Some((
-                                "failed",
-                                format!(
-                                    "reconciled stale running execution after worker restart; execution exceeded {}s without a terminal status",
-                                    stale_timeout_secs
-                                ),
-                            ))
-                        } else {
                             None
                         }
                     }

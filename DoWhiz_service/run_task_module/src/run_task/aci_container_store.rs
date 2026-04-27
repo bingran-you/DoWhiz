@@ -251,6 +251,26 @@ fn parse_container_record(doc: &Document) -> Option<AciContainerRecord> {
     })
 }
 
+/// Find an ACI container by workspace path.
+/// Returns the container record if found, None otherwise.
+pub fn find_aci_container_by_workspace(workspace_path: &str) -> Option<AciContainerRecord> {
+    let coll = collection()?;
+
+    let filter = doc! { "workspace_path": workspace_path };
+    match coll.find_one(filter, None) {
+        Ok(Some(doc)) => parse_container_record(&doc),
+        Ok(None) => None,
+        Err(err) => {
+            tracing::warn!(
+                "failed to find ACI container by workspace {}: {}",
+                workspace_path,
+                err
+            );
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
