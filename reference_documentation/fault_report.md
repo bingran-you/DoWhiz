@@ -239,42 +239,9 @@ for row in rows.iter().filter(|row| row.status == "running") {
 
 ---
 
-## Recommended Future Improvements
+But why are tasks staying in the scheduler for 10+ hrs?
 
-### Option 1: Graceful Shutdown Handler (Recommended)
-
-Add SIGTERM handler to mark in-flight executions as failed before exit:
-
-```rust
-// On SIGTERM
-fn graceful_shutdown(in_flight_executions: &[ExecutionHandle]) {
-    for handle in in_flight_executions {
-        store.record_execution_finish(
-            handle.task_id,
-            handle,
-            Utc::now(),
-            "failed",
-            Some("worker shutdown during execution"),
-        );
-    }
-}
-```
-
-### Option 2: Move record_execution_start() Later
-
-Only record execution after ACI container is confirmed created. Downside: we lose visibility into pre-ACI setup time.
-
-### Option 3: Two-Phase Execution Recording
-
-1. Record as "pending" before execution
-2. Update to "running" after ACI container created
-3. Reconciliation treats "pending" differently (shorter timeout)
-
----
-
----
-
-## Addendum: False Positive in Investment Request Detection
+## False Positive in Investment Request Detection
 
 Task `a457a850` was a GitHub PR comment but was incorrectly classified as an investment request, causing repeated "Output contract violation" failures.
 
