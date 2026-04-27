@@ -5,6 +5,8 @@ use serde_json::Value;
 
 use super::errors::RunTaskError;
 
+// NOTE: Investment contract validation disabled - see ensure_expected_reply_artifact()
+#[allow(dead_code)]
 const REQUIRED_INVESTMENT_MARKERS: &[&str] = &[
     "As of:",
     "Price:",
@@ -29,6 +31,7 @@ const REQUIRED_INVESTMENT_MARKERS: &[&str] = &[
     "Judgment",
 ];
 
+#[allow(dead_code)]
 const SUMMARY_FIRST_HEADINGS: &[&str] = &[
     "decision card",
     "dual-horizon framing",
@@ -39,6 +42,7 @@ const SUMMARY_FIRST_HEADINGS: &[&str] = &[
     "judgment",
 ];
 
+#[allow(dead_code)]
 const SECTION_HEADINGS: &[&str] = &[
     "decision card",
     "dual-horizon framing",
@@ -49,11 +53,14 @@ const SECTION_HEADINGS: &[&str] = &[
     "judgment",
 ];
 
+#[allow(dead_code)]
 const LINKED_EVIDENCE_SECTIONS: &[&str] = &["verified facts"];
 
+#[allow(dead_code)]
 const INVESTMENT_INSTRUMENT_KEYWORDS: &[&str] =
     &["stock", "etf", "ticker", "earnings", "position", "shares"];
 
+#[allow(dead_code)]
 const INVESTMENT_FUNDAMENTAL_KEYWORDS: &[&str] = &[
     "valuation",
     "market cap",
@@ -63,6 +70,7 @@ const INVESTMENT_FUNDAMENTAL_KEYWORDS: &[&str] = &[
     "fcf",
 ];
 
+#[allow(dead_code)]
 const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "good time to buy",
     "should i buy",
@@ -77,10 +85,11 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "buy now",
 ];
 
+#[allow(dead_code)]
 const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze", "analysis"];
 
 pub(super) fn ensure_expected_reply_artifact(
-    workspace_dir: &Path,
+    _workspace_dir: &Path,
     reply_path: &Path,
     output_tail: &str,
 ) -> Result<(), RunTaskError> {
@@ -91,24 +100,35 @@ pub(super) fn ensure_expected_reply_artifact(
         });
     }
 
-    let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
-        return Ok(());
-    };
+    // NOTE: Investment contract validation disabled (2026-04-27).
+    // The is_investment_request() heuristic caused false positives: it flagged
+    // non-investment requests (GitHub PR comments, slide generation) as investment
+    // requests because of common acronyms (PR, ACI, API) triggering contains_probable_ticker()
+    // and words like "analyze/analyzer" triggering has_investment_research.
+    // See reference_documentation/fault_report.md for details.
+    // Investment format requirements moved to system prompt instead.
+    //
+    // let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
+    //     return Ok(());
+    // };
+    //
+    // Err(RunTaskError::OutputContractViolation {
+    //     path: reply_path.to_path_buf(),
+    //     reason: format!(
+    //         "investment reply violates required contract: {}",
+    //         violations.join("; ")
+    //     ),
+    //     output: output_tail.to_string(),
+    // })
 
-    Err(RunTaskError::OutputContractViolation {
-        path: reply_path.to_path_buf(),
-        reason: format!(
-            "investment reply violates required contract: {}",
-            violations.join("; ")
-        ),
-        output: output_tail.to_string(),
-    })
+    Ok(())
 }
 
 pub(super) fn reply_artifact_ready_for_workspace(workspace_dir: &Path, reply_path: &Path) -> bool {
     ensure_expected_reply_artifact(workspace_dir, reply_path, "").is_ok()
 }
 
+#[allow(dead_code)]
 fn investment_contract_violations(
     workspace_dir: &Path,
     reply_path: &Path,
@@ -182,6 +202,7 @@ fn investment_contract_violations(
     }
 }
 
+#[allow(dead_code)]
 fn missing_required_markers(normalized_reply: &str) -> Vec<String> {
     let mut missing = Vec::new();
 
@@ -194,6 +215,7 @@ fn missing_required_markers(normalized_reply: &str) -> Vec<String> {
     missing
 }
 
+#[allow(dead_code)]
 fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     let mut search_start = 0;
     for marker in markers {
@@ -206,6 +228,7 @@ fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     true
 }
 
+#[allow(dead_code)]
 fn decision_card_has_required_rows(normalized_reply: &str) -> bool {
     [
         "audience",
@@ -218,6 +241,7 @@ fn decision_card_has_required_rows(normalized_reply: &str) -> bool {
     .all(|marker| normalized_reply.contains(marker))
 }
 
+#[allow(dead_code)]
 fn derived_metrics_has_formula(raw_html: &str, lowered_reply: &str) -> bool {
     let Some(section) = extract_section(lowered_reply, "derived metrics") else {
         return false;
@@ -230,6 +254,7 @@ fn derived_metrics_has_formula(raw_html: &str, lowered_reply: &str) -> bool {
         || raw_html.to_ascii_lowercase().contains("<table")
 }
 
+#[allow(dead_code)]
 fn triggers_section_has_threshold_markers(lowered_reply: &str) -> bool {
     let Some(section) = extract_section(lowered_reply, "triggers") else {
         return false;
@@ -244,10 +269,12 @@ fn triggers_section_has_threshold_markers(lowered_reply: &str) -> bool {
     has_upgrade && has_add && has_trim_or_exit
 }
 
+#[allow(dead_code)]
 fn count_clickable_links(lowered_reply: &str) -> usize {
     lowered_reply.matches("href=\"http").count() + lowered_reply.matches("href='http").count()
 }
 
+#[allow(dead_code)]
 fn section_contains_clickable_link(lowered_reply: &str, heading: &str) -> bool {
     let Some(section) = extract_section(lowered_reply, heading) else {
         return false;
@@ -255,6 +282,7 @@ fn section_contains_clickable_link(lowered_reply: &str, heading: &str) -> bool {
     section.contains("href=\"http") || section.contains("href='http")
 }
 
+#[allow(dead_code)]
 fn extract_section<'a>(lowered_reply: &'a str, heading: &str) -> Option<&'a str> {
     let start = find_heading_position(lowered_reply, heading)?;
     let section_start = start + 1;
@@ -272,6 +300,7 @@ fn extract_section<'a>(lowered_reply: &'a str, heading: &str) -> Option<&'a str>
     Some(&lowered_reply[start..end])
 }
 
+#[allow(dead_code)]
 fn find_heading_position(lowered_reply: &str, heading: &str) -> Option<usize> {
     for marker in [format!(">{}", heading), format!(">{} ", heading)] {
         if let Some(idx) = lowered_reply.find(&marker) {
@@ -281,6 +310,7 @@ fn find_heading_position(lowered_reply: &str, heading: &str) -> Option<usize> {
     None
 }
 
+#[allow(dead_code)]
 fn load_inbound_request_text(workspace_dir: &Path) -> Result<String, RunTaskError> {
     let incoming_dir = workspace_dir.join("incoming_email");
     let mut parts = Vec::new();
@@ -324,6 +354,7 @@ fn reply_artifact_present(reply_path: &Path) -> bool {
     }
 }
 
+#[allow(dead_code)]
 fn is_investment_request(raw: &str) -> bool {
     let normalized = normalize_search_text(raw);
     let has_instrument_context = INVESTMENT_INSTRUMENT_KEYWORDS
@@ -348,6 +379,7 @@ fn is_investment_request(raw: &str) -> bool {
                 || has_fundamental_context))
 }
 
+#[allow(dead_code)]
 fn contains_probable_ticker(raw: &str) -> bool {
     const STOPWORDS: &[&str] = &[
         "A", "AI", "AM", "AND", "ARE", "BUY", "ETF", "EPS", "HTML", "I", "JSON", "NOW", "THE",
@@ -370,6 +402,7 @@ fn contains_probable_ticker(raw: &str) -> bool {
         })
 }
 
+#[allow(dead_code)]
 fn normalize_search_text(raw: &str) -> String {
     let without_tags = rough_html_to_text(raw);
     let without_entities = without_tags
@@ -384,6 +417,7 @@ fn normalize_search_text(raw: &str) -> String {
         .to_ascii_lowercase()
 }
 
+#[allow(dead_code)]
 fn rough_html_to_text(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut in_tag = false;
