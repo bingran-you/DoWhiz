@@ -37,9 +37,9 @@ DoWhiz_service/.env.example
 /test_reports
 DoWhiz_service/.env.production
 
-# Claude configuration files (contain sensitive context)
-CLAUDE.md
-**/CLAUDE.md
+# Claude configuration files (user session artifacts, not skills)
+.claude/settings.local.json
+.claude/settings.json
 /.playwright-cli
 
 # Log files
