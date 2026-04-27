@@ -36,6 +36,7 @@ shared_skill_dirs = [
   "tpm",
   "us-equity-daily-monitor",
   "us-tax-filing-assistant",
+  "used-car-search",
   "vercel-deploy",
   "web-artifacts-builder",
   "webapp-testing",
