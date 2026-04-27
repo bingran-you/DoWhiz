@@ -487,22 +487,38 @@ impl MongoSchedulerStore {
                 // and disable the task to prevent infinite retry loops
                 match query_aci_container_status(task_id, rg) {
                     AciContainerStatus::NotFound => {
-                        // Disable task to break the retry loop - task died in "danger zone"
-                        // between record_execution_start() and ACI container creation
-                        if let Err(e) = self.disable_task_by_id(
-                            task_id,
-                            "auto-disabled: execution started but ACI container was never created",
-                        ) {
-                            tracing::error!(
-                                "failed to disable task {} after ACI not found: {}",
+                        // Grace period: ephemeral share upload can take 10-15+ minutes,
+                        // so don't auto-disable tasks that might still be setting up
+                        let aci_grace_period = ChronoDuration::minutes(60);
+                        let execution_age = now - row.started_at;
+
+                        if execution_age > aci_grace_period {
+                            // Past grace period - task died in "danger zone" between
+                            // record_execution_start() and ACI container creation
+                            if let Err(e) = self.disable_task_by_id(
                                 task_id,
-                                e
+                                "auto-disabled: execution started but ACI container was never created",
+                            ) {
+                                tracing::error!(
+                                    "failed to disable task {} after ACI not found: {}",
+                                    task_id,
+                                    e
+                                );
+                            }
+                            Some((
+                                "failed",
+                                "reconciled stale running execution; ACI container not found".to_string(),
+                            ))
+                        } else {
+                            // Within grace period - might still be uploading ephemeral share
+                            tracing::debug!(
+                                "ACI container not found for task {} but within grace period ({} < {}), skipping",
+                                task_id,
+                                execution_age,
+                                aci_grace_period
                             );
+                            None
                         }
-                        Some((
-                            "failed",
-                            "reconciled stale running execution; ACI container not found".to_string(),
-                        ))
                     }
                     AciContainerStatus::Terminal(state) => Some((
                         "failed",
