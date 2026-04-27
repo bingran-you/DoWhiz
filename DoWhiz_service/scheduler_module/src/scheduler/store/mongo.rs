@@ -280,6 +280,45 @@ impl MongoSchedulerStore {
         Ok(())
     }
 
+    /// Disable a task by ID to prevent further executions.
+    ///
+    /// Used by reconciliation to break infinite retry loops when a task
+    /// repeatedly fails before ACI container creation.
+    pub(crate) fn disable_task_by_id(
+        &self,
+        task_id: &str,
+        reason: &str,
+    ) -> Result<(), SchedulerError> {
+        let filter = self.task_filter(task_id);
+        let update = doc! {
+            "$set": {
+                "enabled": false,
+                "auto_disabled_reason": reason,
+                "auto_disabled_at": BsonDateTime::from_chrono(Utc::now()),
+            }
+        };
+        let result = retry_mongo_write("tasks.disable_task_by_id", || {
+            self.tasks.update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
+
+        if result.matched_count == 0 {
+            tracing::warn!(
+                "disable_task_by_id matched 0 documents: task_id={} owner_scope=({}, {})",
+                task_id,
+                self.owner_kind,
+                self.owner_id
+            );
+        } else {
+            tracing::info!(
+                "disable_task_by_id succeeded: task_id={} reason={}",
+                task_id,
+                reason
+            );
+        }
+        Ok(())
+    }
+
     /// Check if there's already a running execution for this task.
     ///
     /// This prevents duplicate executions when the worker process restarts
@@ -445,11 +484,26 @@ impl MongoSchedulerStore {
                 ))
             } else if let Some(ref rg) = aci_resource_group {
                 // Check if ACI container still exists - if not, mark execution as failed
+                // and disable the task to prevent infinite retry loops
                 match query_aci_container_status(task_id, rg) {
-                    AciContainerStatus::NotFound => Some((
-                        "failed",
-                        "reconciled stale running execution; ACI container not found".to_string(),
-                    )),
+                    AciContainerStatus::NotFound => {
+                        // Disable task to break the retry loop - task died in "danger zone"
+                        // between record_execution_start() and ACI container creation
+                        if let Err(e) = self.disable_task_by_id(
+                            task_id,
+                            "auto-disabled: execution started but ACI container was never created",
+                        ) {
+                            tracing::error!(
+                                "failed to disable task {} after ACI not found: {}",
+                                task_id,
+                                e
+                            );
+                        }
+                        Some((
+                            "failed",
+                            "reconciled stale running execution; ACI container not found".to_string(),
+                        ))
+                    }
                     AciContainerStatus::Terminal(state) => Some((
                         "failed",
                         format!(

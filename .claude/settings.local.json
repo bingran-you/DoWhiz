@@ -135,7 +135,8 @@
       "Bash(IN_DOCKER=true browser-use click 466)",
       "Bash(IN_DOCKER=true browser-use input 2678 \"Dowhiz testing\")",
       "Bash(IN_DOCKER=true browser-use screenshot /tmp/notion_search_results.png)",
-      "Bash(IN_DOCKER=true browser-use keys \"Escape\")"
+      "Bash(IN_DOCKER=true browser-use keys \"Escape\")",
+      "Bash(ssh dowhizprod1 *)"
     ]
   }
 }

@@ -880,6 +880,130 @@ source ~/server/DoWhiz/DoWhiz_service/.env && echo $VAR_NAME
 grep "NOTION\|MONGODB" ~/server/DoWhiz/DoWhiz_service/.env
 ```
 
+### Task Execution Flow & Stale Running Executions
+
+**Problem:** A task can be marked "running" in MongoDB but have no ACI container created yet. This happens because `record_execution_start()` is called early in the flow, but ACI creation happens much later after extensive setup work.
+
+**Key insight:** If the worker is killed (SIGKILL) during this "danger zone", the execution remains "running" in MongoDB forever—ACI recovery can't help because no container was ever created.
+
+**Execution Flow (with danger zone):**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ scheduler_module/src/scheduler/core.rs                          │
+│                                                                 │
+│ execute_task_at_index()                                         │
+│   │                                                             │
+│   ├─ Line 268: record_execution_start() ← MongoDB "running" ✓  │
+│   │                                                             │
+│   └─ Line 283: executor.execute(&task_kind)                     │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│ scheduler_module/src/scheduler/executor.rs                      │
+│                                                                 │
+│ ModuleExecutor::execute() at line ~1221                         │
+│                                                                 │
+│ ┌─ DANGER ZONE ─────────────────────────────────────────────┐  │
+│ │ For TaskKind::RunTask, these happen BEFORE ACI creation:  │  │
+│ │                                                           │  │
+│ │ 1. supersede_reason check          (line 1228)            │  │
+│ │ 2. load_github_inbound_context     (line 1236)            │  │
+│ │ 3. resolve_account_for_run_task    (line 1237)            │  │
+│ │ 4. Balance check                   (lines 1263-1296)      │  │
+│ │ 5. sync_blob_memo_to_workspace     (line 1316)            │  │
+│ │ 6. sync_user_memory_to_workspace   (line 1348)            │  │
+│ │ 7. sync_user_secrets_to_workspace  (line 1377)            │  │
+│ │ 8. sync_browserbase_state          (line 1404)            │  │
+│ │ 9. sync_grocery_preferences        (line 1446)            │  │
+│ │ 10. build RunTaskParams            (line ~1500)           │  │
+│ └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│   └─ Line ~1551: run_task_module::run_task(&params)             │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+┌───────────────────────────────▼─────────────────────────────────┐
+│ run_task_module/src/run_task/codex.rs                           │
+│                                                                 │
+│ For codex_azure_aci backend:                                    │
+│   Line 1532: register_aci_container(&container_name)            │
+│   Line 1533: register_aci_container_mongo(...)                  │
+│   Line 2596: create_aci_container(...) ← ACTUAL ACI CREATION   │
+│                                                                 │
+│ Function definition: fn create_aci_container() at line 2857     │
+│   └─ Runs: az container create ...                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why ACI Recovery doesn't help:**
+- `aci_recovery.rs` queries MongoDB `aci_containers` collection for orphaned containers
+- If SIGKILL happens before `register_aci_container_mongo()`, there's nothing to recover
+- The execution stays "running" in `task_executions` until stale timeout (20h default)
+
+**Fix deployed (2026-04-27):** Reconciliation now checks if ACI container exists for "running" executions. If not found, marks as failed immediately instead of waiting for stale timeout. See `reference_documentation/fault_report.md`.
+
+**Debugging Commands:**
+
+```bash
+# SSH to production
+ssh dowhizprod1
+
+# Source nvm for pm2
+source ~/.nvm/nvm.sh
+
+# View worker logs (task execution)
+pm2 logs dw_worker --lines 100 --nostream
+
+# View gateway logs (inbound webhooks)
+pm2 logs dw_gateway --lines 100 --nostream
+
+# Stream logs live
+pm2 logs dw_worker
+
+# Search for specific task in logs
+pm2 logs dw_worker --nostream --lines 20000 | grep 'TASK_ID'
+
+# Check for [run_task] logs (ACI execution started)
+pm2 logs dw_worker --nostream --lines 20000 | grep -E '\[run_task\].*TASK_ID'
+
+# Find PM2 restart/SIGKILL events
+pm2 logs --nostream --lines 50000 | grep -i 'restart\|stopping\|SIGKILL' | head -50
+```
+
+**MongoDB execution queries:**
+```bash
+# Query all executions for a specific task
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source /home/azureuser/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").task_executions.find({task_id: \"TASK_ID_HERE\"}).sort({started_at: 1}).toArray()"'
+
+# Count running executions (should normally be 0-2)
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source /home/azureuser/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").task_executions.countDocuments({status: \"running\"})"'
+
+# List all running executions with task_id
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source /home/azureuser/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").task_executions.find({status: \"running\"}, {task_id: 1, started_at: 1}).toArray()"'
+```
+
+**ACI container queries:**
+```bash
+# Check if ACI container exists for a task
+ssh dowhizprod1 'az container list --resource-group rg-dowhiz-oliver-dev --query "[?starts_with(name, '"'"'dwz-codex'"'"')].{name:name, state:instanceView.state}" -o table'
+
+# Check aci_containers collection in MongoDB
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source /home/azureuser/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").aci_containers.find().toArray()"'
+```
+
+**Workspace trace inspection:**
+```bash
+# Check run_task trace metadata (shows if ACI was created)
+ssh dowhizprod1 'cat /home/azureuser/server/.dowhiz/DoWhiz/run_task/little_bear/users/USER_ID/workspaces/WORKSPACE_ID/.run_task_trace/metadata.json'
+
+# Check ACI recovery context (only exists if ACI was registered)
+ssh dowhizprod1 'cat /home/azureuser/server/.dowhiz/DoWhiz/run_task/little_bear/users/USER_ID/workspaces/WORKSPACE_ID/.aci_recovery_context.json'
+```
+
+**Reference documentation:**
+- `reference_documentation/fault_report.md` - 2026-04-27 incident with root cause analysis
+- `reference_documentation/aci_recovery.md` - ACI recovery mechanism documentation
+- `reference_documentation/dowhizprod1_commands.md` - Full command reference
+
 ## Skill routing
 
 When the user's request matches an available skill, ALWAYS invoke it using the Skill
