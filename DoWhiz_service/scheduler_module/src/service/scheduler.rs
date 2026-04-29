@@ -11,6 +11,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::index_store::{IndexStore, TaskRef};
+use crate::scheduler::check_and_send_alert_if_needed;
 use crate::thread_state::default_thread_state_path;
 use crate::user_store::UserStore;
 use crate::{ModuleExecutor, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskKind};
@@ -868,6 +869,8 @@ fn reconcile_stale_executions_pass(
         total_failed,
         stale_after_secs
     );
+
+    check_and_send_alert_if_needed(total_failed);
 
     Ok(())
 }
