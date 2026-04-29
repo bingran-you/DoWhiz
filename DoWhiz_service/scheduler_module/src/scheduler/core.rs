@@ -15,7 +15,7 @@ use super::outbound::execute_slack_send;
 use super::reply::load_reply_context;
 use super::schedule::{next_run_after, validate_cron_expression};
 use super::snapshot::{snapshot_reply_draft, write_scheduler_snapshot};
-use super::store::{ExecutionReconciliationSummary, SchedulerStore};
+use super::store::{reset_reconciliation_failure_counter, ExecutionReconciliationSummary, SchedulerStore};
 use super::types::{
     RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind,
     RUN_TASK_FAILURE_DIR, RUN_TASK_FAILURE_LIMIT, RUN_TASK_FAILURE_NOTICE,
@@ -304,6 +304,9 @@ impl<E: TaskExecutor> Scheduler<E> {
                     terminal_status,
                     terminal_note.as_deref(),
                 )?;
+                if terminal_status == "success" {
+                    reset_reconciliation_failure_counter();
+                }
                 self.tasks[index].last_run = Some(executed_at);
                 match &mut self.tasks[index].schedule {
                     Schedule::Cron {

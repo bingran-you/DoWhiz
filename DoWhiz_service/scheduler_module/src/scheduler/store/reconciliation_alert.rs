@@ -182,16 +182,22 @@ pub fn get_dev_alert_email() -> &'static str {
     DEV_ALERT_EMAIL
 }
 
+pub fn reset_reconciliation_failure_counter() {
+    let prev = CONSECUTIVE_FAILED_PASSES.swap(0, Ordering::SeqCst);
+    if prev > 0 {
+        tracing::debug!(
+            "reset reconciliation failure counter from {} after successful task execution",
+            prev
+        );
+    }
+}
+
 pub fn check_and_send_alert_if_needed(failures_this_pass: usize) {
     if failures_this_pass == 0 {
-        let prev = CONSECUTIVE_FAILED_PASSES.swap(0, Ordering::SeqCst);
-        if prev > 0 {
-            tracing::debug!("reconciliation pass had 0 failures, reset consecutive counter from {}", prev);
-        }
         return;
     }
 
-    let consecutive = CONSECUTIVE_FAILED_PASSES.fetch_add(1, Ordering::SeqCst) + 1;
+    let consecutive = CONSECUTIVE_FAILED_PASSES.fetch_add(failures_this_pass, Ordering::SeqCst) + failures_this_pass;
     tracing::debug!(
         "reconciliation pass had {} failures, consecutive failed passes: {}/{}",
         failures_this_pass,
