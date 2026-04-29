@@ -67,9 +67,10 @@ pub fn query_recent_reconciliation_failures(limit: usize) -> Vec<ReconciliationF
             format!("dowhiz_{}_{}", target, employee)
         });
 
+    // Filter for reconciliation failures from the last 24 hours
     let query = format!(
         r#"db.getSiblingDB("{}").task_executions.find(
-            {{status: "failed", error_message: /reconciled/}},
+            {{status: "failed", error_message: /reconciled/, finished_at: {{$gte: new Date(Date.now() - 24*60*60*1000)}}}},
             {{task_id: 1, started_at: 1, finished_at: 1, error_message: 1, _id: 0}}
         ).limit({}).toArray()"#,
         db_name, limit
