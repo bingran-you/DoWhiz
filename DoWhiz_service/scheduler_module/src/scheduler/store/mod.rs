@@ -5,8 +5,13 @@ use uuid::Uuid;
 use super::types::{ScheduledTask, SchedulerError};
 
 mod mongo;
+pub mod reconciliation_alert;
 
 use mongo::MongoSchedulerStore;
+pub use reconciliation_alert::{
+    format_reconciliation_alert_html, get_dev_alert_email, query_recent_reconciliation_failures,
+    ReconciliationFailureRecord,
+};
 
 #[derive(Debug)]
 pub(crate) struct SchedulerStore {
