@@ -8,6 +8,7 @@ mod mongo;
 pub mod reconciliation_alert;
 
 use mongo::MongoSchedulerStore;
+pub use mongo::mark_execution_finished_by_workspace;
 pub use reconciliation_alert::{check_and_send_alert_if_needed, reset_reconciliation_failure_counter};
 
 #[derive(Debug)]

@@ -1370,6 +1370,105 @@ fn resolve_owner_scope(path: &Path) -> (String, String) {
     ("path_scope".to_string(), hashed)
 }
 
+/// Mark orphaned execution as finished by workspace path.
+/// Used by ACI recovery to update task_executions when recovering containers.
+/// `status` should be "success" if results were recovered, "failed" otherwise.
+/// Returns Ok(true) if an execution was marked, Ok(false) if none found.
+pub fn mark_execution_finished_by_workspace(
+    workspace_path: &Path,
+    status: &str,
+    error_message: Option<&str>,
+) -> Result<bool, SchedulerError> {
+    let client = get_shared_client();
+    let db = database_from_env(client);
+    let (owner_kind, owner_id) = resolve_owner_scope(workspace_path);
+
+    let tasks: Collection<Document> = db.collection("tasks");
+    let executions: Collection<Document> = db.collection("task_executions");
+
+    // Find task_id by matching workspace_dir in task_json
+    let workspace_str = workspace_path.to_string_lossy();
+    let filter = doc! {
+        "owner_scope.kind": &owner_kind,
+        "owner_scope.id": &owner_id,
+    };
+
+    let cursor = retry_mongo_read("tasks.find_for_workspace_lookup", || {
+        tasks.find(filter.clone(), None)
+    })
+    .map_err(mongo_err)?;
+
+    let mut task_id: Option<String> = None;
+    for doc_result in cursor {
+        let doc = doc_result.map_err(mongo_err)?;
+        if let Ok(task_json) = doc.get_str("task_json") {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(task_json) {
+                if let Some(ws) = parsed.get("kind").and_then(|k| k.get("workspace_dir")).and_then(|v| v.as_str()) {
+                    if ws == workspace_str {
+                        task_id = doc.get_str("task_id").ok().map(|s| s.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    let Some(task_id) = task_id else {
+        tracing::debug!(
+            "no task found for workspace {} - cannot mark execution",
+            workspace_path.display()
+        );
+        return Ok(false);
+    };
+
+    // Find running execution for this task
+    let exec_filter = doc! {
+        "owner_scope.kind": &owner_kind,
+        "owner_scope.id": &owner_id,
+        "task_id": &task_id,
+        "status": "running",
+    };
+
+    let running_exec = retry_mongo_read("task_executions.find_running_for_recovery", || {
+        executions.find_one(exec_filter.clone(), None)
+    })
+    .map_err(mongo_err)?;
+
+    let Some(exec_doc) = running_exec else {
+        tracing::debug!(
+            "no running execution found for task {} - may already be marked",
+            task_id
+        );
+        return Ok(false);
+    };
+
+    let doc_id = exec_doc.get("_id").cloned().unwrap_or(Bson::Null);
+    let now = Utc::now();
+
+    // Mark as finished with the given status
+    let update = doc! {
+        "$set": {
+            "status": status,
+            "finished_at": BsonDateTime::from_chrono(now),
+            "error_message": error_message,
+        }
+    };
+
+    retry_mongo_write("task_executions.mark_finished_by_recovery", || {
+        executions.update_one(doc! { "_id": doc_id.clone() }, update.clone(), None)
+    })
+    .map_err(mongo_err)?;
+
+    tracing::info!(
+        "ACI recovery marked execution as {}: task_id={} workspace={}",
+        status,
+        task_id,
+        workspace_path.display()
+    );
+
+    Ok(true)
+}
+
 fn datetime_field_to_rfc3339(document: &Document, key: &str) -> Option<String> {
     match document.get(key) {
         Some(Bson::DateTime(value)) => Some(value.to_chrono().to_rfc3339()),
