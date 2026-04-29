@@ -8,7 +8,7 @@ mod mongo;
 pub mod reconciliation_alert;
 
 use mongo::MongoSchedulerStore;
-pub use reconciliation_alert::check_and_send_alert_if_needed;
+pub use reconciliation_alert::{check_and_send_alert_if_needed, reset_reconciliation_failure_counter};
 
 #[derive(Debug)]
 pub(crate) struct SchedulerStore {
