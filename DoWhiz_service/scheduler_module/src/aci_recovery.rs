@@ -14,6 +14,7 @@ use run_task_module::{
 };
 
 use crate::channel::{Channel, ChannelMetadata};
+use crate::scheduler::mark_execution_finished_by_workspace;
 use crate::scheduler::outbound::{
     execute_bluebubbles_send, execute_discord_send, execute_email_send, execute_google_docs_send,
     execute_lark_send, execute_notion_send, execute_slack_send, execute_sms_send,
@@ -69,12 +70,17 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
         workspace.display()
     );
 
+    // Track whether recovery succeeded for marking execution status
+    let mut recovery_succeeded = false;
+    let mut recovery_error: Option<String> = None;
+
     // Check if outbound was already sent
     if marker_path.exists() {
         info!(
             "container {} already sent outbound (marker exists), skipping propagation",
             container.container_name
         );
+        recovery_succeeded = true;
     } else {
         // Check Azure status and poll if needed
         let status =
@@ -102,6 +108,7 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
                             "container {} poll failed: {}, continuing with cleanup",
                             container.container_name, err
                         );
+                        recovery_error = Some(format!("ACI recovery: poll failed - {}", err));
                     }
                 }
             }
@@ -122,6 +129,7 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
                     "error querying container {} status: {}",
                     container.container_name, err
                 );
+                recovery_error = Some(format!("ACI recovery: status query error - {}", err));
             }
         }
 
@@ -136,20 +144,39 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
         }
 
         // Propagate results to outbound
-        if let Err(err) = propagate_results_to_outbound(workspace) {
-            warn!(
-                "failed to propagate results for container {}: {}",
-                container.container_name, err
-            );
-        } else {
-            // Write marker file after successful outbound
-            if let Err(err) = fs::write(&marker_path, "sent") {
+        match propagate_results_to_outbound(workspace) {
+            Ok(()) => {
+                recovery_succeeded = true;
+                // Write marker file after successful outbound
+                if let Err(err) = fs::write(&marker_path, "sent") {
+                    warn!(
+                        "failed to write outbound marker for container {}: {}",
+                        container.container_name, err
+                    );
+                }
+            }
+            Err(err) => {
                 warn!(
-                    "failed to write outbound marker for container {}: {}",
+                    "failed to propagate results for container {}: {}",
                     container.container_name, err
                 );
+                recovery_error = Some(format!("ACI recovery: propagation failed - {}", err));
             }
         }
+    }
+
+    // Mark the task execution as finished in MongoDB
+    let (status, error_msg) = if recovery_succeeded {
+        ("success", None)
+    } else {
+        ("failed", recovery_error.as_deref().or(Some("ACI recovery: unknown error")))
+    };
+
+    if let Err(err) = mark_execution_finished_by_workspace(workspace, status, error_msg) {
+        warn!(
+            "failed to mark execution for container {}: {}",
+            container.container_name, err
+        );
     }
 
     // Cleanup: delete from Azure
