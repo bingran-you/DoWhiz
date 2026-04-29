@@ -1386,7 +1386,7 @@ pub fn mark_execution_finished_by_workspace(
     let tasks: Collection<Document> = db.collection("tasks");
     let executions: Collection<Document> = db.collection("task_executions");
 
-    // Find task_id by matching workspace_dir in task_json
+    // Find ALL task_ids with matching workspace_dir in task_json
     let workspace_str = workspace_path.to_string_lossy();
     let filter = doc! {
         "owner_scope.kind": &owner_kind,
@@ -1398,34 +1398,35 @@ pub fn mark_execution_finished_by_workspace(
     })
     .map_err(mongo_err)?;
 
-    let mut task_id: Option<String> = None;
+    let mut matching_task_ids: Vec<String> = Vec::new();
     for doc_result in cursor {
         let doc = doc_result.map_err(mongo_err)?;
         if let Ok(task_json) = doc.get_str("task_json") {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(task_json) {
                 if let Some(ws) = parsed.get("kind").and_then(|k| k.get("workspace_dir")).and_then(|v| v.as_str()) {
                     if ws == workspace_str {
-                        task_id = doc.get_str("task_id").ok().map(|s| s.to_string());
-                        break;
+                        if let Ok(task_id) = doc.get_str("task_id") {
+                            matching_task_ids.push(task_id.to_string());
+                        }
                     }
                 }
             }
         }
     }
 
-    let Some(task_id) = task_id else {
+    if matching_task_ids.is_empty() {
         tracing::debug!(
-            "no task found for workspace {} - cannot mark execution",
+            "no tasks found for workspace {} - cannot mark execution",
             workspace_path.display()
         );
         return Ok(false);
-    };
+    }
 
-    // Find running execution for this task
+    // Find running execution for ANY of the matching tasks
     let exec_filter = doc! {
         "owner_scope.kind": &owner_kind,
         "owner_scope.id": &owner_id,
-        "task_id": &task_id,
+        "task_id": { "$in": &matching_task_ids },
         "status": "running",
     };
 
@@ -1436,13 +1437,14 @@ pub fn mark_execution_finished_by_workspace(
 
     let Some(exec_doc) = running_exec else {
         tracing::debug!(
-            "no running execution found for task {} - may already be marked",
-            task_id
+            "no running execution found for tasks {:?} - may already be marked",
+            matching_task_ids
         );
         return Ok(false);
     };
 
     let doc_id = exec_doc.get("_id").cloned().unwrap_or(Bson::Null);
+    let task_id = exec_doc.get_str("task_id").unwrap_or("unknown");
     let now = Utc::now();
 
     // Mark as finished with the given status
