@@ -1233,7 +1233,9 @@ impl TaskExecutor for ModuleExecutor {
                     );
                     return Ok(superseded_task_execution(reason));
                 }
+                info!("[executor] checkpoint: load_github_inbound_context");
                 let github_inbound = load_github_inbound_context(task);
+                info!("[executor] checkpoint: resolve_account_for_run_task");
                 let account_id =
                     resolve_account_for_run_task(task, github_inbound.sender_login.as_deref());
                 let task_dedupe_key = run_task_dedupe_key(task);
@@ -1262,6 +1264,7 @@ impl TaskExecutor for ModuleExecutor {
                 // Check balance before any run_task side effects.
                 if let Some(account_id) = account_id {
                     if let Some(store) = get_global_account_store() {
+                        info!("[executor] checkpoint: has_sufficient_balance account={}", account_id);
                         match store.has_sufficient_balance(account_id) {
                             Ok(false) => {
                                 warn!(
@@ -1296,6 +1299,7 @@ impl TaskExecutor for ModuleExecutor {
                 }
 
                 if let Some(account_id) = account_id {
+                    info!("[executor] checkpoint: track_task_start_markers");
                     track_task_start_markers(account_id, task, &task_dedupe_key);
                 }
 
@@ -1303,10 +1307,14 @@ impl TaskExecutor for ModuleExecutor {
                 let user_memory_dir = resolve_user_memory_dir(task);
                 let user_secrets_path = resolve_user_secrets_path(task);
                 let user_browserbase_state_dir = resolve_user_browserbase_state_dir(task);
+                info!("[executor] checkpoint: discord_typing_heartbeat");
                 let _typing_heartbeat = DiscordTypingHeartbeat::start(task);
+                info!("[executor] checkpoint: post_slack_working_placeholder");
                 post_slack_working_placeholder(task);
+                info!("[executor] checkpoint: slack_placeholder_done");
 
                 // Sync memo to workspace: prefer Azure Blob if account exists, else local storage
+                info!("[executor] checkpoint: sync_blob_memo_to_workspace");
                 let original_memo_snapshot = if let Some(account_id) = account_id {
                     // User has a unified account - try to sync from Azure Blob
                     info!(
@@ -1373,6 +1381,7 @@ impl TaskExecutor for ModuleExecutor {
                     }
                     snapshot
                 };
+                info!("[executor] checkpoint: sync_user_secrets_to_workspace");
                 if let Some(user_secrets_path) = user_secrets_path.as_ref() {
                     sync_user_secrets_to_workspace(user_secrets_path, &task.workspace_dir)
                         .map_err(|err| {
@@ -1400,6 +1409,7 @@ impl TaskExecutor for ModuleExecutor {
                         task.workspace_dir.display()
                     );
                 }
+                info!("[executor] checkpoint: sync_user_browserbase_state_to_workspace");
                 if let Some(user_browserbase_state_dir) = user_browserbase_state_dir.as_ref() {
                     sync_user_browserbase_state_to_workspace(
                         user_browserbase_state_dir,
@@ -1436,6 +1446,7 @@ impl TaskExecutor for ModuleExecutor {
 
                 // Sync grocery preferences to workspace memory
                 // Extract user_id from workspace path: users/{user_id}/workspaces/...
+                info!("[executor] checkpoint: sync_grocery_preferences_to_workspace");
                 let grocery_user_id = user_memory_dir
                     .as_ref()
                     .and_then(|dir| dir.parent())
@@ -1454,7 +1465,13 @@ impl TaskExecutor for ModuleExecutor {
                     );
                     return Ok(superseded_task_execution(reason));
                 }
+                info!("[executor] checkpoint: fetch_user_identities");
                 let user_identities = fetch_user_identities(account_id);
+                info!("[executor] checkpoint: load_google_access_token");
+                let google_access_token = load_google_access_token_from_service_env();
+                info!("[executor] checkpoint: load_notion_access_token");
+                let notion_access_token = load_notion_access_token_for_account(account_id);
+                info!("[executor] checkpoint: build_run_task_params");
                 let params = run_task_module::RunTaskParams {
                     workspace_dir: task.workspace_dir.clone(),
                     input_email_dir: task.input_email_dir.clone(),
@@ -1466,8 +1483,8 @@ impl TaskExecutor for ModuleExecutor {
                     runner: task.runner.clone(),
                     codex_disabled: task.codex_disabled,
                     channel: task.channel.to_string(),
-                    google_access_token: load_google_access_token_from_service_env(),
-                    notion_access_token: load_notion_access_token_for_account(account_id),
+                    google_access_token,
+                    notion_access_token,
                     has_unified_account: account_id.is_some(),
                     user_identities,
                     thread_epoch: task.thread_epoch,
@@ -1548,6 +1565,7 @@ impl TaskExecutor for ModuleExecutor {
                         }
                     }
                 } else {
+                    info!("[executor] checkpoint: run_task_start (direct ACI)");
                     match run_task_module::run_task(&params) {
                         Ok(output) => output,
                         Err(run_task_module::RunTaskError::Canceled { reason, .. }) => {
