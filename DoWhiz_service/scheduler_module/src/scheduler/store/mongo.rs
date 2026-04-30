@@ -518,18 +518,40 @@ impl MongoSchedulerStore {
                             AciContainerStatus::NotFound => {
                                 // Container was registered but no longer exists in Azure
                                 // This means it completed but execution wasn't marked done (crash/restart)
+                                if let Err(e) = self.disable_task_by_id(
+                                    task_id,
+                                    "auto-disabled: ACI container was registered but no longer exists in Azure",
+                                ) {
+                                    tracing::error!(
+                                        "failed to disable task {} after ACI gone from Azure: {}",
+                                        task_id,
+                                        e
+                                    );
+                                }
                                 Some((
                                     "failed",
                                     "reconciled stale running execution; ACI container was registered but no longer exists in Azure".to_string(),
                                 ))
                             }
-                            AciContainerStatus::Terminal(state) => Some((
-                                "failed",
-                                format!(
-                                    "reconciled stale running execution; ACI container terminated with state: {}",
-                                    state
-                                ),
-                            )),
+                            AciContainerStatus::Terminal(state) => {
+                                if let Err(e) = self.disable_task_by_id(
+                                    task_id,
+                                    &format!("auto-disabled: ACI container terminated with state: {}", state),
+                                ) {
+                                    tracing::error!(
+                                        "failed to disable task {} after ACI terminal state: {}",
+                                        task_id,
+                                        e
+                                    );
+                                }
+                                Some((
+                                    "failed",
+                                    format!(
+                                        "reconciled stale running execution; ACI container terminated with state: {}",
+                                        state
+                                    ),
+                                ))
+                            }
                             _ => {
                                 // Container still running or error querying - fall through to stale check
                                 if row.started_at <= stale_before {
