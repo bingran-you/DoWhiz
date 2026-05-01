@@ -169,7 +169,12 @@ fn recover_single_container(container: &AciContainerRecord) -> Result<(), String
     let (status, error_msg) = if recovery_succeeded {
         ("success", None)
     } else {
-        ("failed", recovery_error.as_deref().or(Some("ACI recovery: unknown error")))
+        (
+            "failed",
+            recovery_error
+                .as_deref()
+                .or(Some("ACI recovery: unknown error")),
+        )
     };
 
     if let Err(err) = mark_execution_finished_by_workspace(workspace, status, error_msg) {

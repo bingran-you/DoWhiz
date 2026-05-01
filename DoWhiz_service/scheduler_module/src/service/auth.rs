@@ -1812,11 +1812,7 @@ pub async fn update_organization_database(
     let database_id = payload.database_id.clone();
     let workspace_id = payload.workspace_id.clone();
     let update_result = task::spawn_blocking(move || {
-        store.update_organization_notion_config(
-            &org_name,
-            &database_id,
-            workspace_id.as_deref(),
-        )
+        store.update_organization_notion_config(&org_name, &database_id, workspace_id.as_deref())
     })
     .await
     .map_err(|e| {

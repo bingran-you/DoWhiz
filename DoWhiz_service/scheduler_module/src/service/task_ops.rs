@@ -337,7 +337,9 @@ fn compute_summary_from_execution_docs(
 
         // Collect durations for median/p95
         if let Some(finished_at) = doc.finished_at {
-            let duration = finished_at.signed_duration_since(doc.started_at).num_seconds();
+            let duration = finished_at
+                .signed_duration_since(doc.started_at)
+                .num_seconds();
             if duration >= 0 {
                 durations.push(duration);
             }
@@ -430,7 +432,10 @@ fn paginate_executions_in_memory(
         .take(page_size)
         .collect();
 
-    Ok(TaskOpsPageSlice { rows, has_next_page })
+    Ok(TaskOpsPageSlice {
+        rows,
+        has_next_page,
+    })
 }
 
 fn parse_execution_doc(document: &Document) -> Result<ExecutionDoc, String> {

@@ -30,11 +30,12 @@ fn assert_investment_contract_labels(text: &str) {
         "Price:",
         "Investor question:",
         "Decision Card",
-        "Audience",
-        "Action",
+        "Monitor Status",
+        "New Money Action",
+        "Existing Holder Action",
+        "Thesis Impact",
+        "Signal Quality",
         "Confidence",
-        "New money",
-        "Existing holder",
         "One-line rationale:",
         "Dual-Horizon Framing",
         "Near-Term Timing View",
@@ -46,6 +47,9 @@ fn assert_investment_contract_labels(text: &str) {
         "Base Case",
         "Bear Case",
         "Triggers",
+        "Upgrade / Review Now",
+        "Downgrade / De-risk",
+        "Invalidation",
         "Judgment",
     ] {
         assert!(text.contains(label), "missing label {label}");
@@ -1181,8 +1185,8 @@ fn run_task_accepts_structured_investment_reply_from_fake_codex() {
     assert!(html.contains("Decision Card"));
     assert!(html.contains("Verified Facts"));
     assert!(html.contains("Triggers"));
-    assert!(html.contains("New money"));
-    assert!(html.contains("Existing holder"));
+    assert!(html.contains("New Money Action"));
+    assert!(html.contains("Existing Holder Action"));
 }
 
 #[test]

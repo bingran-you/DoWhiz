@@ -146,63 +146,37 @@ const STRUCTURED_INVESTMENT_REPLY_HTML: &str = r#"
 <section>
   <h2>Decision Card</h2>
   <table>
-    <tr>
-      <th>Audience</th>
-      <th>Action</th>
-      <th>Confidence</th>
-    </tr>
-    <tr>
-      <td>New money</td>
-      <td>Wait</td>
-      <td>Medium</td>
-    </tr>
-    <tr>
-      <td>Existing holder</td>
-      <td>Hold</td>
-      <td>Medium</td>
-    </tr>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Monitor Status</td><td>Watch Closely</td></tr>
+    <tr><td>New Money Action</td><td>Starter Only</td></tr>
+    <tr><td>Existing Holder Action</td><td>Hold/Do not add</td></tr>
+    <tr><td>Thesis Impact</td><td>Mixed</td></tr>
+    <tr><td>Signal Quality</td><td>Moderate</td></tr>
+    <tr><td>Confidence</td><td>Medium</td></tr>
   </table>
-  <p><strong>One-line rationale:</strong> NVIDIA remains an elite business, but new buyers still face a demanding setup into the next print while existing holders already own the secular upside.</p>
+  <p><strong>One-line rationale:</strong> NVIDIA still looks strong, but the next print carries enough margin risk that fresh capital should stay sized and conditional.</p>
 </section>
 <section>
   <h2>Dual-Horizon Framing</h2>
   <h3>Near-Term Timing View</h3>
-  <p>The next earnings print is still the key catalyst, so new money should wait for either a cleaner post-print setup or better evidence that expectations remain too low.</p>
+  <p>The next earnings print is the dominant catalyst for new money.</p>
   <h3>Long-Term Ownership View</h3>
-  <p>Existing holders can keep owning the AI platform thesis as long as demand durability and margin structure remain intact.</p>
+  <p>Existing holders can stay with the AI demand story while margin durability remains intact.</p>
 </section>
 <section>
   <h2>Verified Facts</h2>
   <ul>
-    <li>
-      FY2026 revenue was $215.9B. <a href="https://investor.nvidia.com/">NVIDIA IR</a>
-    </li>
-    <li>
-      Q4 FY2026 revenue was $68.1B with GAAP diluted EPS of $1.76. <a href="https://www.sec.gov/">SEC EDGAR</a>
-    </li>
-    <li>
-      The stock closed at $202.06 on April 20, 2026. <a href="https://www.nasdaq.com/">Nasdaq</a>
-    </li>
+    <li>FY2026 revenue was $215.9B. <a href="https://investor.nvidia.com/">NVIDIA IR</a></li>
+    <li>Q4 FY2026 revenue was $68.1B with GAAP diluted EPS of $1.76. <a href="https://www.sec.gov/">SEC EDGAR</a></li>
+    <li>The stock closed at $202.06 on April 20, 2026. <a href="https://www.nasdaq.com/">Nasdaq</a></li>
   </ul>
 </section>
 <section>
   <h2>Derived Metrics</h2>
   <table>
-    <tr>
-      <th>Metric</th>
-      <th>Value</th>
-      <th>Formula / Inputs</th>
-    </tr>
-    <tr>
-      <td>P/E (TTM)</td>
-      <td>41.2x</td>
-      <td>$202.06 / TTM diluted EPS $4.90</td>
-    </tr>
-    <tr>
-      <td>Revenue YoY (Q4)</td>
-      <td>21.0%</td>
-      <td>$68.1B / $56.3B − 1</td>
-    </tr>
+    <tr><th>Metric</th><th>Value</th><th>Formula / Inputs</th></tr>
+    <tr><td>P/E (TTM)</td><td>41.2x</td><td>$202.06 / TTM diluted EPS $4.90</td></tr>
+    <tr><td>Revenue YoY (Q4)</td><td>21.0%</td><td>$68.1B / $56.3B - 1</td></tr>
   </table>
 </section>
 <section>
@@ -217,15 +191,14 @@ const STRUCTURED_INVESTMENT_REPLY_HTML: &str = r#"
 <section>
   <h2>Triggers — Verdict Movement</h2>
   <ul>
-    <li><strong>Upgrade to Buy (new money):</strong> Revenue above $70B and gross margin above 74%.</li>
-    <li><strong>Add (existing holder):</strong> Pullback of at least 12% without a fundamental reset.</li>
-    <li><strong>Trim:</strong> Two consecutive quarters of margin pressure.</li>
-    <li><strong>Exit:</strong> A major customer capex reset or export-control shock.</li>
+    <li><strong>Upgrade / Review Now:</strong> Revenue above $70B and gross margin above 74%.</li>
+    <li><strong>Downgrade / De-risk:</strong> Gross margin below 71% or a guide cut of 5% or more.</li>
+    <li><strong>Invalidation:</strong> A major customer capex reset or export-control shock that threatens more than 10% of revenue.</li>
   </ul>
 </section>
 <section>
   <h2>Judgment</h2>
-  <p><em>Inference, Medium confidence.</em> NVIDIA still looks stronger as an owned compounder than as a fresh pre-earnings entry because the setup leaves less room for a merely good report.</p>
+  <p><em>Inference, Medium confidence.</em> NVIDIA still looks stronger as an owned compounder than as a full-risk fresh entry, so the calibrated output is `Watch Closely`, not generic hold-and-wait prose.</p>
 </section>
 "#;
 
