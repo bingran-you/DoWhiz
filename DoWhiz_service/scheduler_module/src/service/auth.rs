@@ -1807,10 +1807,42 @@ pub async fn update_organization_database(
         );
     }
 
+    // Auto-detect workspace_id if not provided
+    let database_id = payload.database_id.clone();
+    let workspace_id = if let Some(ws_id) = payload.workspace_id.clone() {
+        Some(ws_id)
+    } else {
+        // Try to auto-detect by testing each credential
+        let account_id = account.id;
+        let db_id = database_id.clone();
+        match task::spawn_blocking(move || {
+            detect_workspace_for_database(account_id, &db_id)
+        })
+        .await
+        {
+            Ok(Some(ws_id)) => {
+                info!(
+                    "Auto-detected workspace_id={} for database_id={}",
+                    ws_id, database_id
+                );
+                Some(ws_id)
+            }
+            Ok(None) => {
+                warn!(
+                    "Could not auto-detect workspace for database_id={}, no credential had access",
+                    database_id
+                );
+                None
+            }
+            Err(e) => {
+                error!("Failed to auto-detect workspace: {}", e);
+                None
+            }
+        }
+    };
+
     // Update the organization's notion_database_id and workspace_id
     let store = state.account_store.clone();
-    let database_id = payload.database_id.clone();
-    let workspace_id = payload.workspace_id.clone();
     let update_result = task::spawn_blocking(move || {
         store.update_organization_notion_config(&org_name, &database_id, workspace_id.as_deref())
     })
@@ -1837,6 +1869,78 @@ pub async fn update_organization_database(
         }
         Err(response) => response,
     }
+}
+
+/// Auto-detect which workspace a Notion database belongs to.
+///
+/// Tries each of the user's Notion credentials to see which one can access the database.
+/// Returns the workspace_id of the first credential that succeeds.
+fn detect_workspace_for_database(account_id: Uuid, database_id: &str) -> Option<String> {
+    let notion_store = match NotionStore::new() {
+        Ok(store) => store,
+        Err(e) => {
+            error!("Failed to create NotionStore: {}", e);
+            return None;
+        }
+    };
+
+    let credentials = match notion_store.get_credentials_for_account(account_id) {
+        Ok(creds) => creds,
+        Err(e) => {
+            error!("Failed to get Notion credentials for account {}: {}", account_id, e);
+            return None;
+        }
+    };
+
+    if credentials.is_empty() {
+        warn!("No Notion credentials found for account {}", account_id);
+        return None;
+    }
+
+    info!(
+        "Trying {} Notion credentials to find workspace for database {}",
+        credentials.len(),
+        database_id
+    );
+
+    // Try each credential to see which one can access the database
+    for cred in &credentials {
+        let url = format!("https://api.notion.com/v1/databases/{}", database_id);
+        let client = reqwest::blocking::Client::new();
+
+        match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", cred.access_token))
+            .header("Notion-Version", "2022-06-28")
+            .send()
+        {
+            Ok(resp) if resp.status().is_success() => {
+                info!(
+                    "Found database {} in workspace {} ({})",
+                    database_id,
+                    cred.workspace_id,
+                    cred.workspace_name.as_deref().unwrap_or("unnamed")
+                );
+                return Some(cred.workspace_id.clone());
+            }
+            Ok(resp) => {
+                info!(
+                    "Workspace {} cannot access database {}: HTTP {}",
+                    cred.workspace_id,
+                    database_id,
+                    resp.status()
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to check database {} with workspace {}: {}",
+                    database_id, cred.workspace_id, e
+                );
+            }
+        }
+    }
+
+    None
 }
 
 /// POST /api/tpm/setup-cron - Set up TPM cron job for an organization
