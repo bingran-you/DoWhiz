@@ -137,7 +137,9 @@ pub fn format_reconciliation_alert_html(
 
     html.push_str("<h2>Summary</h2>\n");
     html.push_str("<table>\n");
-    html.push_str("<tr><th>Task ID</th><th>Started</th><th>Finished</th><th>Error (truncated)</th></tr>\n");
+    html.push_str(
+        "<tr><th>Task ID</th><th>Started</th><th>Finished</th><th>Error (truncated)</th></tr>\n",
+    );
 
     for failure in failures {
         let error_truncated = if failure.error_message.len() > 80 {
@@ -198,7 +200,8 @@ pub fn check_and_send_alert_if_needed(failures_this_pass: usize) {
         return;
     }
 
-    let consecutive = CONSECUTIVE_FAILED_PASSES.fetch_add(failures_this_pass, Ordering::SeqCst) + failures_this_pass;
+    let consecutive = CONSECUTIVE_FAILED_PASSES.fetch_add(failures_this_pass, Ordering::SeqCst)
+        + failures_this_pass;
     tracing::debug!(
         "reconciliation pass had {} failures, consecutive failed passes: {}/{}",
         failures_this_pass,
@@ -307,14 +310,12 @@ mod tests {
 
     #[test]
     fn format_alert_html_generates_valid_structure() {
-        let failures = vec![
-            ReconciliationFailureRecord {
-                task_id: "test-task-1".to_string(),
-                started_at: "2026-04-08T03:13:46.662Z".to_string(),
-                finished_at: "2026-04-08T05:54:12.730Z".to_string(),
-                error_message: "reconciled stale running execution".to_string(),
-            },
-        ];
+        let failures = vec![ReconciliationFailureRecord {
+            task_id: "test-task-1".to_string(),
+            started_at: "2026-04-08T03:13:46.662Z".to_string(),
+            finished_at: "2026-04-08T05:54:12.730Z".to_string(),
+            error_message: "reconciled stale running execution".to_string(),
+        }];
 
         let html = format_reconciliation_alert_html(&failures, 2);
 

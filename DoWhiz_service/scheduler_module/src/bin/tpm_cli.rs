@@ -462,10 +462,7 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                     ) {
                         Ok(org) => Some(org),
                         Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to update organizations: {}",
-                                e
-                            );
+                            eprintln!("Warning: Failed to update organizations: {}", e);
                             eprintln!(
                                 "You must manually update: UPDATE organizations SET notion_database_id = '{}', notion_workspace_id = '{}' WHERE name = '{}'",
                                 db.id, workspace_id, organization

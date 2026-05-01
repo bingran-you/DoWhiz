@@ -1264,7 +1264,10 @@ impl TaskExecutor for ModuleExecutor {
                 // Check balance before any run_task side effects.
                 if let Some(account_id) = account_id {
                     if let Some(store) = get_global_account_store() {
-                        info!("[executor] checkpoint: has_sufficient_balance account={}", account_id);
+                        info!(
+                            "[executor] checkpoint: has_sufficient_balance account={}",
+                            account_id
+                        );
                         match store.has_sufficient_balance(account_id) {
                             Ok(false) => {
                                 warn!(

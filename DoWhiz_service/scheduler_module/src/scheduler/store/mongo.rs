@@ -3,7 +3,9 @@ use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
 use mongodb::options::{FindOneOptions, FindOptions, UpdateOptions};
 use mongodb::sync::{Client, Collection};
 use mongodb::IndexModel;
-use run_task_module::{find_aci_container_by_workspace, query_aci_container_status, AciContainerStatus};
+use run_task_module::{
+    find_aci_container_by_workspace, query_aci_container_status, AciContainerStatus,
+};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -536,7 +538,10 @@ impl MongoSchedulerStore {
                             AciContainerStatus::Terminal(state) => {
                                 if let Err(e) = self.disable_task_by_id(
                                     task_id,
-                                    &format!("auto-disabled: ACI container terminated with state: {}", state),
+                                    &format!(
+                                        "auto-disabled: ACI container terminated with state: {}",
+                                        state
+                                    ),
                                 ) {
                                     tracing::error!(
                                         "failed to disable task {} after ACI terminal state: {}",
@@ -589,7 +594,8 @@ impl MongoSchedulerStore {
                             }
                             Some((
                                 "failed",
-                                "reconciled stale running execution; ACI container not found".to_string(),
+                                "reconciled stale running execution; ACI container not found"
+                                    .to_string(),
                             ))
                         } else {
                             // Within grace period - might still be uploading ephemeral share
@@ -1425,7 +1431,11 @@ pub fn mark_execution_finished_by_workspace(
         let doc = doc_result.map_err(mongo_err)?;
         if let Ok(task_json) = doc.get_str("task_json") {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(task_json) {
-                if let Some(ws) = parsed.get("kind").and_then(|k| k.get("workspace_dir")).and_then(|v| v.as_str()) {
+                if let Some(ws) = parsed
+                    .get("kind")
+                    .and_then(|k| k.get("workspace_dir"))
+                    .and_then(|v| v.as_str())
+                {
                     if ws == workspace_str {
                         if let Ok(task_id) = doc.get_str("task_id") {
                             matching_task_ids.push(task_id.to_string());
