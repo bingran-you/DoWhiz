@@ -2717,15 +2717,22 @@
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
                           Connect an existing Notion database for TPM task management.
                         </p>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                           <input
                             type="text"
                             id="notion-database-id-input"
                             class="auth-input"
                             placeholder="Paste URL to Notion database..."
-                            style="flex: 1; min-width: 200px;"
+                            style="min-width: 200px;"
                           />
-                          <button id="set-notion-database-btn" class="auth-btn auth-btn-oauth">Set</button>
+                          <input
+                            type="text"
+                            id="notion-workspace-id-input"
+                            class="auth-input"
+                            placeholder="Workspace ID (required for multi-workspace)"
+                            style="min-width: 200px;"
+                          />
+                          <button id="set-notion-database-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Set</button>
                         </div>
                         <span id="notion-database-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
                       </div>
@@ -6228,8 +6235,10 @@
         if (setDatabaseBtn) {
           setDatabaseBtn.addEventListener('click', async () => {
             const input = document.getElementById('notion-database-id-input');
+            const workspaceInput = document.getElementById('notion-workspace-id-input');
             const status = document.getElementById('notion-database-status');
             let databaseId = input?.value?.trim();
+            let workspaceId = workspaceInput?.value?.trim();
 
             if (!databaseId) {
               if (status) status.textContent = 'Please enter a database ID or Notion URL';
@@ -6265,7 +6274,10 @@
                   'Authorization': `Bearer ${accessToken}`,
                   'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ database_id: databaseId })
+                body: JSON.stringify({
+                  database_id: databaseId,
+                  ...(workspaceId && { workspace_id: workspaceId })
+                })
               });
 
               if (!res.ok) {
@@ -6276,6 +6288,7 @@
               const data = await res.json();
               if (status) status.textContent = 'Database updated successfully!';
               if (input) input.value = '';
+              if (workspaceInput) workspaceInput.value = '';
             } catch (err) {
               console.error('Failed to update database:', err);
               if (status) status.textContent = `Error: ${err.message}`;
