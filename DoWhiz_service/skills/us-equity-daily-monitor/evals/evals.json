@@ -3,74 +3,37 @@
   "evals": [
     {
       "id": 1,
-      "name": "structured-scan-first-fixture",
+      "name": "watch-closely-full-artifact",
       "kind": "fixture",
       "artifact_file": "fixtures/structured_scan_first_email.html",
-      "require_contract": true,
-      "require_decision_card": true,
-      "require_dual_horizon": true,
-      "require_scenarios": true,
-      "require_triggers": true,
-      "require_citations": true,
-      "require_scan_first": true
+      "expected_monitor_status": "watch closely",
+      "expected_contract_type": "full",
+      "count_toward_distribution": true
     },
     {
       "id": 2,
-      "name": "anti-generic-output-fixture",
+      "name": "no-material-change-short-artifact",
       "kind": "fixture",
-      "artifact_html": "<p>NVIDIA is a great business, but I would wait until after earnings.</p>",
-      "expected_failure": true
+      "artifact_file": "fixtures/no_material_change_short_email.html",
+      "expected_monitor_status": "no material change",
+      "expected_contract_type": "short",
+      "count_toward_distribution": true
     },
     {
       "id": 3,
-      "name": "nokia-live-decision-memo",
-      "kind": "live_run",
-      "subject": "Nokia investment memo",
-      "prompt": "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
-      "require_contract": true,
-      "require_decision_card": true,
-      "require_dual_horizon": true,
-      "require_scenarios": true,
-      "require_triggers": true,
-      "require_citations": true,
-      "require_scan_first": true,
-      "require_live_path_alignment": true
+      "name": "review-now-decisive-artifact",
+      "kind": "fixture",
+      "artifact_file": "fixtures/review_now_email.html",
+      "expected_monitor_status": "review now",
+      "expected_contract_type": "full",
+      "count_toward_distribution": true
     },
     {
       "id": 4,
-      "name": "wrong-premise-correction-nvda",
-      "kind": "live_run",
-      "subject": "NVDA earnings timing",
-      "prompt": "NVDA earnings are on May 27, 2026, right? Should I buy before them?",
-      "require_contract": true,
-      "require_decision_card": true,
-      "require_dual_horizon": true,
-      "require_scenarios": true,
-      "require_triggers": true,
-      "require_citations": true,
-      "require_scan_first": true,
-      "must_contain_any": [
-        "May 20, 2026",
-        "May 20 2026"
-      ]
-    },
-    {
-      "id": 5,
-      "name": "weak-case-confidence-plug",
-      "kind": "live_run",
-      "subject": "PLUG investment memo",
-      "prompt": "Give me deep research on PLUG and tell me whether now is a good time to buy.",
-      "require_contract": true,
-      "require_decision_card": true,
-      "require_dual_horizon": true,
-      "require_scenarios": true,
-      "require_triggers": true,
-      "require_citations": true,
-      "require_scan_first": true,
-      "allowed_confidence": [
-        "low",
-        "medium"
-      ]
+      "name": "anti-generic-polished-waffle",
+      "kind": "fixture",
+      "artifact_file": "fixtures/polished_waffle_email.html",
+      "expected_failure": true
     }
   ]
 }

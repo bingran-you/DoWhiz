@@ -5,18 +5,17 @@ use serde_json::Value;
 
 use super::errors::RunTaskError;
 
-// NOTE: Investment contract validation disabled - see ensure_expected_reply_artifact()
-#[allow(dead_code)]
-const REQUIRED_INVESTMENT_MARKERS: &[&str] = &[
+const FULL_REQUIRED_LABELS: &[&str] = &[
     "As of:",
     "Price:",
     "Investor question:",
     "Decision Card",
-    "Audience",
-    "Action",
+    "Monitor Status",
+    "New Money Action",
+    "Existing Holder Action",
+    "Thesis Impact",
+    "Signal Quality",
     "Confidence",
-    "New money",
-    "Existing holder",
     "One-line rationale:",
     "Dual-Horizon Framing",
     "Near-Term Timing View",
@@ -28,11 +27,34 @@ const REQUIRED_INVESTMENT_MARKERS: &[&str] = &[
     "Base Case",
     "Bear Case",
     "Triggers",
+    "Upgrade / Review Now",
+    "Downgrade / De-risk",
+    "Invalidation",
     "Judgment",
 ];
 
-#[allow(dead_code)]
-const SUMMARY_FIRST_HEADINGS: &[&str] = &[
+const SHORT_REQUIRED_LABELS: &[&str] = &[
+    "As of:",
+    "Price:",
+    "Investor question:",
+    "Decision Card",
+    "Monitor Status",
+    "New Money Action",
+    "Existing Holder Action",
+    "Thesis Impact",
+    "Signal Quality",
+    "Confidence",
+    "One-line rationale:",
+    "What Changed",
+    "Evidence",
+    "Triggers",
+    "Upgrade / Review Now",
+    "Downgrade / De-risk",
+    "Invalidation",
+    "Judgment",
+];
+
+const FULL_ORDER: &[&str] = &[
     "decision card",
     "dual-horizon framing",
     "verified facts",
@@ -42,40 +64,34 @@ const SUMMARY_FIRST_HEADINGS: &[&str] = &[
     "judgment",
 ];
 
-#[allow(dead_code)]
-const SECTION_HEADINGS: &[&str] = &[
+const SHORT_ORDER: &[&str] = &[
     "decision card",
-    "dual-horizon framing",
-    "verified facts",
-    "derived metrics",
-    "scenarios",
+    "what changed",
+    "evidence",
     "triggers",
     "judgment",
 ];
 
-#[allow(dead_code)]
-const LINKED_EVIDENCE_SECTIONS: &[&str] = &["verified facts"];
+const GENERIC_PHRASES: &[&str] = &[
+    "good company, but do not chase",
+    "great business, but wait",
+    "hold for now",
+    "buy in tranches",
+    "wait for clarity",
+    "do not chase",
+    "not a broken asset",
+];
 
-#[allow(dead_code)]
 const INVESTMENT_INSTRUMENT_KEYWORDS: &[&str] =
     &["stock", "etf", "ticker", "earnings", "position", "shares"];
 
-#[allow(dead_code)]
-const INVESTMENT_FUNDAMENTAL_KEYWORDS: &[&str] = &[
-    "valuation",
-    "market cap",
-    "revenue",
-    "eps",
-    "free cash flow",
-    "fcf",
-];
-
-#[allow(dead_code)]
 const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "good time to buy",
     "should i buy",
     "should i sell",
     "worth buying",
+    "a buy",
+    "buy this week",
     "buy before",
     "sell before",
     "investment",
@@ -83,13 +99,13 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "starter position",
     "starter only",
     "buy now",
+    "add or trim",
 ];
 
-#[allow(dead_code)]
 const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze", "analysis"];
 
 pub(super) fn ensure_expected_reply_artifact(
-    _workspace_dir: &Path,
+    workspace_dir: &Path,
     reply_path: &Path,
     output_tail: &str,
 ) -> Result<(), RunTaskError> {
@@ -100,35 +116,24 @@ pub(super) fn ensure_expected_reply_artifact(
         });
     }
 
-    // NOTE: Investment contract validation disabled (2026-04-27).
-    // The is_investment_request() heuristic caused false positives: it flagged
-    // non-investment requests (GitHub PR comments, slide generation) as investment
-    // requests because of common acronyms (PR, ACI, API) triggering contains_probable_ticker()
-    // and words like "analyze/analyzer" triggering has_investment_research.
-    // See reference_documentation/fault_report.md for details.
-    // Investment format requirements moved to system prompt instead.
-    //
-    // let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
-    //     return Ok(());
-    // };
-    //
-    // Err(RunTaskError::OutputContractViolation {
-    //     path: reply_path.to_path_buf(),
-    //     reason: format!(
-    //         "investment reply violates required contract: {}",
-    //         violations.join("; ")
-    //     ),
-    //     output: output_tail.to_string(),
-    // })
+    let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
+        return Ok(());
+    };
 
-    Ok(())
+    Err(RunTaskError::OutputContractViolation {
+        path: reply_path.to_path_buf(),
+        reason: format!(
+            "investment reply violates required contract: {}",
+            violations.join("; ")
+        ),
+        output: output_tail.to_string(),
+    })
 }
 
 pub(super) fn reply_artifact_ready_for_workspace(workspace_dir: &Path, reply_path: &Path) -> bool {
     ensure_expected_reply_artifact(workspace_dir, reply_path, "").is_ok()
 }
 
-#[allow(dead_code)]
 fn investment_contract_violations(
     workspace_dir: &Path,
     reply_path: &Path,
@@ -141,9 +146,20 @@ fn investment_contract_violations(
     let reply_body = fs::read_to_string(reply_path)?;
     let normalized_reply = normalize_search_text(&reply_body);
     let lowered_reply = reply_body.to_ascii_lowercase();
+    let contract_type = detect_contract_type(&normalized_reply);
+    let required_labels = if contract_type == "short" {
+        SHORT_REQUIRED_LABELS
+    } else {
+        FULL_REQUIRED_LABELS
+    };
+    let required_order = if contract_type == "short" {
+        SHORT_ORDER
+    } else {
+        FULL_ORDER
+    };
     let mut violations = Vec::new();
 
-    let missing_markers = missing_required_markers(&normalized_reply);
+    let missing_markers = missing_required_markers(&normalized_reply, required_labels);
     if !missing_markers.is_empty() {
         violations.push(format!(
             "missing required labels: {}",
@@ -151,48 +167,61 @@ fn investment_contract_violations(
         ));
     }
 
-    if !contains_markers_in_order(&normalized_reply, SUMMARY_FIRST_HEADINGS) {
+    if !contains_markers_in_order(&normalized_reply, required_order) {
+        violations.push("summary-first section order is wrong".to_string());
+    }
+
+    if !decision_card_has_required_fields(&normalized_reply) {
         violations.push(
-            "summary-first section order must be Decision Card -> Dual-Horizon Framing -> Verified Facts -> Derived Metrics -> Scenarios -> Triggers -> Judgment"
+            "decision card must include monitor status, both action fields, thesis impact, signal quality, and confidence"
                 .to_string(),
         );
     }
 
-    if !decision_card_has_required_rows(&normalized_reply) {
+    if contract_type == "full" && !derived_metrics_has_formula(&normalized_reply) {
         violations.push(
-            "decision card must show separate `New money` and `Existing holder` rows with action/confidence context"
+            "derived metrics must include a formula-like expression or an explicit non-derivable note"
                 .to_string(),
-        );
-    }
-
-    if !derived_metrics_has_formula(&reply_body, &lowered_reply) {
-        violations.push(
-            "derived metrics must include at least one formula-like expression or an explicit non-derivable note"
-                .to_string(),
-        );
-    }
-
-    if !triggers_section_has_threshold_markers(&lowered_reply) {
-        violations.push(
-            "triggers section must include upgrade/add plus trim or exit conditions".to_string(),
         );
     }
 
     let clickable_link_count = count_clickable_links(&lowered_reply);
-    if clickable_link_count < 3 {
+    let min_links = if contract_type == "short" { 2 } else { 3 };
+    if clickable_link_count < min_links {
         violations.push(format!(
-            "expected at least 3 clickable source links, found {}",
-            clickable_link_count
+            "expected at least {} clickable source links, found {}",
+            min_links, clickable_link_count
         ));
     }
 
-    for heading in LINKED_EVIDENCE_SECTIONS {
-        if !section_contains_clickable_link(&lowered_reply, heading) {
-            violations.push(format!(
-                "section `{}` must include a clickable source link",
-                heading
-            ));
+    let trigger_section = extract_text_section(&normalized_reply, "triggers", &["judgment"]);
+    if neutral_actions_present(&normalized_reply) {
+        for label in [
+            "upgrade / review now",
+            "downgrade / de-risk",
+            "invalidation",
+        ] {
+            if !trigger_section.contains(label) {
+                violations.push(format!("neutral stance missing trigger label `{}`", label));
+            }
         }
+        if count_numeric_hits(&trigger_section) < 3 {
+            violations
+                .push("neutral stance lacks enough concrete numeric trigger detail".to_string());
+        }
+    }
+
+    if contract_type == "short" && normalized_reply.len() > 2200 {
+        violations.push("No Material Change artifact exceeds short-output budget".to_string());
+    }
+
+    if GENERIC_PHRASES
+        .iter()
+        .any(|phrase| normalized_reply.contains(phrase))
+        && count_numeric_hits(&trigger_section) < 3
+    {
+        violations
+            .push("generic hold/wait phrasing without concrete movement criteria".to_string());
     }
 
     if violations.is_empty() {
@@ -202,20 +231,25 @@ fn investment_contract_violations(
     }
 }
 
-#[allow(dead_code)]
-fn missing_required_markers(normalized_reply: &str) -> Vec<String> {
-    let mut missing = Vec::new();
-
-    for label in REQUIRED_INVESTMENT_MARKERS {
-        if !normalized_reply.contains(&label.to_ascii_lowercase()) {
-            missing.push((*label).to_string());
-        }
+fn detect_contract_type(normalized_reply: &str) -> &'static str {
+    if normalized_reply.contains("what changed")
+        && normalized_reply.contains("evidence")
+        && !normalized_reply.contains("dual-horizon framing")
+    {
+        "short"
+    } else {
+        "full"
     }
-
-    missing
 }
 
-#[allow(dead_code)]
+fn missing_required_markers(normalized_reply: &str, labels: &[&str]) -> Vec<String> {
+    labels
+        .iter()
+        .filter(|label| !normalized_reply.contains(&label.to_ascii_lowercase()))
+        .map(|label| (*label).to_string())
+        .collect()
+}
+
 fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     let mut search_start = 0;
     for marker in markers {
@@ -228,86 +262,64 @@ fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     true
 }
 
-#[allow(dead_code)]
-fn decision_card_has_required_rows(normalized_reply: &str) -> bool {
+fn decision_card_has_required_fields(normalized_reply: &str) -> bool {
     [
-        "audience",
-        "action",
+        "monitor status",
+        "new money action",
+        "existing holder action",
+        "thesis impact",
+        "signal quality",
         "confidence",
-        "new money",
-        "existing holder",
     ]
     .iter()
     .all(|marker| normalized_reply.contains(marker))
 }
 
-#[allow(dead_code)]
-fn derived_metrics_has_formula(raw_html: &str, lowered_reply: &str) -> bool {
-    let Some(section) = extract_section(lowered_reply, "derived metrics") else {
-        return false;
-    };
-    let section_text = rough_html_to_text(section).to_ascii_lowercase();
-    section_text.contains('/')
-        || section_text.contains('=')
-        || section_text.contains("not reliably derivable")
-        || section_text.contains("formula")
-        || raw_html.to_ascii_lowercase().contains("<table")
+fn derived_metrics_has_formula(normalized_reply: &str) -> bool {
+    let section = extract_text_section(normalized_reply, "derived metrics", &["scenarios"]);
+    section.contains("formula / inputs")
+        || section.contains('/')
+        || section.contains('=')
+        || section.contains("not reliably derivable")
 }
 
-#[allow(dead_code)]
-fn triggers_section_has_threshold_markers(lowered_reply: &str) -> bool {
-    let Some(section) = extract_section(lowered_reply, "triggers") else {
-        return false;
-    };
-    let section_text = rough_html_to_text(section).to_ascii_lowercase();
-    let has_upgrade = section_text.contains("upgrade to buy");
-    let has_add = section_text.contains("add");
-    let has_trim_or_exit = section_text.contains("trim/exit")
-        || section_text.contains("trim")
-        || section_text.contains("exit");
-
-    has_upgrade && has_add && has_trim_or_exit
+fn neutral_actions_present(normalized_reply: &str) -> bool {
+    normalized_reply.contains("new money action wait")
+        || normalized_reply.contains("existing holder action hold")
+        || normalized_reply.contains("existing holder action hold/do not add")
 }
 
-#[allow(dead_code)]
 fn count_clickable_links(lowered_reply: &str) -> usize {
     lowered_reply.matches("href=\"http").count() + lowered_reply.matches("href='http").count()
 }
 
-#[allow(dead_code)]
-fn section_contains_clickable_link(lowered_reply: &str, heading: &str) -> bool {
-    let Some(section) = extract_section(lowered_reply, heading) else {
-        return false;
+fn extract_text_section(normalized_reply: &str, start_label: &str, end_labels: &[&str]) -> String {
+    let Some(start) = normalized_reply.find(start_label) else {
+        return String::new();
     };
-    section.contains("href=\"http") || section.contains("href='http")
+    let tail = &normalized_reply[start..];
+    let end = end_labels
+        .iter()
+        .filter_map(|label| tail.find(label))
+        .min()
+        .unwrap_or(tail.len());
+    tail[..end].to_string()
 }
 
-#[allow(dead_code)]
-fn extract_section<'a>(lowered_reply: &'a str, heading: &str) -> Option<&'a str> {
-    let start = find_heading_position(lowered_reply, heading)?;
-    let section_start = start + 1;
-    let mut end = lowered_reply.len();
-
-    for next_heading in SECTION_HEADINGS {
-        if *next_heading == heading {
-            continue;
-        }
-        if let Some(offset) = find_heading_position(&lowered_reply[section_start..], next_heading) {
-            end = end.min(section_start + offset);
-        }
-    }
-
-    Some(&lowered_reply[start..end])
-}
-
-#[allow(dead_code)]
-fn find_heading_position(lowered_reply: &str, heading: &str) -> Option<usize> {
-    for marker in [format!(">{}", heading), format!(">{} ", heading)] {
-        if let Some(idx) = lowered_reply.find(&marker) {
-            return Some(idx);
+fn count_numeric_hits(text: &str) -> usize {
+    let mut count = 0;
+    let mut in_number = false;
+    for ch in text.chars() {
+        if ch.is_ascii_digit() {
+            if !in_number {
+                count += 1;
+            }
+            in_number = true;
+        } else {
+            in_number = false;
         }
     }
-    None
+    count + text.matches('%').count() + text.matches('$').count() + text.matches("bps").count()
 }
 
 #[allow(dead_code)]
@@ -354,13 +366,9 @@ fn reply_artifact_present(reply_path: &Path) -> bool {
     }
 }
 
-#[allow(dead_code)]
 fn is_investment_request(raw: &str) -> bool {
     let normalized = normalize_search_text(raw);
     let has_instrument_context = INVESTMENT_INSTRUMENT_KEYWORDS
-        .iter()
-        .any(|keyword| normalized.contains(keyword));
-    let has_fundamental_context = INVESTMENT_FUNDAMENTAL_KEYWORDS
         .iter()
         .any(|keyword| normalized.contains(keyword));
     let has_investment_intent = INVESTMENT_INTENT_KEYWORDS
@@ -372,18 +380,13 @@ fn is_investment_request(raw: &str) -> bool {
     let has_probable_ticker = contains_probable_ticker(raw);
 
     (has_instrument_context && (has_investment_intent || has_investment_research))
-        || (has_probable_ticker
-            && (has_instrument_context
-                || has_investment_intent
-                || has_investment_research
-                || has_fundamental_context))
+        || (has_probable_ticker && has_investment_intent)
 }
 
-#[allow(dead_code)]
 fn contains_probable_ticker(raw: &str) -> bool {
     const STOPWORDS: &[&str] = &[
-        "A", "AI", "AM", "AND", "ARE", "BUY", "ETF", "EPS", "HTML", "I", "JSON", "NOW", "THE",
-        "WAIT",
+        "A", "AI", "ACI", "AM", "AND", "API", "ARE", "BUY", "CI", "ETF", "EPS", "HTML", "I",
+        "JSON", "NOW", "PR", "THE", "UI", "URL", "UX", "WAIT",
     ];
 
     raw.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '$')
@@ -391,7 +394,7 @@ fn contains_probable_ticker(raw: &str) -> bool {
         .any(|token| {
             let trimmed = token.trim_start_matches('$');
             let len = trimmed.len();
-            if !(1..=5).contains(&len) {
+            if !(2..=5).contains(&len) {
                 return false;
             }
             if STOPWORDS.iter().any(|stop| stop == &trimmed) {
@@ -481,7 +484,7 @@ mod tests {
             "Please buy an NVDA GPU and compare keyboard options."
         ));
         assert!(!is_investment_request(
-            "Use Ray Dalio's framework to analyze where we are in the cycle now, explain high valuations in parts of the equity market, and make a PowerPoint slide about potential bubbles in the AI industry."
+            "Analyze PR comments on our API design and summarize the tradeoffs."
         ));
     }
 
@@ -497,18 +500,22 @@ mod tests {
             <section>
               <h2>Decision Card</h2>
               <table>
-                <tr><th>Audience</th><th>Action</th><th>Confidence</th></tr>
-                <tr><td>New money</td><td>Wait</td><td>Medium</td></tr>
-                <tr><td>Existing holder</td><td>Hold</td><td>Medium</td></tr>
+                <tr><th>Field</th><th>Value</th></tr>
+                <tr><td>Monitor Status</td><td>Watch Closely</td></tr>
+                <tr><td>New Money Action</td><td>Starter Only</td></tr>
+                <tr><td>Existing Holder Action</td><td>Hold/Do not add</td></tr>
+                <tr><td>Thesis Impact</td><td>Mixed</td></tr>
+                <tr><td>Signal Quality</td><td>Moderate</td></tr>
+                <tr><td>Confidence</td><td>Medium</td></tr>
               </table>
-              <p><strong>One-line rationale:</strong> NVIDIA remains a high-quality business, but the near-term setup still asks new buyers to pay up ahead of another demanding print.</p>
+              <p><strong>One-line rationale:</strong> NVIDIA still looks strong, but the next print carries enough margin risk that fresh capital should stay sized and conditional.</p>
             </section>
             <section>
               <h2>Dual-Horizon Framing</h2>
               <h3>Near-Term Timing View</h3>
-              <p>The next earnings print is the dominant catalyst, so new money should wait for a cleaner post-print setup.</p>
+              <p>The next earnings print is the dominant catalyst for new money.</p>
               <h3>Long-Term Ownership View</h3>
-              <p>Existing holders can keep owning the secular AI demand story as long as margin durability and customer spending remain intact.</p>
+              <p>Existing holders can stay with the AI demand story while margin durability remains intact.</p>
             </section>
             <section>
               <h2>Verified Facts</h2>
@@ -523,6 +530,7 @@ mod tests {
               <table>
                 <tr><th>Metric</th><th>Value</th><th>Formula / Inputs</th></tr>
                 <tr><td>P/E (TTM)</td><td>41.2x</td><td>$202.06 / TTM diluted EPS $4.90</td></tr>
+                <tr><td>Revenue YoY (Q4)</td><td>21.0%</td><td>$68.1B / $56.3B - 1</td></tr>
               </table>
             </section>
             <section>
@@ -537,14 +545,14 @@ mod tests {
             <section>
               <h2>Triggers — Verdict Movement</h2>
               <ul>
-                <li><strong>Upgrade to Buy (new money):</strong> Revenue above $70B and gross margin above 74%.</li>
-                <li><strong>Add (existing holder):</strong> Pullback of at least 12% without a fundamental reset.</li>
-                <li><strong>Trim/Exit:</strong> Two consecutive quarters of margin pressure or a major customer capex reset.</li>
+                <li><strong>Upgrade / Review Now:</strong> Revenue above $70B and gross margin above 74%.</li>
+                <li><strong>Downgrade / De-risk:</strong> Gross margin below 71% or a guide cut of 5% or more.</li>
+                <li><strong>Invalidation:</strong> A major customer capex reset or export-control shock that threatens more than 10% of revenue.</li>
               </ul>
             </section>
             <section>
               <h2>Judgment</h2>
-              <p><em>Inference, Medium confidence.</em> The business still looks strong, but the setup is more compelling for holders than for fresh capital right before the next catalyst.</p>
+              <p><em>Inference, Medium confidence.</em> The business still looks strong, but the right calibrated output is `Watch Closely`, not a generic hold-and-wait paragraph.</p>
             </section>
             "#,
         );
@@ -558,7 +566,7 @@ mod tests {
     fn generic_investment_commentary_fails_contract_validation() {
         let workspace = write_workspace(
             "Give me deep research on NVDA and tell me whether now is a good time to buy.",
-            "<p>NVIDIA is a good business, but I would wait until after earnings and buy in tranches.</p>",
+            "<p>NVIDIA is a good company, but I would wait for clarity and buy in tranches.</p>",
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
