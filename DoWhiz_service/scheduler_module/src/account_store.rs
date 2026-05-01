@@ -192,6 +192,8 @@ pub struct Organization {
     pub name: String,
     /// Notion database ID for this organization's task board
     pub notion_database_id: Option<String>,
+    /// Notion workspace ID where the task board lives
+    pub notion_workspace_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -433,6 +435,7 @@ impl AccountStore {
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name TEXT NOT NULL UNIQUE,
                 notion_database_id TEXT NULL,
+                notion_workspace_id TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
@@ -1683,7 +1686,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, created_at
              FROM organizations
              WHERE name = $1",
             &[&name],
@@ -1693,7 +1696,8 @@ impl AccountStore {
             id: r.get(0),
             name: r.get(1),
             notion_database_id: r.get(2),
-            created_at: r.get(3),
+            notion_workspace_id: r.get(3),
+            created_at: r.get(4),
         }))
     }
 
@@ -1704,7 +1708,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, created_at
              FROM organizations
              WHERE id = $1",
             &[&org_id],
@@ -1714,11 +1718,12 @@ impl AccountStore {
             id: r.get(0),
             name: r.get(1),
             notion_database_id: r.get(2),
-            created_at: r.get(3),
+            notion_workspace_id: r.get(3),
+            created_at: r.get(4),
         }))
     }
 
-    /// Update the Notion database ID for an organization.
+    /// Update the Notion database ID and workspace ID for an organization.
     ///
     /// Called after `tpm_cli setup-board` creates a new Notion task board.
     pub fn update_organization_notion_database_id(
@@ -1726,21 +1731,44 @@ impl AccountStore {
         organization_name: &str,
         notion_database_id: &str,
     ) -> Result<Organization, AccountStoreError> {
+        self.update_organization_notion_config(organization_name, notion_database_id, None)
+    }
+
+    /// Update the Notion database ID and optionally the workspace ID for an organization.
+    ///
+    /// Called after `tpm_cli setup-board` creates a new Notion task board,
+    /// or via PUT /auth/organization/:name/database endpoint.
+    pub fn update_organization_notion_config(
+        &self,
+        organization_name: &str,
+        notion_database_id: &str,
+        notion_workspace_id: Option<&str>,
+    ) -> Result<Organization, AccountStoreError> {
         let mut conn = self.conn()?;
-        let row = conn.query_opt(
-            "UPDATE organizations
-             SET notion_database_id = $1
-             WHERE name = $2
-             RETURNING id, name, notion_database_id, created_at",
-            &[&notion_database_id, &organization_name],
-        )?;
+        let row = match notion_workspace_id {
+            Some(ws_id) => conn.query_opt(
+                "UPDATE organizations
+                 SET notion_database_id = $1, notion_workspace_id = $2
+                 WHERE name = $3
+                 RETURNING id, name, notion_database_id, notion_workspace_id, created_at",
+                &[&notion_database_id, &ws_id, &organization_name],
+            )?,
+            None => conn.query_opt(
+                "UPDATE organizations
+                 SET notion_database_id = $1
+                 WHERE name = $2
+                 RETURNING id, name, notion_database_id, notion_workspace_id, created_at",
+                &[&notion_database_id, &organization_name],
+            )?,
+        };
 
         match row {
             Some(r) => Ok(Organization {
                 id: r.get(0),
                 name: r.get(1),
                 notion_database_id: r.get(2),
-                created_at: r.get(3),
+                notion_workspace_id: r.get(3),
+                created_at: r.get(4),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1764,7 +1792,7 @@ impl AccountStore {
 
         let row = conn.query_one(
             "INSERT INTO organizations (name) VALUES ($1)
-             RETURNING id, name, notion_database_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, created_at",
             &[&name],
         )?;
 
@@ -1772,7 +1800,8 @@ impl AccountStore {
             id: row.get(0),
             name: row.get(1),
             notion_database_id: row.get(2),
-            created_at: row.get(3),
+            notion_workspace_id: row.get(3),
+            created_at: row.get(4),
         })
     }
 
@@ -1789,7 +1818,7 @@ impl AccountStore {
             Some(term) => {
                 let pattern = format!("%{}%", term.to_lowercase());
                 conn.query(
-                    "SELECT id, name, notion_database_id, created_at
+                    "SELECT id, name, notion_database_id, notion_workspace_id, created_at
                      FROM organizations
                      WHERE LOWER(name) LIKE $1
                      ORDER BY name
@@ -1798,7 +1827,7 @@ impl AccountStore {
                 )?
             }
             None => conn.query(
-                "SELECT id, name, notion_database_id, created_at
+                "SELECT id, name, notion_database_id, notion_workspace_id, created_at
                  FROM organizations
                  ORDER BY name
                  LIMIT 50",
@@ -1812,7 +1841,8 @@ impl AccountStore {
                 id: r.get(0),
                 name: r.get(1),
                 notion_database_id: r.get(2),
-                created_at: r.get(3),
+                notion_workspace_id: r.get(3),
+                created_at: r.get(4),
             })
             .collect())
     }

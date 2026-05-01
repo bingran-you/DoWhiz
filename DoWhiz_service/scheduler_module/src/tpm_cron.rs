@@ -234,13 +234,31 @@ pub fn setup_tpm_cron(
     }
 
     // Write Notion context files for tpm_cli
+    // Use org's workspace_id to find the right credential (for multi-workspace setups)
     if let Ok(notion_store) = NotionStore::new() {
         if let Ok(credentials) = notion_store.get_credentials_for_account(user_id) {
-            if let Some(cred) = credentials.first() {
+            // Find credential matching org's workspace_id, or fall back to first
+            let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
+                credentials
+                    .iter()
+                    .find(|c| &c.workspace_id == org_ws_id)
+                    .or_else(|| {
+                        tracing::warn!(
+                            "No credential found for org workspace_id={}, falling back to first",
+                            org_ws_id
+                        );
+                        credentials.first()
+                    })
+            } else {
+                credentials.first()
+            };
+
+            if let Some(cred) = cred {
                 // Write .notion_context.json with workspace_id
                 let notion_context = json!({
                     "workspace_id": cred.workspace_id,
                     "workspace_name": cred.workspace_name,
+                    "account_id": user_id.to_string(),
                 });
                 let context_path = workspace_dir.join(".notion_context.json");
                 if let Err(e) = std::fs::write(
@@ -479,13 +497,31 @@ pub fn trigger_tpm_sync(
     }
 
     // Write Notion context files for tpm_cli
+    // Use org's workspace_id to find the right credential (for multi-workspace setups)
     if let Ok(notion_store) = NotionStore::new() {
         if let Ok(credentials) = notion_store.get_credentials_for_account(user_id) {
-            if let Some(cred) = credentials.first() {
+            // Find credential matching org's workspace_id, or fall back to first
+            let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
+                credentials
+                    .iter()
+                    .find(|c| &c.workspace_id == org_ws_id)
+                    .or_else(|| {
+                        tracing::warn!(
+                            "No credential found for org workspace_id={}, falling back to first",
+                            org_ws_id
+                        );
+                        credentials.first()
+                    })
+            } else {
+                credentials.first()
+            };
+
+            if let Some(cred) = cred {
                 // Write .notion_context.json with workspace_id
                 let notion_context = json!({
                     "workspace_id": cred.workspace_id,
                     "workspace_name": cred.workspace_name,
+                    "account_id": user_id.to_string(),
                 });
                 let context_path = workspace_dir.join(".notion_context.json");
                 if let Err(e) = std::fs::write(

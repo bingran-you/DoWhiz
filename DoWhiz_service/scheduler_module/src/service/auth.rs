@@ -1637,6 +1637,7 @@ pub async fn create_organization(
                 "id": org.id,
                 "name": org.name,
                 "notion_database_id": org.notion_database_id,
+                "notion_workspace_id": org.notion_workspace_id,
                 "created_at": org.created_at,
             })),
         )
@@ -1682,6 +1683,7 @@ pub async fn list_organizations(
                         "id": org.id,
                         "name": org.name,
                         "notion_database_id": org.notion_database_id,
+                        "notion_workspace_id": org.notion_workspace_id,
                         "created_at": org.created_at,
                     })
                 })
@@ -1745,6 +1747,8 @@ pub async fn get_organization_member_count(
 #[derive(Debug, Deserialize)]
 pub struct UpdateOrganizationDatabaseRequest {
     pub database_id: String,
+    /// Notion workspace ID where the database lives (required for multi-workspace setups)
+    pub workspace_id: Option<String>,
 }
 
 /// PUT /auth/organization/:name/database - Update organization's Notion database ID
@@ -1803,11 +1807,16 @@ pub async fn update_organization_database(
         );
     }
 
-    // Update the organization's notion_database_id
+    // Update the organization's notion_database_id and workspace_id
     let store = state.account_store.clone();
     let database_id = payload.database_id.clone();
+    let workspace_id = payload.workspace_id.clone();
     let update_result = task::spawn_blocking(move || {
-        store.update_organization_notion_database_id(&org_name, &database_id)
+        store.update_organization_notion_config(
+            &org_name,
+            &database_id,
+            workspace_id.as_deref(),
+        )
     })
     .await
     .map_err(|e| {
@@ -1822,6 +1831,7 @@ pub async fn update_organization_database(
                 "success": true,
                 "organization_name": updated_org.name,
                 "notion_database_id": updated_org.notion_database_id,
+                "notion_workspace_id": updated_org.notion_workspace_id,
             })),
         )
             .into_response(),
