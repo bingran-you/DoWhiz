@@ -452,19 +452,23 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
     let db_title = format!("{} Task Board", organization);
     match client.create_database(&workspace_id, &parent_page_id, &db_title, properties) {
         Ok(db) => {
-            // Update organizations.notion_database_id in Supabase
+            // Update organizations.notion_database_id and notion_workspace_id in Supabase
             let supabase_updated = match AccountStore::from_env() {
                 Ok(store) => {
-                    match store.update_organization_notion_database_id(&organization, &db.id) {
+                    match store.update_organization_notion_config(
+                        &organization,
+                        &db.id,
+                        Some(&workspace_id),
+                    ) {
                         Ok(org) => Some(org),
                         Err(e) => {
                             eprintln!(
-                                "Warning: Failed to update organizations.notion_database_id: {}",
+                                "Warning: Failed to update organizations: {}",
                                 e
                             );
                             eprintln!(
-                                "You must manually update: UPDATE organizations SET notion_database_id = '{}' WHERE name = '{}'",
-                                db.id, organization
+                                "You must manually update: UPDATE organizations SET notion_database_id = '{}', notion_workspace_id = '{}' WHERE name = '{}'",
+                                db.id, workspace_id, organization
                             );
                             None
                         }
@@ -473,8 +477,8 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                 Err(e) => {
                     eprintln!("Warning: Could not connect to Supabase: {}", e);
                     eprintln!(
-                        "You must manually update: UPDATE organizations SET notion_database_id = '{}' WHERE name = '{}'",
-                        db.id, organization
+                        "You must manually update: UPDATE organizations SET notion_database_id = '{}', notion_workspace_id = '{}' WHERE name = '{}'",
+                        db.id, workspace_id, organization
                     );
                     None
                 }
@@ -484,13 +488,14 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                 "success": true,
                 "organization": organization,
                 "database_id": db.id,
+                "workspace_id": workspace_id,
                 "database_url": db.url,
                 "database_title": db.title,
                 "supabase_updated": supabase_updated.is_some(),
                 "message": if supabase_updated.is_some() {
-                    "Notion database created and organizations.notion_database_id updated"
+                    "Notion database created and organization config updated"
                 } else {
-                    "Notion database created but organizations.notion_database_id NOT updated (see stderr)"
+                    "Notion database created but organization config NOT updated (see stderr)"
                 }
             });
             println!("{}", serde_json::to_string_pretty(&output).unwrap());
