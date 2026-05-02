@@ -234,9 +234,10 @@ pub fn setup_tpm_cron(
     }
 
     // Write Notion context files for tpm_cli
-    // Use org's workspace_id to find the right credential (for multi-workspace setups)
+    // Use leader's credentials if set, otherwise fall back to triggering user
+    let credential_account_id = org.leader_account_id.unwrap_or(user_id);
     if let Ok(notion_store) = NotionStore::new() {
-        if let Ok(credentials) = notion_store.get_credentials_for_account(user_id) {
+        if let Ok(credentials) = notion_store.get_credentials_for_account(credential_account_id) {
             // Find credential matching org's workspace_id, or fall back to first
             let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
                 credentials
@@ -258,7 +259,7 @@ pub fn setup_tpm_cron(
                 let notion_context = json!({
                     "workspace_id": cred.workspace_id,
                     "workspace_name": cred.workspace_name,
-                    "account_id": user_id.to_string(),
+                    "account_id": credential_account_id.to_string(),
                 });
                 let context_path = workspace_dir.join(".notion_context.json");
                 if let Err(e) = std::fs::write(
@@ -497,9 +498,10 @@ pub fn trigger_tpm_sync(
     }
 
     // Write Notion context files for tpm_cli
-    // Use org's workspace_id to find the right credential (for multi-workspace setups)
+    // Use leader's credentials if set, otherwise fall back to triggering user
+    let credential_account_id = org.leader_account_id.unwrap_or(user_id);
     if let Ok(notion_store) = NotionStore::new() {
-        if let Ok(credentials) = notion_store.get_credentials_for_account(user_id) {
+        if let Ok(credentials) = notion_store.get_credentials_for_account(credential_account_id) {
             // Find credential matching org's workspace_id, or fall back to first
             let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
                 credentials
@@ -521,7 +523,7 @@ pub fn trigger_tpm_sync(
                 let notion_context = json!({
                     "workspace_id": cred.workspace_id,
                     "workspace_name": cred.workspace_name,
-                    "account_id": user_id.to_string(),
+                    "account_id": credential_account_id.to_string(),
                 });
                 let context_path = workspace_dir.join(".notion_context.json");
                 if let Err(e) = std::fs::write(

@@ -156,6 +156,69 @@ Get the number of members in an organization.
 
 ---
 
+### PUT /auth/organization/:name/database
+Update organization's Notion database ID and optionally workspace ID.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+
+**Request:**
+```json
+{
+  "database_id": "notion-database-id-or-url",
+  "workspace_id": "optional-workspace-id"
+}
+```
+
+If `workspace_id` is not provided, it will be auto-detected by testing the user's Notion credentials against the database.
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "organization_name": "deeptutor",
+  "notion_database_id": "abc123",
+  "notion_workspace_id": "xyz789"
+}
+```
+
+---
+
+### PUT /auth/organization/:name/leader
+Set the organization's leader account. The leader's Notion credentials are used for all TPM operations.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+
+**Request:**
+```json
+{
+  "leader_account_id": "uuid-of-leader-account"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "organization_name": "deeptutor",
+  "leader_account_id": "uuid"
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "You are not a member of this organization"
+}
+```
+
+---
+
 ### PUT /auth/account/organization
 Join an organization by name.
 
