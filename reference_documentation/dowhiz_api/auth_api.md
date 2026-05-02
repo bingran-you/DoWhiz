@@ -201,12 +201,29 @@ Set the organization's leader account. The leader's Notion credentials are used 
 }
 ```
 
+**Validation:**
+- The leader account must exist
+- The leader account must be a member of this organization
+
 **Response 200:**
 ```json
 {
   "success": true,
   "organization_name": "deeptutor",
   "leader_account_id": "uuid"
+}
+```
+
+**Response 400:**
+```json
+{
+  "error": "Leader account does not exist"
+}
+```
+or
+```json
+{
+  "error": "Leader account must be a member of this organization"
 }
 ```
 

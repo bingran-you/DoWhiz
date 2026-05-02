@@ -1937,6 +1937,38 @@ pub async fn update_organization_leader(
         );
     }
 
+    // Verify the leader account exists and is a member of this organization
+    let store = state.account_store.clone();
+    let leader_id = payload.leader_account_id;
+    let leader_check = task::spawn_blocking(move || store.get_account(leader_id))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match leader_check {
+        Ok(Ok(Some(leader_account))) => {
+            if leader_account.organization_id != Some(org.id) {
+                return json_error_response(
+                    StatusCode::BAD_REQUEST,
+                    "Leader account must be a member of this organization",
+                );
+            }
+        }
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::BAD_REQUEST,
+                "Leader account does not exist",
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get leader account: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    }
+
     // Update the leader
     let store = state.account_store.clone();
     let leader_id = payload.leader_account_id;
