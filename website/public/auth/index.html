@@ -5857,7 +5857,7 @@
       let selectedOrganization = null;
       let currentOrganizationName = null;
 
-      function initOrganizationUI(accountData) {
+      async function initOrganizationUI(accountData) {
         const orgCurrentDisplay = document.getElementById('org-current-display');
         const orgCurrentName = document.getElementById('org-current-name');
         const orgJoinContainer = document.getElementById('org-join-container');
@@ -5871,6 +5871,19 @@
           }
           if (orgJoinContainer) {
             orgJoinContainer.classList.add('hidden');
+          }
+          // Pre-populate database ID and workspace ID fields
+          const orgs = await searchOrganizations(currentOrganizationName);
+          const currentOrg = orgs.find(o => o.name === currentOrganizationName);
+          if (currentOrg) {
+            const dbInput = document.getElementById('notion-database-id-input');
+            const wsInput = document.getElementById('notion-workspace-id-input');
+            if (dbInput && currentOrg.notion_database_id) {
+              dbInput.value = currentOrg.notion_database_id;
+            }
+            if (wsInput && currentOrg.notion_workspace_id) {
+              wsInput.value = currentOrg.notion_workspace_id;
+            }
           }
         } else {
           if (orgCurrentDisplay) {
