@@ -858,3 +858,111 @@ Since Oliver uses the **user's OAuth token**, no separate sharing step is needed
 4. TPM commands will automatically have access via the user's token
 
 **Common mistake:** Users share their database with `oliver@dowhiz.com` (human account) thinking this grants API access. It does not - Oliver's human account is separate from the OAuth integration that the API uses.
+
+---
+
+## Addendum: What happens if Oliver is given the DeepTutor Task Board Page?
+
+**Date:** 2026-05-01  
+**Task ID:** `96d8a69e-dbd2-4172-ab42-af4b2f68208e`
+
+### Retrieving Codex Output for Debugging
+
+To see Oliver's full thinking process and command execution for any task:
+
+```bash
+# 1. Get the task execution from MongoDB to find user_id
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source ~/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").task_executions.findOne({task_id: \"<TASK_ID>\"})"'
+
+# 2. List workspaces for the user
+ssh dowhizprod1 'ls ~/.dowhiz/DoWhiz/run_task/little_bear/users/<USER_ID>/workspaces/'
+
+# 3. List workspace contents
+ssh dowhizprod1 'ls -la ~/.dowhiz/DoWhiz/run_task/little_bear/users/<USER_ID>/workspaces/<WORKSPACE_NAME>/'
+
+# 4. Read the full codex output (contains all agent thinking + commands)
+ssh dowhizprod1 'cat ~/.dowhiz/DoWhiz/run_task/little_bear/users/<USER_ID>/workspaces/<WORKSPACE_NAME>/.codex_remote_output.log'
+
+# 5. Extract just the notion_api_cli commands Oliver ran
+ssh dowhizprod1 'grep -o "\"command\":\"[^\"]*notion_api_cli[^\"]*\"" ~/.dowhiz/DoWhiz/run_task/little_bear/users/<USER_ID>/workspaces/<WORKSPACE_NAME>/.codex_remote_output.log | sed "s/\"command\":\"//g" | sed "s/\"$//g"'
+```
+
+### Example: Task 96d8a69e-dbd2-4172-ab42-af4b2f68208e
+
+```bash
+# User ID: 2a49c2c5-4557-493a-9f6e-3da23d34a5d2
+# Workspace: tpm_trigger_6ea7f66e-2160-4029-985a-9506c66040d7
+
+ssh dowhizprod1 'cat ~/.dowhiz/DoWhiz/run_task/little_bear/users/2a49c2c5-4557-493a-9f6e-3da23d34a5d2/workspaces/tpm_trigger_6ea7f66e-2160-4029-985a-9506c66040d7/.codex_remote_output.log'
+```
+
+### Oliver's Discovery Flow (Task Board Page → Child Databases)
+
+When given a **page ID** (18037bc1...) instead of a **database ID**, Oliver dynamically discovers child databases:
+
+**Step 1: Try tpm_cli with the page ID**
+```bash
+tpm_cli list-tasks --organization deeptutor --database-id 18037bc1a42180e3b1d9faab97e62b1f
+# Error: "Provided ID is a page, not a database. Use the retrieve page API instead"
+```
+
+**Step 2: Search and read the Task Board page**
+```bash
+notion_api_cli search --query deeptutor
+notion_api_cli read-page --page-id 18037bc1a42180e3b1d9faab97e62b1f
+```
+
+**Step 3: Discover child databases from the page content**
+Oliver found 3 child databases embedded in the Task Board page:
+- `18037bc1a42180e7be1fd8b5e0bfdc99` → Product database
+- `19d37bc1a4218070a636de01684123d2` → DeepTutor Bug List
+- `20037bc1a42180b6bb64c9efc4330ce2` → (inaccessible - "does not contain any data sources")
+
+**Step 4: Try get-database on each**
+```bash
+notion_api_cli get-database --database-id 18037bc1a42180e7be1fd8b5e0bfdc99  # ✓ Product
+notion_api_cli get-database --database-id 19d37bc1a4218070a636de01684123d2  # ✓ Bug List
+notion_api_cli get-database --database-id 20037bc1a42180b6bb64c9efc4330ce2  # ✗ Error
+```
+
+**Step 5: Query accessible databases**
+```bash
+notion_api_cli query-database --database-id 19d37bc1a4218070a636de01684123d2 --limit 100
+notion_api_cli query-database --database-id 18037bc1a42180e7be1fd8b5e0bfdc99 --limit 100
+```
+
+**Step 6: List child pages for additional context**
+```bash
+notion_api_cli get-children --parent-id 18037bc1a42180e3b1d9faab97e62b1f
+```
+
+**Step 7: Bulk read and make updates**
+```bash
+notion_api_cli bulk-read --page-ids 2c737bc1...,2b637bc1...,32f37bc1...
+notion_api_cli create-comment --page-id 31537bc1... --content "..."
+notion_api_cli create-page --parent-id 18037bc1a42180e3b1d9faab97e62b1f --title "Zotero Cloud API integration review"
+```
+
+### Key Insights
+
+1. **Page vs Database**: The Task Board URL (18037bc1...) is a **page** containing child databases, not a database itself. Oliver correctly detected this and pivoted to discovery mode.
+
+2. **Graceful degradation**: When one database (20037bc1...) was inaccessible, Oliver continued with the accessible databases (Product, Bug List).
+
+3. **Workaround for inaccessible database**: Oliver created a **child page** under the Task Board parent instead of a database row, since the target database couldn't be queried via API.
+
+4. **Discovery pattern**: `read-page` → find `child_database` blocks → `get-database` each → `query-database` accessible ones. This is more robust than requiring hardcoded database IDs.
+
+### Notion API Limitation Encountered
+
+The database `20037bc1a42180b6bb64c9efc4330ce2` returns:
+```json
+{
+  "object": "error",
+  "status": 400,
+  "code": "validation_error", 
+  "message": "Database with ID 20037bc1-a421-80b6-bb64-c9efc4330ce2 does not contain any data sources accessible by this API bot."
+}
+```
+
+This appears to be related to Notion's API version 2025-09-03 changes around multi-source databases. The database is visible as a child block but cannot be queried directly.

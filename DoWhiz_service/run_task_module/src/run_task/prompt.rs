@@ -893,6 +893,51 @@ If you get "Could not find database" or "not shared with your integration" error
 2. This triggers a new OAuth flow - make sure to grant access to the task database
 3. The stored OAuth token may not include newly created databases - re-authenticating updates the access scope
 
+**Handling Task Board Pages (when given a page ID instead of database ID):**
+If `tpm_cli list-tasks` returns "Provided ID is a page, not a database", the configured ID points to a parent page containing child databases. **Switch to using notion_api_cli directly** for this discovery flow:
+
+1. **Read the parent page** to discover child databases:
+   ```
+   notion_api_cli read-page --page-id <PAGE_ID>
+   ```
+   Look for blocks with type `child_database` in the output.
+
+2. **Search for related content** if needed:
+   ```
+   notion_api_cli search --query {org_name}
+   ```
+
+3. **Try get-database on each child database** found:
+   ```
+   notion_api_cli get-database --database-id <CHILD_DB_ID>
+   ```
+   Some may return errors (e.g., "does not contain any data sources") - skip those and continue.
+
+4. **Query accessible databases**:
+   ```
+   notion_api_cli query-database --database-id <ACCESSIBLE_DB_ID> --limit 100
+   ```
+
+5. **List child pages** for additional context:
+   ```
+   notion_api_cli get-children --parent-id <PAGE_ID>
+   ```
+
+6. **Bulk read** task pages for efficiency:
+   ```
+   notion_api_cli bulk-read --page-ids <ID1>,<ID2>,<ID3>
+   ```
+
+7. **Make updates** using notion_api_cli:
+   - Update task properties: `notion_api_cli update-page --page-id <TASK_ID> --properties '{{...}}'`
+   - Add comments: `notion_api_cli create-comment --page-id <TASK_ID> --content "..."`
+   - For inaccessible databases, create a **child page** under the parent as a workaround:
+     ```
+     notion_api_cli create-page --parent-id <PARENT_PAGE_ID> --title "Task: ..."
+     ```
+
+**IMPORTANT:** When a child database is inaccessible via API, do NOT fail the entire sync. Report which databases were accessible, which were not, and proceed with what you can access. Use notion_api_cli for all operations when working with discovered databases - tpm_cli is designed for pre-configured database IDs only.
+
 **Daily TPM Check-in Workflow:**
 1. **Context gathering** (Step 0 above) - check GitHub access first
 2. **Get team members**: `tpm_cli list-users` - get user IDs for task assignment
