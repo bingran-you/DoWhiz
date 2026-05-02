@@ -11,6 +11,8 @@ const DEFAULT_SCHEDULER_TASK_TIMEOUT_SECS: u64 = 600;
 const DEFAULT_RUN_TASK_TIMEOUT_SECS: u64 = 36000;
 const WATCHDOG_HEADROOM_SECS: u64 = 30;
 const MIN_RUN_TASK_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_REPLY_DRAFT_RESERVE_SECS: u64 = 120;
+const MIN_REPLY_DRAFT_RESERVE_SECS: u64 = 5;
 
 #[derive(Debug, Clone)]
 pub(super) struct ThreadSupersedeMonitor {
@@ -78,6 +80,35 @@ pub(super) fn run_task_timeout() -> Duration {
     Duration::from_secs(timeout_secs)
 }
 
+pub(super) fn reply_draft_reserve_timeout(total_budget: Duration) -> Duration {
+    let requested_override_secs = parse_timeout_secs("RUN_TASK_REPLY_DRAFT_RESERVE_SECS");
+    let requested_secs = requested_override_secs.unwrap_or(DEFAULT_REPLY_DRAFT_RESERVE_SECS);
+    let minimum_reserve_secs = if requested_override_secs.is_some() {
+        1
+    } else {
+        MIN_REPLY_DRAFT_RESERVE_SECS
+    };
+    let minimum_secs = minimum_reserve_secs.min(total_budget.as_secs().max(1));
+    let maximum_secs = total_budget
+        .as_secs()
+        .saturating_sub(MIN_REPLY_DRAFT_RESERVE_SECS)
+        .max(minimum_secs);
+
+    Duration::from_secs(requested_secs.clamp(minimum_secs, maximum_secs))
+}
+
+pub(super) fn split_reply_completion_budget(
+    total_budget: Duration,
+) -> Option<(Duration, Duration)> {
+    let reserve = reply_draft_reserve_timeout(total_budget);
+    let primary = total_budget.saturating_sub(reserve);
+    if primary.as_secs() < MIN_REPLY_DRAFT_RESERVE_SECS {
+        return None;
+    }
+
+    Some((primary, reserve))
+}
+
 /// Spawns a thread to continuously drain a pipe into a buffer.
 /// This prevents the pipe buffer from filling up and blocking the child process.
 fn spawn_pipe_drainer<R: Read + Send + 'static>(
@@ -109,12 +140,37 @@ pub(super) fn run_command_with_timeout(
     run_command_with_timeout_and_cancel(cmd, timeout, label, None)
 }
 
+pub(super) enum CommandCompletion {
+    Completed(Output),
+    EarlySuccess { output: Output, note: String },
+}
+
 pub(super) fn run_command_with_timeout_and_cancel(
-    mut cmd: Command,
+    cmd: Command,
     timeout: Duration,
     label: &'static str,
     cancel_monitor: Option<&ThreadSupersedeMonitor>,
 ) -> Result<Output, RunTaskError> {
+    match run_command_with_timeout_and_cancel_with_ready_check(
+        cmd,
+        timeout,
+        label,
+        cancel_monitor,
+        None,
+    )? {
+        CommandCompletion::Completed(output) | CommandCompletion::EarlySuccess { output, .. } => {
+            Ok(output)
+        }
+    }
+}
+
+pub(super) fn run_command_with_timeout_and_cancel_with_ready_check(
+    mut cmd: Command,
+    timeout: Duration,
+    label: &'static str,
+    cancel_monitor: Option<&ThreadSupersedeMonitor>,
+    mut ready_check: Option<&mut dyn FnMut(Duration) -> Option<String>>,
+) -> Result<CommandCompletion, RunTaskError> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(RunTaskError::Io)?;
     let start = Instant::now();
@@ -137,6 +193,7 @@ pub(super) fn run_command_with_timeout_and_cancel(
     let status: ExitStatus;
     let timed_out;
     let mut cancel_reason: Option<String> = None;
+    let mut early_success_note: Option<String> = None;
     loop {
         if let Some(reason) = cancel_monitor.and_then(ThreadSupersedeMonitor::supersede_reason) {
             let _ = child.kill();
@@ -150,6 +207,16 @@ pub(super) fn run_command_with_timeout_and_cancel(
             status = s;
             timed_out = false;
             break;
+        }
+
+        if let Some(check) = ready_check.as_mut() {
+            if let Some(note) = check(start.elapsed()) {
+                let _ = child.kill();
+                status = child.wait().map_err(RunTaskError::Io)?;
+                timed_out = false;
+                early_success_note = Some(note);
+                break;
+            }
         }
 
         if start.elapsed() >= timeout {
@@ -201,11 +268,17 @@ pub(super) fn run_command_with_timeout_and_cancel(
         });
     }
 
-    Ok(Output {
+    let output = Output {
         status,
         stdout,
         stderr,
-    })
+    };
+
+    if let Some(note) = early_success_note {
+        Ok(CommandCompletion::EarlySuccess { output, note })
+    } else {
+        Ok(CommandCompletion::Completed(output))
+    }
 }
 
 pub(super) fn current_thread_epoch(path: &Path) -> Option<u64> {
@@ -216,13 +289,11 @@ pub(super) fn current_thread_epoch(path: &Path) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::env::acquire_env_test_lock;
     use super::*;
     use std::fs;
     use std::process::Command;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct EnvVarGuard {
         key: &'static str,
@@ -255,7 +326,7 @@ mod tests {
 
     #[test]
     fn run_task_timeout_defaults_to_watchdog_budget_minus_headroom() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::unset("RUN_TASK_TIMEOUT_SECS"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -266,7 +337,7 @@ mod tests {
 
     #[test]
     fn run_task_timeout_respects_shorter_explicit_override() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "120"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -277,7 +348,7 @@ mod tests {
 
     #[test]
     fn run_task_timeout_caps_explicit_value_to_watchdog_budget() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "36000"),
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
@@ -288,7 +359,7 @@ mod tests {
 
     #[test]
     fn run_task_timeout_uses_custom_task_timeout_budget() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::unset("RUN_TASK_TIMEOUT_SECS"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "900"),
@@ -299,7 +370,7 @@ mod tests {
 
     #[test]
     fn run_task_timeout_caps_to_custom_task_timeout_budget() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "880"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "900"),
@@ -310,13 +381,57 @@ mod tests {
 
     #[test]
     fn run_task_timeout_ignores_invalid_values() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "abc"),
             EnvVarGuard::set("TASK_TIMEOUT_SECS", "0"),
         ];
 
         assert_eq!(run_task_timeout(), Duration::from_secs(36000));
+    }
+
+    #[test]
+    fn reply_draft_reserve_timeout_uses_default_when_unset() {
+        let _lock = acquire_env_test_lock();
+        let _guard = EnvVarGuard::unset("RUN_TASK_REPLY_DRAFT_RESERVE_SECS");
+
+        assert_eq!(
+            reply_draft_reserve_timeout(Duration::from_secs(480)),
+            Duration::from_secs(120)
+        );
+    }
+
+    #[test]
+    fn reply_draft_reserve_timeout_respects_small_override_for_fast_tests() {
+        let _lock = acquire_env_test_lock();
+        let _guard = EnvVarGuard::set("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "3");
+
+        assert_eq!(
+            reply_draft_reserve_timeout(Duration::from_secs(8)),
+            Duration::from_secs(3)
+        );
+    }
+
+    #[test]
+    fn split_reply_completion_budget_returns_primary_and_reserve() {
+        let _lock = acquire_env_test_lock();
+        let _guard = EnvVarGuard::set("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "120");
+
+        assert_eq!(
+            split_reply_completion_budget(Duration::from_secs(480)),
+            Some((Duration::from_secs(360), Duration::from_secs(120)))
+        );
+    }
+
+    #[test]
+    fn split_reply_completion_budget_respects_small_override_for_fast_tests() {
+        let _lock = acquire_env_test_lock();
+        let _guard = EnvVarGuard::set("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "3");
+
+        assert_eq!(
+            split_reply_completion_budget(Duration::from_secs(8)),
+            Some((Duration::from_secs(5), Duration::from_secs(3)))
+        );
     }
 
     #[test]

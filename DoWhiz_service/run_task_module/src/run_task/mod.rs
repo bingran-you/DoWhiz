@@ -8,6 +8,7 @@ mod docker;
 mod env;
 mod errors;
 mod github_auth;
+mod investment_fail_soft;
 pub mod pool_manager;
 mod prompt;
 mod reply_contract;

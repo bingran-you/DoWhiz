@@ -32,6 +32,7 @@ Use this skill to produce calibrated decision support, not safe commentary. Deci
 ## Core rules
 
 - `No Material Change` means the output gets shorter, not safer.
+- If the user says "only tell me if I should act" and the right answer is `No Material Change`, use the ultra-short contract.
 - `Review Now` means the evidence justifies a decision or re-underwrite now. It does not automatically mean `Buy` or `Sell`.
 - `Watch Closely` is for mixed but relevant change with concrete confirmation triggers, not filler prose.
 - Separate monitor status from the audience-specific actions.

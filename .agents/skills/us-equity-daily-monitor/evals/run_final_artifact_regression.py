@@ -97,7 +97,9 @@ def run_fixture_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
 
 
 def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, Any]:
-    audit = audit_final_artifact(run_result["artifact_html"])
+    audit = audit_final_artifact(
+        run_result["artifact_html"], request_text=case.get("prompt")
+    )
     checks = list(audit["checks"])
 
     if case.get("expected_monitor_status"):

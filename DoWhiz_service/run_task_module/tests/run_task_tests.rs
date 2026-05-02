@@ -6,7 +6,8 @@ use run_task_module::{
 use send_emails_module::normalize_email_html;
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 use support::{
     build_params, create_workspace, install_runtime_skills_and_employee_guidance,
     write_fake_claude, write_fake_codex, write_fake_gh, EnvGuard, EnvUnsetGuard, FakeClaudeMode,
@@ -106,6 +107,18 @@ fn write_investment_request(workspace: &Path, subject: &str, prompt: &str) {
     .unwrap();
 }
 
+#[cfg(unix)]
+fn write_shell_script(dir: &Path, name: &str, body: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = dir.join(name);
+    fs::write(&path, body).unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
+    path
+}
+
 #[test]
 #[cfg(unix)]
 fn run_task_success_with_fake_codex() {
@@ -175,16 +188,92 @@ fn run_task_skips_yolo_without_bypass() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_uses_yolo_with_bypass() {
+fn run_task_uses_danger_bypass_flag_when_supported() {
     let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_yolo").unwrap();
+    let temp = TempDir::new("codex_task_danger_flag").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
 
     let home_dir = temp.path.join("home");
     let bin_dir = temp.path.join("bin");
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
-    write_fake_codex(&bin_dir, FakeCodexMode::EnsureYolo).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+found="0"
+for arg in "$@"; do
+  if [ "$arg" = "--dangerously-bypass-approvals-and-sandbox" ]; then
+    found="1"
+  fi
+done
+if [ "$found" != "1" ]; then
+  echo "missing --dangerously-bypass-approvals-and-sandbox" >&2
+  exit 3
+fi
+echo "<html><body>Test reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("CODEX_BYPASS_SANDBOX", "1"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).unwrap();
+    assert!(result.reply_html_path.exists());
+    assert!(result.reply_attachments_dir.is_dir());
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_falls_back_to_legacy_yolo_when_only_yolo_is_supported() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_legacy_yolo").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--yolo' '--cd'
+  exit 0
+fi
+found="0"
+for arg in "$@"; do
+  if [ "$arg" = "--yolo" ]; then
+    found="1"
+  fi
+done
+if [ "$found" != "1" ]; then
+  echo "missing --yolo" >&2
+  exit 3
+fi
+echo "<html><body>Test reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+    );
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -264,19 +353,47 @@ fn run_task_sets_human_approval_gate_mcp_env() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_passes_add_dir_for_gh_config() {
+fn run_task_sets_workspace_gh_config_dir_without_add_dir() {
     let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_add_dir").unwrap();
+    let temp = TempDir::new("codex_task_gh_config_dir").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
 
     let home_dir = temp.path.join("home");
     let bin_dir = temp.path.join("bin");
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
-    write_fake_codex(&bin_dir, FakeCodexMode::EnsureAddDir).unwrap();
-
-    let gh_config_dir = home_dir.join(".config").join("gh");
-    let expected_add_dir = gh_config_dir.to_str().unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+if [ -z "${GH_CONFIG_DIR:-}" ]; then
+  echo "missing GH_CONFIG_DIR" >&2
+  exit 3
+fi
+if [ ! -d "$GH_CONFIG_DIR" ]; then
+  echo "GH_CONFIG_DIR does not exist: $GH_CONFIG_DIR" >&2
+  exit 3
+fi
+if [ -n "${EXPECTED_GH_CONFIG_DIR:-}" ] && [ "$GH_CONFIG_DIR" != "$EXPECTED_GH_CONFIG_DIR" ]; then
+  echo "unexpected GH_CONFIG_DIR: expected '$EXPECTED_GH_CONFIG_DIR' got '$GH_CONFIG_DIR'" >&2
+  exit 3
+fi
+for arg in "$@"; do
+  if [ "$arg" = "--add-dir" ]; then
+    echo "unexpected --add-dir" >&2
+    exit 3
+  fi
+done
+echo "<html><body>Test reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+    );
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -286,13 +403,17 @@ fn run_task_passes_add_dir_for_gh_config() {
         ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
         ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
         ("GH_AUTH_DISABLED", "1"),
-        ("EXPECTED_ADD_DIR", expected_add_dir),
+        (
+            "EXPECTED_GH_CONFIG_DIR",
+            workspace.join(".config").join("gh").to_str().unwrap(),
+        ),
     ]);
 
     let params = build_params(&workspace);
     let result = run_task(&params).unwrap();
     assert!(result.reply_html_path.exists());
     assert!(result.reply_attachments_dir.is_dir());
+    assert!(workspace.join(".config").join("gh").is_dir());
 }
 
 #[test]
@@ -453,6 +574,108 @@ fn run_task_falls_back_to_claude_after_codex_failure_by_default() {
     .unwrap();
     assert!(fallback_note.contains("status=success"));
     assert!(fallback_note.contains("fallback_model=claude-sonnet-4-5"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_claude_fallback_uses_explicit_settings_and_clears_ambient_auth() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_claude_foundry_settings").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::Fail).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+set -e
+found_settings="0"
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--settings" ]; then
+    found_settings="1"
+  fi
+  prev="$arg"
+done
+if [ "$found_settings" != "1" ]; then
+  echo "missing --settings" >&2
+  exit 3
+fi
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "ambient ANTHROPIC_API_KEY leaked into claude child" >&2
+  exit 3
+fi
+echo '{"type":"message_delta","delta":{"text":"ok"}}'
+echo "<html><body>Claude fallback reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("ANTHROPIC_API_KEY", "ambient-bad-key"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).expect("run_task should recover with explicit Claude settings");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Claude fallback reply"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_reports_explicit_claude_auth_failure_when_fallback_login_is_invalid() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_claude_auth_failure").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::Fail).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+echo "Invalid API key · Please run /login" >&2
+exit 7
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("ANTHROPIC_API_KEY", "ambient-bad-key"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let err = run_task(&params).expect_err("fallback should fail with explicit auth message");
+    match err {
+        RunTaskError::FallbackFailed { fallback, .. } => {
+            assert!(
+                fallback.contains("Claude authentication failed while attempting DoWhiz fallback")
+            );
+            assert!(fallback.contains("Please run /login"));
+        }
+        other => panic!("expected FallbackFailed, got {:?}", other),
+    }
 }
 
 #[test]
@@ -673,6 +896,614 @@ fn run_task_recovers_ready_reply_after_late_codex_failure() {
 
 #[test]
 #[cfg(unix)]
+fn run_task_treats_completed_turn_with_valid_reply_and_nonzero_exit_as_success() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_completed_turn_nonzero").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::ReplyThenTurnCompleteExitNonzero).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace)).expect("completed turn should be accepted");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Recovered reply"));
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("Codex completed the turn and wrote a valid reply artifact"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_returns_early_when_valid_reply_artifact_exists() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_timeout_valid_reply").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA monitor check",
+        "Check whether anything material changed for NVDA and summarize the update.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+exec python3 - <<'PY'
+from pathlib import Path
+import time
+
+Path("reply_email_draft.html").write_text("""<section>
+  <p><strong>As of:</strong> 2026-05-01 · <strong>Price:</strong> $114.50</p>
+  <p><strong>Investor question:</strong> Check whether anything material changed for NVDA and summarize the update.</p>
+</section>
+<section>
+  <h2>Decision Card</h2>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Monitor Status</td><td>No Material Change</td></tr>
+    <tr><td>New Money Action</td><td>Wait</td></tr>
+    <tr><td>Existing Holder Action</td><td>Hold/Do not add</td></tr>
+    <tr><td>Thesis Impact</td><td>No Material Change</td></tr>
+    <tr><td>Signal Quality</td><td>Moderate</td></tr>
+    <tr><td>Confidence</td><td>Medium</td></tr>
+  </table>
+  <p><strong>One-line rationale:</strong> Nothing material changed, so there is still no new edge today.</p>
+</section>
+<section>
+  <h2>Why Now</h2>
+  <p>Recent checks did not move the thesis enough to justify new action.</p>
+</section>
+<section>
+  <h2>What Would Change The View</h2>
+  <ul>
+    <li><strong>Upgrade / Review Now:</strong> Next report shows data-center revenue growth re-accelerating above 25% while gross margin stays above 74%.</li>
+    <li><strong>Downgrade / De-risk:</strong> Management cuts the next-quarter revenue guide by 5% or more.</li>
+    <li><strong>Invalidation:</strong> A new export-control change threatens more than 10% of expected revenue.</li>
+  </ul>
+</section>
+<section>
+  <h2>Evidence Chips</h2>
+  <ul>
+    <li><a href="https://investor.nvidia.com/">NVIDIA IR</a></li>
+    <li><a href="https://www.sec.gov/">SEC EDGAR</a></li>
+    <li><a href="https://www.reuters.com/world/china/prices-nvidias-b300-server-1-million-china-us-curbs-sources-say-2026-04-30/">Reuters</a></li>
+  </ul>
+</section>
+""")
+attachments = Path("reply_email_attachments")
+attachments.mkdir(exist_ok=True)
+(attachments / "attachment.txt").write_text("attachment")
+time.sleep(10)
+PY
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "20"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "4"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let started_at = Instant::now();
+    let result =
+        run_task(&build_params(&workspace)).expect("ready artifact should be accepted early");
+    let elapsed = started_at.elapsed();
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("No Material Change"));
+    assert!(
+        elapsed.as_secs_f32() < 6.0,
+        "artifact-first runner should have returned quickly, elapsed={elapsed:?}"
+    );
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("Returned early once a valid reply artifact existed"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_action_only_monitor_requests_use_fast_path() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_action_only_monitor_fast_path").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA monitor check",
+        "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let counter_path = temp.path.join("codex_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        &format!(
+            r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+count=0
+if [ -f "{counter_path}" ]; then
+  count="$(cat "{counter_path}")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "{counter_path}"
+echo "action-only monitor fast path should not invoke codex" >&2
+sleep 20
+"#,
+            counter_path = counter_path.display()
+        ),
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "20"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let started_at = Instant::now();
+    let result = run_task(&build_params(&workspace))
+        .expect("action-only monitor request should use fast path");
+    let elapsed = started_at.elapsed();
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Insufficient Evidence"));
+    assert!(html.contains("Incomplete monitor check"));
+    assert!(html.contains("prior note needed for a literal change-since-last-note diff"));
+    assert!(!html.contains("Dual-Horizon Framing"));
+    assert!(!html.contains("href=\"http"));
+    assert!(!counter_path.exists());
+    assert!(
+        elapsed.as_secs_f32() < 6.0,
+        "action-only monitor fast path should return quickly, elapsed={elapsed:?}"
+    );
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("deterministic action-only monitor artifact"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_monitor_timeout_yields_short_fail_soft_artifact() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_monitor_fail_soft").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA monitor check",
+        "Check whether anything material changed for NVDA and summarize the update.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+sleep 20
+"#,
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "20"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace))
+        .expect("monitor timeout should produce fail-soft artifact");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Insufficient Evidence"));
+    assert!(html.contains("Incomplete monitor check"));
+    assert!(!html.contains("Dual-Horizon Framing"));
+    assert!(!html.contains("href=\"http"));
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("deterministic monitor fail-soft artifact"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_timeout_tries_fast_completion_before_failing_soft_for_real_ticker_research() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_fail_soft_before_retry").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Nokia investment memo",
+        "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+    let research_dir = workspace.join("work").join("research");
+    fs::create_dir_all(&research_dir).unwrap();
+    fs::write(
+        research_dir.join("nokia_q1_release.md"),
+        "Nokia release notes placeholder",
+    )
+    .unwrap();
+    fs::write(
+        research_dir.join("nokia_margin_notes.txt"),
+        "Operating margin notes placeholder",
+    )
+    .unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let counter_path = temp.path.join("codex_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        &format!(
+            r#"#!/bin/sh
+set -e
+for arg in "$@"; do
+  if [ "$arg" = "--help" ]; then
+    echo "codex exec [--dangerously-bypass-approvals-and-sandbox] [--cd]"
+    exit 0
+  fi
+done
+workspace="."
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--cd" ]; then
+    workspace="$arg"
+    break
+  fi
+  prev="$arg"
+done
+cd "$workspace"
+count=0
+if [ -f "{counter_path}" ]; then
+  count="$(cat "{counter_path}")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "{counter_path}"
+echo "count=$count" >&2
+sleep 20
+"#,
+            counter_path = counter_path.display()
+        ),
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "30"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "20"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result =
+        run_task(&build_params(&workspace)).expect("fail-soft artifact should recover timeout");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Incomplete research artifact"));
+    assert!(html.contains("What Was Found"));
+    assert!(html.contains("What Is Missing"));
+    assert!(html.contains("What would be needed for Buy / Avoid / Add / Exit"));
+    assert!(!html.contains("href=\"http"));
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
+    assert!(workspace.join("codex_fast_completion_context.md").exists());
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("deterministic incomplete-research investment finalizer"));
+    assert!(!note.contains("Returned early once a valid reply artifact existed"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_synthetic_investment_requests_use_assumption_fast_path() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_negative_synthetic_fail_soft").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Synthetic downside scenario",
+        "Assume company Y cut revenue guidance by 20%, lost its largest customer, gross margin collapsed, management withdrew long-term targets, and the stock still trades above peer multiples. Write the investment monitor output.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let counter_path = temp.path.join("codex_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        &format!(
+            r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+count=0
+if [ -f "{counter_path}" ]; then
+  count="$(cat "{counter_path}")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "{counter_path}"
+echo "synthetic fast path should not invoke codex" >&2
+sleep 20
+"#,
+            counter_path = counter_path.display()
+        ),
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "20"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result = run_task(&build_params(&workspace))
+        .expect("synthetic request should yield deterministic assumption artifact");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Assumption-based investment monitor output"));
+    assert!(html.contains("Avoid for now"));
+    assert!(html.contains("Exit"));
+    assert!(html.contains("Review Now"));
+    assert!(html.contains("assumption-based"));
+    assert!(html.contains("Medium"));
+    assert!(!html.contains("High"));
+    assert!(!html.contains("href=\"http"));
+    assert!(!counter_path.exists());
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("deterministic assumption-based investment artifact"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_watch_closely_synthetic_prompts_use_assumption_fast_path() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_watch_closely_synthetic_fast_path").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Watch Closely synthetic",
+        "Assume company Z reported revenue slightly above expectations, but lowered next-quarter margin guidance because of temporary supply-chain costs. Demand commentary improved, but free cash flow remained negative. Write the investment monitor output.",
+    );
+    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let counter_path = temp.path.join("codex_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        &format!(
+            r#"#!/bin/sh
+set -e
+if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
+  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
+  exit 0
+fi
+count=0
+if [ -f "{counter_path}" ]; then
+  count="$(cat "{counter_path}")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "{counter_path}"
+echo "watch-closely synthetic fast path should not invoke codex" >&2
+sleep 20
+"#,
+            counter_path = counter_path.display()
+        ),
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("RUN_TASK_TIMEOUT_SECS", "20"),
+        ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let started_at = Instant::now();
+    let result = run_task(&build_params(&workspace))
+        .expect("synthetic watch-closely request should use fast path");
+    let elapsed = started_at.elapsed();
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Assumption-based investment monitor output"));
+    assert!(html.contains("Watch Closely"));
+    assert!(html.contains("Starter Only"));
+    assert!(html.contains("Hold/Do not add"));
+    assert!(html.contains("assumption-based"));
+    assert!(html.contains("Medium"));
+    assert!(!html.contains("High"));
+    assert!(!html.contains("href=\"http"));
+    assert!(!counter_path.exists());
+    assert!(
+        elapsed.as_secs_f32() < 6.0,
+        "synthetic watch-closely fast path should return quickly, elapsed={elapsed:?}"
+    );
+    let note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(note.contains("deterministic assumption-based investment artifact"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_recovers_reply_from_session_log_after_codex_failure() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_session_recovery").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let sessions_dir = home_dir
+        .join(".codex")
+        .join("sessions")
+        .join("2026")
+        .join("05")
+        .join("01");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    fs::create_dir_all(&sessions_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+echo "simulated failure" >&2
+exit 23
+"#,
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let recovered_reply = workspace.join("reply_email_draft.html");
+    let session_path = sessions_dir.join("rollout-session-recovery.jsonl");
+    let patch_payload = format!(
+        "*** Begin Patch\n*** Add File: {}\n+<html><body>Recovered from session log</body></html>\n*** End Patch\n",
+        recovered_reply.display()
+    );
+    let session_line = serde_json::json!({
+        "type": "response_item",
+        "payload": {
+            "type": "custom_tool_call",
+            "name": "apply_patch",
+            "input": patch_payload,
+        }
+    });
+    fs::write(session_path, format!("{}\n", session_line)).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).expect("run_task should recover reply from session log");
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Recovered from session log"));
+    let recovery_note = result.recovery_note.as_deref().unwrap_or("");
+    assert!(recovery_note.contains("Recovered reply artifact from Codex session log"));
+    assert!(recovery_note.contains("Codex exited with status 23"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_nonzero_completed_turn_with_invalid_investment_reply_triggers_claude_fallback() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_invalid_nonzero_fallback").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "NVDA investment memo",
+        "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(
+        &bin_dir,
+        FakeCodexMode::InvestmentGenericTurnCompleteExitNonzero,
+    )
+    .unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentStructured).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let result =
+        run_task(&build_params(&workspace)).expect("invalid nonzero artifact should fall back");
+    let html = fs::read_to_string(result.reply_html_path).unwrap();
+    assert!(html.contains("Decision Card"));
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
 fn run_task_reports_turn_aborted_as_codex_failure() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_turn_aborted").unwrap();
@@ -742,6 +1573,60 @@ fn run_task_times_out_with_codex() {
             assert!(primary.contains("Command timed out (codex after 1s)"));
             assert!(fallback.contains("Claude failed"));
             assert!(fallback.contains("simulated claude failure"));
+        }
+        other => panic!("expected FallbackFailed, got {:?}", other),
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_preserves_primary_draft_when_fallback_fails_after_timeout() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_timeout_preserve_primary_draft").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+cat > reply_email_draft.html <<'HTML'
+<p>Draft exists, but it is not a valid final investment artifact yet.</p>
+HTML
+sleep "${SLEEP_SECS:-2}"
+"#,
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+        ("RUN_TASK_TIMEOUT_SECS", "1"),
+        ("SLEEP_SECS", "2"),
+    ]);
+
+    let params = build_params(&workspace);
+    let err = run_task(&params).unwrap_err();
+    match err {
+        RunTaskError::FallbackFailed { primary, fallback } => {
+            let preserved = workspace
+                .join(".run_task_trace_codex_primary")
+                .join("preserved_artifacts")
+                .join("reply_email_draft.html");
+            assert!(preserved.exists(), "preserved primary draft should exist");
+            let preserved_html = fs::read_to_string(&preserved).unwrap();
+            assert!(preserved_html.contains("Draft exists"));
+            assert!(primary.contains("Preserved primary Codex draft at"));
+            assert!(fallback.contains("Claude failed"));
         }
         other => panic!("expected FallbackFailed, got {:?}", other),
     }
@@ -1266,7 +2151,7 @@ fn run_task_investment_contract_violation_triggers_claude_fallback() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_investment_contract_violation_fails_closed_when_fallback_is_still_generic() {
+fn run_task_investment_contract_violation_uses_fail_soft_artifact_when_fallback_is_still_generic() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_fail_closed").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1293,10 +2178,17 @@ fn run_task_investment_contract_violation_fails_closed_when_fallback_is_still_ge
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
-    let err = run_task(&build_params(&workspace)).expect_err("expected fail-closed contract error");
-    let rendered = err.to_string();
-    assert!(rendered.contains("Output contract violation"));
-    assert!(rendered.contains("violates required contract"));
+    let result = run_task(&build_params(&workspace))
+        .expect("generic Codex + generic fallback should still return a fail-soft artifact");
+    let html = fs::read_to_string(result.reply_html_path).unwrap();
+    let recovery = result.recovery_note.unwrap_or_default();
+    assert!(html.contains("Incomplete research artifact"));
+    assert!(html.contains("What Was Found"));
+    assert!(html.contains("What Is Missing"));
+    assert!(html.contains("What would be needed for Buy / Avoid / Add / Exit"));
+    assert!(!html.contains("href=\"http"));
+    assert!(recovery.contains("deterministic incomplete-research investment finalizer"));
+    assert!(recovery.contains("Codex and fallback recovery failed"));
 }
 
 #[test]

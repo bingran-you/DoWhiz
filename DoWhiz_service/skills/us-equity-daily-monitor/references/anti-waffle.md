@@ -38,3 +38,4 @@ When the right answer is `No Material Change`, do not inflate the artifact into 
 - Would this still sound specific if the company name were removed?
 - Did I explain what moves the call up, down, or breaks it?
 - If I recommended `Wait` or `Hold`, did I show a mechanical path to stop waiting or holding?
+- If this is an assumption-based synthetic scenario, did I say so plainly instead of pretending I verified live issuer evidence?

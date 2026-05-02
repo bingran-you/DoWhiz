@@ -49,16 +49,26 @@ Required order:
 
 1. Header with `As of:`, `Price:`, and `Investor question:`
 2. `## Decision Card`
-3. `## What Changed`
-4. `## Evidence`
-5. `## Triggers — Verdict Movement`
-6. `## Judgment`
+3. `## Why Now`
+4. `## What Would Change The View`
+5. `## Evidence Chips`
 
-The short update should stay concise. Target roughly 400 to 2200 characters of visible text.
+The short update should stay extremely concise. Target roughly 250 to 1200 characters of visible text.
+If the artifact already fits this shape by inspection, finalize it instead of running extra dump-the-whole-artifact checks.
+
+Inside `## What Would Change The View`, keep these exact trigger labels:
+
+- `Upgrade / Review Now`
+- `Downgrade / De-risk`
+- `Invalidation`
 
 ## Shared minimums
 
 - keep clickable source links close to factual claims
 - include at least 3 clickable links for the full memo and at least 2 for the short update
 - keep the artifact scan-first
+- if the user says "only tell me if I should act" and the correct mode is `No Material Change`, do not write a mini-memo
 - if the recommendation is `Wait`, `Hold`, or `Hold/Do not add`, the trigger block must make the next decision mechanical
+- if the scenario is synthetic or assumption-based, say `assumption-based` explicitly in the visible artifact
+- synthetic assumption-only outputs do not need issuer evidence links, but they also must not use generic market homepages as fake evidence
+- synthetic assumption-only outputs should cap `Confidence` at `Medium` unless real issuer-specific evidence is actually verified and linked

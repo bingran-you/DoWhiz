@@ -127,6 +127,8 @@ pub enum FakeCodexMode {
     EmptyReply,
     Fail,
     ReplyThenFail,
+    ReplyThenTurnCompleteExitNonzero,
+    InvestmentGenericTurnCompleteExitNonzero,
     TurnAborted,
     GithubEnvCheck,
     X402EnvCheck,
@@ -266,6 +268,30 @@ mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 echo "response.failed event received" >&2
 exit 23
+"#
+        }
+        FakeCodexMode::ReplyThenTurnCompleteExitNonzero => {
+            r#"#!/bin/sh
+set -e
+echo "<html><body>Recovered reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+echo '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":20}}'
+echo "stream disconnected after completion" >&2
+exit 1
+"#
+        }
+        FakeCodexMode::InvestmentGenericTurnCompleteExitNonzero => {
+            r#"#!/bin/sh
+set -e
+cat > reply_email_draft.html <<'HTML'
+<p>NVIDIA is a good business, but I would wait until after earnings and buy in tranches instead of going all in now.</p>
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
+echo '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":20}}'
+echo "stream disconnected after completion" >&2
+exit 1
 "#
         }
         FakeCodexMode::TurnAborted => {

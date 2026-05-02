@@ -65,7 +65,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn prepare_workspace(workspace_dir: &Path) -> Result<(), std::io::Error> {
     fs::create_dir_all(workspace_dir.join("incoming_email"))?;
+    fs::create_dir_all(workspace_dir.join("incoming_email").join("entries"))?;
     fs::create_dir_all(workspace_dir.join("incoming_attachments"))?;
+    fs::create_dir_all(workspace_dir.join("incoming_attachments").join("entries"))?;
     fs::create_dir_all(workspace_dir.join("memory"))?;
     fs::create_dir_all(workspace_dir.join("references"))?;
     Ok(())
@@ -90,6 +92,32 @@ fn write_inbound_email(
     fs::write(
         workspace_dir.join("incoming_email").join("email.html"),
         format!("<p>{}</p>", prompt),
+    )?;
+    fs::write(
+        workspace_dir
+            .join("incoming_email")
+            .join("thread_request.md"),
+        format!("{prompt}\n"),
+    )?;
+    fs::write(
+        workspace_dir.join("incoming_email").join("thread_history.md"),
+        format!(
+            "# Thread history\n\n- Subject: {subject}\n- Canonical request: incoming_email/thread_request.md\n- Latest HTML body: incoming_email/email.html\n- Raw payload: incoming_email/postmark_payload.json\n- Historical entries directory: incoming_email/entries/\n"
+        ),
+    )?;
+    fs::write(
+        workspace_dir
+            .join("incoming_email")
+            .join("entries")
+            .join("0001_latest_email.html"),
+        format!("<p>{}</p>", prompt),
+    )?;
+    fs::write(
+        workspace_dir
+            .join("incoming_email")
+            .join("entries")
+            .join("0001_postmark_payload.json"),
+        serde_json::to_string_pretty(&payload).map_err(std::io::Error::other)?,
     )?;
     Ok(())
 }
@@ -118,4 +146,44 @@ fn install_runtime_skills_and_guidance(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_inbound_email_populates_thread_files_for_local_live_eval() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        prepare_workspace(temp.path()).expect("prepare workspace");
+        write_inbound_email(
+            temp.path(),
+            "NVDA monitor check",
+            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
+        )
+        .expect("write inbound email");
+
+        let incoming = temp.path().join("incoming_email");
+        assert_eq!(
+            fs::read_to_string(incoming.join("thread_request.md")).expect("thread request"),
+            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.\n"
+        );
+        let thread_history =
+            fs::read_to_string(incoming.join("thread_history.md")).expect("thread history");
+        assert!(thread_history.contains("incoming_email/thread_request.md"));
+        assert!(thread_history.contains("incoming_email/entries/"));
+        assert!(incoming
+            .join("entries")
+            .join("0001_latest_email.html")
+            .exists());
+        assert!(incoming
+            .join("entries")
+            .join("0001_postmark_payload.json")
+            .exists());
+        assert!(temp
+            .path()
+            .join("incoming_attachments")
+            .join("entries")
+            .is_dir());
+    }
 }

@@ -179,7 +179,7 @@ pub(super) fn run_claude_task(
     if !output.status.success() {
         let err = RunTaskError::ClaudeFailed {
             status: output.status.code(),
-            output: output_tail,
+            output: annotate_claude_failure_output(&output_tail),
         };
         let _ = trace.finish(output.status.code(), false, Some(&err.to_string()), None);
         return Err(err);
@@ -189,7 +189,7 @@ pub(super) fn run_claude_task(
     if assistant_text.trim().is_empty() {
         let err = RunTaskError::ClaudeFailed {
             status: output.status.code(),
-            output: output_tail,
+            output: annotate_claude_failure_output(&output_tail),
         };
         let _ = trace.finish(output.status.code(), false, Some(&err.to_string()), None);
         return Err(err);
@@ -434,6 +434,24 @@ fn maybe_recover_from_ready_reply_artifact(
     Some(reason)
 }
 
+fn annotate_claude_failure_output(output: &str) -> String {
+    if is_claude_auth_failure(output) {
+        format!(
+            "Claude authentication failed while attempting DoWhiz fallback. No reply artifact was delivered. Clear conflicting local Claude auth state and rely on the DoWhiz Foundry settings for this run.\n{}",
+            output
+        )
+    } else {
+        output.to_string()
+    }
+}
+
+fn is_claude_auth_failure(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    normalized.contains("invalid api key")
+        || normalized.contains("please run /login")
+        || normalized.contains("authentication failed")
+}
+
 fn build_claude_command(
     workspace_dir: &Path,
     prompt: &str,
@@ -443,6 +461,9 @@ fn build_claude_command(
     let max_turns = claude_max_turns();
     let mut cmd = Command::new("claude");
     remove_restricted_agent_env(&mut cmd);
+    if let Ok(settings_path) = claude_settings_path() {
+        cmd.arg("--settings").arg(settings_path);
+    }
     cmd.arg("-p")
         .arg("--output-format")
         .arg("stream-json")
@@ -456,8 +477,17 @@ fn build_claude_command(
         .arg("--dangerously-skip-permissions")
         .arg(prompt)
         .current_dir(workspace_dir);
+    cmd.env_remove("ANTHROPIC_API_KEY")
+        .env_remove("ANTHROPIC_AUTH_TOKEN")
+        .env_remove("ANTHROPIC_BASE_URL")
+        .env_remove("ANTHROPIC_API_BASE")
+        .env_remove("CLAUDE_API_KEY");
     apply_env_pairs(&mut cmd, env_overrides);
     cmd
+}
+
+fn claude_settings_path() -> Result<PathBuf, RunTaskError> {
+    Ok(dowhiz_claude_home()?.join("settings.json"))
 }
 
 fn claude_max_turns() -> u32 {
@@ -587,10 +617,10 @@ fn extract_claude_fragment(event: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::env::acquire_env_test_lock;
     use super::{build_claude_command, claude_task_timeout, CLAUDE_ALLOWED_TOOLS};
     use std::env;
     use std::path::Path;
-    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
     struct EnvVarGuard {
@@ -622,8 +652,7 @@ mod tests {
     }
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        acquire_env_test_lock()
     }
 
     #[test]

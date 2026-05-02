@@ -5,6 +5,9 @@ use std::process::Command;
 
 use super::errors::RunTaskError;
 
+#[cfg(test)]
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
 pub(super) fn load_env_sources(workspace_dir: &Path) -> Result<(), RunTaskError> {
     for env_path in find_env_files(workspace_dir) {
         load_env_file(&env_path)?;
@@ -187,12 +190,18 @@ pub(super) fn is_restricted_agent_env_key(key: &str) -> bool {
 }
 
 #[cfg(test)]
+pub(super) fn acquire_env_test_lock() -> MutexGuard<'static, ()> {
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct EnvVarGuard {
         key: &'static str,
@@ -237,7 +246,7 @@ mod tests {
 
     #[test]
     fn load_env_sources_merges_workspace_and_cwd_env() {
-        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _lock = acquire_env_test_lock();
         let _backend_guard = EnvVarGuard::unset("RUN_TASK_EXECUTION_BACKEND");
         let _group_guard = EnvVarGuard::unset("RUN_TASK_AZURE_ACI_RESOURCE_GROUP");
 

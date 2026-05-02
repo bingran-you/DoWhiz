@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
+
+from html_contract_utils import count_clickable_links, normalize_text
 
 FULL_ORDER = [
     "decision card",
@@ -19,10 +20,9 @@ FULL_ORDER = [
 ]
 SHORT_ORDER = [
     "decision card",
-    "what changed",
-    "evidence",
-    "triggers",
-    "judgment",
+    "why now",
+    "what would change the view",
+    "evidence chips",
 ]
 
 FULL_LABELS = [
@@ -64,28 +64,13 @@ SHORT_LABELS = [
     "signal quality",
     "confidence",
     "one-line rationale:",
-    "what changed",
-    "evidence",
-    "triggers",
+    "why now",
+    "what would change the view",
+    "evidence chips",
     "upgrade / review now",
     "downgrade / de-risk",
     "invalidation",
-    "judgment",
 ]
-
-
-def normalize_text(raw_html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", raw_html)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
-    text = text.replace("&lt;", "<").replace("&gt;", ">")
-    return " ".join(text.split()).lower()
-
-
-def count_clickable_links(raw_html: str) -> int:
-    lowered = raw_html.lower()
-    return lowered.count('href="http') + lowered.count("href='http")
-
-
 def contains_in_order(text: str, markers: list[str]) -> bool:
     start = 0
     for marker in markers:
@@ -97,7 +82,12 @@ def contains_in_order(text: str, markers: list[str]) -> bool:
 
 
 def detect_contract_type(text: str) -> str:
-    if "what changed" in text and "evidence" in text and "dual-horizon framing" not in text:
+    if (
+        "why now" in text
+        and "what would change the view" in text
+        and "evidence chips" in text
+        and "dual-horizon framing" not in text
+    ):
         return "short"
     return "full"
 
