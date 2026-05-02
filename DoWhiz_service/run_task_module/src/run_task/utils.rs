@@ -81,9 +81,14 @@ pub(super) fn run_task_timeout() -> Duration {
 }
 
 pub(super) fn reply_draft_reserve_timeout(total_budget: Duration) -> Duration {
-    let requested_secs = parse_timeout_secs("RUN_TASK_REPLY_DRAFT_RESERVE_SECS")
-        .unwrap_or(DEFAULT_REPLY_DRAFT_RESERVE_SECS);
-    let minimum_secs = MIN_REPLY_DRAFT_RESERVE_SECS.min(total_budget.as_secs().max(1));
+    let requested_override_secs = parse_timeout_secs("RUN_TASK_REPLY_DRAFT_RESERVE_SECS");
+    let requested_secs = requested_override_secs.unwrap_or(DEFAULT_REPLY_DRAFT_RESERVE_SECS);
+    let minimum_reserve_secs = if requested_override_secs.is_some() {
+        1
+    } else {
+        MIN_REPLY_DRAFT_RESERVE_SECS
+    };
+    let minimum_secs = minimum_reserve_secs.min(total_budget.as_secs().max(1));
     let maximum_secs = total_budget
         .as_secs()
         .saturating_sub(MIN_REPLY_DRAFT_RESERVE_SECS)
@@ -95,10 +100,6 @@ pub(super) fn reply_draft_reserve_timeout(total_budget: Duration) -> Duration {
 pub(super) fn split_reply_completion_budget(
     total_budget: Duration,
 ) -> Option<(Duration, Duration)> {
-    if total_budget.as_secs() <= MIN_REPLY_DRAFT_RESERVE_SECS * 2 {
-        return None;
-    }
-
     let reserve = reply_draft_reserve_timeout(total_budget);
     let primary = total_budget.saturating_sub(reserve);
     if primary.as_secs() < MIN_REPLY_DRAFT_RESERVE_SECS {
@@ -419,6 +420,17 @@ mod tests {
         assert_eq!(
             split_reply_completion_budget(Duration::from_secs(480)),
             Some((Duration::from_secs(360), Duration::from_secs(120)))
+        );
+    }
+
+    #[test]
+    fn split_reply_completion_budget_respects_small_override_for_fast_tests() {
+        let _lock = acquire_env_test_lock();
+        let _guard = EnvVarGuard::set("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "3");
+
+        assert_eq!(
+            split_reply_completion_budget(Duration::from_secs(8)),
+            Some((Duration::from_secs(5), Duration::from_secs(3)))
         );
     }
 
