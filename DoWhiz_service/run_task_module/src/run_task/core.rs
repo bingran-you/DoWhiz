@@ -1,19 +1,52 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use super::claude::run_claude_task;
-use super::codex::run_codex_task;
+use super::codex::{
+    codex_command_timeout, run_codex_task, run_codex_task_with_fast_completion,
+    run_codex_task_with_timeout,
+};
 use super::env::read_env_trimmed;
 use super::errors::RunTaskError;
+use super::investment_fail_soft::{
+    maybe_write_action_only_monitor_artifact, maybe_write_fail_soft_investment_artifact,
+    maybe_write_synthetic_assumption_artifact,
+};
+use super::reply_contract::{
+    investment_monitor_request_for_workspace, investment_request_for_workspace,
+};
 use super::trace::RUN_TASK_TRACE_DIRNAME;
 use super::types::{RunTaskOutput, RunTaskParams, RunTaskRequest};
+use super::utils::split_reply_completion_budget;
 use super::workspace::{prepare_workspace, remap_workspace_dir, write_placeholder_reply};
+
+const MAX_INVESTMENT_MONITOR_PRIMARY_TIMEOUT_SECS: u64 = 30;
+const MAX_INVESTMENT_MONITOR_FAST_COMPLETION_TIMEOUT_SECS: u64 = 20;
+const MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS: u64 = 90;
+const MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS: u64 = 30;
 
 pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
     let workspace_dir = remap_workspace_dir(&params.workspace_dir)?;
     let runner = normalize_runner(&params.runner);
     let request = build_request(&workspace_dir, params, params.model_name.as_str());
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+
+    if let Some(output) = maybe_finalize_synthetic_investment_artifact(
+        params,
+        &workspace_dir,
+        "synthetic assumption-mode fast path",
+    )? {
+        return Ok(output);
+    }
+
+    if let Some(output) = maybe_finalize_action_only_monitor_artifact(
+        params,
+        &workspace_dir,
+        "action-only monitor fast path",
+    )? {
+        return Ok(output);
+    }
 
     if params.codex_disabled {
         if !params.reply_to.is_empty() {
@@ -32,6 +65,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
         });
     }
 
+    let codex_budget_split = codex_fast_completion_budget_split(&runner, &request)?;
     let primary_result = match runner.as_str() {
         "claude" => run_claude_task(
             build_request(&workspace_dir, params, params.model_name.as_str()),
@@ -40,18 +74,172 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
             reply_attachments_dir.clone(),
             false,
         ),
-        _ => run_codex_task(
-            build_request(&workspace_dir, params, params.model_name.as_str()),
-            &runner,
-            reply_html_path.clone(),
-            reply_attachments_dir.clone(),
-        ),
+        _ => match codex_budget_split {
+            Some((primary_timeout, _)) => run_codex_task_with_timeout(
+                build_request(&workspace_dir, params, params.model_name.as_str()),
+                &runner,
+                reply_html_path.clone(),
+                reply_attachments_dir.clone(),
+                Some(primary_timeout),
+            ),
+            None => run_codex_task(
+                build_request(&workspace_dir, params, params.model_name.as_str()),
+                &runner,
+                reply_html_path.clone(),
+                reply_attachments_dir.clone(),
+            ),
+        },
     };
 
     match primary_result {
         Ok(output) => Ok(output),
-        Err(primary_err) => run_claude_fallback_after_codex_failure(params, primary_err),
+        Err(primary_err) => {
+            let mut fallback_primary_err = primary_err;
+            if let Some((_, fast_completion_timeout)) = codex_budget_split {
+                match maybe_run_codex_fast_completion_retry(
+                    params,
+                    &workspace_dir,
+                    &runner,
+                    &fallback_primary_err,
+                    fast_completion_timeout,
+                ) {
+                    Ok(Some(output)) => return Ok(output),
+                    Ok(None) => {}
+                    Err(retry_err) => fallback_primary_err = retry_err,
+                }
+            }
+            let prefer_fail_soft =
+                should_prefer_investment_fail_soft(params, &workspace_dir, &fallback_primary_err)?;
+            if prefer_fail_soft {
+                if let Some(output) = maybe_finalize_investment_artifact_before_fallback(
+                    params,
+                    &workspace_dir,
+                    &fallback_primary_err,
+                )? {
+                    return Ok(output);
+                }
+            }
+            match run_claude_fallback_after_codex_failure(params, fallback_primary_err) {
+                Ok(output) => Ok(output),
+                Err(fallback_err) => {
+                    if let Some(output) = maybe_finalize_investment_artifact_before_fallback(
+                        params,
+                        &workspace_dir,
+                        &fallback_err,
+                    )? {
+                        Ok(output)
+                    } else {
+                        Err(fallback_err)
+                    }
+                }
+            }
+        }
     }
+}
+
+fn should_prefer_investment_fail_soft(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    primary_err: &RunTaskError,
+) -> Result<bool, RunTaskError> {
+    if params.reply_to.is_empty() || !investment_request_for_workspace(workspace_dir)? {
+        return Ok(false);
+    }
+
+    Ok(matches!(
+        primary_err,
+        RunTaskError::CommandTimeout { .. } | RunTaskError::OutputMissing { .. }
+    ))
+}
+
+fn maybe_finalize_synthetic_investment_artifact(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    codex_output: &str,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if params.reply_to.is_empty() {
+        return Ok(None);
+    }
+
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let Some(recovery_note) =
+        maybe_write_synthetic_assumption_artifact(workspace_dir, &reply_html_path)?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(RunTaskOutput {
+        reply_html_path,
+        reply_attachments_dir,
+        codex_output: codex_output.to_string(),
+        scheduled_tasks: Vec::new(),
+        scheduled_tasks_error: None,
+        scheduler_actions: Vec::new(),
+        scheduler_actions_error: None,
+        token_usage: None,
+        recovery_note: Some(recovery_note),
+    }))
+}
+
+fn maybe_finalize_action_only_monitor_artifact(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    codex_output: &str,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if params.reply_to.is_empty() {
+        return Ok(None);
+    }
+
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let Some(recovery_note) =
+        maybe_write_action_only_monitor_artifact(workspace_dir, &reply_html_path)?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(RunTaskOutput {
+        reply_html_path,
+        reply_attachments_dir,
+        codex_output: codex_output.to_string(),
+        scheduled_tasks: Vec::new(),
+        scheduled_tasks_error: None,
+        scheduler_actions: Vec::new(),
+        scheduler_actions_error: None,
+        token_usage: None,
+        recovery_note: Some(recovery_note),
+    }))
+}
+
+fn maybe_finalize_investment_artifact_before_fallback(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    primary_err: &RunTaskError,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if params.reply_to.is_empty() {
+        return Ok(None);
+    }
+
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let Some(recovery_note) =
+        maybe_write_fail_soft_investment_artifact(workspace_dir, &reply_html_path, primary_err)?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(RunTaskOutput {
+        reply_html_path,
+        reply_attachments_dir,
+        codex_output: primary_err.to_string(),
+        scheduled_tasks: Vec::new(),
+        scheduled_tasks_error: None,
+        scheduler_actions: Vec::new(),
+        scheduler_actions_error: None,
+        token_usage: None,
+        recovery_note: Some(recovery_note),
+    }))
 }
 
 pub fn run_claude_fallback_after_codex_failure(
@@ -68,6 +256,7 @@ pub fn run_claude_fallback_after_codex_failure(
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
     let fallback_model = resolve_claude_fallback_model(params.model_name.as_str());
     archive_primary_codex_trace(&workspace_dir)?;
+    let archived_primary_reply = archive_primary_reply_artifact(&workspace_dir, &reply_html_path)?;
     reset_reply_artifacts(&reply_html_path, &reply_attachments_dir)?;
     let fallback_result = run_claude_task(
         build_request(&workspace_dir, params, fallback_model.as_str()),
@@ -86,6 +275,7 @@ pub fn run_claude_fallback_after_codex_failure(
                 fallback_model.as_str(),
                 &primary_err,
                 None,
+                archived_primary_reply.as_deref(),
             )?;
             output.recovery_note = Some(match output.recovery_note.take() {
                 Some(existing) => format!("{}\n{}", existing, note),
@@ -100,9 +290,13 @@ pub fn run_claude_fallback_after_codex_failure(
                 fallback_model.as_str(),
                 &primary_err,
                 Some(&fallback_err),
+                archived_primary_reply.as_deref(),
             )?;
             Err(RunTaskError::FallbackFailed {
-                primary: primary_err.to_string(),
+                primary: primary_error_with_archived_reply(
+                    &primary_err,
+                    archived_primary_reply.as_deref(),
+                ),
                 fallback: fallback_err.to_string(),
             })
         }
@@ -146,6 +340,139 @@ fn build_request<'a>(
         thread_epoch: params.thread_epoch,
         thread_state_path: params.thread_state_path.as_deref(),
     }
+}
+
+fn codex_fast_completion_budget_split(
+    runner: &str,
+    request: &RunTaskRequest<'_>,
+) -> Result<Option<(Duration, Duration)>, RunTaskError> {
+    if !runner.eq_ignore_ascii_case("codex") || request.reply_to.is_empty() {
+        return Ok(None);
+    }
+    if !investment_request_for_workspace(request.workspace_dir)? {
+        return Ok(None);
+    }
+
+    let total_budget = codex_command_timeout();
+    if investment_monitor_request_for_workspace(request.workspace_dir)? {
+        let desired_primary = Duration::from_secs(MAX_INVESTMENT_MONITOR_PRIMARY_TIMEOUT_SECS);
+        let desired_reserve =
+            Duration::from_secs(MAX_INVESTMENT_MONITOR_FAST_COMPLETION_TIMEOUT_SECS);
+        if total_budget >= desired_primary + desired_reserve {
+            return Ok(Some((desired_primary, desired_reserve)));
+        }
+    }
+
+    let desired_primary = Duration::from_secs(MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS);
+    let desired_reserve = Duration::from_secs(MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS);
+    if total_budget >= desired_primary + desired_reserve {
+        return Ok(Some((desired_primary, desired_reserve)));
+    }
+
+    let Some((primary_timeout, reserve_timeout)) = split_reply_completion_budget(total_budget)
+    else {
+        return Ok(None);
+    };
+
+    if investment_monitor_request_for_workspace(request.workspace_dir)? {
+        return Ok(Some((primary_timeout, reserve_timeout)));
+    }
+
+    Ok(Some((primary_timeout, reserve_timeout)))
+}
+
+fn should_retry_codex_fast_completion(primary_err: &RunTaskError) -> bool {
+    match primary_err {
+        RunTaskError::CommandTimeout { command, .. } => {
+            matches!(
+                *command,
+                "codex" | "docker" | "docker run" | "az container create" | "az container show"
+            )
+        }
+        RunTaskError::OutputMissing { .. } => true,
+        RunTaskError::OutputContractViolation { reason, .. } => {
+            reason.contains("No Material Change artifact exceeds short-output budget")
+        }
+        _ => false,
+    }
+}
+
+fn write_codex_fast_completion_context(
+    workspace_dir: &Path,
+    primary_err: &RunTaskError,
+    fast_completion_timeout: Duration,
+) -> Result<(), RunTaskError> {
+    let reply_path = workspace_dir.join("reply_email_draft.html");
+    let reply_status = if reply_path.exists() {
+        format!("Existing draft to inspect first: {}", reply_path.display())
+    } else {
+        "No existing reply draft was preserved from the earlier pass.".to_string()
+    };
+    let trace_hint = if workspace_dir.join(".run_task_trace_codex_primary").exists() {
+        ".run_task_trace_codex_primary/"
+    } else if workspace_dir.join(RUN_TASK_TRACE_DIRNAME).exists() {
+        ".run_task_trace/"
+    } else {
+        "(no prior trace directory preserved)"
+    };
+    let context = format!(
+        "# Codex fast-completion context\n\n\
+This workspace is running a second Codex pass because the earlier pass did not finish with a deliverable inside its research budget.\n\n\
+Remaining drafting budget: approximately {budget_secs} seconds.\n\n\
+Primary failure class: {primary_summary}\n\n\
+Artifact status:\n- {reply_status}\n- Prior trace to reuse if needed: {trace_hint}\n\n\
+Required behavior now:\n- Use existing workspace evidence first. Do not restart the same search loop that already consumed the research budget.\n\
+- Create or update `reply_email_draft.html` before any new broad research.\n\
+- If this is an investment monitor request and the likely answer is `No Material Change`, write the short artifact now instead of doing more price sweeps.\n\
+- If a single missing fact still blocks the verdict, do at most one targeted follow-up check after the draft exists.\n\
+- Reuse evidence already gathered in this workspace.\n\
+- Do not restart broad page-by-page annual-report extraction.\n\
+- If evidence is incomplete, say so explicitly and finalize the best calibrated artifact now.\n\
+- For real-ticker investment work, finish a complete final artifact instead of a provisional shell. Fill every required section, include concrete upgrade / downgrade / invalidation triggers, and remove `still being finalized`, `TBD`, or similar placeholders before you stop.\n\
+- Do not refuse solely because the request concerns stock analysis or a synthetic investment-monitor scenario. If certainty is limited, answer with calibrated uncertainty instead of refusal.\n",
+        budget_secs = fast_completion_timeout.as_secs(),
+        primary_summary = primary_error_summary(primary_err),
+        reply_status = reply_status,
+        trace_hint = trace_hint,
+    );
+    fs::write(
+        workspace_dir.join("codex_fast_completion_context.md"),
+        context,
+    )?;
+    Ok(())
+}
+
+fn maybe_run_codex_fast_completion_retry(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    runner: &str,
+    primary_err: &RunTaskError,
+    fast_completion_timeout: Duration,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if !should_retry_codex_fast_completion(primary_err) {
+        return Ok(None);
+    }
+
+    write_codex_fast_completion_context(workspace_dir, primary_err, fast_completion_timeout)?;
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let mut output = run_codex_task_with_fast_completion(
+        build_request(workspace_dir, params, params.model_name.as_str()),
+        runner,
+        reply_html_path,
+        reply_attachments_dir,
+        Some(fast_completion_timeout),
+    )?;
+
+    let retry_note = format!(
+        "Recovered via second Codex fast-completion pass after primary Codex failure. Primary error: {}",
+        primary_error_summary(primary_err)
+    );
+    output.recovery_note = Some(match output.recovery_note.take() {
+        Some(existing) => format!("{}\n{}", existing, retry_note),
+        None => retry_note,
+    });
+    Ok(Some(output))
 }
 
 fn should_fallback_to_claude(primary_runner: &str, err: &RunTaskError) -> bool {
@@ -194,6 +521,30 @@ fn archive_primary_codex_trace(workspace_dir: &Path) -> Result<(), RunTaskError>
     Ok(())
 }
 
+fn archive_primary_reply_artifact(
+    workspace_dir: &Path,
+    reply_path: &Path,
+) -> Result<Option<PathBuf>, RunTaskError> {
+    if !reply_path.exists() {
+        return Ok(None);
+    }
+
+    let archive_dir = workspace_dir.join(".run_task_trace_codex_primary");
+    if !archive_dir.exists() {
+        return Ok(None);
+    }
+
+    let preserved_dir = archive_dir.join("preserved_artifacts");
+    fs::create_dir_all(&preserved_dir)?;
+    let file_name = reply_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("reply_email_draft.html");
+    let preserved_path = preserved_dir.join(file_name);
+    fs::copy(reply_path, &preserved_path)?;
+    Ok(Some(preserved_path))
+}
+
 fn reset_reply_artifacts(
     reply_path: &Path,
     reply_attachments_dir: &Path,
@@ -230,6 +581,20 @@ fn build_claude_fallback_note(primary_err: &RunTaskError, fallback_model: &str) 
     )
 }
 
+fn primary_error_with_archived_reply(
+    primary_err: &RunTaskError,
+    archived_reply: Option<&Path>,
+) -> String {
+    match archived_reply {
+        Some(path) => format!(
+            "{}\nPreserved primary Codex draft at {}",
+            primary_err,
+            path.display()
+        ),
+        None => primary_err.to_string(),
+    }
+}
+
 fn primary_error_summary(err: &RunTaskError) -> &'static str {
     match err {
         RunTaskError::CodexNotFound => "Codex CLI not found",
@@ -264,6 +629,7 @@ fn write_fallback_note(
     fallback_model: &str,
     primary_err: &RunTaskError,
     fallback_err: Option<&RunTaskError>,
+    archived_primary_reply: Option<&Path>,
 ) -> Result<(), RunTaskError> {
     let recovery_dir = workspace_dir.join(RUN_TASK_TRACE_DIRNAME).join("recovery");
     fs::create_dir_all(&recovery_dir)?;
@@ -277,6 +643,9 @@ fn write_fallback_note(
         body.push_str(&format!("fallback_model={}\n", fallback_model.trim()));
     }
     body.push_str("archived_primary_trace=.run_task_trace_codex_primary\n\n");
+    if let Some(path) = archived_primary_reply {
+        body.push_str(&format!("archived_primary_reply={}\n\n", path.display()));
+    }
     body.push_str("primary_error:\n");
     body.push_str(&primary_err.to_string());
     body.push('\n');
@@ -291,7 +660,14 @@ fn write_fallback_note(
 
 #[cfg(test)]
 mod tests {
+    use super::super::env::acquire_env_test_lock;
+    use super::super::types::{RunTaskRequest, UserIdentities};
+    use super::codex_fast_completion_budget_split;
     use super::is_codex_timeout_eligible_for_fallback;
+    use std::env;
+    use std::fs;
+    use std::path::Path;
+    use tempfile::TempDir;
 
     #[test]
     fn codex_timeout_fallback_covers_remote_and_docker_commands() {
@@ -302,5 +678,97 @@ mod tests {
         ));
         assert!(is_codex_timeout_eligible_for_fallback("az container show"));
         assert!(!is_codex_timeout_eligible_for_fallback("az container logs"));
+    }
+
+    #[test]
+    fn codex_fast_completion_budget_split_caps_monitor_primary_window() {
+        let _lock = acquire_env_test_lock();
+        let temp = TempDir::new().expect("tempdir");
+        let incoming = temp.path().join("incoming_email");
+        fs::create_dir_all(&incoming).expect("incoming dir");
+        fs::write(
+            incoming.join("thread_request.md"),
+            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.\n",
+        )
+        .expect("thread request");
+
+        let prior_timeout = env::var_os("RUN_TASK_CODEX_TIMEOUT_SECS");
+        env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", "480");
+
+        let replies = vec!["user@example.com".to_string()];
+        let identities = UserIdentities::default();
+        let request = RunTaskRequest {
+            workspace_dir: temp.path(),
+            input_email_dir: Path::new("incoming_email"),
+            input_attachments_dir: Path::new("incoming_attachments"),
+            memory_dir: Path::new("memory"),
+            reference_dir: Path::new("references"),
+            model_name: "gpt-5.4",
+            reply_to: &replies,
+            channel: "email",
+            google_access_token: None,
+            notion_access_token: None,
+            has_unified_account: true,
+            user_identities: &identities,
+            thread_epoch: None,
+            thread_state_path: None,
+        };
+
+        let split = codex_fast_completion_budget_split("codex", &request)
+            .expect("split")
+            .expect("budget split");
+        assert_eq!(split.0.as_secs(), 30);
+        assert_eq!(split.1.as_secs(), 20);
+
+        match prior_timeout {
+            Some(value) => env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", value),
+            None => env::remove_var("RUN_TASK_CODEX_TIMEOUT_SECS"),
+        }
+    }
+
+    #[test]
+    fn codex_fast_completion_budget_split_uses_fixed_monitor_window_for_shorter_budget() {
+        let _lock = acquire_env_test_lock();
+        let temp = TempDir::new().expect("tempdir");
+        let incoming = temp.path().join("incoming_email");
+        fs::create_dir_all(&incoming).expect("incoming dir");
+        fs::write(
+            incoming.join("thread_request.md"),
+            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.\n",
+        )
+        .expect("thread request");
+
+        let prior_timeout = env::var_os("RUN_TASK_CODEX_TIMEOUT_SECS");
+        env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", "120");
+
+        let replies = vec!["user@example.com".to_string()];
+        let identities = UserIdentities::default();
+        let request = RunTaskRequest {
+            workspace_dir: temp.path(),
+            input_email_dir: Path::new("incoming_email"),
+            input_attachments_dir: Path::new("incoming_attachments"),
+            memory_dir: Path::new("memory"),
+            reference_dir: Path::new("references"),
+            model_name: "gpt-5.4",
+            reply_to: &replies,
+            channel: "email",
+            google_access_token: None,
+            notion_access_token: None,
+            has_unified_account: true,
+            user_identities: &identities,
+            thread_epoch: None,
+            thread_state_path: None,
+        };
+
+        let split = codex_fast_completion_budget_split("codex", &request)
+            .expect("split")
+            .expect("budget split");
+        assert_eq!(split.0.as_secs(), 30);
+        assert_eq!(split.1.as_secs(), 20);
+
+        match prior_timeout {
+            Some(value) => env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", value),
+            None => env::remove_var("RUN_TASK_CODEX_TIMEOUT_SECS"),
+        }
     }
 }

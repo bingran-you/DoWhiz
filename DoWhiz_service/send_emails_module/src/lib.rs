@@ -1685,11 +1685,15 @@ mod tests {
             <section>
               <h2>Decision Card</h2>
               <table>
-                <tr><th>Audience</th><th>Action</th><th>Confidence</th></tr>
-                <tr><td>New money</td><td>Wait</td><td>Medium</td></tr>
-                <tr><td>Existing holder</td><td>Hold</td><td>Medium</td></tr>
+                <tr><th>Field</th><th>Value</th></tr>
+                <tr><td>Monitor Status</td><td>Watch Closely</td></tr>
+                <tr><td>New Money Action</td><td>Starter Only</td></tr>
+                <tr><td>Existing Holder Action</td><td>Hold/Do not add</td></tr>
+                <tr><td>Thesis Impact</td><td>Mixed</td></tr>
+                <tr><td>Signal Quality</td><td>Moderate</td></tr>
+                <tr><td>Confidence</td><td>Medium</td></tr>
               </table>
-              <p><strong>One-line rationale:</strong> Great business, but the setup still gives fresh money less room for error than existing holders.</p>
+              <p><strong>One-line rationale:</strong> The setup still needs one more clean confirmation before it deserves a broader risk-on call.</p>
             </section>
             <section>
               <h2>Dual-Horizon Framing</h2>
@@ -1725,9 +1729,9 @@ mod tests {
             <section>
               <h2>Triggers — Verdict Movement</h2>
               <ul>
-                <li><strong>Upgrade to Buy (new money):</strong> Durable beat plus guidance.</li>
-                <li><strong>Add (existing holder):</strong> Pullback without a thesis break.</li>
-                <li><strong>Trim/Exit:</strong> Margin guide weakens.</li>
+                <li><strong>Upgrade / Review Now:</strong> Durable beat plus guidance above current expectations.</li>
+                <li><strong>Downgrade / De-risk:</strong> Margin guide weakens by more than 100bps.</li>
+                <li><strong>Invalidation:</strong> A material customer or regulatory shock breaks the thesis.</li>
               </ul>
             </section>
             <section><h2>Judgment</h2><p><em>Inference, Medium confidence.</em> Judgment.</p></section>
@@ -1740,11 +1744,12 @@ mod tests {
             "Price:",
             "Investor question:",
             "Decision Card",
-            "Audience",
-            "Action",
+            "Monitor Status",
+            "New Money Action",
+            "Existing Holder Action",
+            "Thesis Impact",
+            "Signal Quality",
             "Confidence",
-            "New money",
-            "Existing holder",
             "One-line rationale:",
             "Dual-Horizon Framing",
             "Near-Term Timing View",
@@ -1756,6 +1761,9 @@ mod tests {
             "Base Case",
             "Bear Case",
             "Triggers",
+            "Upgrade / Review Now",
+            "Downgrade / De-risk",
+            "Invalidation",
             "Judgment",
         ] {
             assert!(

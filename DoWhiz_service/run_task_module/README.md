@@ -36,6 +36,9 @@ Late-finalization recovery:
 - when Codex has already written the expected reply artifact, `run_task` now treats that artifact as
   a recoverable completion signal even if the CLI later disconnects, refuses, or exits non-zero
   during finalization
+- for investment email runs, a command-level Codex timeout is also treated as success when the
+  existing reply artifact already passes the investment contract; non-investment email drafts still
+  fail closed instead of silently shipping partial HTML
 - warm-pool executions also validate the completion exit code and require the expected reply
   artifact to be non-empty before reporting success, so Codex failures can fall through to the
   normal error/fallback path instead of being recorded as successful no-reply runs
@@ -45,11 +48,19 @@ Late-finalization recovery:
 - optional `RUN_TASK_CODEX_TIMEOUT_SECS=<seconds>` caps the primary Codex runtime; by default
   Azure ACI Codex runs are time-boxed to 900 seconds so Claude fallback can still fire within a
   much larger overall `RUN_TASK_TIMEOUT_SECS` window
+- investment replies reserve a final drafting window inside that Codex budget. When the overall
+  Codex timeout is large enough, `run_task` splits it into a primary research window plus a final
+  `RUN_TASK_REPLY_DRAFT_RESERVE_SECS` drafting window (default 120s, minimum 5s). If the primary
+  pass times out, finishes without a reply, or writes an over-budget `No Material Change` reply,
+  `run_task` writes `codex_fast_completion_context.md` and retries Codex once in fast-completion
+  mode before attempting Claude fallback
 - optional `RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS=<seconds>` caps Claude fallback runtime; by
   default the fallback is bounded to 900 seconds and never exceeds the overall run_task timeout
 - Claude fallback recovery mode now prioritizes a useful in-channel reply over rebuilding large
   multi-file deliverables from scratch, and it reuses `.codex_remote_output.log` plus
   `.run_task_trace_codex_primary/` when the primary run already gathered evidence
+- local Claude fallback runs now fail explicitly when the local Claude auth state is invalid, so a
+  broken fallback login does not look like a silent task drop
 - recovered runs surface a `recovery_note` in `RunTaskOutput` and write
   `.run_task_trace/logs/recovery_note.txt` for debugging
 
@@ -79,6 +90,8 @@ Common optional controls:
 - `CODEX_MODEL`, `CLAUDE_MODEL`
 - `RUN_TASK_TIMEOUT_SECS`
 - optional `RUN_TASK_CODEX_TIMEOUT_SECS=<seconds>` to cap the primary Codex runtime
+- optional `RUN_TASK_REPLY_DRAFT_RESERVE_SECS=<seconds>` to reserve the final drafting slice for
+  investment email runs when Codex gets a two-pass research-then-draft budget
 - `CODEX_SANDBOX_MODE`, `CODEX_BYPASS_SANDBOX`
 - Codex-specific failures automatically retry with the Claude runner, including warm-pool
   executions

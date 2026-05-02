@@ -1,10 +1,13 @@
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde_json::Value;
 
 use super::errors::RunTaskError;
 use super::types::UserIdentities;
+use super::utils::reply_draft_reserve_timeout;
 use super::workspace::resolve_rel_dir;
 
 const GITHUB_NOTIFICATIONS_ADDRESS: &str = "notifications@github.com";
@@ -47,6 +50,7 @@ pub(super) fn build_prompt(
         has_unified_account,
         user_identities,
         false,
+        None,
     )
 }
 
@@ -78,6 +82,40 @@ pub(super) fn build_prompt_with_fast_completion(
         has_unified_account,
         user_identities,
         prefer_fast_completion,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_prompt_with_budget_override(
+    input_email_dir: &Path,
+    input_attachments_dir: &Path,
+    memory_dir: &Path,
+    reference_dir: &Path,
+    workspace_dir: &Path,
+    runner: &str,
+    memory_context: &str,
+    reply_required: bool,
+    channel: &str,
+    has_unified_account: bool,
+    user_identities: &UserIdentities,
+    prefer_fast_completion: bool,
+    effective_budget_override: Option<Duration>,
+) -> String {
+    build_prompt_internal(
+        input_email_dir,
+        input_attachments_dir,
+        memory_dir,
+        reference_dir,
+        workspace_dir,
+        runner,
+        memory_context,
+        reply_required,
+        channel,
+        has_unified_account,
+        user_identities,
+        prefer_fast_completion,
+        effective_budget_override,
     )
 }
 
@@ -95,6 +133,7 @@ fn build_prompt_internal(
     has_unified_account: bool,
     user_identities: &UserIdentities,
     prefer_fast_completion: bool,
+    effective_budget_override: Option<Duration>,
 ) -> String {
     let memory_section = if memory_context.trim().is_empty() {
         "Memory context (from memory/*.md):\n- (no memory files found)\n\n".to_string()
@@ -239,13 +278,26 @@ Do not pretend the job has been done without actually doing it."#
     let chat_history_capabilities_section =
         build_chat_history_capabilities_section(workspace_dir, channel);
     let investment_capabilities_section = build_investment_capabilities_section();
+    let reply_budget_section = build_reply_completion_budget_section(
+        reply_required,
+        prefer_fast_completion,
+        effective_budget_override,
+    );
     let fast_completion_section = if prefer_fast_completion {
-        r#"Claude fallback execution guidance:
-- This run is a recovery path after the primary runner failed. These recovery instructions take precedence over conflicting planning or artifact-building advice elsewhere in this prompt.
-- Prioritize delivering a useful reply within the recovery budget over rebuilding the entire original project from scratch.
-- Before starting new research, inspect any existing artifacts from the primary runner, especially `.codex_remote_output.log` and `.run_task_trace_codex_primary/`, and reuse any facts, sources, filenames, or failure context already gathered there.
-- For long research or writing tasks, begin updating the final reply artifact early and keep it current as sections become ready.
-- If you are still gathering evidence, clearly mark the draft as a working draft near the top, and remove or replace that note before you finish if the reply becomes complete.
+        r#"Recovery-mode execution guidance:
+- This run is a recovery path after the primary runner failed or a time-boxed drafting pass after the primary research budget was exhausted. These recovery instructions take precedence over conflicting planning or artifact-building advice elsewhere in this prompt.
+- Prioritize delivering a useful reply within the remaining budget over rebuilding the entire original project from scratch.
+- Before starting new research, inspect any existing artifacts from the earlier pass, especially `codex_fast_completion_context.md`, `reply_email_draft.html`, `.codex_remote_output.log`, and `.run_task_trace_codex_primary/` if present. Reuse facts, sources, filenames, and partial drafts instead of starting over.
+- For long research or writing tasks, begin updating the final reply artifact immediately and keep it current as sections become ready.
+- For investment monitoring in this mode, treat the run as `draft first, research second`.
+- If the user asked for investment monitoring, `reply_email_draft.html` must exist within your next two tool actions. Do not start a fresh multi-site quote sweep, broad annual-report extraction, or repeated market-price loop before the draft exists.
+- If the user asked for investment monitoring and the earlier pass already gathered enough support for a calibrated call, stop researching and finalize the artifact now.
+- If the prompt says "only tell me if I should act" and the likely answer is `No Material Change`, write the short update immediately and stop.
+- After the draft exists, allow at most one additional targeted external check when a single missing fact blocks the verdict. Otherwise finalize with an explicit limitation note instead of continuing to search.
+- For incomplete real-ticker investment work, finalize a complete `Watch Closely` artifact rather than a provisional shell. Fill every required section, include concrete upgrade/downgrade/invalidation triggers, and state missing evidence explicitly instead of leaving placeholder text.
+- Do not leave `Provisional update`, `still being finalized`, `TBD`, `to be confirmed`, or empty section shells in the final artifact.
+- Investment-monitor requests in this product are allowed. Do not refuse solely because the task concerns a stock, an ETF, or an assumption-based investment scenario. If evidence is limited, answer with calibrated limitation language instead of refusing.
+- If you are still gathering evidence, clearly mark the draft as provisional near the top, and remove or replace that note before you finish if the reply becomes complete.
 - Prefer a concise in-email deliverable over new PDFs, slide decks, LaTeX reports, or other multi-file attachments unless the user explicitly required that format and it is already almost complete.
 - Keep any new web research focused. Reuse evidence already gathered, avoid repeating similar searches, and stop searching once you have enough support to answer the user's questions coherently.
 - If authoritative evidence is missing or the research path is blocked, send an honest limitation / next-steps reply instead of timing out with no reply.
@@ -288,6 +340,10 @@ You main goal is
 1. Most importantly, understand the task described in the incoming email and get the task done.
 {reply_instruction}
 
+{reply_budget_section}
+{fast_completion_section}
+{investment_capabilities_section}
+
 Inputs (relative to workspace root):
 - Incoming email dir: {input_email} (latest raw payload plus `thread_request.md`, `thread_history.md`, and `entries/`)
 - `incoming_email/thread_request.md` is the canonical merged request for reruns after follow-up messages. Latest follow-up wins if it conflicts with older instructions.
@@ -324,8 +380,6 @@ Scheduling:
 {human_approval_gate_section}
 {user_identities_section}
 {tpm_capabilities_section}
-{investment_capabilities_section}
-{fast_completion_section}
 Rules:
 - Each workspace includes a `.env` file at the workspace root. You may edit it to manage per-user secrets; updates are synced back after the task completes.
 - Do not modify input directories. Any file editing requests should be done on the copied version of attachments and save into reply_email_attachments/ to be sent back to the user. Mark version updates as "_v2", "_v3", etc. in the filename.
@@ -350,9 +404,47 @@ Rules:
         user_identities_section = user_identities_section,
         tpm_capabilities_section = tpm_capabilities_section,
         investment_capabilities_section = investment_capabilities_section,
+        reply_budget_section = reply_budget_section,
         fast_completion_section = fast_completion_section,
         filesystem_security_section = filesystem_security_section,
         registration_section = registration_section,
+    )
+}
+
+fn build_reply_completion_budget_section(
+    reply_required: bool,
+    prefer_fast_completion: bool,
+    effective_budget_override: Option<Duration>,
+) -> String {
+    if !reply_required {
+        return String::new();
+    }
+
+    let total_budget_secs = effective_budget_override
+        .map(|value| value.as_secs())
+        .or_else(|| {
+            env::var("RUN_TASK_CODEX_TIMEOUT_SECS")
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())
+                .filter(|value| *value > 0)
+        })
+        .or_else(|| {
+            env::var("RUN_TASK_TIMEOUT_SECS")
+                .ok()
+                .and_then(|value| value.trim().parse::<u64>().ok())
+                .filter(|value| *value > 0)
+        })
+        .unwrap_or(480);
+    let reserve_secs =
+        reply_draft_reserve_timeout(std::time::Duration::from_secs(total_budget_secs)).as_secs();
+    let mode_note = if prefer_fast_completion {
+        "This is especially important in recovery mode, where the remaining budget may be much smaller than the original run."
+    } else {
+        "Do not spend the full budget researching and leave the reply unwritten."
+    };
+
+    format!(
+        "Reply completion budget:\n- This run has a hard budget of roughly {total_budget_secs} seconds.\n- Reserve the final {reserve_secs} seconds for writing or updating the final reply artifact.\n- If you are still researching when that reserve window begins, stop gathering marginal evidence and finalize the best available honest reply now.\n- Prefer an explicit limitation note over timing out with no reply. {mode_note}\n\n"
     )
 }
 
@@ -539,6 +631,8 @@ fn build_investment_capabilities_section() -> &'static str {
 - Keep the final user-visible reply structured and scan-first. Do not collapse it into generic commentary or one long research wall.
 - Decide the monitor mode first: `No Material Change`, `Watch Closely`, or `Review Now`.
 - For email replies, render the memo structure from the skill in semantic HTML inside `reply_email_draft.html`.
+- For real-ticker deep-research requests, do a bounded first pass before you go deeper: latest company release or filing, one current price/reference check, and one independent cross-check. Then start or update the draft. Do not spend the whole run on page-by-page annual-report extraction unless that first pass leaves a material unresolved conflict.
+- Create or refresh `reply_email_draft.html` before starting a second layer of research. Keep the draft current as you verify more evidence.
 - Keep these visible sections and labels in the HTML body:
   - `As of:`
   - `Price:`
@@ -552,16 +646,30 @@ fn build_investment_capabilities_section() -> &'static str {
   - `Confidence`
   - `One-line rationale:`
   - For `Watch Closely` / `Review Now`: `Dual-Horizon Framing`, `Near-Term Timing View`, `Long-Term Ownership View`, `Verified Facts`, `Derived Metrics`, `Scenarios`, `Bull Case`, `Base Case`, `Bear Case`
-  - For `No Material Change`: `What Changed`, `Evidence`
-  - `Triggers`
-  - `Upgrade / Review Now`
-  - `Downgrade / De-risk`
-  - `Invalidation`
-  - `Judgment`
+  - For `No Material Change`: `Why Now`, `What Would Change The View`, `Evidence Chips`
+  - Inside `What Would Change The View`, keep `Upgrade / Review Now`, `Downgrade / De-risk`, and `Invalidation`
+- Use the exact decision-card values below. Do not paraphrase them into sentence fragments.
+  - `Monitor Status`: `No Material Change` | `Watch Closely` | `Review Now`
+  - `New Money Action`: `Buy` | `Starter Only` | `Wait` | `Avoid for now`
+  - `Existing Holder Action`: `Add` | `Hold/Do not add` | `Hold` | `Trim` | `Exit`
+  - `Thesis Impact`: `No Material Change` | `Positive` | `Mixed` | `Negative`
+  - `Signal Quality`: `Weak` | `Moderate` | `Strong`
+  - `Confidence`: `Low` | `Medium` | `High`
 - Keep clickable source links near the factual claims they support. Compact chip-style links are fine, but regular inline links are also acceptable if they stay close to the claim.
 - Use a mix of source tiers: at least one primary filing or IR source, plus independent or reference cross-checks when relevant.
 - If the correct answer is `No Material Change`, prefer the short update contract instead of padding into a long memo.
+- If the user says "only tell me if I should act" and the correct mode is `No Material Change`, keep the output extremely short: no full memo, no scenario block, and stay under roughly 1200 visible characters.
+- For `No Material Change`, the final artifact should normally be closer to 250-900 visible characters than to 1200. Remove throat-clearing, provisional filler, and repeated caveats.
+- For `No Material Change`, `Evidence Chips` should contain 1 to 3 compact bullets or inline chips with concrete clickable links when those links are available. Do not leave `Evidence Chips` as a placeholder sentence.
+- Do not leave `Provisional update`, `still being finalized`, or similar placeholder language in the final artifact unless the entire point of the reply is to state that evidence remains incomplete.
+- Once a `No Material Change` short update is written, stop. Do not keep researching, and do not spend the final stretch on extra character-count or HTML-dump commands.
 - If the visible recommendation lands on `Wait`, `Hold`, or `Hold/Do not add`, include concrete upgrade, downgrade, and invalidation triggers with numbers or dated events.
+- For synthetic or assumption-based scenarios, label the artifact as `assumption-based`, do not use generic market homepages as placeholder evidence, and cap confidence at `Medium` unless you verified real issuer-specific evidence.
+- For long research paths, update `reply_email_draft.html` early and keep it current. If time is running low, stop searching and finalize the best calibrated artifact you can support, explicitly naming any missing evidence.
+- If the research path stays incomplete near the deadline on a real ticker, prefer a best-available `Watch Closely` artifact with explicit missing evidence over timing out with no reply.
+- If the research path stays incomplete near the deadline on a real ticker, do not leave placeholder lines like `still being finalized` or `will include later`. Replace them with explicit limitation language and a final best-available verdict.
+- Investment monitoring requests in this product are allowed. Do not refuse solely because the task concerns stock analysis, a buy/wait/trim decision, or an assumption-based scenario. If evidence is incomplete, answer with calibrated uncertainty instead of refusing.
+- If you sanity-check the final artifact, keep that check lightweight. Do not print the full visible text body or the entire HTML back to the terminal.
 - If the user states a conflicting earnings date or similar factual premise, correct it explicitly in the final reply instead of silently accepting it.
 
 "#
@@ -1722,7 +1830,7 @@ mod tests {
     fn build_prompt_with_fast_completion_prioritizes_recovery_reply() {
         let temp = TempDir::new().expect("tempdir");
 
-        let prompt = build_prompt_with_fast_completion(
+        let prompt = build_prompt_with_budget_override(
             Path::new("incoming_email"),
             Path::new("incoming_attachments"),
             Path::new("memory"),
@@ -1735,6 +1843,7 @@ mod tests {
             true,
             &UserIdentities::default(),
             true,
+            Some(Duration::from_secs(120)),
         );
 
         assert!(prompt.contains("Recovery-mode override for email replies"));
@@ -1742,6 +1851,44 @@ mod tests {
         assert!(prompt.contains(".run_task_trace_codex_primary/"));
         assert!(prompt.contains("Do NOT start new PDFs"));
         assert!(prompt.contains("send an honest limitation / next-steps reply"));
+        assert!(
+            prompt.contains("reply_email_draft.html` must exist within your next two tool actions")
+        );
+        assert!(prompt.contains("Do not start a fresh multi-site quote sweep"));
+        assert!(prompt.contains("hard budget of roughly 120 seconds"));
+        assert!(prompt.contains("Do not refuse solely because the task concerns stock analysis"));
+        assert!(prompt.contains("Do not leave `Provisional update`"));
+        assert!(
+            prompt.find("Reply completion budget:").unwrap()
+                < prompt.find("Inputs (relative to workspace root):").unwrap()
+        );
+        assert!(
+            prompt.find("Investment research requests:").unwrap()
+                < prompt.find("Inputs (relative to workspace root):").unwrap()
+        );
+    }
+
+    #[test]
+    fn build_prompt_includes_reply_completion_budget_guidance() {
+        let temp = TempDir::new().expect("tempdir");
+
+        let prompt = build_prompt(
+            Path::new("incoming_email"),
+            Path::new("incoming_attachments"),
+            Path::new("memory"),
+            Path::new("references"),
+            temp.path(),
+            "codex",
+            "",
+            true,
+            "email",
+            true,
+            &UserIdentities::default(),
+        );
+
+        assert!(prompt.contains("Reply completion budget"));
+        assert!(prompt.contains("Reserve the final"));
+        assert!(prompt.contains("Prefer an explicit limitation note over timing out with no reply"));
     }
 
     #[test]

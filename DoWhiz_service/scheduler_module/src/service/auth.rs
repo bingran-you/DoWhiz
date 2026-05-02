@@ -1816,10 +1816,7 @@ pub async fn update_organization_database(
         // Try to auto-detect by testing each credential
         let account_id = account.id;
         let db_id = database_id.clone();
-        match task::spawn_blocking(move || {
-            detect_workspace_for_database(account_id, &db_id)
-        })
-        .await
+        match task::spawn_blocking(move || detect_workspace_for_database(account_id, &db_id)).await
         {
             Ok(Some(ws_id)) => {
                 info!(
@@ -1953,10 +1950,7 @@ pub async fn update_organization_leader(
             }
         }
         Ok(Ok(None)) => {
-            return json_error_response(
-                StatusCode::BAD_REQUEST,
-                "Leader account does not exist",
-            );
+            return json_error_response(StatusCode::BAD_REQUEST, "Leader account does not exist");
         }
         Ok(Err(e)) => {
             error!("Failed to get leader account: {}", e);
@@ -2012,7 +2006,10 @@ fn detect_workspace_for_database(account_id: Uuid, database_id: &str) -> Option<
     let credentials = match notion_store.get_credentials_for_account(account_id) {
         Ok(creds) => creds,
         Err(e) => {
-            error!("Failed to get Notion credentials for account {}: {}", account_id, e);
+            error!(
+                "Failed to get Notion credentials for account {}: {}",
+                account_id, e
+            );
             return None;
         }
     };

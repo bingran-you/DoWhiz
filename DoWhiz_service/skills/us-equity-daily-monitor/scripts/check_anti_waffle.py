@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
+
+from html_contract_utils import normalize_text
 
 GENERIC_PHRASES = [
     "good company, but do not chase",
@@ -22,28 +23,38 @@ TRIGGER_LABELS = [
     "downgrade / de-risk",
     "invalidation",
 ]
-
-
-def normalize_text(raw_html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", raw_html)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
-    text = text.replace("&lt;", "<").replace("&gt;", ">")
-    return " ".join(text.split()).lower()
+NUMBER_WORD_PATTERN = (
+    r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"
+)
+TIME_UNIT_PATTERN = r"\b(?:day|days|week|weeks|month|months|quarter|quarters|year|years)\b"
 
 
 def extract_trigger_slice(text: str) -> str:
-    start = text.find("triggers")
+    start = text.find("what would change the view")
+    if start == -1:
+        start = text.find("triggers")
     if start == -1:
         return ""
-    end = text.find("judgment", start)
+    end = text.find("evidence chips", start)
+    if end == -1:
+        end = text.find("judgment", start)
     return text[start:end] if end != -1 else text[start:]
 
 
 def has_numeric_signal(text: str) -> bool:
-    return bool(re.search(r"(\$|\d|\b\d+%|\bbps\b|\bx\b)", text))
+    import re
+
+    return bool(
+        re.search(
+            rf"(\$|\d|\b\d+%|\bbps\b|\bx\b|{NUMBER_WORD_PATTERN}\s+(?:more\s+)?{TIME_UNIT_PATTERN})",
+            text,
+        )
+    )
 
 
 def audit_anti_waffle(raw_html: str) -> dict:
+    import re
+
     text = normalize_text(raw_html)
     trigger_slice = extract_trigger_slice(text)
     generic_hits = [phrase for phrase in GENERIC_PHRASES if phrase in text]
@@ -58,9 +69,12 @@ def audit_anti_waffle(raw_html: str) -> dict:
     missing_trigger_labels = [
         label for label in TRIGGER_LABELS if label not in trigger_slice
     ]
-    numeric_hits = re.findall(r"(\$?\d+(?:\.\d+)?%?|\bbps\b|\bx\b)", trigger_slice)
+    numeric_hits = re.findall(
+        rf"(\$?\d+(?:\.\d+)?%?|\bbps\b|\bx\b|{NUMBER_WORD_PATTERN}\s+(?:more\s+)?{TIME_UNIT_PATTERN})",
+        trigger_slice,
+    )
     no_material_change_too_long = (
-        "monitor status no material change" in text and len(text) > 2200
+        "monitor status no material change" in text and len(text) > 1200
     )
     passed = True
     reasons: list[str] = []

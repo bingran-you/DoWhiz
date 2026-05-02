@@ -32,16 +32,19 @@ use super::env::{
 };
 use super::errors::RunTaskError;
 use super::github_auth::{ensure_github_cli_auth, resolve_github_auth};
-use super::prompt::{build_prompt, load_memory_context};
-use super::reply_contract::{ensure_expected_reply_artifact, reply_artifact_ready_for_workspace};
+use super::prompt::{build_prompt, build_prompt_with_budget_override, load_memory_context};
+use super::reply_contract::{
+    ensure_expected_reply_artifact, investment_request_for_workspace,
+    reply_artifact_ready_for_workspace,
+};
 use super::scheduled::{extract_scheduled_tasks, extract_scheduler_actions};
 use super::timing::{TaskTimingBuilder, TIMING_COLLECTOR};
 use super::trace::RunTaskTraceRecorder;
 use super::types::RunTaskParams;
 use super::types::{RunTaskOutput, RunTaskRequest, TokenUsage};
 use super::utils::{
-    run_command_with_timeout, run_command_with_timeout_and_cancel, run_task_timeout, tail_string,
-    ThreadSupersedeMonitor,
+    run_command_with_timeout, run_command_with_timeout_and_cancel_with_ready_check,
+    run_task_timeout, tail_string, CommandCompletion, ThreadSupersedeMonitor,
 };
 use super::workspace::{canonicalize_dir, workspace_path_in_container};
 
@@ -97,6 +100,7 @@ const EMPLOYEE_CONFIG_PATH_ENV_KEY: &str = "EMPLOYEE_CONFIG_PATH";
 const EMPLOYEE_ID_ENV_KEY: &str = "EMPLOYEE_ID";
 const DEPLOY_TARGET_ENV_KEY: &str = "DEPLOY_TARGET";
 const STAGING_DEPLOY_TARGET: &str = "staging";
+const GH_CONFIG_DIR_ENV_KEY: &str = "GH_CONFIG_DIR";
 const GOOGLE_WORKSPACE_CLI_CREDENTIAL_FILE_ENV: &str = "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE";
 const GOOGLE_WORKSPACE_CLI_CREDENTIAL_COMPONENT_KEYS: &[&str] = &[
     "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_ID",
@@ -134,6 +138,25 @@ const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
     "references",
 ];
 static ACI_CONTAINER_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug, Clone, Copy, Default)]
+struct CodexExecutionOptions {
+    prefer_fast_completion: bool,
+    timeout_override: Option<Duration>,
+}
+
+fn ensure_fast_completion_context_file(workspace_dir: &Path) -> Result<(), RunTaskError> {
+    let path = workspace_dir.join("codex_fast_completion_context.md");
+    if path.exists() {
+        return Ok(());
+    }
+
+    fs::write(
+        path,
+        "# Codex fast-completion context\n\nThis run is a time-boxed drafting or recovery pass. Reuse any evidence or partial draft already present in the workspace, stop broad re-research, and finalize the best available honest reply now.\n",
+    )?;
+    Ok(())
+}
 
 #[derive(Debug, Deserialize)]
 struct AzureAciContainerInstanceView {
@@ -441,6 +464,15 @@ struct AciPollState {
     remote_artifact_completion: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct CodexExecFeatures {
+    supports_search: bool,
+    supports_ask_for_approval: bool,
+    supports_sandbox: bool,
+    supports_danger_bypass: bool,
+    supports_yolo: bool,
+}
+
 /// Check if cross-channel routing was requested and return the correct expected reply path.
 /// If reply_routing.json specifies a different target channel, compute the expected file for that target.
 fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> PathBuf {
@@ -481,6 +513,216 @@ fn resolve_expected_reply_path(workspace_dir: &Path, default_path: PathBuf) -> P
     }
 }
 
+fn late_codex_failure_description(exit_status: Option<i32>, failure_output: &str) -> String {
+    let lowered = failure_output.to_ascii_lowercase();
+    if lowered.contains("response.failed event received") {
+        "Codex stream disconnect during finalization".to_string()
+    } else if lowered.contains("command timed out") || lowered.contains("timed out (codex") {
+        "Codex timed out after writing output".to_string()
+    } else if lowered.contains("cannot assist with that request") {
+        "a late Codex refusal".to_string()
+    } else if lowered.contains("task_complete reported status=") {
+        "Codex reported a late task_complete failure".to_string()
+    } else if let Some(code) = exit_status.filter(|code| *code != 0) {
+        format!("Codex exited with status {code} after writing output")
+    } else {
+        "a late Codex failure".to_string()
+    }
+}
+
+fn maybe_recover_reply_artifact_from_recent_session(
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+) -> Option<PathBuf> {
+    let home = env::var("HOME").ok()?;
+    let sessions_root = PathBuf::from(home).join(".codex").join("sessions");
+    if !sessions_root.exists() {
+        return None;
+    }
+    let target_name = expected_reply_path
+        .file_name()
+        .and_then(|value| value.to_str())?;
+
+    let mut session_files = Vec::new();
+    collect_session_jsonl_files(&sessions_root, &mut session_files).ok()?;
+    session_files.sort_by(|a, b| {
+        let a_time = a
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let b_time = b
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        b_time.cmp(&a_time)
+    });
+
+    let workspace_marker = workspace_dir.to_string_lossy();
+    for session_path in session_files.into_iter().take(40) {
+        let Ok(contents) = fs::read_to_string(&session_path) else {
+            continue;
+        };
+        if !contents.contains(workspace_marker.as_ref()) {
+            continue;
+        }
+        let Some(reply_body) = extract_reply_artifact_from_session_jsonl(&contents, target_name)
+        else {
+            continue;
+        };
+        if reply_body.trim().is_empty() {
+            continue;
+        }
+        if let Some(parent) = expected_reply_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if fs::write(expected_reply_path, reply_body).is_ok() {
+            return Some(session_path);
+        }
+    }
+    None
+}
+
+fn extract_reply_artifact_from_session_jsonl(output: &str, target_name: &str) -> Option<String> {
+    for line in output.lines() {
+        if !line.contains(target_name) {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let mut candidates = Vec::new();
+        collect_string_values(&value, &mut candidates);
+        for candidate in candidates {
+            if let Some(reply) = extract_reply_artifact_from_text_payload(&candidate, target_name) {
+                return Some(reply);
+            }
+            if let Ok(nested) = serde_json::from_str::<serde_json::Value>(&candidate) {
+                let mut nested_candidates = Vec::new();
+                collect_string_values(&nested, &mut nested_candidates);
+                for nested_candidate in nested_candidates {
+                    if let Some(reply) =
+                        extract_reply_artifact_from_text_payload(&nested_candidate, target_name)
+                    {
+                        return Some(reply);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn collect_string_values(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(text) => out.push(text.clone()),
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_string_values(item, out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for value in map.values() {
+                collect_string_values(value, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_reply_artifact_from_text_payload(text: &str, target_name: &str) -> Option<String> {
+    extract_reply_from_apply_patch_payload(text, target_name)
+        .or_else(|| extract_reply_from_heredoc_payload(text, target_name))
+        .or_else(|| extract_reply_from_echo_payload(text, target_name))
+}
+
+fn extract_reply_from_apply_patch_payload(text: &str, target_name: &str) -> Option<String> {
+    if !text.contains("*** Begin Patch") || !text.contains(target_name) {
+        return None;
+    }
+
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        let Some(path) = line.strip_prefix("*** Add File: ") else {
+            continue;
+        };
+        if !path_matches_target(path, target_name) {
+            continue;
+        }
+
+        let mut body = Vec::new();
+        while let Some(next) = lines.peek().copied() {
+            if next.starts_with("*** ") {
+                break;
+            }
+            let next = lines.next().unwrap_or_default();
+            if let Some(content) = next.strip_prefix('+') {
+                body.push(content.to_string());
+            }
+        }
+        if !body.is_empty() {
+            return Some(body.join("\n"));
+        }
+    }
+    None
+}
+
+fn extract_reply_from_heredoc_payload(text: &str, target_name: &str) -> Option<String> {
+    let lines = text.lines().collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.contains(target_name) || !line.contains("<<") {
+            continue;
+        }
+        let token = line
+            .split("<<")
+            .nth(1)
+            .map(str::trim)
+            .map(|value| value.trim_matches('\'').trim_matches('"'))
+            .filter(|value| !value.is_empty())?;
+        let mut body = Vec::new();
+        for next in lines.iter().skip(index + 1) {
+            if *next == token {
+                return Some(body.join("\n"));
+            }
+            body.push((*next).to_string());
+        }
+    }
+    None
+}
+
+fn extract_reply_from_echo_payload(text: &str, target_name: &str) -> Option<String> {
+    for line in text.lines() {
+        if !line.contains(target_name) || !line.contains('>') {
+            continue;
+        }
+        let trimmed = line.trim();
+        let quote = if trimmed.starts_with("echo \"") {
+            '"'
+        } else if trimmed.starts_with("echo '") {
+            '\''
+        } else {
+            continue;
+        };
+        let prefix_len = "echo ".len() + 1;
+        let remainder = &trimmed[prefix_len..];
+        let end = remainder.find(quote)?;
+        return Some(remainder[..end].to_string());
+    }
+    None
+}
+
+fn path_matches_target(path: &str, target_name: &str) -> bool {
+    Path::new(path.trim())
+        .file_name()
+        .and_then(|value| value.to_str())
+        == Some(target_name)
+}
+
 fn maybe_recover_from_ready_reply_artifact(
     reply_expected: bool,
     workspace_dir: &Path,
@@ -488,28 +730,81 @@ fn maybe_recover_from_ready_reply_artifact(
     exit_status: Option<i32>,
     failure_output: &str,
 ) -> Option<String> {
-    if !reply_expected || !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+    if !reply_expected {
         return None;
     }
 
-    let lowered = failure_output.to_ascii_lowercase();
-    let reason = if lowered.contains("response.failed event received") {
-        "Recovered ready reply artifact after Codex stream disconnect during finalization"
-            .to_string()
-    } else if lowered.contains("cannot assist with that request") {
-        "Recovered ready reply artifact after a late Codex refusal".to_string()
-    } else if lowered.contains("task_complete reported status=") {
-        "Recovered ready reply artifact after Codex reported a late task_complete failure"
-            .to_string()
-    } else if let Some(code) = exit_status.filter(|code| *code != 0) {
-        format!(
-            "Recovered ready reply artifact after Codex exited with status {code} after writing output"
-        )
-    } else {
-        "Recovered ready reply artifact after Codex reported a late failure".to_string()
-    };
+    let failure_description = late_codex_failure_description(exit_status, failure_output);
+    if reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+        return Some(format!(
+            "Recovered ready reply artifact after {}",
+            failure_description
+        ));
+    }
+    let session_path =
+        maybe_recover_reply_artifact_from_recent_session(workspace_dir, expected_reply_path)?;
+    if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+        return None;
+    }
 
-    Some(reason)
+    Some(format!(
+        "Recovered reply artifact from Codex session log ({}) after {}",
+        session_path.display(),
+        failure_description
+    ))
+}
+
+fn codex_turn_completed(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.contains("\"type\":\"turn.completed\""))
+}
+
+fn maybe_accept_nonfatal_post_completion_reply_artifact(
+    reply_expected: bool,
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+    exit_status: Option<i32>,
+    combined_output: &str,
+) -> Option<String> {
+    let code = exit_status.filter(|value| *value != 0)?;
+    if !reply_expected || !codex_turn_completed(combined_output) {
+        return None;
+    }
+    if detect_codex_runtime_failure(combined_output).is_some() {
+        return None;
+    }
+    if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+        return None;
+    }
+
+    Some(format!(
+        "Codex completed the turn and wrote a valid reply artifact, but the CLI exited with status {code}; treating that late exit as a warning instead of a task failure"
+    ))
+}
+
+fn maybe_accept_timeout_with_ready_reply_artifact(
+    investment_request: bool,
+    reply_expected: bool,
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+    err: &RunTaskError,
+) -> Option<String> {
+    if !investment_request {
+        return None;
+    }
+    if !matches!(err, RunTaskError::CommandTimeout { command, .. } if *command == "codex" || *command == "docker run")
+    {
+        return None;
+    }
+
+    maybe_recover_from_ready_reply_artifact(
+        reply_expected,
+        workspace_dir,
+        expected_reply_path,
+        None,
+        &err.to_string(),
+    )
 }
 
 fn record_codex_success(
@@ -589,7 +884,67 @@ pub(super) fn run_codex_task(
     reply_html_path: PathBuf,
     reply_attachments_dir: PathBuf,
 ) -> Result<RunTaskOutput, RunTaskError> {
+    run_codex_task_with_options(
+        request,
+        runner,
+        reply_html_path,
+        reply_attachments_dir,
+        CodexExecutionOptions::default(),
+    )
+}
+
+pub(super) fn run_codex_task_with_fast_completion(
+    request: RunTaskRequest<'_>,
+    runner: &str,
+    reply_html_path: PathBuf,
+    reply_attachments_dir: PathBuf,
+    timeout_override: Option<Duration>,
+) -> Result<RunTaskOutput, RunTaskError> {
+    run_codex_task_with_options(
+        request,
+        runner,
+        reply_html_path,
+        reply_attachments_dir,
+        CodexExecutionOptions {
+            prefer_fast_completion: true,
+            timeout_override,
+        },
+    )
+}
+
+pub(super) fn run_codex_task_with_timeout(
+    request: RunTaskRequest<'_>,
+    runner: &str,
+    reply_html_path: PathBuf,
+    reply_attachments_dir: PathBuf,
+    timeout_override: Option<Duration>,
+) -> Result<RunTaskOutput, RunTaskError> {
+    run_codex_task_with_options(
+        request,
+        runner,
+        reply_html_path,
+        reply_attachments_dir,
+        CodexExecutionOptions {
+            prefer_fast_completion: false,
+            timeout_override,
+        },
+    )
+}
+
+fn run_codex_task_with_options(
+    request: RunTaskRequest<'_>,
+    runner: &str,
+    reply_html_path: PathBuf,
+    reply_attachments_dir: PathBuf,
+    options: CodexExecutionOptions,
+) -> Result<RunTaskOutput, RunTaskError> {
     super::env::load_env_sources(request.workspace_dir)?;
+    if options.prefer_fast_completion {
+        ensure_fast_completion_context_file(request.workspace_dir)?;
+    }
+    let expected_reply_path =
+        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
+    let investment_request = investment_request_for_workspace(request.workspace_dir)?;
     let _browserbase_cleanup = BrowserbaseSessionCleanupGuard::new(request.workspace_dir);
     let cancel_monitor = request
         .thread_epoch
@@ -613,6 +968,7 @@ pub(super) fn run_codex_task(
             runner,
             reply_html_path,
             reply_attachments_dir,
+            options,
             cancel_monitor.as_ref(),
         );
     }
@@ -675,7 +1031,16 @@ pub(super) fn run_codex_task(
     let has_google_token = request.workspace_dir.join(".google_access_token").exists();
     let bypass_sandbox = codex_bypass_sandbox() || use_docker || is_google_docs || has_google_token;
     let sandbox_mode = effective_codex_sandbox_mode(&sandbox_mode, bypass_sandbox);
-    let add_dirs = codex_add_dirs(request.workspace_dir, use_docker)?;
+    let workspace_gh_config_dir = ensure_workspace_gh_config_dir(
+        host_workspace_dir
+            .as_deref()
+            .unwrap_or(request.workspace_dir),
+    )?;
+    let gh_config_dir_env = if use_docker {
+        format!("{}/.config/gh", DOCKER_WORKSPACE_DIR)
+    } else {
+        workspace_gh_config_dir.to_string_lossy().into_owned()
+    };
     if use_docker {
         let codex_home = host_workspace_dir
             .as_ref()
@@ -713,7 +1078,7 @@ pub(super) fn run_codex_task(
     let tpm_env_overrides = collect_tpm_env_overrides();
 
     let memory_context = load_memory_context(request.workspace_dir, request.memory_dir)?;
-    let prompt = build_prompt(
+    let prompt = build_prompt_with_budget_override(
         request.input_email_dir,
         request.input_attachments_dir,
         request.memory_dir,
@@ -725,6 +1090,8 @@ pub(super) fn run_codex_task(
         request.channel,
         request.has_unified_account,
         request.user_identities,
+        options.prefer_fast_completion,
+        options.timeout_override,
     );
 
     let mut trace_env_overrides = vec![
@@ -762,8 +1129,11 @@ pub(super) fn run_codex_task(
     for (key, value) in &github_auth.env_overrides {
         trace_env_overrides.push((key.clone(), value.clone()));
     }
+    trace_env_overrides.push((GH_CONFIG_DIR_ENV_KEY.to_string(), gh_config_dir_env.clone()));
 
-    let timeout = codex_command_timeout();
+    let timeout = options
+        .timeout_override
+        .unwrap_or_else(codex_command_timeout);
     let mut trace = RunTaskTraceRecorder::new(
         request.workspace_dir,
         runner,
@@ -777,11 +1147,12 @@ pub(super) fn run_codex_task(
         timeout,
         serde_json::json!({
             "reply_expected": !request.reply_to.is_empty(),
+            "prefer_fast_completion": options.prefer_fast_completion,
             "sandbox_mode": sandbox_mode.clone(),
             "bypass_sandbox": bypass_sandbox,
             "use_docker": use_docker,
             "docker_image": if use_docker { serde_json::Value::String(docker_image.clone()) } else { serde_json::Value::Null },
-            "add_dirs": add_dirs.clone(),
+            "gh_config_dir": gh_config_dir_env.clone(),
         }),
         &trace_env_overrides,
     )?;
@@ -790,7 +1161,8 @@ pub(super) fn run_codex_task(
     } else {
         "executing_codex_local"
     });
-    let output = if use_docker {
+    let investment_reply_expected = investment_request && !request.reply_to.is_empty();
+    let (output, early_success_note) = if use_docker {
         if let Err(err) = ensure_docker_image_available(&docker_image) {
             let _ = trace.finish(None, false, Some(&err.to_string()), None);
             return Err(err);
@@ -903,7 +1275,9 @@ pub(super) fn run_codex_task(
             cmd.arg("-e").arg(format!("{}={}", key, value));
         }
         cmd.arg("-e")
-            .arg(format!("{}=1", HUMAN_APPROVAL_GATE_REQUIRE_MCP_ENV_KEY));
+            .arg(format!("{}=1", HUMAN_APPROVAL_GATE_REQUIRE_MCP_ENV_KEY))
+            .arg("-e")
+            .arg(format!("{}={}", GH_CONFIG_DIR_ENV_KEY, gh_config_dir_env));
         for (key, value) in &github_auth.env_overrides {
             cmd.arg("-e").arg(format!("{}={}", key, value));
         }
@@ -922,80 +1296,93 @@ pub(super) fn run_codex_task(
         for search_domain in read_env_list("RUN_TASK_DOCKER_DNS_SEARCH") {
             cmd.arg("--dns-search").arg(search_domain);
         }
-        cmd.arg("--entrypoint")
-            .arg("codex")
-            .arg(&docker_image)
-            .arg("exec")
-            .arg("--json");
-        if bypass_sandbox {
-            cmd.arg("--yolo");
-        }
-        for add_dir in &add_dirs {
-            cmd.arg("--add-dir").arg(add_dir);
-        }
-        cmd.arg("--skip-git-repo-check")
-            .arg("-m")
-            .arg(&model_name)
-            .arg("-c")
-            .arg("web_search=\"live\"")
-            .arg("-c")
-            .arg("ask_for_approval=\"never\"")
-            .arg("-c")
-            .arg(format!("sandbox=\"{}\"", sandbox_mode))
-            .arg("-c")
-            .arg("model_provider=\"azure\"")
-            .arg("-c")
-            .arg("model_providers.azure.env_key=\"AZURE_OPENAI_API_KEY_BACKUP\"")
-            .arg("--cd")
-            .arg(DOCKER_WORKSPACE_DIR)
-            .arg(prompt);
+        cmd.arg("--entrypoint").arg("codex").arg(&docker_image);
+        append_codex_exec_args(
+            &mut cmd,
+            None,
+            &model_name,
+            &sandbox_mode,
+            bypass_sandbox,
+            Path::new(DOCKER_WORKSPACE_DIR),
+            &prompt,
+        );
 
-        match run_command_with_timeout_and_cancel(
+        let mut ready_check = |elapsed: Duration| {
+            if !investment_reply_expected {
+                return None;
+            }
+            reply_artifact_ready_for_workspace(request.workspace_dir, &expected_reply_path).then(
+                || {
+                    format!(
+                        "Returned early once a valid reply artifact existed after {:.1}s; canceled the remaining Codex runtime instead of waiting for the full budget",
+                        elapsed.as_secs_f32()
+                    )
+                },
+            )
+        };
+
+        match run_command_with_timeout_and_cancel_with_ready_check(
             cmd,
             timeout,
             "docker run",
             cancel_monitor.as_ref(),
+            Some(&mut ready_check),
         ) {
-            Ok(output) => output,
+            Ok(CommandCompletion::Completed(output)) => (output, None),
+            Ok(CommandCompletion::EarlySuccess { output, note }) => (output, Some(note)),
             Err(RunTaskError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
                 let failure = RunTaskError::DockerNotFound;
                 let _ = trace.finish(None, false, Some(&failure.to_string()), None);
                 return Err(failure);
             }
             Err(err) => {
+                if let Some(recovery_note) = maybe_accept_timeout_with_ready_reply_artifact(
+                    investment_request,
+                    !request.reply_to.is_empty(),
+                    request.workspace_dir,
+                    &expected_reply_path,
+                    &err,
+                ) {
+                    let output_tail = tail_string(&err.to_string(), 2000);
+                    record_codex_success(
+                        &mut trace,
+                        None,
+                        &output_tail,
+                        Some(&recovery_note),
+                        None,
+                    );
+                    return Ok(RunTaskOutput {
+                        reply_html_path: expected_reply_path.clone(),
+                        reply_attachments_dir: reply_attachments_dir.clone(),
+                        codex_output: output_tail,
+                        scheduled_tasks: Vec::new(),
+                        scheduled_tasks_error: None,
+                        scheduler_actions: Vec::new(),
+                        scheduler_actions_error: None,
+                        token_usage: None,
+                        recovery_note: Some(recovery_note),
+                    });
+                }
                 let _ = trace.finish(None, false, Some(&err.to_string()), None);
                 return Err(err);
             }
         }
     } else {
         let mut cmd = Command::new("codex");
-        cmd.arg("exec").arg("--json");
         remove_restricted_agent_env(&mut cmd);
-        if bypass_sandbox {
-            cmd.arg("--yolo");
-        }
-        for add_dir in &add_dirs {
-            cmd.arg("--add-dir").arg(add_dir);
-        }
-        cmd.arg("--skip-git-repo-check")
-            .arg("-m")
-            .arg(&model_name)
-            .arg("-c")
-            .arg("web_search=\"live\"")
-            .arg("-c")
-            .arg("ask_for_approval=\"never\"")
-            .arg("-c")
-            .arg(format!("sandbox=\"{}\"", sandbox_mode))
-            .arg("-c")
-            .arg("model_provider=\"azure\"")
-            .arg("-c")
-            .arg("model_providers.azure.env_key=\"AZURE_OPENAI_API_KEY_BACKUP\"")
-            .arg("--cd")
-            .arg(request.workspace_dir)
-            .arg(prompt)
-            .env("AZURE_OPENAI_API_KEY_BACKUP", api_key)
+        append_codex_exec_args(
+            &mut cmd,
+            Some(detect_codex_exec_features()),
+            &model_name,
+            &sandbox_mode,
+            bypass_sandbox,
+            request.workspace_dir,
+            &prompt,
+        );
+        cmd.env("AZURE_OPENAI_API_KEY_BACKUP", api_key)
             .env("AZURE_OPENAI_ENDPOINT_BACKUP", &azure_endpoint)
             .env_remove("OPENAI_API_KEY") // Prevent Codex from using OpenAI instead of Azure
+            .env(GH_CONFIG_DIR_ENV_KEY, &gh_config_dir_env)
             .current_dir(request.workspace_dir);
         // Extend PATH with DoWhiz bin directory for tools like google-docs
         let current_path = env::var("PATH").unwrap_or_default();
@@ -1064,14 +1451,62 @@ pub(super) fn run_codex_task(
             cmd.env("GIT_TERMINAL_PROMPT", "0");
         }
 
-        match run_command_with_timeout_and_cancel(cmd, timeout, "codex", cancel_monitor.as_ref()) {
-            Ok(output) => output,
+        let mut ready_check = |elapsed: Duration| {
+            if !investment_reply_expected {
+                return None;
+            }
+            reply_artifact_ready_for_workspace(request.workspace_dir, &expected_reply_path).then(
+                || {
+                    format!(
+                        "Returned early once a valid reply artifact existed after {:.1}s; canceled the remaining Codex runtime instead of waiting for the full budget",
+                        elapsed.as_secs_f32()
+                    )
+                },
+            )
+        };
+
+        match run_command_with_timeout_and_cancel_with_ready_check(
+            cmd,
+            timeout,
+            "codex",
+            cancel_monitor.as_ref(),
+            Some(&mut ready_check),
+        ) {
+            Ok(CommandCompletion::Completed(output)) => (output, None),
+            Ok(CommandCompletion::EarlySuccess { output, note }) => (output, Some(note)),
             Err(RunTaskError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
                 let failure = RunTaskError::CodexNotFound;
                 let _ = trace.finish(None, false, Some(&failure.to_string()), None);
                 return Err(failure);
             }
             Err(err) => {
+                if let Some(recovery_note) = maybe_accept_timeout_with_ready_reply_artifact(
+                    investment_request,
+                    !request.reply_to.is_empty(),
+                    request.workspace_dir,
+                    &expected_reply_path,
+                    &err,
+                ) {
+                    let output_tail = tail_string(&err.to_string(), 2000);
+                    record_codex_success(
+                        &mut trace,
+                        None,
+                        &output_tail,
+                        Some(&recovery_note),
+                        None,
+                    );
+                    return Ok(RunTaskOutput {
+                        reply_html_path: expected_reply_path.clone(),
+                        reply_attachments_dir: reply_attachments_dir.clone(),
+                        codex_output: output_tail,
+                        scheduled_tasks: Vec::new(),
+                        scheduled_tasks_error: None,
+                        scheduler_actions: Vec::new(),
+                        scheduler_actions_error: None,
+                        token_usage: None,
+                        recovery_note: Some(recovery_note),
+                    });
+                }
                 let _ = trace.finish(None, false, Some(&err.to_string()), None);
                 return Err(err);
             }
@@ -1094,10 +1529,53 @@ pub(super) fn run_codex_task(
         );
     let token_usage = extract_token_usage(&combined_output);
     let output_tail = tail_string(&combined_output, 2000);
-    let expected_reply_path =
-        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
-
+    if let Some(note) = early_success_note {
+        record_codex_success(
+            &mut trace,
+            output.status.code(),
+            &output_tail,
+            Some(&note),
+            token_usage.as_ref(),
+        );
+        return Ok(RunTaskOutput {
+            reply_html_path: expected_reply_path,
+            reply_attachments_dir,
+            codex_output: output_tail,
+            scheduled_tasks,
+            scheduled_tasks_error,
+            scheduler_actions,
+            scheduler_actions_error,
+            token_usage,
+            recovery_note: Some(note),
+        });
+    }
     if !output.status.success() {
+        if let Some(note) = maybe_accept_nonfatal_post_completion_reply_artifact(
+            !request.reply_to.is_empty(),
+            request.workspace_dir,
+            &expected_reply_path,
+            output.status.code(),
+            &combined_output,
+        ) {
+            record_codex_success(
+                &mut trace,
+                output.status.code(),
+                &output_tail,
+                Some(&note),
+                token_usage.as_ref(),
+            );
+            return Ok(RunTaskOutput {
+                reply_html_path: expected_reply_path,
+                reply_attachments_dir,
+                codex_output: output_tail,
+                scheduled_tasks,
+                scheduled_tasks_error,
+                scheduler_actions,
+                scheduler_actions_error,
+                token_usage,
+                recovery_note: Some(note),
+            });
+        }
         let err = if use_docker {
             RunTaskError::DockerFailed {
                 status: output.status.code(),
@@ -1275,7 +1753,7 @@ fn resolve_execution_backend() -> ExecutionBackend {
     }
 }
 
-fn codex_command_timeout() -> Duration {
+pub(super) fn codex_command_timeout() -> Duration {
     let overall_timeout = run_task_timeout();
     let configured_timeout = read_env_trimmed("RUN_TASK_CODEX_TIMEOUT_SECS")
         .and_then(|value| value.parse::<u64>().ok())
@@ -1313,6 +1791,7 @@ fn run_codex_task_azure_aci(
     runner: &str,
     reply_html_path: PathBuf,
     reply_attachments_dir: PathBuf,
+    options: CodexExecutionOptions,
     cancel_monitor: Option<&ThreadSupersedeMonitor>,
 ) -> Result<RunTaskOutput, RunTaskError> {
     let _browserbase_cleanup = BrowserbaseSessionCleanupGuard::new(request.workspace_dir);
@@ -1354,7 +1833,12 @@ fn run_codex_task_azure_aci(
     let bypass_sandbox = codex_bypass_sandbox() || is_google_docs || has_google_token;
     let sandbox_mode = effective_codex_sandbox_mode(&sandbox_mode, bypass_sandbox);
 
-    let add_dirs = codex_add_dirs_remote(&host_workspace_dir, &container_workspace_dir)?;
+    let _workspace_gh_config_dir = ensure_workspace_gh_config_dir(&host_workspace_dir)?;
+    let gh_config_dir_env = container_workspace_dir
+        .join(".config")
+        .join("gh")
+        .to_string_lossy()
+        .into_owned();
     let codex_home = host_workspace_dir.join(DOCKER_CODEX_HOME_DIR);
     ensure_codex_config_at(&codex_home, &container_workspace_dir, &azure_endpoint)?;
     let payment_env_overrides = collect_payment_env_overrides();
@@ -1368,7 +1852,7 @@ fn run_codex_task_azure_aci(
     let tpm_env_overrides = collect_tpm_env_overrides();
 
     let memory_context = load_memory_context(request.workspace_dir, request.memory_dir)?;
-    let prompt = build_prompt(
+    let prompt = build_prompt_with_budget_override(
         request.input_email_dir,
         request.input_attachments_dir,
         request.memory_dir,
@@ -1380,6 +1864,8 @@ fn run_codex_task_azure_aci(
         request.channel,
         request.has_unified_account,
         request.user_identities,
+        options.prefer_fast_completion,
+        options.timeout_override,
     );
 
     // Remote executor reads prompt from workspace file to avoid oversized command lines.
@@ -1439,6 +1925,7 @@ fn run_codex_task_azure_aci(
                 DOCKER_CODEX_HOME_DIR
             ),
         ),
+        (GH_CONFIG_DIR_ENV_KEY.to_string(), gh_config_dir_env.clone()),
         ("DEPLOY_TARGET".to_string(), "azure_aci_runner".to_string()),
     ];
     for (key, value) in payment_env_overrides {
@@ -1501,7 +1988,9 @@ fn run_codex_task_azure_aci(
     let container_name = build_aci_container_name();
     timing.set_task_id(&container_name);
     timing.end_setup();
-    let timeout = codex_command_timeout();
+    let timeout = options
+        .timeout_override
+        .unwrap_or_else(codex_command_timeout);
     let mut trace = RunTaskTraceRecorder::new(
         request.workspace_dir,
         runner,
@@ -1511,6 +2000,7 @@ fn run_codex_task_azure_aci(
         timeout,
         serde_json::json!({
             "reply_expected": !request.reply_to.is_empty(),
+            "prefer_fast_completion": options.prefer_fast_completion,
             "sandbox_mode": sandbox_mode.clone(),
             "bypass_sandbox": bypass_sandbox,
             "container_name": container_name.clone(),
@@ -1521,7 +2011,7 @@ fn run_codex_task_azure_aci(
             "file_share": config.file_share.clone(),
             "host_workspace_dir": host_workspace_dir.to_string_lossy().into_owned(),
             "container_workspace_dir": container_workspace_dir.to_string_lossy().into_owned(),
-            "add_dirs": add_dirs.clone(),
+            "gh_config_dir": gh_config_dir_env.clone(),
         }),
         &env_overrides,
     )?;
@@ -1572,12 +2062,6 @@ fn run_codex_task_azure_aci(
         None => (config.file_share.clone(), container_workspace_dir.clone()),
     };
 
-    let effective_add_dirs = if ephemeral_guard.is_some() {
-        codex_add_dirs_remote(&host_workspace_dir, &effective_container_workspace)?
-    } else {
-        add_dirs.clone()
-    };
-
     // Override HOME and CODEX_HOME when using ephemeral shares (files uploaded to share root)
     if ephemeral_guard.is_some() {
         env_overrides.push((
@@ -1593,6 +2077,15 @@ fn run_codex_task_azure_aci(
             ),
         ));
     }
+    env_overrides.push((
+        GH_CONFIG_DIR_ENV_KEY.to_string(),
+        effective_container_workspace
+            .join(".config")
+            .join("gh")
+            .to_string_lossy()
+            .into_owned(),
+    ));
+    let env_overrides = dedupe_env_overrides_last_wins(&env_overrides);
 
     eprintln!(
         "[run_task] azure_aci create container={} resource_group={} image={}",
@@ -1603,7 +2096,6 @@ fn run_codex_task_azure_aci(
         &config,
         &container_name,
         &effective_container_workspace,
-        &effective_add_dirs,
         &remote_exit_code_path,
         &model_name,
         &sandbox_mode,
@@ -2436,14 +2928,110 @@ fn map_path_to_container(
     Some(container_workspace_dir.join(relative))
 }
 
-fn codex_add_dirs_remote(
-    host_workspace_dir: &Path,
-    container_workspace_dir: &Path,
-) -> Result<Vec<String>, RunTaskError> {
-    let host_gh_config_dir = host_workspace_dir.join(".config").join("gh");
-    fs::create_dir_all(&host_gh_config_dir)?;
-    let container_gh_config_dir = container_workspace_dir.join(".config").join("gh");
-    Ok(vec![container_gh_config_dir.to_string_lossy().into_owned()])
+fn detect_codex_exec_features() -> CodexExecFeatures {
+    let output = Command::new("codex").arg("exec").arg("--help").output();
+    let help = match output {
+        Ok(output) => {
+            let mut combined = String::new();
+            combined.push_str(&String::from_utf8_lossy(&output.stdout));
+            combined.push_str(&String::from_utf8_lossy(&output.stderr));
+            combined
+        }
+        Err(_) => String::new(),
+    };
+
+    CodexExecFeatures {
+        supports_search: help.contains("--search"),
+        supports_ask_for_approval: help.contains("--ask-for-approval"),
+        supports_sandbox: help.contains("--sandbox"),
+        supports_danger_bypass: help.contains("--dangerously-bypass-approvals-and-sandbox"),
+        supports_yolo: help.contains("--yolo"),
+    }
+}
+
+fn append_codex_exec_args(
+    cmd: &mut Command,
+    features: Option<CodexExecFeatures>,
+    model_name: &str,
+    sandbox_mode: &str,
+    bypass_sandbox: bool,
+    workspace_dir: &Path,
+    prompt: &str,
+) {
+    const WEB_SEARCH_CFG: &str = "web_search=\"live\"";
+    const ASK_FOR_APPROVAL_CFG: &str = "ask_for_approval=\"never\"";
+    const MODEL_PROVIDER_CFG: &str = "model_provider=\"azure\"";
+    const AZURE_ENV_CFG: &str = "model_providers.azure.env_key=\"AZURE_OPENAI_API_KEY_BACKUP\"";
+
+    let features = features.unwrap_or_default();
+    cmd.arg("exec").arg("--json");
+    if features.supports_search {
+        cmd.arg("--search");
+    } else {
+        cmd.arg("-c").arg(WEB_SEARCH_CFG);
+    }
+    if features.supports_ask_for_approval {
+        cmd.arg("--ask-for-approval").arg("never");
+    } else {
+        cmd.arg("-c").arg(ASK_FOR_APPROVAL_CFG);
+    }
+    if features.supports_sandbox {
+        cmd.arg("--sandbox").arg(sandbox_mode);
+    } else {
+        cmd.arg("-c").arg(format!("sandbox=\"{}\"", sandbox_mode));
+    }
+    if bypass_sandbox {
+        if features.supports_danger_bypass {
+            cmd.arg("--dangerously-bypass-approvals-and-sandbox");
+        } else if features.supports_yolo {
+            cmd.arg("--yolo");
+        }
+    }
+    cmd.arg("--skip-git-repo-check")
+        .arg("-m")
+        .arg(model_name)
+        .arg("-c")
+        .arg(MODEL_PROVIDER_CFG)
+        .arg("-c")
+        .arg(AZURE_ENV_CFG)
+        .arg("--cd")
+        .arg(workspace_dir)
+        .arg(prompt);
+}
+
+fn ensure_workspace_gh_config_dir(workspace_dir: &Path) -> Result<PathBuf, RunTaskError> {
+    let workspace_gh_dir = workspace_dir.join(".config").join("gh");
+    fs::create_dir_all(&workspace_gh_dir)?;
+
+    let home_gh_dir = env::var("HOME")
+        .ok()
+        .map(PathBuf::from)
+        .map(|home| home.join(".config").join("gh"));
+    if let Some(home_gh_dir) = home_gh_dir {
+        copy_regular_files(&home_gh_dir, &workspace_gh_dir)?;
+    }
+
+    Ok(workspace_gh_dir)
+}
+
+fn copy_regular_files(source_dir: &Path, target_dir: &Path) -> Result<(), RunTaskError> {
+    if !source_dir.is_dir() {
+        return Ok(());
+    }
+    fs::create_dir_all(target_dir)?;
+
+    for entry in fs::read_dir(source_dir)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        if !source_path.is_file() {
+            continue;
+        }
+        let Some(file_name) = source_path.file_name() else {
+            continue;
+        };
+        fs::copy(&source_path, target_dir.join(file_name))?;
+    }
+    Ok(())
 }
 
 fn build_aci_container_name() -> String {
@@ -2460,7 +3048,6 @@ fn run_azure_aci_execution(
     config: &AzureAciConfig,
     container_name: &str,
     container_workspace_dir: &Path,
-    add_dirs: &[String],
     remote_exit_code_path: &Path,
     model_name: &str,
     sandbox_mode: &str,
@@ -2500,11 +3087,6 @@ fn run_azure_aci_execution(
     let model_provider_cfg = shell_quote("model_provider=\"azure\"");
     let azure_env_cfg =
         shell_quote("model_providers.azure.env_key=\"AZURE_OPENAI_API_KEY_BACKUP\"");
-    let add_dir_lines = add_dirs
-        .iter()
-        .map(|dir| format!("codex_cmd+=(--add-dir {})", shell_quote(dir)))
-        .collect::<Vec<_>>()
-        .join("\n");
     let bypass_enabled = if bypass_sandbox { "1" } else { "0" };
     let execution_started = Instant::now();
 
@@ -2559,7 +3141,6 @@ if [ \"{bypass}\" = \"1\" ]; then\n\
     codex_cmd+=(--yolo)\n\
   fi\n\
 fi\n\
-{add_dirs}\n\
 codex_cmd+=(--skip-git-repo-check -m {model_name} -c {model_provider_cfg} -c {azure_env_cfg} --cd {workspace} \"$(cat .codex_remote_prompt.txt)\")\n\
 set +e\n\
 \"${{codex_cmd[@]}}\" > {output_tmp} 2>&1\n\
@@ -2584,7 +3165,6 @@ exit \"$status\"\n",
         sandbox_mode = sandbox_mode_sh,
         sandbox_cfg = sandbox_cfg,
         bypass = bypass_enabled,
-        add_dirs = add_dir_lines,
         model_name = model_name_sh,
         model_provider_cfg = model_provider_cfg,
         azure_env_cfg = azure_env_cfg,
@@ -3633,21 +4213,6 @@ fn ensure_discord_context_file(workspace_dir: &Path) -> Result<(), RunTaskError>
     Ok(())
 }
 
-fn codex_add_dirs(workspace_dir: &Path, use_docker: bool) -> Result<Vec<String>, RunTaskError> {
-    let mut add_dirs = Vec::new();
-    if use_docker {
-        let gh_config_dir = workspace_dir.join(".config").join("gh");
-        fs::create_dir_all(&gh_config_dir)?;
-        add_dirs.push(format!("{}/.config/gh", DOCKER_WORKSPACE_DIR));
-    } else {
-        let home = env::var("HOME").map_err(|_| RunTaskError::MissingEnv { key: "HOME" })?;
-        let gh_config_dir = PathBuf::from(home).join(".config").join("gh");
-        fs::create_dir_all(&gh_config_dir)?;
-        add_dirs.push(gh_config_dir.to_string_lossy().into_owned());
-    }
-    Ok(add_dirs)
-}
-
 fn azure_endpoint_from_env() -> Result<String, RunTaskError> {
     let endpoint =
         read_env_trimmed("AZURE_OPENAI_ENDPOINT_BACKUP").ok_or(RunTaskError::MissingEnv {
@@ -4184,6 +4749,7 @@ pub fn run_codex_warm_pool(
 
     // 0c. Create GitHub askpass script in workspace (for git operations)
     let _ = resolve_github_auth(Some(&codex_home))?;
+    let _ = ensure_workspace_gh_config_dir(workspace_dir)?;
 
     // 0d. Materialize Google Workspace CLI credentials if available
     let _ = collect_google_workspace_cli_env_overrides(workspace_dir)?;
@@ -4424,6 +4990,7 @@ fn build_warm_pool_agent_command(
         r#"set -euo pipefail
 cd "$WORKSPACE_LOCAL_DIR"
 mkdir -p .config/gh .codex
+export GH_CONFIG_DIR="$WORKSPACE_LOCAL_DIR/.config/gh"
 
 # GitHub CLI/Git env vars (same as ACI flow github_auth.env_overrides)
 export GH_PROMPT_DISABLED=1
@@ -4482,7 +5049,7 @@ if [ "{bypass}" = "1" ]; then
     codex_cmd+=(--yolo)
   fi
 fi
-codex_cmd+=(--add-dir "$WORKSPACE_LOCAL_DIR/.config/gh" --skip-git-repo-check -m {model_name} -c {model_provider_cfg} -c {azure_env_cfg} "$(cat .codex_remote_prompt.txt)")
+codex_cmd+=(--skip-git-repo-check -m {model_name} -c {model_provider_cfg} -c {azure_env_cfg} "$(cat .codex_remote_prompt.txt)")
 set +e
 "${{codex_cmd[@]}}" > codex_output.txt 2>&1
 status=$?
@@ -4698,17 +5265,13 @@ fn update_message_visibility(
 
 #[cfg(test)]
 mod tests {
+    use super::super::env::acquire_env_test_lock;
     use super::*;
     use std::fs;
     use std::path::Path;
-    use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        ENV_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|err| err.into_inner())
+        acquire_env_test_lock()
     }
 
     struct EnvVarGuard {
