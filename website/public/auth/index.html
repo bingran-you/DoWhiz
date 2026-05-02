@@ -167,7 +167,8 @@
       /* Organization search styles */
       .current-org-display {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: stretch;
         gap: 0.5rem;
         padding: 0.75rem 1rem;
         background: var(--surface-secondary, #17191d);
@@ -2711,8 +2712,8 @@
                       </div>
                       <span id="org-sync-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
 
-                      <a href="#" id="org-advanced-toggle" style="display: inline-block; margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted, #888);">Advanced</a>
-                      <div id="org-advanced-section" class="hidden" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #333);">
+                      <a href="#" id="org-advanced-toggle" style="display: block; margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted, #888);">Advanced</a>
+                      <div id="org-advanced-section" class="hidden" style="display: block; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #333); width: 100%;">
                         <h4 style="margin-bottom: 0.5rem;">Change Notion task board</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
                           Connect an existing Notion database for TPM task management.
@@ -2735,6 +2736,22 @@
                           <button id="set-notion-database-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Set</button>
                         </div>
                         <span id="notion-database-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Organization Leader</h4>
+                        <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
+                          The leader's Notion credentials are used for all TPM operations.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                          <input
+                            type="text"
+                            id="org-leader-account-id-input"
+                            class="auth-input"
+                            placeholder="Leader Account ID (UUID from Supabase)"
+                            style="min-width: 200px;"
+                          />
+                          <button id="set-org-leader-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Set Leader</button>
+                        </div>
+                        <span id="org-leader-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
                       </div>
                     </div>
 
@@ -5872,17 +5889,21 @@
           if (orgJoinContainer) {
             orgJoinContainer.classList.add('hidden');
           }
-          // Pre-populate database ID and workspace ID fields
+          // Pre-populate database ID, workspace ID, and leader fields
           const orgs = await searchOrganizations(currentOrganizationName);
           const currentOrg = orgs.find(o => o.name === currentOrganizationName);
           if (currentOrg) {
             const dbInput = document.getElementById('notion-database-id-input');
             const wsInput = document.getElementById('notion-workspace-id-input');
+            const leaderInput = document.getElementById('org-leader-account-id-input');
             if (dbInput && currentOrg.notion_database_id) {
               dbInput.value = currentOrg.notion_database_id;
             }
             if (wsInput && currentOrg.notion_workspace_id) {
               wsInput.value = currentOrg.notion_workspace_id;
+            }
+            if (leaderInput && currentOrg.leader_account_id) {
+              leaderInput.value = currentOrg.leader_account_id;
             }
           }
         } else {
@@ -6307,6 +6328,62 @@
               if (status) status.textContent = `Error: ${err.message}`;
             } finally {
               setDatabaseBtn.disabled = false;
+            }
+          });
+        }
+
+        // Set Leader button handler
+        const setLeaderBtn = document.getElementById('set-org-leader-btn');
+        if (setLeaderBtn) {
+          setLeaderBtn.addEventListener('click', async () => {
+            const input = document.getElementById('org-leader-account-id-input');
+            const status = document.getElementById('org-leader-status');
+            const leaderId = input?.value?.trim();
+
+            if (!leaderId) {
+              if (status) status.textContent = 'Please enter a leader account ID';
+              return;
+            }
+
+            // Basic UUID validation
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!uuidRegex.test(leaderId)) {
+              if (status) status.textContent = 'Invalid UUID format';
+              return;
+            }
+
+            if (!currentOrganizationName) {
+              if (status) status.textContent = 'No organization selected';
+              return;
+            }
+
+            try {
+              setLeaderBtn.disabled = true;
+              if (status) status.textContent = 'Updating...';
+
+              const { data: { session } } = await supabase.auth.getSession();
+              const accessToken = session?.access_token;
+
+              const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/leader`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ leader_account_id: leaderId })
+              });
+
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `Failed: ${res.status}`);
+              }
+
+              if (status) status.textContent = 'Leader updated successfully!';
+            } catch (err) {
+              console.error('Failed to update leader:', err);
+              if (status) status.textContent = `Error: ${err.message}`;
+            } finally {
+              setLeaderBtn.disabled = false;
             }
           });
         }

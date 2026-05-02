@@ -1684,6 +1684,7 @@ pub async fn list_organizations(
                         "name": org.name,
                         "notion_database_id": org.notion_database_id,
                         "notion_workspace_id": org.notion_workspace_id,
+                        "leader_account_id": org.leader_account_id,
                         "created_at": org.created_at,
                     })
                 })
@@ -1869,6 +1870,98 @@ pub async fn update_organization_database(
             .into_response(),
         Ok(Err(e)) => {
             error!("Failed to update organization database: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrganizationLeaderRequest {
+    pub leader_account_id: Uuid,
+}
+
+/// PUT /auth/organization/:name/leader - Set the organization's leader account
+///
+/// The leader's Notion credentials are used for all TPM operations in the org.
+/// The user must be a member of the organization to update its leader.
+pub async fn update_organization_leader(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+    Json(payload): Json<UpdateOrganizationLeaderRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    // Verify user belongs to an organization
+    let Some(account_org_id) = account.organization_id else {
+        return json_error_response(
+            StatusCode::BAD_REQUEST,
+            "You must be a member of an organization to update its leader",
+        );
+    };
+
+    // Fetch the organization to verify it exists and user belongs to it
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    // Verify user belongs to this organization
+    if account_org_id != org.id {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "You are not a member of this organization",
+        );
+    }
+
+    // Update the leader
+    let store = state.account_store.clone();
+    let leader_id = payload.leader_account_id;
+    let org_name_for_update = org_name.clone();
+    let update_result = task::spawn_blocking(move || {
+        store.set_organization_leader(&org_name_for_update, leader_id)
+    })
+    .await
+    .map_err(|e| {
+        error!("spawn_blocking panicked: {}", e);
+        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+    });
+
+    match update_result {
+        Ok(Ok(updated_org)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "organization_name": updated_org.name,
+                "leader_account_id": updated_org.leader_account_id,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to update organization leader: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
         }
         Err(response) => response,
@@ -7369,6 +7462,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/auth/organization/:name/database",
             put(update_organization_database),
+        )
+        .route(
+            "/auth/organization/:name/leader",
+            put(update_organization_leader),
         )
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))
