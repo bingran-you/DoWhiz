@@ -253,6 +253,14 @@ fn investment_contract_violations(
     workspace_dir: &Path,
     reply_path: &Path,
 ) -> Result<Option<Vec<String>>, RunTaskError> {
+    // DISABLED: Investment contract validation causes 10+ hour task spinning loops
+    // due to false positives (e.g., "PR" detected as ticker, "analyze" as intent).
+    // See reference_documentation/fault_report.md for incidents.
+    // TODO: Re-enable only after fixing is_investment_request() false positives.
+    let _ = (workspace_dir, reply_path);
+    return Ok(None);
+
+    #[allow(unreachable_code)]
     let request_text = load_inbound_request_text(workspace_dir)?;
     if !is_investment_request(&request_text) {
         return Ok(None);
