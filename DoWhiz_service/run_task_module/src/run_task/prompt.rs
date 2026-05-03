@@ -897,46 +897,43 @@ If you get "Could not find database" or "not shared with your integration" error
 3. The stored OAuth token may not include newly created databases - re-authenticating updates the access scope
 
 **Handling Task Board Pages (when given a page ID instead of database ID):**
-If `tpm_cli list-tasks` returns "Provided ID is a page, not a database", the configured ID points to a parent page containing child databases. **Switch to using notion_api_cli directly** for this discovery flow:
+If `tpm_cli list-tasks` returns "Provided ID is a page, not a database", the configured `--database-id` value is actually a PAGE ID pointing to a parent page containing child databases. **Extract the ID from the --database-id flag above** (e.g., if the flag is `--database-id abc123`, then `abc123` is the page ID). Then switch to using notion_api_cli directly and ONLY work with child databases from that configured page:
 
-1. **Read the parent page** to discover child databases:
-   ```
-   notion_api_cli read-page --page-id <PAGE_ID>
-   ```
-   Look for blocks with type `child_database` in the output.
+**CRITICAL:** Do NOT use `notion_api_cli search` to find boards - this may find wrong boards with similar names in other workspaces. ONLY use child databases discovered from the configured page.
 
-2. **Search for related content** if needed:
+1. **Read the configured parent page** to discover its child databases (use the ID from the --database-id flag):
    ```
-   notion_api_cli search --query {org_name}
+   notion_api_cli read-page --page-id <ID_FROM_DATABASE_FLAG>
    ```
+   Look for blocks with type `child_database` in the output. These are the ONLY databases you should work with.
 
-3. **Try get-database on each child database** found:
+2. **Try get-database on each child database** found in step 1:
    ```
    notion_api_cli get-database --database-id <CHILD_DB_ID>
    ```
    Some may return errors (e.g., "does not contain any data sources") - skip those and continue.
 
-4. **Query accessible databases**:
+3. **Query accessible databases**:
    ```
    notion_api_cli query-database --database-id <ACCESSIBLE_DB_ID> --limit 100
    ```
 
-5. **List child pages** for additional context:
+4. **List child pages** for additional context:
    ```
-   notion_api_cli get-children --parent-id <PAGE_ID>
+   notion_api_cli get-children --parent-id <ID_FROM_DATABASE_FLAG>
    ```
 
-6. **Bulk read** task pages for efficiency:
+5. **Bulk read** task pages for efficiency:
    ```
    notion_api_cli bulk-read --page-ids <ID1>,<ID2>,<ID3>
    ```
 
-7. **Make updates** using notion_api_cli:
+6. **Make updates** using notion_api_cli:
    - Update task properties: `notion_api_cli update-page --page-id <TASK_ID> --properties '{{...}}'`
    - Add comments: `notion_api_cli create-comment --page-id <TASK_ID> --content "..."`
    - For inaccessible databases, create a **child page** under the parent as a workaround:
      ```
-     notion_api_cli create-page --parent-id <PARENT_PAGE_ID> --title "Task: ..."
+     notion_api_cli create-page --parent-id <ID_FROM_DATABASE_FLAG> --title "Task: ..."
      ```
 
 **IMPORTANT:** When a child database is inaccessible via API, do NOT fail the entire sync. Report which databases were accessible, which were not, and proceed with what you can access. Use notion_api_cli for all operations when working with discovered databases - tpm_cli is designed for pre-configured database IDs only.
