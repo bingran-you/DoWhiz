@@ -1889,11 +1889,12 @@ fn run_codex_task_azure_aci(
     }
 
     // Write Notion access token for channel-agnostic Notion operations
+    // Only write if the file doesn't already exist (TPM sets leader's token first)
     if let Some(token) = request.notion_access_token {
-        fs::write(
-            host_workspace_dir.join(".notion_env"),
-            format!("NOTION_API_TOKEN={}\n", token),
-        )?;
+        let notion_env_file = host_workspace_dir.join(".notion_env");
+        if !notion_env_file.exists() {
+            fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))?;
+        }
     }
 
     let askpass_container_path = github_auth.askpass_path.as_ref().and_then(|path| {
