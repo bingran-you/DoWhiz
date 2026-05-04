@@ -1230,12 +1230,15 @@ fn run_codex_task_with_options(
         // Write Notion access token for channel-agnostic Notion operations
         if let Some(ref token) = request.notion_access_token {
             cmd.arg("-e").arg(format!("NOTION_API_TOKEN={}", token));
-            // Also write to .notion_env file for CLI tools
+            // Also write to .notion_env file for CLI tools, but don't overwrite if it exists
+            // (tpm_cron.rs may have already written the leader's token for TPM tasks)
             let notion_env_file = host_workspace_dir.join(".notion_env");
-            if let Err(e) =
-                std::fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))
-            {
-                eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
+            if !notion_env_file.exists() {
+                if let Err(e) =
+                    std::fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))
+                {
+                    eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
+                }
             }
         }
         for (key, value) in &payment_env_overrides {
@@ -1415,10 +1418,13 @@ fn run_codex_task_with_options(
         // Write Notion access token for channel-agnostic Notion operations
         if let Some(ref token) = request.notion_access_token {
             cmd.env("NOTION_API_TOKEN", token);
-            // Also write to .notion_env file for CLI tools
+            // Also write to .notion_env file for CLI tools, but don't overwrite if it exists
+            // (tpm_cron.rs may have already written the leader's token for TPM tasks)
             let notion_env_file = request.workspace_dir.join(".notion_env");
-            if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
-                eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
+            if !notion_env_file.exists() {
+                if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
+                    eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
+                }
             }
         }
         for (key, value) in &payment_env_overrides {
@@ -4760,11 +4766,12 @@ pub fn run_codex_warm_pool(
     }
 
     // 0f. Write Notion access token for channel-agnostic Notion operations
+    // Don't overwrite if it exists (tpm_cron.rs may have already written the leader's token)
     if let Some(ref token) = request.notion_access_token {
-        fs::write(
-            workspace_dir.join(".notion_env"),
-            format!("NOTION_API_TOKEN={}\n", token),
-        )?;
+        let notion_env_file = workspace_dir.join(".notion_env");
+        if !notion_env_file.exists() {
+            fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))?;
+        }
     }
 
     // 1. Create ephemeral share and upload workspace
