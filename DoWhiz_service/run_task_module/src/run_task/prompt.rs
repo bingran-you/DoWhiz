@@ -962,12 +962,16 @@ Before running TPM commands, gather context about {org_name}:
 - `tpm_cli get-schema{db_flag}` - Get database schema (property names, types, and allowed values)
 
 **Task Assignment Workflow:**
-1. First, run `tpm_cli list-users` to get available team members and their Notion user IDs
-2. When creating tasks, use `--assignee <USER_ID>` to assign the task
-3. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
-4. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
-5. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
-6. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
+1. First, run `tpm_cli list-users` to get paid Notion users and their IDs
+2. **Always discover actual assignees**: Scan existing tasks to extract all names/IDs of people already assigned - some orgs only pay for a few Notion seats but have more team members actively working on tasks
+3. **Apply recency filter**: Only include assignees from tasks with `last_edited_time` within the last 90 days - this filters out people who may have left the team
+4. **Merge both lists**: Combine `list-users` results with discovered active assignees to build the complete assignee bank
+5. When creating/assigning tasks, use context to match tasks to appropriate team members based on who worked on similar tasks before
+6. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
+7. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
+8. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
+9. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
+10. Report in your summary which assignees you discovered vs. which came from `list-users`
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
