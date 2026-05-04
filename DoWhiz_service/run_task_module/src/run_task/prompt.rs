@@ -995,16 +995,29 @@ Users may connect their own existing Notion databases with different property na
 
 **IMPORTANT:** When working with custom schemas, fill ALL columns returned by `get-schema`, not just Status/Priority/Assignee. If the board has additional properties like "Due Date", "Sprint", "Category", "Tags", etc., populate them with appropriate values based on the task context. The user's workflow depends on these fields being filled.
 
-**Notion Access Errors:**
-If you get "Could not find database" or "not shared with your integration" errors, the user's Notion OAuth token doesn't have access to this database. Tell the user:
+**Handling Database Errors - ALWAYS TRY PAGE FALLBACK FIRST:**
+If `tpm_cli list-tasks` or `notion_api_cli get-database` returns ANY of these errors:
+- "Could not find database"
+- "Provided ID is a page, not a database"
+- "object_not_found"
+- "not shared with your integration"
+
+**BEFORE doing anything else (including search)**, try reading the configured ID as a PAGE:
+```
+notion_api_cli read-page --page-id <ID_FROM_DATABASE_FLAG>
+```
+
+If this succeeds, the configured ID is a parent page containing child databases. Follow the steps below to discover and use those child databases.
+
+If `read-page` also fails, THEN tell the user to re-authenticate:
 1. Go to dowhiz.com dashboard → Connections → Click the Notion button
 2. This triggers a new OAuth flow - make sure to grant access to the task database
 3. The stored OAuth token may not include newly created databases - re-authenticating updates the access scope
 
-**Handling Task Board Pages (when given a page ID instead of database ID):**
-If `tpm_cli list-tasks` returns "Provided ID is a page, not a database", the configured `--database-id` value is actually a PAGE ID pointing to a parent page containing child databases. **Extract the ID from the --database-id flag above** (e.g., if the flag is `--database-id abc123`, then `abc123` is the page ID). Then switch to using notion_api_cli directly and ONLY work with child databases from that configured page:
+**CRITICAL: NEVER use `notion_api_cli search` before trying the page fallback above.** Search may find wrong boards with similar names in other workspaces. ONLY use child databases discovered from the configured page.
 
-**CRITICAL:** Do NOT use `notion_api_cli search` to find boards - this may find wrong boards with similar names in other workspaces. ONLY use child databases discovered from the configured page.
+**Handling Task Board Pages (when configured ID is a page):**
+When `read-page` succeeds on the configured ID, it means the `--database-id` value is actually a PAGE ID pointing to a parent page containing child databases. Switch to using notion_api_cli directly and ONLY work with child databases from that configured page:
 
 1. **Read the configured parent page** to discover its child databases (use the ID from the --database-id flag):
    ```
