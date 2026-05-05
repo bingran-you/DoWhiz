@@ -1422,7 +1422,8 @@ fn run_codex_task_with_options(
             // (tpm_cron.rs may have already written the leader's token for TPM tasks)
             let notion_env_file = request.workspace_dir.join(".notion_env");
             if !notion_env_file.exists() {
-                if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token)) {
+                if let Err(e) = fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))
+                {
                     eprintln!("[run_task] Warning: Failed to write Notion env file: {}", e);
                 }
             }
