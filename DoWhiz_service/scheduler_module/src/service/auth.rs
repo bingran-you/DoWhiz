@@ -7074,6 +7074,7 @@ async fn mutate_unified_account_task(
     action: TaskMutationAction,
 ) -> Result<Option<TaskMutationOutcome>, Response> {
     let task_paths = load_unified_account_task_paths(state, account_id).await?;
+    let primary_account_task_path = task_paths.first().cloned();
     let task_id = task_id.to_string();
     let action_name = match action {
         TaskMutationAction::Cancel => "cancel",
@@ -7084,7 +7085,13 @@ async fn mutate_unified_account_task(
     let action_name_for_log = action_name.clone();
 
     task::spawn_blocking(move || {
-        mutate_unified_account_task_blocking(&task_paths, &task_id, action, &action_name)
+        mutate_unified_account_task_blocking(
+            &task_paths,
+            primary_account_task_path.as_deref(),
+            &task_id,
+            action,
+            &action_name,
+        )
     })
     .await
     .map_err(|err| {
@@ -7098,6 +7105,7 @@ async fn mutate_unified_account_task(
 
 fn mutate_unified_account_task_blocking(
     task_paths: &[PathBuf],
+    primary_account_task_path: Option<&std::path::Path>,
     task_id: &str,
     action: TaskMutationAction,
     action_name: &str,
@@ -7123,17 +7131,37 @@ fn mutate_unified_account_task_blocking(
                     "Only failed or expired workflow tasks can be resubmitted safely.",
                 ));
             }
+            let write_target_idx = primary_account_task_path
+                .and_then(|path| preferred_task_write_match_index(&matches, path))
+                .unwrap_or(selected_idx);
+            let write_target = matches[write_target_idx].clone();
             let resubmitted_task = build_resubmitted_task(&selected.task, Utc::now())
                 .map_err(|message| json_error_response(StatusCode::CONFLICT, &message))?;
-            insert_scheduled_task(&selected.path, &resubmitted_task).map_err(|err| {
+            insert_scheduled_task(&write_target.path, &resubmitted_task).map_err(|err| {
                 error!(
                     "failed to insert resubmitted task {} into {}: {}",
                     resubmitted_task.id,
-                    selected.path.display(),
+                    write_target.path.display(),
                     err
                 );
                 json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Failed to resubmit task")
             })?;
+            if let Some(account_path) = primary_account_task_path {
+                if account_path != write_target.path.as_path() {
+                    insert_scheduled_task(account_path, &resubmitted_task).map_err(|err| {
+                        error!(
+                            "failed to mirror resubmitted task {} into {}: {}",
+                            resubmitted_task.id,
+                            account_path.display(),
+                            err
+                        );
+                        json_error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to mirror resubmitted task",
+                        )
+                    })?;
+                }
+            }
             Ok(Some(TaskMutationOutcome {
                 task_id: task_id.to_string(),
                 resubmitted_task_id: Some(resubmitted_task.id.to_string()),
@@ -7205,6 +7233,27 @@ fn cancel_task_matches(
     }
 
     Ok(())
+}
+
+fn preferred_task_write_match_index(
+    matches: &[TaskStorageMatch],
+    primary_account_task_path: &std::path::Path,
+) -> Option<usize> {
+    let mut best_idx: Option<usize> = None;
+    for (idx, candidate) in matches.iter().enumerate() {
+        if candidate.path.as_path() == primary_account_task_path {
+            continue;
+        }
+        match best_idx {
+            Some(existing_idx)
+                if !should_prefer_task_summary(
+                    &candidate.summary,
+                    &matches[existing_idx].summary,
+                ) => {}
+            _ => best_idx = Some(idx),
+        }
+    }
+    best_idx
 }
 
 fn request_running_task_cancellation(task: &crate::RunTaskTask) -> Result<(), String> {
@@ -7656,6 +7705,39 @@ mod tests {
                 .map(|_| "temporary failure".to_string()),
             created_at: created_at.to_rfc3339(),
             is_recurring: run_at.is_none(),
+        }
+    }
+
+    fn sample_task_status_summary(
+        id: &str,
+        status: &str,
+        created_at: chrono::DateTime<Utc>,
+    ) -> TaskStatusSummary {
+        TaskStatusSummary {
+            id: id.to_string(),
+            kind: "run_task".to_string(),
+            channel: "slack".to_string(),
+            request_summary: Some(format!("Task {id}")),
+            enabled: status != "failed",
+            created_at: created_at.to_rfc3339(),
+            last_run: None,
+            schedule_type: "one_shot".to_string(),
+            next_run: None,
+            run_at: Some(created_at.to_rfc3339()),
+            execution_status: Some(status.to_string()),
+            error_message: (status == "failed").then(|| "boom".to_string()),
+            execution_started_at: Some(created_at.to_rfc3339()),
+            auto_disabled_reason: None,
+            auto_disabled_at: None,
+            status: status.to_string(),
+            status_reason: None,
+            status_changed_at: Some(created_at.to_rfc3339()),
+            retry_at: None,
+            will_retry: false,
+            retry_count: 0,
+            is_running_long: false,
+            can_cancel: matches!(status, "queued" | "retry_scheduled"),
+            can_resubmit: status == "failed",
         }
     }
 
@@ -8288,6 +8370,40 @@ mod tests {
 
         let error = build_resubmitted_task(&task, now).expect_err("stale thread epoch");
         assert!(error.contains("older thread state"));
+    }
+
+    #[test]
+    fn preferred_task_write_match_index_skips_account_mirror_when_live_copy_exists() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at: now },
+            enabled: false,
+            created_at: now - ChronoDuration::minutes(5),
+            last_run: Some(now - ChronoDuration::minutes(1)),
+        };
+        let account_path = PathBuf::from("/tmp/users/account-123/state/tasks.db");
+        let live_path = PathBuf::from("/tmp/users/slack-user-1/state/tasks.db");
+        let matches = vec![
+            TaskStorageMatch {
+                path: account_path.clone(),
+                task: task.clone(),
+                summary: sample_task_status_summary(&task.id.to_string(), "failed", now),
+                executions: Vec::new(),
+            },
+            TaskStorageMatch {
+                path: live_path,
+                task,
+                summary: sample_task_status_summary("live-copy", "failed", now),
+                executions: Vec::new(),
+            },
+        ];
+
+        assert_eq!(
+            preferred_task_write_match_index(&matches, account_path.as_path()),
+            Some(1)
+        );
     }
 
     // ==================== WeCom OAuth Tests ====================

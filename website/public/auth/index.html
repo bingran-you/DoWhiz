@@ -7487,14 +7487,22 @@
 
       function buildTaskModalRows(task) {
         const status = taskStatusPresentation(task);
+        const retryMode = task.will_retry
+          ? 'Automatic'
+          : task.can_resubmit
+            ? 'Manual only'
+            : 'None';
         return [
           { label: 'Task ID', value: task.id || 'N/A' },
           { label: 'Title', value: formatTaskTitle(task) },
           { label: 'Channel', value: formatWorkChannelLabel(task.channel || task.source) },
           { label: 'Status', value: status.label },
           { label: 'Enabled', value: task.enabled ? 'Yes' : 'No' },
+          { label: 'Retry Mode', value: retryMode },
+          { label: 'Next Retry', value: formatLocalDateTime(task.retry_at, null) },
           { label: 'Schedule Type', value: task.schedule_type || 'N/A' },
           { label: 'Retry Count', value: Number(task.retry_count || 0) },
+          { label: 'Auto-disabled At', value: formatLocalDateTime(task.auto_disabled_at, null) },
           { label: 'Created At', value: formatLocalDateTime(task.created_at, null) },
           { label: 'Next Run', value: formatLocalDateTime(task.next_run, null) },
           { label: 'Last Run', value: formatLocalDateTime(task.last_run, null) },
@@ -7517,6 +7525,20 @@
           metaItems.push({
             label: 'Note',
             value: task.status_reason
+          });
+        }
+
+        if (task.will_retry) {
+          metaItems.push({
+            label: 'Retry',
+            value: task.retry_at
+              ? `Automatic retry scheduled for ${formatLocalDateTime(task.retry_at, null)}`
+              : 'Automatic retry pending'
+          });
+        } else if (task.can_resubmit) {
+          metaItems.push({
+            label: 'Retry',
+            value: 'Manual resubmit required'
           });
         }
 

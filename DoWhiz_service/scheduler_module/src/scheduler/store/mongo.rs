@@ -247,21 +247,26 @@ impl MongoSchedulerStore {
     pub(crate) fn update_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
-        let filter = self.task_filter(&task.id.to_string());
+        let filter = doc! { "task_id": task.id.to_string() };
         let update = doc! {
             "$set": {
                 "enabled": task.enabled,
                 "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
                 "schedule": schedule_doc(&task.schedule),
                 "task_json": task_json,
-            }
+            },
+            "$unset": {
+                "auto_disabled_reason": "",
+                "auto_disabled_at": "",
+            },
         };
         let result = retry_mongo_write("tasks.update_task", || {
-            self.tasks.update_one(filter.clone(), update.clone(), None)
+            self.tasks.update_many(filter.clone(), update.clone(), None)
         })
         .map_err(mongo_err)?;
 
-        // Log warning if no document was matched - this indicates a bug
+        // Task documents are mirrored across owner scopes by shared task_id.
+        // Updating all matching copies keeps account/user summaries consistent.
         if result.matched_count == 0 {
             tracing::warn!(
                 "update_task matched 0 documents! task_id={} owner_scope=({}, {}) filter={:?}",
@@ -291,7 +296,7 @@ impl MongoSchedulerStore {
         task_id: &str,
         reason: &str,
     ) -> Result<(), SchedulerError> {
-        let filter = self.task_filter(task_id);
+        let filter = doc! { "task_id": task_id };
         let update = doc! {
             "$set": {
                 "enabled": false,
@@ -300,24 +305,24 @@ impl MongoSchedulerStore {
             }
         };
         let result = retry_mongo_write("tasks.disable_task_by_id", || {
-            self.tasks.update_one(filter.clone(), update.clone(), None)
+            self.tasks.update_many(filter.clone(), update.clone(), None)
         })
         .map_err(mongo_err)?;
 
         if result.matched_count == 0 {
-            tracing::warn!(
+            let message = format!(
                 "disable_task_by_id matched 0 documents: task_id={} owner_scope=({}, {})",
-                task_id,
-                self.owner_kind,
-                self.owner_id
+                task_id, self.owner_kind, self.owner_id
             );
-        } else {
-            tracing::info!(
-                "disable_task_by_id succeeded: task_id={} reason={}",
-                task_id,
-                reason
-            );
+            tracing::warn!("{message}");
+            return Err(SchedulerError::Storage(message));
         }
+        tracing::info!(
+            "disable_task_by_id succeeded: task_id={} reason={} matched={}",
+            task_id,
+            reason,
+            result.matched_count
+        );
         Ok(())
     }
 
@@ -529,11 +534,13 @@ impl MongoSchedulerStore {
                                         task_id,
                                         e
                                     );
+                                    None
+                                } else {
+                                    Some((
+                                        "failed",
+                                        "reconciled stale running execution; ACI container was registered but no longer exists in Azure".to_string(),
+                                    ))
                                 }
-                                Some((
-                                    "failed",
-                                    "reconciled stale running execution; ACI container was registered but no longer exists in Azure".to_string(),
-                                ))
                             }
                             AciContainerStatus::Terminal(state) => {
                                 if let Err(e) = self.disable_task_by_id(
@@ -548,14 +555,16 @@ impl MongoSchedulerStore {
                                         task_id,
                                         e
                                     );
+                                    None
+                                } else {
+                                    Some((
+                                        "failed",
+                                        format!(
+                                            "reconciled stale running execution; ACI container terminated with state: {}",
+                                            state
+                                        ),
+                                    ))
                                 }
-                                Some((
-                                    "failed",
-                                    format!(
-                                        "reconciled stale running execution; ACI container terminated with state: {}",
-                                        state
-                                    ),
-                                ))
                             }
                             _ => {
                                 // Container still running or error querying - fall through to stale check
@@ -591,12 +600,14 @@ impl MongoSchedulerStore {
                                     task_id,
                                     e
                                 );
+                                None
+                            } else {
+                                Some((
+                                    "failed",
+                                    "reconciled stale running execution; ACI container not found"
+                                        .to_string(),
+                                ))
                             }
-                            Some((
-                                "failed",
-                                "reconciled stale running execution; ACI container not found"
-                                    .to_string(),
-                            ))
                         } else {
                             // Within grace period - might still be uploading ephemeral share
                             tracing::debug!(
@@ -819,20 +830,20 @@ impl MongoSchedulerStore {
     }
 
     pub(crate) fn increment_retry_count(&self, task_id: &str) -> Result<u32, SchedulerError> {
-        let filter = self.task_filter(task_id);
+        let filter = doc! { "task_id": task_id };
         let update = doc! { "$inc": { "retry_count": 1i32 } };
         retry_mongo_write("tasks.increment_retry_count", || {
-            self.tasks.update_one(filter.clone(), update.clone(), None)
+            self.tasks.update_many(filter.clone(), update.clone(), None)
         })
         .map_err(mongo_err)?;
         self.get_retry_count(task_id)
     }
 
     pub(crate) fn reset_retry_count(&self, task_id: &str) -> Result<(), SchedulerError> {
-        let filter = self.task_filter(task_id);
+        let filter = doc! { "task_id": task_id };
         let update = doc! { "$set": { "retry_count": 0i32 } };
         retry_mongo_write("tasks.reset_retry_count", || {
-            self.tasks.update_one(filter.clone(), update.clone(), None)
+            self.tasks.update_many(filter.clone(), update.clone(), None)
         })
         .map_err(mongo_err)?;
         Ok(())
@@ -887,6 +898,14 @@ impl MongoSchedulerStore {
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
             let retry_count = numeric_field_to_u32(&task_doc, "retry_count").unwrap_or(0);
+            let auto_disabled_reason = task_doc
+                .get_str("auto_disabled_reason")
+                .ok()
+                .map(|value| value.to_string());
+            let auto_disabled_at = task_doc
+                .get_datetime("auto_disabled_at")
+                .ok()
+                .map(|value| value.to_chrono().to_rfc3339());
             let (schedule_type, next_run, run_at) = match &task.schedule {
                 Schedule::Cron { next_run, .. } => {
                     ("cron".to_string(), Some(next_run.to_rfc3339()), None)
@@ -906,6 +925,8 @@ impl MongoSchedulerStore {
                 run_at,
                 executions,
                 retry_count,
+                auto_disabled_reason,
+                auto_disabled_at,
                 now,
             ));
         }
@@ -939,6 +960,14 @@ impl MongoSchedulerStore {
         let request_summary = derive_request_summary(&task_doc);
         let executions = self.load_execution_rows_for_task(task_id)?;
         let retry_count = numeric_field_to_u32(&task_doc, "retry_count").unwrap_or(0);
+        let auto_disabled_reason = task_doc
+            .get_str("auto_disabled_reason")
+            .ok()
+            .map(|value| value.to_string());
+        let auto_disabled_at = task_doc
+            .get_datetime("auto_disabled_at")
+            .ok()
+            .map(|value| value.to_chrono().to_rfc3339());
         let (schedule_type, next_run, run_at) = match &task.schedule {
             Schedule::Cron { next_run, .. } => {
                 ("cron".to_string(), Some(next_run.to_rfc3339()), None)
@@ -959,6 +988,8 @@ impl MongoSchedulerStore {
             run_at,
             &executions,
             retry_count,
+            auto_disabled_reason,
+            auto_disabled_at,
             now,
         )))
     }
@@ -1139,10 +1170,18 @@ fn build_task_status_summary(
     run_at: Option<String>,
     executions: &[ExecutionRow],
     retry_count: u32,
+    auto_disabled_reason: Option<String>,
+    auto_disabled_at: Option<String>,
     now: chrono::DateTime<Utc>,
 ) -> TaskStatusSummary {
     let latest_execution = executions.first();
-    let derived_status = derive_user_task_status(task, latest_execution, retry_count, now);
+    let derived_status = derive_user_task_status(
+        task,
+        latest_execution,
+        retry_count,
+        auto_disabled_reason.as_deref(),
+        now,
+    );
 
     TaskStatusSummary {
         id: task_id.to_string(),
@@ -1158,9 +1197,13 @@ fn build_task_status_summary(
         execution_status: latest_execution.map(|row| row.status.clone()),
         error_message: latest_execution.and_then(|row| row.error_message.clone()),
         execution_started_at: latest_execution.map(|row| row.started_at.to_rfc3339()),
+        auto_disabled_reason,
+        auto_disabled_at,
         status: derived_status.status.to_string(),
         status_reason: derived_status.status_reason,
         status_changed_at: derived_status.status_changed_at,
+        retry_at: derived_status.retry_at,
+        will_retry: derived_status.will_retry,
         retry_count,
         is_running_long: derived_status.is_running_long,
         can_cancel: derived_status.can_cancel,
@@ -1173,6 +1216,8 @@ struct DerivedTaskStatus {
     status: &'static str,
     status_reason: Option<String>,
     status_changed_at: Option<String>,
+    retry_at: Option<String>,
+    will_retry: bool,
     is_running_long: bool,
     can_cancel: bool,
     can_resubmit: bool,
@@ -1182,12 +1227,15 @@ fn derive_user_task_status(
     task: &ScheduledTask,
     latest_execution: Option<&ExecutionRow>,
     retry_count: u32,
+    auto_disabled_reason: Option<&str>,
     now: chrono::DateTime<Utc>,
 ) -> DerivedTaskStatus {
     let is_one_shot = matches!(&task.schedule, Schedule::OneShot { .. });
     let is_run_task = matches!(&task.kind, TaskKind::RunTask(_));
 
     let mut status_reason = None;
+    let mut retry_at = None;
+    let mut will_retry = false;
     let mut is_running_long = false;
     let (status, status_changed_at) = if let Some(row) = latest_execution {
         let mut status = "scheduled";
@@ -1213,23 +1261,38 @@ fn derive_user_task_status(
                 }
             }
             "failed" => {
-                if task.enabled && is_one_shot {
+                if let Some(reason) = auto_disabled_reason {
+                    status = "failed";
+                    status_reason = Some(format!(
+                        "Automatic retries stopped because {}. Use Resubmit to run it again.",
+                        humanize_auto_disabled_reason(reason)
+                    ));
+                } else if task.enabled && is_one_shot {
                     match &task.schedule {
                         Schedule::OneShot { run_at } if *run_at > now => {
                             status = "retry_scheduled";
+                            retry_at = Some(run_at.to_rfc3339());
+                            will_retry = true;
                             let retry_prefix = if retry_count > 0 {
-                                format!("Retry {retry_count} scheduled")
+                                format!("Automatic retry {retry_count} scheduled")
                             } else {
-                                "Retry scheduled".to_string()
+                                "Automatic retry scheduled".to_string()
                             };
                             status_reason =
                                 Some(format!("{retry_prefix} for {}", run_at.to_rfc3339()));
                         }
-                        Schedule::OneShot { .. } => {
+                        Schedule::OneShot { run_at } => {
                             status = "queued";
-                            status_reason = Some(
-                                "Retry is due and waiting for a worker to pick it up.".to_string(),
-                            );
+                            retry_at = Some(run_at.to_rfc3339());
+                            will_retry = true;
+                            status_reason = Some(if retry_count > 0 {
+                                format!(
+                                        "Automatic retry {retry_count} is due and waiting for a worker to pick it up."
+                                    )
+                            } else {
+                                "Automatic retry is due and waiting for a worker to pick it up."
+                                    .to_string()
+                            });
                         }
                         Schedule::Cron { .. } => {
                             status = "failed";
@@ -1237,6 +1300,10 @@ fn derive_user_task_status(
                     }
                 } else {
                     status = "failed";
+                    if is_run_task && is_one_shot {
+                        status_reason =
+                            Some("This workflow failed. Use Resubmit to run it again.".to_string());
+                    }
                 }
             }
             "success" => {
@@ -1313,10 +1380,21 @@ fn derive_user_task_status(
         status,
         status_reason,
         status_changed_at,
+        retry_at,
+        will_retry,
         is_running_long,
         can_cancel,
         can_resubmit,
     }
+}
+
+fn humanize_auto_disabled_reason(raw: &str) -> String {
+    raw.trim()
+        .strip_prefix("auto-disabled:")
+        .unwrap_or(raw.trim())
+        .trim()
+        .trim_end_matches('.')
+        .to_string()
 }
 
 fn bson_i64(value: Option<&Bson>, field: &str) -> Result<i64, SchedulerError> {
@@ -1599,6 +1677,8 @@ mod tests {
             Some((now + ChronoDuration::minutes(15)).to_rfc3339()),
             &[],
             0,
+            None,
+            None,
             now,
         );
 
@@ -1634,6 +1714,8 @@ mod tests {
             Some((started_at - ChronoDuration::minutes(5)).to_rfc3339()),
             &[execution],
             0,
+            None,
+            None,
             now,
         );
 
@@ -1671,11 +1753,23 @@ mod tests {
             Some((started_at - ChronoDuration::minutes(5)).to_rfc3339()),
             &[execution],
             3,
+            Some(
+                "auto-disabled: execution started but ACI container was never created".to_string(),
+            ),
+            Some((now - ChronoDuration::minutes(8)).to_rfc3339()),
             now,
         );
 
         assert_eq!(summary.status, "failed");
+        assert_eq!(
+            summary.status_reason.as_deref(),
+            Some(
+                "Automatic retries stopped because execution started but ACI container was never created. Use Resubmit to run it again."
+            )
+        );
         assert!(!summary.can_cancel);
         assert!(summary.can_resubmit);
+        assert!(!summary.will_retry);
+        assert!(summary.retry_at.is_none());
     }
 }

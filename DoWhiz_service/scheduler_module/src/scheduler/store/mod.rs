@@ -203,12 +203,19 @@ pub struct TaskStatusSummary {
     pub execution_status: Option<String>,
     pub error_message: Option<String>,
     pub execution_started_at: Option<String>,
+    /// Why the task was auto-disabled, when automatic retries were stopped by the system.
+    pub auto_disabled_reason: Option<String>,
+    pub auto_disabled_at: Option<String>,
     /// User-facing task state derived from schedule, enabled flag, and execution history.
     pub status: String,
     /// Optional explanation for the current task state.
     pub status_reason: Option<String>,
     /// When the current user-facing state last changed.
     pub status_changed_at: Option<String>,
+    /// When the next automatic retry is/was due.
+    pub retry_at: Option<String>,
+    /// Whether the current task state still has an automatic retry pending.
+    pub will_retry: bool,
     /// Current retry counter persisted with the task.
     pub retry_count: u32,
     /// Whether the task has been running long enough to warn that it may be stuck.
