@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use std::path::Path;
 use uuid::Uuid;
 
+use crate::account_store::AccountStore;
 use crate::channel::Channel;
 use crate::google_auth::{GoogleAuth, GoogleAuthConfig};
 use crate::notion_store::NotionStore;
@@ -117,6 +118,20 @@ pub fn load_google_access_token_from_service_env() -> Option<String> {
 pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<String> {
     let account_id = account_id?;
 
+    // If user belongs to an organization, use the org leader's Notion credentials.
+    // This ensures all org members use the shared org Notion workspace.
+    let effective_account_id = match resolve_org_leader_account_id(account_id) {
+        Some(leader_id) => {
+            tracing::info!(
+                "User {} belongs to org, using leader {} for Notion credentials",
+                account_id,
+                leader_id
+            );
+            leader_id
+        }
+        None => account_id,
+    };
+
     let store = match NotionStore::new() {
         Ok(store) => store,
         Err(e) => {
@@ -125,27 +140,37 @@ pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<
         }
     };
 
-    match store.get_credentials_for_account(account_id) {
+    match store.get_credentials_for_account(effective_account_id) {
         Ok(credentials) => {
             if let Some(cred) = credentials.first() {
                 tracing::debug!(
                     "Loaded Notion access token for account {} (workspace: {})",
-                    account_id,
+                    effective_account_id,
                     cred.workspace_name.as_deref().unwrap_or("unknown")
                 );
                 Some(cred.access_token.clone())
             } else {
-                tracing::debug!("No Notion credentials found for account {}", account_id);
+                tracing::debug!("No Notion credentials found for account {}", effective_account_id);
                 None
             }
         }
         Err(e) => {
             tracing::warn!(
                 "Failed to load Notion credentials for account {}: {}",
-                account_id,
+                effective_account_id,
                 e
             );
             None
         }
     }
+}
+
+/// If the account belongs to an organization with a leader, return the leader's account_id.
+/// Returns None if the account is not in an org, or the org has no leader set.
+fn resolve_org_leader_account_id(account_id: Uuid) -> Option<Uuid> {
+    let account_store = AccountStore::from_env().ok()?;
+    let account = account_store.get_account(account_id).ok()??;
+    let org_id = account.organization_id?;
+    let org = account_store.get_organization_by_id(org_id).ok()??;
+    org.leader_account_id
 }
