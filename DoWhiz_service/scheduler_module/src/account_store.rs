@@ -199,6 +199,14 @@ pub struct Organization {
     pub created_at: DateTime<Utc>,
 }
 
+/// Organization member info with name/email from auth.users
+#[derive(Debug, Clone)]
+pub struct OrgMember {
+    pub account_id: Uuid,
+    pub email: String,
+    pub name: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChannelInstallOnboardingState {
     pub account_id: Uuid,
@@ -1995,6 +2003,31 @@ impl AccountStore {
                 tokens_to_hours: r.get(3),
                 purchased_hours: r.get(4),
                 organization_id: r.get(5),
+            })
+            .collect())
+    }
+
+    /// List all org members with their name/email from auth.users.
+    /// Joins accounts with auth.users to get user info.
+    pub fn list_org_members_with_info(
+        &self,
+        organization_id: Uuid,
+    ) -> Result<Vec<OrgMember>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let rows = conn.query(
+            "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name
+             FROM accounts a
+             JOIN auth.users u ON a.auth_user_id = u.id
+             WHERE a.organization_id = $1",
+            &[&organization_id],
+        )?;
+
+        Ok(rows
+            .iter()
+            .map(|r| OrgMember {
+                account_id: r.get(0),
+                email: r.get::<_, Option<String>>(1).unwrap_or_default(),
+                name: r.get(2),
             })
             .collect())
     }

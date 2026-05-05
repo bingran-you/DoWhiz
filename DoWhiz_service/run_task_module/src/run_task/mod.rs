@@ -39,6 +39,6 @@ pub use trace::{
     load_trace_snapshot, RunTaskTraceSnapshot, RunTaskTraceTimingMs, RUN_TASK_TRACE_DIRNAME,
 };
 pub use types::{
-    RunTaskOutput, RunTaskParams, ScheduleRequest, ScheduledSendEmailTask, ScheduledTaskRequest,
-    SchedulerActionRequest, TokenUsage, UserIdentities,
+    OrgMember, RunTaskOutput, RunTaskParams, ScheduleRequest, ScheduledSendEmailTask,
+    ScheduledTaskRequest, SchedulerActionRequest, TokenUsage, UserIdentities,
 };
