@@ -2773,6 +2773,24 @@
                       </div>
                       <button id="org-join-btn" class="auth-btn auth-btn-primary" disabled>Join</button>
                       <span id="org-join-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
+
+                      <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color, #333);">
+                        <h3>Create a new organization</h3>
+                        <p style="font-size: 0.9rem; color: var(--text-muted, #888); margin-bottom: 1rem;">
+                          Start a new organization if yours doesn't exist yet.
+                        </p>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                          <input
+                            type="text"
+                            id="org-create-name-input"
+                            class="auth-input"
+                            placeholder="Organization name"
+                            style="min-width: 200px; flex: 1;"
+                          />
+                          <button id="org-create-btn" class="auth-btn auth-btn-primary">Create</button>
+                        </div>
+                        <span id="org-create-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -6116,6 +6134,68 @@
         }
       }
 
+      async function createOrganization() {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        const nameInput = document.getElementById('org-create-name-input');
+        const createBtn = document.getElementById('org-create-btn');
+        const orgStatus = document.getElementById('org-create-status');
+
+        const orgName = nameInput?.value?.trim();
+        if (!orgName) {
+          if (orgStatus) {
+            orgStatus.textContent = 'Please enter an organization name';
+            orgStatus.className = 'org-status error';
+          }
+          return;
+        }
+
+        if (createBtn) createBtn.disabled = true;
+        if (orgStatus) {
+          orgStatus.textContent = 'Creating...';
+          orgStatus.className = 'org-status';
+        }
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/organization`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ organization_name: orgName })
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to create organization');
+          }
+
+          if (orgStatus) {
+            orgStatus.textContent = `Created "${orgName}"! You can now join it.`;
+            orgStatus.className = 'org-status success';
+          }
+          if (nameInput) nameInput.value = '';
+
+          // Auto-populate the search input so user can join
+          const searchInput = document.getElementById('org-join-search-input');
+          if (searchInput) {
+            searchInput.value = orgName;
+            searchInput.dispatchEvent(new Event('input'));
+          }
+
+        } catch (err) {
+          if (orgStatus) {
+            orgStatus.textContent = normalizeApiFetchError(err);
+            orgStatus.className = 'org-status error';
+          }
+        } finally {
+          if (createBtn) createBtn.disabled = false;
+        }
+      }
+
       async function triggerTpmSync() {
         const session = await supabase.auth.getSession();
         const accessToken = session?.data?.session?.access_token;
@@ -6218,6 +6298,7 @@
         const advancedToggle = document.getElementById('org-advanced-toggle');
         const advancedSection = document.getElementById('org-advanced-section');
         const setDatabaseBtn = document.getElementById('set-notion-database-btn');
+        const createBtn = document.getElementById('org-create-btn');
 
         let searchTimeout;
         if (searchInput) {
@@ -6257,6 +6338,7 @@
         if (leaveBtn) leaveBtn.addEventListener('click', leaveOrganization);
         if (triggerSyncBtn) triggerSyncBtn.addEventListener('click', triggerTpmSync);
         if (setupCronBtn) setupCronBtn.addEventListener('click', setupTpmCron);
+        if (createBtn) createBtn.addEventListener('click', createOrganization);
 
         if (advancedToggle && advancedSection) {
           advancedToggle.addEventListener('click', (e) => {
