@@ -421,6 +421,17 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
                 result.organization_name = Some(org.name);
                 result.notion_database_id = org.notion_database_id;
             }
+            // Fetch org members for task assignment
+            if let Ok(members) = store.list_org_members_with_info(org_id) {
+                result.organization_members = members
+                    .into_iter()
+                    .map(|m| run_task_module::OrgMember {
+                        account_id: m.account_id.to_string(),
+                        email: m.email,
+                        name: m.name,
+                    })
+                    .collect();
+            }
         }
     }
 

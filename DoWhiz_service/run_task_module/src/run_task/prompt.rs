@@ -914,9 +914,30 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         .map(|id| format!(" --database-id {}", id))
         .unwrap_or_default();
 
+    // Build org members list for task assignment
+    let org_members_section = if identities.organization_members.is_empty() {
+        String::new()
+    } else {
+        let members_list: Vec<String> = identities
+            .organization_members
+            .iter()
+            .map(|m| {
+                if let Some(name) = &m.name {
+                    format!("- {} ({})", name, m.email)
+                } else {
+                    format!("- {}", m.email)
+                }
+            })
+            .collect();
+        format!(
+            "\n**Known Organization Members (from DoWhiz):**\n{}\n\nWhen assigning tasks:\n- Match org members to Notion users by email when possible\n- If no Notion user match exists, add \"Assigned to: [name]\" in the task description\n",
+            members_list.join("\n")
+        )
+    };
+
     format!(
         r#"
-=== TPM MODE ACTIVE for {org_name} ===
+=== TPM MODE ACTIVE for {org_name} ==={org_members_section}
 
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
@@ -963,16 +984,20 @@ Before running TPM commands, gather context about {org_name}:
 - `tpm_cli get-schema{db_flag}` - Get database schema (property names, types, and allowed values)
 
 **Task Assignment Workflow:**
-1. First, run `tpm_cli list-users` to get paid Notion users and their IDs
-2. **Always discover actual assignees**: Scan existing tasks to extract all names/IDs of people already assigned - some orgs only pay for a few Notion seats but have more team members actively working on tasks
-3. **Apply recency filter**: Only include assignees from tasks with `last_edited_time` within the last 90 days - this filters out people who may have left the team
-4. **Merge both lists**: Combine `list-users` results with discovered active assignees to build the complete assignee bank
-5. When creating/assigning tasks, use context to match tasks to appropriate team members based on who worked on similar tasks before
-6. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
-7. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
-8. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
-9. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
-10. Report in your summary which assignees you discovered vs. which came from `list-users`
+1. **Gather assignee sources** (use ALL three):
+   - `tpm_cli list-users` - paid Notion users with Notion IDs
+   - **Known Org Members** (listed above) - DoWhiz org members with email/name
+   - **Discover from existing tasks** - scan tasks for assignees not in the above lists
+2. **Apply recency filter**: Only include discovered assignees from tasks with `last_edited_time` within the last 90 days
+3. **Merge all sources**: Build the complete assignee bank from all three sources above
+4. **Match org members to Notion users** by email - if matched, use the Notion user ID for assignment
+5. **For unmatched org members**: Create tasks with "Assigned to: [name]" in the description
+6. When creating/assigning tasks, use context to match tasks to appropriate team members based on who worked on similar tasks before
+7. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
+8. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
+9. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
+10. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
+11. Report in your summary which assignees came from each source (Notion users / org members / discovered)
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
