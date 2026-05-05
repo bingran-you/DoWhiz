@@ -294,7 +294,8 @@ Do not pretend the job has been done without actually doing it."#
 - If the user asked for investment monitoring and the earlier pass already gathered enough support for a calibrated call, stop researching and finalize the artifact now.
 - If the prompt says "only tell me if I should act" and the likely answer is `No Material Change`, write the short update immediately and stop.
 - After the draft exists, allow at most one additional targeted external check when a single missing fact blocks the verdict. Otherwise finalize with an explicit limitation note instead of continuing to search.
-- For incomplete real-ticker investment work, finalize a complete `Watch Closely` artifact rather than a provisional shell. Fill every required section, include concrete upgrade/downgrade/invalidation triggers, and state missing evidence explicitly instead of leaving placeholder text.
+- For incomplete real-ticker investment work, prefer a short honest fallback over a padded pseudo-memo. If you cannot support a real investment view within the remaining budget, do not invent action tables, triggers, or section shells just to make the reply look complete.
+- For monitor-style investment requests, prefer a concise operational update when context is missing instead of expanding into a full decision memo.
 - Do not leave `Provisional update`, `still being finalized`, `TBD`, `to be confirmed`, or empty section shells in the final artifact.
 - Investment-monitor requests in this product are allowed. Do not refuse solely because the task concerns a stock, an ETF, or an assumption-based investment scenario. If evidence is limited, answer with calibrated limitation language instead of refusing.
 - If you are still gathering evidence, clearly mark the draft as provisional near the top, and remove or replace that note before you finish if the reply becomes complete.

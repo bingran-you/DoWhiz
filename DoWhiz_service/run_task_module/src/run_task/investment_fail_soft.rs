@@ -11,9 +11,6 @@ use super::reply_contract::{
     synthetic_investment_request_for_workspace,
 };
 
-const INCOMPLETE_RESEARCH_MARKER: &str = "Incomplete research artifact";
-const INCOMPLETE_MONITOR_MARKER: &str = "Incomplete monitor check";
-
 pub(super) fn maybe_write_fail_soft_investment_artifact(
     workspace_dir: &Path,
     reply_path: &Path,
@@ -24,14 +21,12 @@ pub(super) fn maybe_write_fail_soft_investment_artifact(
     }
 
     let request_text = load_inbound_request_text(workspace_dir)?;
-    let raw_request = canonical_request_line(&request_text);
-
     let html = if is_synthetic_request(&request_text) {
-        build_synthetic_assumption_artifact(&raw_request)
+        build_synthetic_assumption_artifact(&canonical_request_line(&request_text))
     } else if investment_monitor_request_for_workspace(workspace_dir)? {
-        build_monitor_fail_soft_artifact(workspace_dir, &raw_request)
+        build_monitor_operational_fallback(workspace_dir, &request_text)
     } else {
-        build_real_ticker_incomplete_artifact(workspace_dir, &raw_request)
+        build_real_ticker_operational_fallback(workspace_dir, &request_text)
     };
 
     fs::write(reply_path, html)?;
@@ -46,12 +41,12 @@ pub(super) fn maybe_write_fail_soft_investment_artifact(
         )
     } else if investment_monitor_request_for_workspace(workspace_dir)? {
         format!(
-            "Recovered via deterministic monitor fail-soft artifact after {}",
+            "Recovered via deterministic operational monitor fallback after {}",
             summarize_failure(cause)
         )
     } else {
         format!(
-            "Recovered via deterministic incomplete-research investment finalizer after {}",
+            "Recovered via deterministic operational investment fallback after {}",
             summarize_failure(cause)
         )
     };
@@ -94,8 +89,7 @@ pub(super) fn maybe_write_action_only_monitor_artifact(
     }
 
     let request_text = load_inbound_request_text(workspace_dir)?;
-    let raw_request = canonical_request_line(&request_text);
-    let html = build_monitor_fail_soft_artifact(workspace_dir, &raw_request);
+    let html = build_monitor_operational_fallback(workspace_dir, &request_text);
 
     fs::write(reply_path, html)?;
     if !reply_artifact_ready_for_workspace(workspace_dir, reply_path) {
@@ -103,7 +97,7 @@ pub(super) fn maybe_write_action_only_monitor_artifact(
     }
 
     Ok(Some(
-        "Answered via deterministic action-only monitor artifact because the request explicitly asked for a short act-now update.".to_string(),
+        "Answered via deterministic action-only monitor fallback because the request explicitly asked for a short act-now update.".to_string(),
     ))
 }
 
@@ -118,54 +112,37 @@ fn summarize_failure(cause: &RunTaskError) -> &'static str {
     }
 }
 
-fn build_monitor_fail_soft_artifact(workspace_dir: &Path, request_text: &str) -> String {
-    let investor_question = escape_html(request_text);
+fn build_monitor_operational_fallback(workspace_dir: &Path, request_text: &str) -> String {
+    let (display_name, ticker_hint) = infer_security_label(workspace_dir, request_text);
+    let heading = if let Some(ticker) = &ticker_hint {
+        format!("Quick update on {} ({})", display_name, ticker)
+    } else {
+        format!("Quick update on {}", display_name)
+    };
     let today = Utc::now().format("%Y-%m-%d").to_string();
+    let lower_request = request_text.to_ascii_lowercase();
     let prior_note_missing = prior_note_context_missing(workspace_dir);
-    let why_now = if prior_note_missing && request_text.to_ascii_lowercase().contains("last note") {
-        format!(
-            "<strong>{INCOMPLETE_MONITOR_MARKER}.</strong> The workspace did not include the prior note needed for a literal change-since-last-note diff, so the runtime returned a short fail-soft update instead of timing out with no reply."
-        )
+    let reason = if prior_note_missing && lower_request.contains("last note") {
+        "I could not do a literal change-since-last-note check because the earlier note was not available in the current thread context."
     } else {
-        format!(
-            "<strong>{INCOMPLETE_MONITOR_MARKER}.</strong> The runtime returned a short fail-soft update instead of timing out with no reply."
-        )
+        "I could not verify enough fresh context to support a reliable act-now update yet."
     };
-    let evidence_chip = if prior_note_missing
-        && request_text.to_ascii_lowercase().contains("last note")
-    {
-        "No real evidence links were preserved in this timed monitor fallback, and the prior note was not available in the workspace, so confidence stays Low."
+    let next_step = if prior_note_missing && lower_request.contains("last note") {
+        "What would help next: the prior note plus the latest verified issuer update."
     } else {
-        "No real evidence links were preserved in this timed monitor fallback, so confidence stays Low."
+        "What would help next: the latest verified issuer update plus a fresh price and valuation check."
     };
+
     format!(
         r#"<html>
   <body>
-    <h1>Investment monitor update</h1>
+    <h1>{heading}</h1>
     <p><strong>As of:</strong> {today}</p>
-    <p><strong>Price:</strong> Verification incomplete in this timed monitor run</p>
-    <p><strong>Investor question:</strong> {investor_question}</p>
-    <h2>Decision Card</h2>
-    <table>
-      <tr><th align="left">Monitor Status</th><td>Insufficient Evidence</td></tr>
-      <tr><th align="left">New Money Action</th><td>Wait</td></tr>
-      <tr><th align="left">Existing Holder Action</th><td>Hold/Do not add</td></tr>
-      <tr><th align="left">Thesis Impact</th><td>Mixed</td></tr>
-      <tr><th align="left">Signal Quality</th><td>Weak</td></tr>
-      <tr><th align="left">Confidence</th><td>Low</td></tr>
-    </table>
-    <p><strong>One-line rationale:</strong> This monitor check ran out of verified context before it could justify a stronger act-now call.</p>
-    <h2>Why Now</h2>
-    <p>{why_now}</p>
-    <h2>What Would Change The View</h2>
+    <p>{reason}</p>
+    <p>I do not want to turn incomplete context into a low-confidence buy / hold / trim call.</p>
     <ul>
-      <li><strong>Upgrade / Review Now:</strong> A verified issuer update moves revenue or margin expectations by at least 5%.</li>
-      <li><strong>Downgrade / De-risk:</strong> A verified guidance cut above 5% or a 200 bps margin reset.</li>
-      <li><strong>Invalidation:</strong> Two reporting periods pass without evidence that confirms the prior note.</li>
-    </ul>
-    <h2>Evidence Chips</h2>
-    <ul>
-      <li>{evidence_chip}</li>
+      <li><strong>What I can say now:</strong> there is no verified act-now signal I would ask you to trade on yet.</li>
+      <li><strong>What would help next:</strong> {next_step}</li>
     </ul>
   </body>
 </html>
@@ -173,89 +150,36 @@ fn build_monitor_fail_soft_artifact(workspace_dir: &Path, request_text: &str) ->
     )
 }
 
-fn build_real_ticker_incomplete_artifact(workspace_dir: &Path, request_text: &str) -> String {
+fn build_real_ticker_operational_fallback(workspace_dir: &Path, request_text: &str) -> String {
     let (display_name, ticker_hint) = infer_security_label(workspace_dir, request_text);
-    let h1 = if let Some(ticker) = &ticker_hint {
-        format!("{} ({}) decision memo", display_name, ticker)
+    let heading = if let Some(ticker) = &ticker_hint {
+        format!("Quick update on {} ({})", display_name, ticker)
     } else {
-        format!("{} decision memo", display_name)
+        format!("Quick update on {}", display_name)
     };
     let research_labels = collect_research_labels(workspace_dir);
     let research_summary = if research_labels.is_empty() {
-        "No preserved research filenames were available.".to_string()
+        "I do not have preserved issuer-specific research notes worth presenting as evidence yet."
+            .to_string()
     } else {
         format!(
-            "Preserved timed-run inputs included: {}.",
+            "I do have partial research notes saved from this pass: {}.",
             research_labels.join(", ")
         )
     };
-    let investor_question = escape_html(request_text);
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
     format!(
         r#"<html>
   <body>
-    <h1>{h1}</h1>
+    <h1>{heading}</h1>
     <p><strong>As of:</strong> {today}</p>
-    <p><strong>Price:</strong> Verification incomplete in this timed run</p>
-    <p><strong>Investor question:</strong> {investor_question}</p>
-
-    <h2>Decision Card</h2>
-    <table>
-      <tr><th align="left">Monitor Status</th><td>Watch Closely</td></tr>
-      <tr><th align="left">New Money Action</th><td>Wait</td></tr>
-      <tr><th align="left">Existing Holder Action</th><td>Hold/Do not add</td></tr>
-      <tr><th align="left">Thesis Impact</th><td>Mixed</td></tr>
-      <tr><th align="left">Signal Quality</th><td>Weak</td></tr>
-      <tr><th align="left">Confidence</th><td>Low</td></tr>
-    </table>
-    <p><strong>One-line rationale:</strong> Research did not complete within budget, so this is a best-available timed artifact rather than a completed buy-or-avoid underwriting.</p>
-
-    <h2>Dual-Horizon Framing</h2>
-    <h3>Near-Term Timing View</h3>
-    <p>Do not commit fresh capital until a completed release and valuation check confirms whether the setup is truly improving rather than merely looking cheap on partial evidence.</p>
-    <h3>Long-Term Ownership View</h3>
-    <p>The long-term case remains open, but this timed run did not verify enough issuer evidence to re-underwrite the thesis confidently.</p>
-
-    <h2>Verified Facts</h2>
-    <p><strong>Research status:</strong> {INCOMPLETE_RESEARCH_MARKER}. The runtime preserved a partial draft or research trail, but not a contract-ready final artifact.</p>
-    <h3>What Was Found</h3>
+    <p>I could not finish a reliable buy-or-avoid review yet, so I am not sending a half-verified investment memo.</p>
     <ul>
-      <li>{research_summary}</li>
-      <li>The interrupted run had enough structure to support a cautious monitoring stance, but not enough verified evidence for a completed decision memo.</li>
-      <li>The runtime is surfacing a fail-soft artifact instead of silently losing the task.</li>
+      <li><strong>What I have so far:</strong> {research_summary}</li>
+      <li><strong>What is still missing:</strong> a current price and valuation cross-check, the latest issuer update read-through, and verified implications for margin, cash flow, or guidance.</li>
+      <li><strong>What this means now:</strong> treat this as incomplete work rather than a real Buy / Avoid / Add / Exit call.</li>
     </ul>
-    <h3>What Is Missing</h3>
-    <ul>
-      <li>A fully verified current price and valuation cross-check tied to the latest completed issuer update.</li>
-      <li>A completed read of the latest release or filing with confirmed implications for revenue, margin, and cash generation.</li>
-      <li>A finished independent cross-check that can support a stronger Buy, Avoid, Add, or Exit call.</li>
-    </ul>
-
-    <h2>Derived Metrics</h2>
-    <table>
-      <tr><th align="left">Metric</th><th align="left">Read-through</th><th align="left">Formula / Inputs</th></tr>
-      <tr><td>Fresh-entry conviction</td><td>Not reliably derivable</td><td>Not reliably derivable from the incomplete timed run because issuer metrics were not fully validated before the deadline.</td></tr>
-    </table>
-
-    <h2>Scenarios</h2>
-    <h3>Bull Case</h3>
-    <p>The next completed company update confirms margin stabilization above 11%, positive free cash flow, and no new guide cuts.</p>
-    <h3>Base Case</h3>
-    <p>The business remains investable, but evidence is still incomplete enough that fresh money stays in `Wait` and existing holders should avoid adding.</p>
-    <h3>Bear Case</h3>
-    <p>The next verified release shows another guide cut, another 200 bps margin step-down, or stalled cash generation.</p>
-
-    <h2>Triggers</h2>
-    <ul>
-      <li><strong>Upgrade / Review Now:</strong> The next verified company update shows operating margin above 11%, positive free cash flow, and no guide cut.</li>
-      <li><strong>Downgrade / De-risk:</strong> Management cuts guidance by 5% or more, or the next release shows another 200 bps margin deterioration.</li>
-      <li><strong>Invalidation:</strong> Two more quarters pass without a verified path back to durable positive free cash flow and stable margins.</li>
-    </ul>
-
-    <h2>Judgment</h2>
-    <p><em>Inference, Low confidence.</em> This is a best-available timed artifact, not completed deep research, so it should be treated as a watchlist handoff rather than a high-conviction call.</p>
-    <p><strong>What would be needed for Buy / Avoid / Add / Exit:</strong> a completed issuer-release review, a clean current valuation cross-check, and a verified read on whether margin and cash-flow improvement are actually durable.</p>
   </body>
 </html>
 "#
@@ -661,7 +585,28 @@ fn load_inbound_request_text(workspace_dir: &Path) -> Result<String, RunTaskErro
 fn canonical_request_line(raw: &str) -> String {
     raw.lines()
         .map(str::trim)
-        .find(|line| !line.is_empty())
+        .find(|line| {
+            if line.is_empty() {
+                return false;
+            }
+            let lower = line.to_ascii_lowercase();
+            !lower.starts_with("# canonical thread request")
+                && !lower.starts_with("auto-generated merged view")
+                && !lower.starts_with("rules:")
+                && !lower.starts_with("## ")
+                && !lower.starts_with("entry:")
+                && !lower.starts_with("subject:")
+                && !lower.starts_with("from:")
+                && !lower.starts_with("date:")
+                && !lower.starts_with("preview:")
+                && !lower.starts_with("attachments:")
+                && !lower.starts_with("```")
+                && !lower.starts_with("- ")
+                && !lower.starts_with('{')
+                && !lower.starts_with('[')
+                && !lower.contains("\"subject\"")
+                && !lower.contains("\"textbody\"")
+        })
         .unwrap_or("Investment monitor request")
         .to_string()
 }

@@ -1039,6 +1039,11 @@ fn run_task_action_only_monitor_requests_use_fast_path() {
         "NVDA monitor check",
         "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
     );
+    fs::write(
+        workspace.join("incoming_email").join("thread_request.md"),
+        "# Canonical thread request\nAuto-generated merged view for reruns.\n\n## Latest inbound message\nPreview:\n```text\nCheck whether anything material changed for NVDA since your last note. Only tell me if I should act.\n```\n",
+    )
+    .unwrap();
     install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
 
     let home_dir = temp.path.join("home");
@@ -1087,10 +1092,12 @@ sleep 20
         .expect("action-only monitor request should use fast path");
     let elapsed = started_at.elapsed();
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Insufficient Evidence"));
-    assert!(html.contains("Incomplete monitor check"));
-    assert!(html.contains("prior note needed for a literal change-since-last-note diff"));
-    assert!(!html.contains("Dual-Horizon Framing"));
+    assert!(html.contains("Quick update on NVDA"));
+    assert!(html.contains("literal change-since-last-note check"));
+    assert!(html.contains("low-confidence buy / hold / trim call"));
+    assert!(!html.contains("Decision Card"));
+    assert!(!html.contains("Insufficient Evidence"));
+    assert!(!html.contains("Canonical thread request"));
     assert!(!html.contains("href=\"http"));
     assert!(!counter_path.exists());
     assert!(
@@ -1098,7 +1105,7 @@ sleep 20
         "action-only monitor fast path should return quickly, elapsed={elapsed:?}"
     );
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic action-only monitor artifact"));
+    assert!(note.contains("deterministic action-only monitor fallback"));
     assert!(!note.contains("Claude fallback"));
 }
 
@@ -1148,12 +1155,13 @@ sleep 20
     let result = run_task(&build_params(&workspace))
         .expect("monitor timeout should produce fail-soft artifact");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Insufficient Evidence"));
-    assert!(html.contains("Incomplete monitor check"));
-    assert!(!html.contains("Dual-Horizon Framing"));
+    assert!(html.contains("Quick update on NVDA"));
+    assert!(html.contains("low-confidence buy / hold / trim call"));
+    assert!(!html.contains("Decision Card"));
+    assert!(!html.contains("timed monitor run"));
     assert!(!html.contains("href=\"http"));
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic monitor fail-soft artifact"));
+    assert!(note.contains("deterministic operational monitor fallback"));
     assert!(!note.contains("Claude fallback"));
 }
 
@@ -1238,15 +1246,17 @@ sleep 20
     let result =
         run_task(&build_params(&workspace)).expect("fail-soft artifact should recover timeout");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Incomplete research artifact"));
-    assert!(html.contains("What Was Found"));
-    assert!(html.contains("What Is Missing"));
-    assert!(html.contains("What would be needed for Buy / Avoid / Add / Exit"));
+    assert!(html.contains("Quick update on Nokia (NOK)"));
+    assert!(html.contains("I could not finish a reliable buy-or-avoid review yet"));
+    assert!(html.contains("What I have so far"));
+    assert!(html.contains("What is still missing"));
+    assert!(html.contains("incomplete work rather than a real Buy / Avoid / Add / Exit call"));
+    assert!(!html.contains("Decision Card"));
     assert!(!html.contains("href=\"http"));
     assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
     assert!(workspace.join("codex_fast_completion_context.md").exists());
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic incomplete-research investment finalizer"));
+    assert!(note.contains("deterministic operational investment fallback"));
     assert!(!note.contains("Returned early once a valid reply artifact existed"));
 }
 
@@ -2182,12 +2192,14 @@ fn run_task_investment_contract_violation_uses_fail_soft_artifact_when_fallback_
         .expect("generic Codex + generic fallback should still return a fail-soft artifact");
     let html = fs::read_to_string(result.reply_html_path).unwrap();
     let recovery = result.recovery_note.unwrap_or_default();
-    assert!(html.contains("Incomplete research artifact"));
-    assert!(html.contains("What Was Found"));
-    assert!(html.contains("What Is Missing"));
-    assert!(html.contains("What would be needed for Buy / Avoid / Add / Exit"));
+    assert!(html.contains("Quick update on NVDA"));
+    assert!(html.contains("I could not finish a reliable buy-or-avoid review yet"));
+    assert!(html.contains("What I have so far"));
+    assert!(html.contains("What is still missing"));
+    assert!(html.contains("incomplete work rather than a real Buy / Avoid / Add / Exit call"));
+    assert!(!html.contains("Decision Card"));
     assert!(!html.contains("href=\"http"));
-    assert!(recovery.contains("deterministic incomplete-research investment finalizer"));
+    assert!(recovery.contains("deterministic operational investment fallback"));
     assert!(recovery.contains("Codex and fallback recovery failed"));
 }
 

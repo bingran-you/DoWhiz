@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::errors::RunTaskError;
 
+#[allow(dead_code)]
 const FULL_REQUIRED_LABELS: &[&str] = &[
     "As of:",
     "Price:",
@@ -35,6 +36,7 @@ const FULL_REQUIRED_LABELS: &[&str] = &[
     "Judgment",
 ];
 
+#[allow(dead_code)]
 const SHORT_REQUIRED_LABELS: &[&str] = &[
     "As of:",
     "Price:",
@@ -55,6 +57,7 @@ const SHORT_REQUIRED_LABELS: &[&str] = &[
     "Invalidation",
 ];
 
+#[allow(dead_code)]
 const FULL_ORDER: &[&str] = &[
     "decision card",
     "dual-horizon framing",
@@ -65,6 +68,7 @@ const FULL_ORDER: &[&str] = &[
     "judgment",
 ];
 
+#[allow(dead_code)]
 const SHORT_ORDER: &[&str] = &[
     "decision card",
     "why now",
@@ -80,6 +84,8 @@ const GENERIC_PHRASES: &[&str] = &[
     "wait for clarity",
     "do not chase",
     "not a broken asset",
+    "good business, but not a good all-in buy",
+    "wait until after earnings",
 ];
 const INCOMPLETE_FAIL_SOFT_MARKERS: &[&str] = &[
     "incomplete research artifact",
@@ -88,11 +94,30 @@ const INCOMPLETE_FAIL_SOFT_MARKERS: &[&str] = &[
     "best-available timed reply",
     "incomplete monitor check",
 ];
+#[allow(dead_code)]
 const INCOMPLETE_RESEARCH_MARKERS: &[&str] = &[
     "incomplete research artifact",
     "research did not complete within budget",
     "best-available timed artifact",
     "best-available timed reply",
+];
+const INTERNAL_THREAD_METADATA_MARKERS: &[&str] = &[
+    "canonical thread request",
+    "auto-generated merged view for reruns",
+    "thread timeline",
+    "merged attachments for this rerun",
+];
+const INTERNAL_RUNTIME_LANGUAGE_MARKERS: &[&str] = &[
+    "verification incomplete in this timed monitor run",
+    "verification incomplete in this timed run",
+    "timed monitor fallback",
+    "short fail-soft update",
+    "fail-soft artifact",
+    "best-available timed artifact",
+    "best-available timed reply",
+    "contract-ready final artifact",
+    "the runtime returned",
+    "silently losing the task",
 ];
 
 const INVESTMENT_INSTRUMENT_KEYWORDS: &[&str] =
@@ -107,15 +132,17 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "buy this week",
     "buy before",
     "sell before",
-    "investment",
     "investing",
+    "investment view",
+    "investment case",
+    "investment memo",
     "starter position",
     "starter only",
     "buy now",
     "add or trim",
 ];
 
-const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze", "analysis"];
+const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze"];
 const INVESTMENT_MONITOR_KEYWORDS: &[&str] = &[
     "material changed",
     "material change",
@@ -253,14 +280,6 @@ fn investment_contract_violations(
     workspace_dir: &Path,
     reply_path: &Path,
 ) -> Result<Option<Vec<String>>, RunTaskError> {
-    // DISABLED: Investment contract validation causes 10+ hour task spinning loops
-    // due to false positives (e.g., "PR" detected as ticker, "analyze" as intent).
-    // See reference_documentation/fault_report.md for incidents.
-    // TODO: Re-enable only after fixing is_investment_request() false positives.
-    let _ = (workspace_dir, reply_path);
-    return Ok(None);
-
-    #[allow(unreachable_code)]
     let request_text = load_inbound_request_text(workspace_dir)?;
     if !is_investment_request(&request_text) {
         return Ok(None);
@@ -269,105 +288,35 @@ fn investment_contract_violations(
 
     let reply_body = fs::read_to_string(reply_path)?;
     let normalized_reply = normalize_search_text(&reply_body);
-    let contract_type = detect_contract_type(&normalized_reply);
-    let incomplete_mode = is_incomplete_fail_soft_artifact(&normalized_reply);
-    let incomplete_research_mode = is_incomplete_research_artifact(&normalized_reply);
-    let required_labels = if contract_type == "short" {
-        SHORT_REQUIRED_LABELS
-    } else {
-        FULL_REQUIRED_LABELS
-    };
-    let required_order = if contract_type == "short" {
-        SHORT_ORDER
-    } else {
-        FULL_ORDER
-    };
     let mut violations = Vec::new();
 
-    let missing_markers = missing_required_markers(&normalized_reply, required_labels);
-    if !missing_markers.is_empty() {
-        violations.push(format!(
-            "missing required labels: {}",
-            missing_markers.join(", ")
-        ));
-    }
-
-    if !contains_markers_in_order(&normalized_reply, required_order) {
-        violations.push("summary-first section order is wrong".to_string());
-    }
-
-    if !decision_card_has_required_fields(&normalized_reply) {
+    if contains_any_marker(&normalized_reply, INTERNAL_THREAD_METADATA_MARKERS) {
         violations.push(
-            "decision card must include monitor status, both action fields, thesis impact, signal quality, and confidence"
+            "reply leaks internal canonical-thread metadata instead of a user-facing question"
                 .to_string(),
         );
     }
 
-    if contract_type == "full" && !derived_metrics_has_formula(&normalized_reply) {
+    if contains_any_marker(&normalized_reply, INTERNAL_RUNTIME_LANGUAGE_MARKERS) {
         violations.push(
-            "derived metrics must include a formula-like expression or an explicit non-derivable note"
+            "reply contains internal timeout/recovery wording that is not user-sendable"
+                .to_string(),
+        );
+    }
+
+    if reply_looks_like_templated_incomplete_investment_output(&normalized_reply) {
+        violations.push(
+            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
                 .to_string(),
         );
     }
 
     let clickable_links = clickable_links(&reply_body);
-    let clickable_link_count = clickable_links.len();
-    let min_links = if synthetic_mode || incomplete_mode {
-        0
-    } else if contract_type == "short" {
-        2
-    } else {
-        3
-    };
-    if clickable_link_count < min_links {
-        violations.push(format!(
-            "expected at least {} clickable source links, found {}",
-            min_links, clickable_link_count
-        ));
-    }
-
-    let trigger_section = if contract_type == "short" {
-        extract_text_section(
-            &normalized_reply,
-            "what would change the view",
-            &["evidence chips"],
-        )
-    } else {
-        extract_text_section(&normalized_reply, "triggers", &["judgment"])
-    };
-    if neutral_actions_present(&normalized_reply) {
-        for label in [
-            "upgrade / review now",
-            "downgrade / de-risk",
-            "invalidation",
-        ] {
-            if !trigger_section.contains(label) {
-                violations.push(format!("neutral stance missing trigger label `{}`", label));
-            }
-        }
-        if count_numeric_hits(&trigger_section) < 3 {
-            violations
-                .push("neutral stance lacks enough concrete numeric trigger detail".to_string());
-        }
-    }
-
-    if contract_type == "short" && normalized_reply.len() > SHORT_ARTIFACT_VISIBLE_CHAR_LIMIT {
+    if detect_contract_type(&normalized_reply) == "short"
+        && normalized_reply.contains("no material change")
+        && normalized_reply.len() > SHORT_ARTIFACT_VISIBLE_CHAR_LIMIT
+    {
         violations.push("No Material Change artifact exceeds short-output budget".to_string());
-    }
-
-    if incomplete_research_mode {
-        for label in [
-            "what was found",
-            "what is missing",
-            "what would be needed for buy / avoid / add / exit",
-        ] {
-            if !normalized_reply.contains(label) {
-                violations.push(format!(
-                    "incomplete-research artifact missing `{}` guidance",
-                    label
-                ));
-            }
-        }
     }
 
     if synthetic_mode {
@@ -401,10 +350,9 @@ fn investment_contract_violations(
     if GENERIC_PHRASES
         .iter()
         .any(|phrase| normalized_reply.contains(phrase))
-        && count_numeric_hits(&trigger_section) < 3
     {
         violations
-            .push("generic hold/wait phrasing without concrete movement criteria".to_string());
+            .push("generic hold/wait phrasing is not sendable as an investment reply".to_string());
     }
 
     if violations.is_empty() {
@@ -426,18 +374,21 @@ fn detect_contract_type(normalized_reply: &str) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 fn is_incomplete_fail_soft_artifact(normalized_reply: &str) -> bool {
     INCOMPLETE_FAIL_SOFT_MARKERS
         .iter()
         .any(|marker| normalized_reply.contains(marker))
 }
 
+#[allow(dead_code)]
 fn is_incomplete_research_artifact(normalized_reply: &str) -> bool {
     INCOMPLETE_RESEARCH_MARKERS
         .iter()
         .any(|marker| normalized_reply.contains(marker))
 }
 
+#[allow(dead_code)]
 fn missing_required_markers(normalized_reply: &str, labels: &[&str]) -> Vec<String> {
     labels
         .iter()
@@ -446,6 +397,7 @@ fn missing_required_markers(normalized_reply: &str, labels: &[&str]) -> Vec<Stri
         .collect()
 }
 
+#[allow(dead_code)]
 fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     let mut search_start = 0;
     for marker in markers {
@@ -458,6 +410,7 @@ fn contains_markers_in_order(normalized_reply: &str, markers: &[&str]) -> bool {
     true
 }
 
+#[allow(dead_code)]
 fn decision_card_has_required_fields(normalized_reply: &str) -> bool {
     [
         "monitor status",
@@ -471,6 +424,7 @@ fn decision_card_has_required_fields(normalized_reply: &str) -> bool {
     .all(|marker| normalized_reply.contains(marker))
 }
 
+#[allow(dead_code)]
 fn derived_metrics_has_formula(normalized_reply: &str) -> bool {
     let section = extract_text_section(normalized_reply, "derived metrics", &["scenarios"]);
     section.contains("formula / inputs")
@@ -479,6 +433,7 @@ fn derived_metrics_has_formula(normalized_reply: &str) -> bool {
         || section.contains("not reliably derivable")
 }
 
+#[allow(dead_code)]
 fn neutral_actions_present(normalized_reply: &str) -> bool {
     normalized_reply.contains("new money action wait")
         || normalized_reply.contains("existing holder action hold")
@@ -503,6 +458,7 @@ fn clickable_links(raw_reply: &str) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn extract_text_section(normalized_reply: &str, start_label: &str, end_labels: &[&str]) -> String {
     let Some(start) = normalized_reply.find(start_label) else {
         return String::new();
@@ -516,6 +472,7 @@ fn extract_text_section(normalized_reply: &str, start_label: &str, end_labels: &
     tail[..end].to_string()
 }
 
+#[allow(dead_code)]
 fn count_numeric_hits(text: &str) -> usize {
     let mut count = 0;
     let mut in_number = false;
@@ -536,6 +493,7 @@ fn count_numeric_hits(text: &str) -> usize {
         + count_number_word_time_hits(text)
 }
 
+#[allow(dead_code)]
 fn count_number_word_time_hits(text: &str) -> usize {
     let number_words = [
         "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
@@ -672,8 +630,9 @@ fn is_action_only_monitor_request(raw: &str) -> bool {
 
 fn contains_probable_ticker(raw: &str) -> bool {
     const STOPWORDS: &[&str] = &[
-        "A", "AI", "ACI", "AM", "AND", "API", "ARE", "BUY", "CI", "ETF", "EPS", "HTML", "I",
-        "JSON", "NOW", "PR", "THE", "UI", "URL", "UX", "WAIT",
+        "A", "AI", "ACI", "AM", "AND", "API", "ARE", "AWS", "BUY", "CI", "CLI", "CSS", "CSV",
+        "ETF", "EPS", "HTML", "HTTP", "I", "JSON", "NOW", "PR", "SDK", "SQL", "SSH", "THE", "TSV",
+        "UI", "URL", "UX", "WAIT", "XML", "YAML",
     ];
 
     raw.split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '$')
@@ -862,6 +821,22 @@ fn link_looks_specific(link: &str) -> bool {
         || trimmed.contains("article")
 }
 
+fn contains_any_marker(normalized_reply: &str, markers: &[&str]) -> bool {
+    markers
+        .iter()
+        .any(|marker| normalized_reply.contains(marker))
+}
+
+fn reply_looks_like_templated_incomplete_investment_output(normalized_reply: &str) -> bool {
+    let has_decision_card = normalized_reply.contains("decision card");
+    let has_action_table = normalized_reply.contains("new money action")
+        || normalized_reply.contains("existing holder action");
+    let has_incomplete_marker = contains_any_marker(normalized_reply, INCOMPLETE_FAIL_SOFT_MARKERS)
+        || contains_any_marker(normalized_reply, INTERNAL_RUNTIME_LANGUAGE_MARKERS);
+
+    (has_decision_card || has_action_table) && has_incomplete_marker
+}
+
 fn url_path(link: &str) -> &str {
     let without_scheme = link.split_once("://").map(|(_, rest)| rest).unwrap_or(link);
     let Some(path_start) = without_scheme.find('/') else {
@@ -1018,6 +993,26 @@ mod tests {
                 || rendered.contains("violates required contract")
         );
         assert!(!reply_artifact_ready_for_workspace(&workspace, &reply_path));
+    }
+
+    #[test]
+    fn canonical_thread_metadata_in_reply_fails_sendability_gate() {
+        let workspace = write_workspace(
+            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
+            r#"
+            <section>
+              <p><strong>As of:</strong> 2026-05-01</p>
+              <p><strong>Investor question:</strong> # Canonical thread request</p>
+            </section>
+            "#,
+        );
+        let reply_path = workspace.join("reply_email_draft.html");
+
+        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect_err("canonical thread metadata should not be sendable");
+        assert!(err
+            .to_string()
+            .contains("reply leaks internal canonical-thread metadata"));
     }
 
     #[test]
@@ -1203,7 +1198,7 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_research_artifact_can_pass_without_links_when_disclosures_are_present() {
+    fn incomplete_research_investment_memo_fails_sendability_gate() {
         let workspace = write_workspace(
             "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
             r#"
@@ -1277,12 +1272,15 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect("incomplete-research artifact should validate");
+        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect_err("incomplete pseudo-memo should not be sendable");
+        assert!(err.to_string().contains(
+            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
+        ));
     }
 
     #[test]
-    fn incomplete_short_monitor_artifact_can_pass_without_links() {
+    fn incomplete_short_monitor_artifact_fails_sendability_gate() {
         let workspace = write_workspace(
             "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
             r#"
@@ -1324,7 +1322,14 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect("short incomplete monitor artifact should validate");
+        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect_err("short incomplete monitor pseudo-memo should not be sendable");
+        let rendered = err.to_string();
+        assert!(rendered.contains(
+            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
+        ));
+        assert!(rendered.contains(
+            "reply contains internal timeout/recovery wording that is not user-sendable"
+        ));
     }
 }
