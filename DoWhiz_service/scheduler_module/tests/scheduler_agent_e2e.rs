@@ -11,6 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::TempDir;
 
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
 struct EnvGuard {
     key: &'static str,
     previous: Option<String>,
@@ -156,6 +158,7 @@ exit 23
 
 #[test]
 fn scheduler_actions_end_to_end() {
+    let _lock = ENV_MUTEX.lock().unwrap();
     if !require_mongodb_uri("scheduler_actions_end_to_end") {
         return;
     }
@@ -300,6 +303,7 @@ fn scheduler_actions_end_to_end() {
 
 #[test]
 fn scheduler_auto_reply_recovers_late_codex_failure_after_reply_written() {
+    let _lock = ENV_MUTEX.lock().unwrap();
     if !require_mongodb_uri("scheduler_auto_reply_recovers_late_codex_failure_after_reply_written")
     {
         return;
