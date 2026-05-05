@@ -247,10 +247,43 @@ DeepTutor Development Board
 
 ### 5. Developer Assignment & Notifications
 
+**Assignee Discovery (Three Sources - Added 2026-05-05):**
+
+Oliver builds a complete assignee bank from three sources:
+
+| Source | How | What it provides |
+|--------|-----|------------------|
+| `tpm_cli list-users` | Notion API | Paid Notion users with Notion user IDs |
+| **DoWhiz Org Members** | `UserIdentities.organization_members` | All org members with name + email (from `auth.users`) |
+| **Discovered from tasks** | Scan existing task assignees | Historical assignees (filtered to last 90 days) |
+
+**Why three sources?**
+- Not all org members have paid Notion seats (won't appear in `list-users`)
+- Not all org members have been assigned tasks before (won't be discovered)
+- DoWhiz knows the full org roster via `accounts.organization_id`
+
+**Org Members Flow (`executor.rs` → `prompt.rs`):**
+```
+1. executor.rs: fetch_user_identities(account_id)
+                    ↓
+2. If account has organization_id:
+   → AccountStore.list_org_members_with_info(org_id)
+   → Joins accounts + auth.users to get name/email
+                    ↓
+3. UserIdentities.organization_members populated
+                    ↓
+4. prompt.rs: build_tpm_capabilities_section() includes member list
+                    ↓
+5. Oliver sees: "Known Organization Members: - Dylan Tang (dtang@...)"
+```
+
 **Assignment Logic:**
-1. Match task tags to developer expertise
-2. Check current workload (tasks in progress)
-3. Round-robin for equal-priority tasks
+1. Match org member email → Notion user (if they have a Notion account)
+2. If matched, use Notion user ID for API assignment
+3. If unmatched, add "Assigned to: [name]" in task description
+4. Match task tags to developer expertise
+5. Check current workload (tasks in progress)
+6. Round-robin for equal-priority tasks
 
 **Outbound Task Assignment:**
 - Primary: Notion @mention on task page + Email
@@ -579,6 +612,24 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/5/26
+**Completed:**
+- ✅ **Organization Leader Notion Credentials** — All org members now use the leader's Notion token
+  - `utils.rs`: `resolve_org_leader_account_id()` checks if user is in org, returns leader's account_id
+  - `load_notion_access_token_for_account()` uses leader's credentials for all org members
+  - Enables any org member to trigger TPM via any channel (Discord, email, etc.)
+- ✅ **Prevent .notion_env overwrite** — `codex.rs` checks `if !notion_env_file.exists()` before writing
+  - Prevents overwriting TPM cron's pre-written leader token
+  - Applied to all 4 execution paths: Docker, Local, ACI, Warm Pool
+- ✅ **Organization Members for Task Assignment** — Pass DoWhiz org members to prompt
+  - `account_store.rs`: Added `OrgMember` struct and `list_org_members_with_info()` (joins accounts + auth.users)
+  - `executor.rs`: Fetches org members when building `UserIdentities`
+  - `prompt.rs`: Displays "Known Organization Members" list with name + email
+  - Updated Task Assignment Workflow to use three sources (Notion users, org members, discovered from tasks)
+- ✅ **Disabled investment contract validation** — `reply_contract.rs` returns `Ok(None)` early
+  - Was causing 10+ hour task loops due to false positives ("TPM" detected as ticker, etc.)
+- ✅ **Prompt page fallback** — Oliver tries reading page ID before searching when database lookup fails
+
 ### 4/21/26
 **Completed:**
 - ✅ Added `list-users` command — Lists all Notion workspace users (for task assignment)
@@ -679,25 +730,100 @@ User joins an organization via the DoWhiz dashboard (`website/public/auth/index.
 
 ## Notion Token Flow
 
-### Interactive Requests (setup-board, create-task)
-User sends first TPM request after connecting organization → uses **user's Notion OAuth token** → database created in **user's workspace** → user owns it.
+### Organization Leader Mechanism (Added 2026-05-05)
 
-1. User sends task to Oliver
+All TPM operations use the **organization leader's** Notion credentials, regardless of who triggers the request. This ensures consistent access to the shared org task board.
+
+**Leader Resolution Flow (`executor.rs` → `utils.rs`):**
+
+```
+1. Any org member triggers TPM (Discord, email, cron, etc.)
+                    ↓
+2. executor.rs calls load_notion_access_token_for_account(account_id)
+                    ↓
+3. utils.rs checks: does this account belong to an organization?
+   → AccountStore.get_account(account_id) → account.organization_id
+                    ↓
+4. If org exists, get leader: AccountStore.get_organization_by_id(org_id) → org.leader_account_id
+                    ↓
+5. Load LEADER's Notion token: NotionStore.get_credentials_for_account(leader_account_id)
+                    ↓
+6. Token passed to codex.rs → written to .notion_env
+```
+
+**Key code (`scheduler_module/src/scheduler/utils.rs`):**
+
+```rust
+pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<String> {
+    let account_id = account_id?;
+    
+    // If user belongs to an organization, use the org leader's Notion credentials
+    let effective_account_id = match resolve_org_leader_account_id(account_id) {
+        Some(leader_id) => leader_id,  // Use leader's credentials
+        None => account_id,             // No org, use own credentials
+    };
+    
+    // Load Notion token for effective_account_id
+    let store = NotionStore::new().ok()?;
+    store.get_credentials_for_account(effective_account_id)
+        .ok()?.first()?.access_token.clone().into()
+}
+
+fn resolve_org_leader_account_id(account_id: Uuid) -> Option<Uuid> {
+    let account_store = AccountStore::from_env().ok()?;
+    let account = account_store.get_account(account_id).ok()??;
+    let org_id = account.organization_id?;
+    let org = account_store.get_organization_by_id(org_id).ok()??;
+    org.leader_account_id
+}
+```
+
+**Why this matters:**
+- Any org member can trigger TPM via any channel (Discord, email, Slack, etc.)
+- All requests use the same Notion workspace (leader's)
+- No need for each member to connect their own Notion OAuth
+- Consistent access to the shared task board
+
+### .notion_env Population
+
+The `.notion_env` file in the workspace contains `NOTION_API_TOKEN` for CLI tools. It's populated in two ways:
+
+**Path 1: TPM Cron (`tpm_cron.rs`)**
+- Writes leader's token directly to `.notion_env` before task execution
+- Uses `org.leader_account_id` to look up `NotionStore` credentials
+
+**Path 2: Regular Channels (`executor.rs` → `codex.rs`)**
+- `executor.rs` resolves leader's token via `load_notion_access_token_for_account()`
+- Token passed to `codex.rs` via `RunTaskParams.notion_access_token`
+- `codex.rs` writes to `.notion_env` only if file doesn't already exist (prevents overwriting TPM cron's token)
+
+**codex.rs guard (prevents overwrite):**
+```rust
+if let Some(token) = request.notion_access_token {
+    let notion_env_file = host_workspace_dir.join(".notion_env");
+    if !notion_env_file.exists() {
+        fs::write(&notion_env_file, format!("NOTION_API_TOKEN={}\n", token))?;
+    }
+}
+```
+
+### Interactive Requests (setup-board, create-task)
+User sends TPM request → uses **leader's Notion OAuth token** → database created in **leader's workspace**.
+
+1. User sends task to Oliver (any channel)
 2. `executor.rs` calls `load_notion_access_token_for_account(account_id)` 
-3. `codex.rs` passes token to ACI via `NOTION_API_TOKEN` env var
-4. `tpm_cli` reads env var, creates database in user's Notion
-5. User shares database with team + Oliver (manual step via Notion UI)
+3. `utils.rs` resolves to leader's account via `resolve_org_leader_account_id()`
+4. `codex.rs` passes leader's token to ACI via `.notion_env`
+5. `tpm_cli` reads token, creates database in leader's Notion workspace
+6. Leader shares database with team (manual step via Notion UI)
 
 ### Cron Job (setup_tpm_cron)
-Cron stores **setup user's account_id** → uses **their Notion token** for scheduled syncs.
+Cron uses **organization leader's** Notion token for scheduled syncs.
 
 1. User joins organization → `POST /api/tpm/setup-cron` calls `setup_tpm_cron(account_id, organization)`
-2. Task stored in account-level `tasks.db` with `account_id: <UUID>` (the setup user)
-3. Cron fires → `resolve_account_for_run_task` returns stored `account_id` via `scheduler.add_cron_task(&cron_expr, RunTaskTask)`
-4. `load_notion_access_token_for_account(account_id)` loads setup user's token
-5. User's token has access to their own database → sync works
-
-**Note:** No separate "Oliver Notion token" needed for cron. The setup user's token is used since they own the database.
+2. `tpm_cron.rs` looks up `org.leader_account_id` and writes leader's token to `.notion_env`
+3. Cron fires → leader's token already in workspace
+4. Sync runs with consistent access to leader's Notion workspace
 
 ---
 
