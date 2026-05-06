@@ -150,7 +150,10 @@ pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<
                 );
                 Some(cred.access_token.clone())
             } else {
-                tracing::debug!("No Notion credentials found for account {}", effective_account_id);
+                tracing::debug!(
+                    "No Notion credentials found for account {}",
+                    effective_account_id
+                );
                 None
             }
         }

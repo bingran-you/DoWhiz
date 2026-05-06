@@ -25,7 +25,7 @@ const LANDING_PAGE_OVERRIDE_VALUE = 'landing';
 const LANDING_DASHBOARD_SUFFIX = '?loggedIn=true#section-overview';
 const LANDING_SETTINGS_SUFFIX = '#section-settings';
 const AUTHENTICATED_SETTINGS_SUFFIX = '?loggedIn=true#section-settings';
-const LANDING_PAGE_VARIANT = 'oliver_channel_native_stages_v3';
+const LANDING_PAGE_VARIANT = 'launch_execution_workspace_v1';
 const HERO_SHOWCASE_INTERVAL_MS = 4200;
 const PUBLIC_CHANNEL_URLS = {
   slack:
@@ -569,7 +569,7 @@ function SlackHeroStage({ tool }) {
         </div>
 
         <div className="hero-stage-slack-composer">
-          <span className="hero-stage-slack-composer-pill">@Oliver</span>
+          <span className="hero-stage-slack-composer-pill">@DoWhiz</span>
           <div className="hero-stage-slack-composer-copy">
             <strong>{stage.composerPlaceholder}</strong>
             <span>{stage.composerHint}</span>
@@ -1277,9 +1277,9 @@ function LandingPage({ locale }) {
 
   const buildToolTrialMailto = (tool) => {
     const englishContext = {
-      github: 'repo, issue, or code-adjacent task',
-      notion: 'docs, notes, or knowledge work',
-      lark: 'ops coordination or follow-through work'
+      github: 'launch issue, blocker, or code-adjacent follow-through',
+      notion: 'launch brief, decision log, or planning doc',
+      lark: 'cross-team follow-through work'
     };
     const chineseContext = {
       github: 'repo、issue 或代码周边任务',
@@ -1287,10 +1287,10 @@ function LandingPage({ locale }) {
       lark: '协作运营或持续跟进任务'
     };
     const chineseTaskContext = chineseContext[tool.key] || `${tool.label} 相关任务`;
-    const subject = isChinesePage ? `想通过 ${tool.label} 试用 Oliver` : `Trying Oliver with ${tool.label}`;
+    const subject = isChinesePage ? `想通过 ${tool.label} 试用 DoWhiz` : `Trying DoWhiz with ${tool.label}`;
     const body = isChinesePage
-      ? `你好 Oliver，\n\n我想先试一个和 ${tool.label} 有关的 ${chineseTaskContext}。\n\n- 我需要你处理什么：\n- 相关链接或上下文：\n- 希望最后拿到什么结果：\n- 如果后续更顺手，我是否愿意再连接 ${tool.label}：\n\n如果 setup 或绑定真的有帮助，也请你在回复里告诉我下一步。\n\n谢谢！`
-      : `Hi Oliver,\n\nI want to try Oliver with a ${englishContext[tool.key] || tool.label} request.\n\n- What I need done:\n- Relevant links or context:\n- What a good result looks like:\n- If it helps later, should we connect ${tool.label} after this:\n\nIf setup or linking would actually help, please guide me in your reply.\n\nThanks!`;
+      ? `你好 DoWhiz，\n\n我想先试一个和 ${tool.label} 有关的 ${chineseTaskContext}。\n\n- 我需要你处理什么：\n- 相关链接或上下文：\n- 希望最后拿到什么结果：\n- 如果后续更顺手，我是否愿意再连接 ${tool.label}：\n\n如果 setup 或绑定真的有帮助，也请你在回复里告诉我下一步。\n\n谢谢！`
+      : `Hi DoWhiz,\n\nI want to try DoWhiz with a ${englishContext[tool.key] || tool.label} request.\n\n- What I need done:\n- Relevant links or context:\n- What a good result looks like:\n- If it helps later, should we connect ${tool.label} after this:\n\nIf setup or linking would actually help, please guide me in your reply.\n\nThanks!`;
 
     return buildMailtoLink('oliver@dowhiz.com', subject, body);
   };
@@ -1644,21 +1644,8 @@ function LandingPage({ locale }) {
                 >
                   {content.hero.primaryCta}
                 </a>
-                <a
-                  className="btn btn-secondary hero-secondary-cta"
-                  href="#watch"
-                  onClick={() =>
-                    trackCtaClick('secondary_cta_click', {
-                      cta_location: 'hero_secondary_watch',
-                      cta_text: content.hero.secondaryCta,
-                      landing_page_variant: LANDING_PAGE_VARIANT
-                    })
-                  }
-                >
-                  {content.hero.secondaryCta}
-                </a>
               </div>
-              <p className="hero-support-note">{content.hero.toolsFootnote}</p>
+              <p className="hero-support-note">{content.hero.supportNote || content.hero.toolsFootnote}</p>
             </div>
 
             <div
@@ -1679,11 +1666,11 @@ function LandingPage({ locale }) {
                 </div>
                 <div className="hero-operator-chip">
                   <div className="hero-operator-portrait">
-                    <img src={oliverImg} alt="Oliver" className="hero-portrait" />
+                    <img src={oliverImg} alt={content.hero.operatorName || 'Oliver'} className="hero-portrait" />
                   </div>
                   <div className="hero-operator-copy">
-                    <strong>Oliver</strong>
-                    <span>{isChinesePage ? '可信 AI operator' : 'Trusted AI operator'}</span>
+                    <strong>{content.hero.operatorName || 'Oliver'}</strong>
+                    <span>{content.hero.operatorRole || (isChinesePage ? '可信 AI operator' : 'Trusted AI operator')}</span>
                   </div>
                 </div>
               </div>
@@ -1807,143 +1794,202 @@ function LandingPage({ locale }) {
           </div>
         </section>
 
-          <section id="watch" className="section demo-showcase-section">
-          <div className="container">
-            <div className="section-heading-shell">
-              <span className="section-kicker">{content.demo.eyebrow}</span>
-              <h2 className="section-title section-title-left">{content.demo.title}</h2>
-              <p className="section-intro section-intro-left">{content.demo.intro}</p>
-            </div>
-
-            <div className="demo-showcase-grid">
-              <article className="demo-feature-card">
-                <div className="demo-card-head">
-                  <div>
-                    <h3>{content.demo.desktopTitle}</h3>
-                    <p>{content.demo.desktopDescription}</p>
+          {isChinesePage ? (
+            <>
+              <section id="watch" className="section demo-showcase-section">
+                <div className="container">
+                  <div className="section-heading-shell">
+                    <span className="section-kicker">{content.demo.eyebrow}</span>
+                    <h2 className="section-title section-title-left">{content.demo.title}</h2>
+                    <p className="section-intro section-intro-left">{content.demo.intro}</p>
                   </div>
-                  <a
-                    className="demo-inline-link"
-                    href={content.demo.desktopVideoHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {content.demo.desktopCta}
-                  </a>
-                </div>
-                <div className="frame-shell frame-landscape">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${content.demo.desktopVideoId}?rel=0`}
-                    title={content.demo.desktopTitle}
-                    loading="lazy"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allowFullScreen
-                  ></iframe>
-                </div>
-              </article>
 
-              <aside className="demo-short-rail">
-                <div className="demo-short-head">
-                  <h3>{content.demo.shortsTitle}</h3>
-                  <p>{content.demo.shortsDescription}</p>
-                </div>
-                <div className="demo-short-grid">
-                  {content.demo.shorts.map((item) => (
-                    <article key={item.videoId} className="demo-short-card">
-                      <div className="frame-shell frame-portrait">
+                  <div className="demo-showcase-grid">
+                    <article className="demo-feature-card">
+                      <div className="demo-card-head">
+                        <div>
+                          <h3>{content.demo.desktopTitle}</h3>
+                          <p>{content.demo.desktopDescription}</p>
+                        </div>
+                        <a
+                          className="demo-inline-link"
+                          href={content.demo.desktopVideoHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {content.demo.desktopCta}
+                        </a>
+                      </div>
+                      <div className="frame-shell frame-landscape">
                         <iframe
-                          src={`https://www.youtube.com/embed/${item.videoId}?rel=0`}
-                          title={item.title}
+                          src={`https://www.youtube.com/embed/${content.demo.desktopVideoId}?rel=0`}
+                          title={content.demo.desktopTitle}
                           loading="lazy"
                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                           referrerPolicy="strict-origin-when-cross-origin"
                           allowFullScreen
                         ></iframe>
                       </div>
-                      <a
-                        className="demo-short-link"
-                        href={item.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {item.title}
-                      </a>
                     </article>
-                  ))}
-                </div>
-              </aside>
-            </div>
-          </div>
-        </section>
 
-          <section id="examples" className="section example-showcase-section">
-          <div className="container story-stack">
-            <div className="section-heading-shell">
-              <span className="section-kicker">{content.examples.eyebrow}</span>
-              <h2 className="section-title section-title-left">{content.examples.title}</h2>
-              <p className="section-intro section-intro-left">{content.examples.intro}</p>
-            </div>
-
-            <div className="example-card-grid">
-              {content.examples.cards.map((item) => (
-                <a
-                  key={item.title}
-                  className={`example-card${item.href ? ' example-card-link' : ''}`}
-                  href={item.href || undefined}
-                >
-                  <span className="example-card-tag">{item.tag}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                  {item.ctaLabel ? <span className="example-card-cta">{item.ctaLabel}</span> : null}
-                </a>
-              ))}
-            </div>
-          </div>
-        </section>
-
-          <section id="faq" className="section faq-section">
-            <div className="container">
-              <div className="section-heading-shell">
-                <span className="section-kicker">{content.labels.faqEyebrow}</span>
-                <h2 className="section-title section-title-left">{content.labels.faqTitle}</h2>
-                <p className="section-intro section-intro-left">{content.labels.faqIntro}</p>
-              </div>
-              <div className="faq-accordion faq-compact">
-                {content.faqItems.map((item, idx) => {
-                  const isOpen = openFaq === idx;
-                  return (
-                    <article key={item.question} className={`faq-accordion-item ${isOpen ? 'open' : ''}`}>
-                      <button
-                        type="button"
-                        className="faq-accordion-header"
-                        onClick={() => toggleFaq(idx)}
-                        aria-expanded={isOpen}
-                        aria-controls={`faq-panel-${idx}`}
-                      >
-                        <span className="faq-question">{item.question}</span>
-                        <span className="faq-toggle" aria-hidden="true">
-                          {isOpen ? '−' : '+'}
-                        </span>
-                      </button>
-                      <div
-                        id={`faq-panel-${idx}`}
-                        className="faq-accordion-panel"
-                        style={{ display: isOpen ? 'block' : 'none' }}
-                      >
-                        <p>{item.answer}</p>
+                    <aside className="demo-short-rail">
+                      <div className="demo-short-head">
+                        <h3>{content.demo.shortsTitle}</h3>
+                        <p>{content.demo.shortsDescription}</p>
                       </div>
-                    </article>
-                  );
-                })}
+                      <div className="demo-short-grid">
+                        {content.demo.shorts.map((item) => (
+                          <article key={item.videoId} className="demo-short-card">
+                            <div className="frame-shell frame-portrait">
+                              <iframe
+                                src={`https://www.youtube.com/embed/${item.videoId}?rel=0`}
+                                title={item.title}
+                                loading="lazy"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                allowFullScreen
+                              ></iframe>
+                            </div>
+                            <a
+                              className="demo-short-link"
+                              href={item.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {item.title}
+                            </a>
+                          </article>
+                        ))}
+                      </div>
+                    </aside>
+                  </div>
+                </div>
+              </section>
+
+              <section id="examples" className="section example-showcase-section">
+                <div className="container story-stack">
+                  <div className="section-heading-shell">
+                    <span className="section-kicker">{content.examples.eyebrow}</span>
+                    <h2 className="section-title section-title-left">{content.examples.title}</h2>
+                    <p className="section-intro section-intro-left">{content.examples.intro}</p>
+                  </div>
+
+                  <div className="example-card-grid">
+                    {content.examples.cards.map((item) => (
+                      <a
+                        key={item.title}
+                        className={`example-card${item.href ? ' example-card-link' : ''}`}
+                        href={item.href || undefined}
+                      >
+                        <span className="example-card-tag">{item.tag}</span>
+                        <h3>{item.title}</h3>
+                        <p>{item.description}</p>
+                        {item.ctaLabel ? <span className="example-card-cta">{item.ctaLabel}</span> : null}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            <>
+              <section id="workflow" className="section workflow-visual-section">
+                <div className="container story-stack">
+                  <div className="section-heading-shell">
+                    <span className="section-kicker">{content.workflowVisual.eyebrow}</span>
+                    <h2 className="section-title section-title-left">{content.workflowVisual.title}</h2>
+                    <p className="section-intro section-intro-left">{content.workflowVisual.subtitle}</p>
+                  </div>
+
+                  <div className="workflow-visual-flow">
+                    {content.workflowVisual.stages.map((stage, index) => (
+                      <article
+                        key={stage.key}
+                        className="workflow-visual-step"
+                        data-app={stage.key}
+                      >
+                        <div className="workflow-visual-card">
+                          <div className="workflow-visual-card-head">
+                            <span className="workflow-visual-app">{stage.app}</span>
+                            <span className="workflow-visual-index">{String(index + 1).padStart(2, '0')}</span>
+                          </div>
+                          <h3>{stage.title}</h3>
+                          <p className="workflow-visual-copy">{stage.copy}</p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <p className="workflow-visual-note">{content.workflowVisual.note}</p>
+                </div>
+              </section>
+
+              <section id="outputs" className="section outputs-compact-section">
+                <div className="container story-stack">
+                  <div className="section-heading-shell">
+                    <span className="section-kicker">{content.artifactRail.eyebrow}</span>
+                    <h2 className="section-title section-title-left">{content.artifactRail.title}</h2>
+                    <p className="section-intro section-intro-left">{content.artifactRail.subtitle}</p>
+                  </div>
+
+                  <div className="artifact-rail">
+                    {content.artifactRail.items.map((item) => (
+                      <article key={item.title} className="example-card artifact-card">
+                        <h3>{item.title}</h3>
+                        <p>{item.description}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+
+          {isChinesePage ? (
+            <section id="faq" className="section faq-section">
+              <div className="container">
+                <div className="section-heading-shell">
+                  <span className="section-kicker">{content.labels.faqEyebrow}</span>
+                  <h2 className="section-title section-title-left">{content.labels.faqTitle}</h2>
+                  <p className="section-intro section-intro-left">{content.labels.faqIntro}</p>
+                </div>
+                <div className="faq-accordion faq-compact">
+                  {content.faqItems.map((item, idx) => {
+                    const isOpen = openFaq === idx;
+                    return (
+                      <article key={item.question} className={`faq-accordion-item ${isOpen ? 'open' : ''}`}>
+                        <button
+                          type="button"
+                          className="faq-accordion-header"
+                          onClick={() => toggleFaq(idx)}
+                          aria-expanded={isOpen}
+                          aria-controls={`faq-panel-${idx}`}
+                        >
+                          <span className="faq-question">{item.question}</span>
+                          <span className="faq-toggle" aria-hidden="true">
+                            {isOpen ? '−' : '+'}
+                          </span>
+                        </button>
+                        <div
+                          id={`faq-panel-${idx}`}
+                          className="faq-accordion-panel"
+                          style={{ display: isOpen ? 'block' : 'none' }}
+                        >
+                          <p>{item.answer}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="faq-link-row">
+                  <a className="faq-text-link" href="/help-center/">
+                    {content.labels.faqLinkLabel}
+                  </a>
+                </div>
               </div>
-              <div className="faq-link-row">
-                <a className="faq-text-link" href="/help-center/">
-                  {content.labels.faqLinkLabel}
-                </a>
-              </div>
-            </div>
-          </section>
+            </section>
+          ) : null}
+
         </main>
 
         <footer className="site-footer">
@@ -1965,7 +2011,7 @@ function LandingPage({ locale }) {
                   </a>
                 ))}
                 <a href={`mailto:${SUPPORT_EMAIL}`} className="footer-link">
-                  {isChinesePage ? '联系 Oliver' : 'Contact Oliver'}
+                  {content.labels.footerContactLabel || (isChinesePage ? '联系 Oliver' : 'Contact Oliver')}
                 </a>
               </div>
             </div>

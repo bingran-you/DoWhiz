@@ -25,7 +25,7 @@ export const oliverLandingContent = {
   hero: {
     badge: 'Launch Execution Copilot',
     eyebrow: 'For one launch thread at a time',
-    title: 'Turn one messy launch thread into accountable execution.',
+    title: 'Turn one launch thread into accountable execution',
     subtitle:
       'Paste the thread. Oliver extracts owners, dates, dependencies, blockers, open decisions, and a readiness brief backed by evidence.',
     activity: 'Readiness brief refreshed from the latest owner update.',

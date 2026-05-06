@@ -376,7 +376,8 @@
 .hero-secondary-cta {
   min-height: 2.8rem;
   min-width: 230px;
-  border-color: var(--color-border);
+  border-color: color-mix(in srgb, var(--brand-primary) 16%, var(--color-border));
+  background: color-mix(in srgb, var(--surface-elevated) 92%, rgba(255, 255, 255, 0.72));
 }
 
 .landing-page-cn .hero-copy {
@@ -2191,7 +2192,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.6rem;
+  gap: 0.25rem 0.7rem;
   max-width: 48rem;
   margin: 0 auto;
 }
@@ -2199,28 +2200,37 @@
 .hero-value-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 2.1rem;
-  padding: 0.45rem 0.8rem;
-  border-radius: var(--radius-full);
-  border: 1px solid color-mix(in srgb, var(--glass-border) 84%, transparent);
-  background: color-mix(in srgb, var(--surface-primary) 84%, transparent);
+  min-height: auto;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--text-secondary);
   font-size: 0.84rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
+.hero-value-pill:not(:first-child)::before {
+  content: '•';
+  margin-right: 0.7rem;
+  color: color-mix(in srgb, var(--brand-primary) 45%, var(--text-secondary));
+}
+
 .hero-primary-cta {
-  min-width: 13.75rem;
-  box-shadow: 0 18px 45px -32px rgba(28, 28, 30, 0.32);
+  min-width: 15rem;
+  min-height: 3.2rem;
+  font-weight: 700;
+  box-shadow:
+    0 22px 48px -30px rgba(28, 28, 30, 0.36),
+    0 0 0 1px color-mix(in srgb, var(--brand-primary) 18%, transparent);
 }
 
 .hero-support-note {
   margin: 0;
-  max-width: 42rem;
+  max-width: 34rem;
   color: var(--text-secondary);
-  font-size: 0.92rem;
-  line-height: 1.55;
+  font-size: 0.89rem;
+  line-height: 1.5;
 }
 
 .hero-channel-showcase {
@@ -2642,6 +2652,26 @@
 [data-theme="dark"] .demo-short-link,
 [data-theme="dark"] .example-card-link:hover,
 [data-theme="dark"] .example-card-link:focus-visible {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+}
+
+[data-theme="dark"] .example-loop-callout,
+[data-theme="dark"] .continuity-panel,
+[data-theme="dark"] .final-cta-panel {
+  border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-secondary) 92%, transparent) 0%,
+      color-mix(in srgb, var(--surface-primary) 97%, transparent) 100%
+    );
+  box-shadow:
+    0 30px 62px -46px rgba(0, 0, 0, 0.54),
+    0 14px 24px -18px rgba(0, 0, 0, 0.34);
+}
+
+[data-theme="dark"] .trust-note {
   border-color: color-mix(in srgb, var(--glass-border) 90%, transparent);
   background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
 }
@@ -5115,6 +5145,382 @@
   color: var(--brand-primary);
 }
 
+.problem-section {
+  padding-top: 1.5rem;
+}
+
+.problem-card-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.problem-card,
+.workflow-step-card,
+.example-loop-step-card,
+.output-card,
+.use-case-card,
+.continuity-card,
+.trust-card {
+  min-height: 100%;
+}
+
+.workflow-section,
+.outputs-section,
+.use-case-section,
+.continuity-section,
+.trust-section {
+  padding-top: 0.9rem;
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.example-loop-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.example-loop-brief {
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+}
+
+.example-loop-brief h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.24;
+}
+
+.example-loop-summary {
+  display: grid;
+  gap: 0.72rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.example-loop-summary li {
+  position: relative;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.example-loop-summary li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.52rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: var(--radius-full);
+  background: var(--brand-primary);
+}
+
+.example-loop-step-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.example-loop-callout {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
+  background: color-mix(in srgb, var(--surface-elevated) 92%, rgba(255, 255, 255, 0.68));
+  box-shadow: 0 16px 32px -30px rgba(28, 28, 30, 0.22);
+}
+
+.example-loop-callout strong {
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+
+.example-loop-callout p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.output-card-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.continuity-panel,
+.final-cta-panel {
+  border: 1px solid color-mix(in srgb, var(--glass-border) 92%, transparent);
+  border-radius: 1.45rem;
+  background: color-mix(in srgb, var(--surface-elevated) 92%, rgba(255, 255, 255, 0.7));
+  box-shadow: 0 16px 32px -30px rgba(28, 28, 30, 0.22);
+}
+
+.continuity-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+}
+
+.continuity-pill-groups {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.continuity-pill-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.continuity-pill-label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.continuity-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.continuity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.trust-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.trust-note {
+  margin: 0;
+  padding: 0.92rem 1rem;
+  border-radius: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, var(--glass-border));
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--surface-elevated));
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.final-cta-section {
+  padding-top: 0.5rem;
+}
+
+.final-cta-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding: 1.25rem;
+}
+
+.final-cta-copy {
+  display: grid;
+  gap: 0.7rem;
+  max-width: 44rem;
+}
+
+.final-cta-support {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.final-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.workflow-visual-section,
+.outputs-compact-section {
+  padding-top: 0.85rem;
+}
+
+.workflow-visual-card h3,
+.artifact-card h3 {
+  max-width: 14ch;
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.workflow-visual-section .section-title,
+.outputs-compact-section .section-title {
+  max-width: none;
+  font-size: clamp(1.5rem, 3.4vw, 2.65rem);
+  white-space: nowrap;
+  text-wrap: nowrap;
+}
+
+.workflow-visual-section .section-intro,
+.outputs-compact-section .section-intro {
+  max-width: 30rem;
+  text-wrap: pretty;
+}
+
+.workflow-visual-card h3,
+.artifact-card h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.24;
+}
+
+.workflow-visual-card p,
+.artifact-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.workflow-visual-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  max-width: 56rem;
+  align-items: stretch;
+}
+
+.workflow-visual-step {
+  display: grid;
+  min-height: 100%;
+}
+
+.workflow-visual-step:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: calc((100% - 1rem) / 2);
+  justify-self: center;
+}
+
+.workflow-visual-card,
+.artifact-card {
+  min-height: 100%;
+  padding: 0.92rem;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 94%, transparent);
+  border-radius: 1.45rem;
+  background: color-mix(in srgb, var(--surface-elevated) 90%, rgba(255, 255, 255, 0.68));
+  box-shadow: 0 16px 32px -30px rgba(28, 28, 30, 0.22);
+}
+
+.workflow-visual-card {
+  display: grid;
+  gap: 0.68rem;
+}
+
+.workflow-visual-copy {
+  color: var(--text-primary);
+}
+
+.workflow-visual-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.workflow-visual-app,
+.workflow-visual-index {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.workflow-visual-app {
+  min-height: 1.9rem;
+  padding: 0.35rem 0.72rem;
+  border: 1px solid color-mix(in srgb, var(--glass-border) 90%, transparent);
+  background: color-mix(in srgb, var(--surface-primary) 92%, transparent);
+  color: var(--text-primary);
+}
+
+.workflow-visual-index {
+  min-width: 2.2rem;
+  min-height: 2.2rem;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 16%, var(--glass-border));
+  background: color-mix(in srgb, var(--surface-elevated) 96%, rgba(255, 255, 255, 0.88));
+  color: var(--text-secondary);
+  box-shadow: 0 8px 18px -14px rgba(28, 28, 30, 0.26);
+}
+
+.workflow-visual-note {
+  margin: 0;
+  max-width: 28rem;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.workflow-visual-step[data-app='discord'] .workflow-visual-app {
+  background: color-mix(in srgb, #5865f2 12%, var(--surface-primary));
+  border-color: color-mix(in srgb, #5865f2 20%, var(--glass-border));
+}
+
+.workflow-visual-step[data-app='notion'] .workflow-visual-app {
+  background: color-mix(in srgb, #111111 10%, var(--surface-primary));
+}
+
+.workflow-visual-step[data-app='github'] .workflow-visual-app {
+  background: color-mix(in srgb, #24292f 10%, var(--surface-primary));
+}
+
+.workflow-visual-step[data-app='devin'] .workflow-visual-app {
+  background: color-mix(in srgb, #ff8a3d 14%, var(--surface-primary));
+  border-color: color-mix(in srgb, #ff8a3d 20%, var(--glass-border));
+}
+
+.workflow-visual-step[data-app='review'] .workflow-visual-app {
+  background: color-mix(in srgb, #1c9b6e 14%, var(--surface-primary));
+  border-color: color-mix(in srgb, #1c9b6e 18%, var(--glass-border));
+}
+
+.workflow-visual-step[data-app='deploy'] .workflow-visual-app {
+  background: color-mix(in srgb, #218bff 14%, var(--surface-primary));
+  border-color: color-mix(in srgb, #218bff 18%, var(--glass-border));
+}
+
+.workflow-visual-step[data-app='staging'] .workflow-visual-app {
+  background: color-mix(in srgb, #4d8dff 14%, var(--surface-primary));
+  border-color: color-mix(in srgb, #4d8dff 18%, var(--glass-border));
+}
+
+.workflow-visual-step[data-app='thread'] .workflow-visual-app {
+  background: color-mix(in srgb, #ff5b7c 14%, var(--surface-primary));
+  border-color: color-mix(in srgb, #ff5b7c 18%, var(--glass-border));
+}
+
+.artifact-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  max-width: 42rem;
+}
+
 .landing-page-cn .section-kicker,
 .landing-page-cn .hero-stage-micro-label,
 .landing-page-cn .hero-preview-label,
@@ -5136,6 +5542,24 @@
 }
 
 @media (max-width: 1180px) {
+  .problem-card-grid,
+  .workflow-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .artifact-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .example-loop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .output-card-grid,
+  .trust-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .demo-showcase-grid {
     grid-template-columns: 1fr;
   }
@@ -5169,6 +5593,35 @@
 }
 
 @media (max-width: 900px) {
+  .problem-card-grid,
+  .workflow-grid,
+  .continuity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-visual-flow {
+    grid-template-columns: 1fr;
+    max-width: 40rem;
+  }
+
+  .workflow-visual-step:last-child:nth-child(odd) {
+    grid-column: auto;
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .artifact-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .artifact-rail {
+    gap: 0.85rem;
+  }
+
+  .example-loop-step-grid {
+    grid-template-columns: 1fr;
+  }
+
   .hero-stage-slack-layout,
   .hero-stage-discord-layout,
   .hero-stage-lark-layout {
@@ -5207,8 +5660,37 @@
   }
 
   .hero-copy-showcase .hero-title {
-    max-width: 11ch;
+    max-width: 13ch;
     white-space: normal;
+  }
+
+  .problem-card-grid,
+  .workflow-grid,
+  .output-card-grid,
+  .continuity-grid,
+  .trust-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-visual-section .section-title,
+  .outputs-compact-section .section-title {
+    font-size: clamp(1.5rem, 6vw, 1.95rem);
+    max-width: none;
+    white-space: nowrap;
+  }
+
+  .workflow-visual-card,
+  .artifact-card {
+    padding: 1rem;
+  }
+
+  .workflow-visual-index {
+    min-width: 2rem;
+    min-height: 2rem;
   }
 
   .hero-channel-showcase,
@@ -5267,6 +5749,7 @@
   .section-title-left {
     max-width: none;
   }
+
 }
 
 @media (max-width: 560px) {
