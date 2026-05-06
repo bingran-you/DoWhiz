@@ -780,6 +780,7 @@ fn notify_run_task_failure(
 ) -> Result<(), SchedulerError> {
     let failure_dir = task.workspace_dir.join(RUN_TASK_FAILURE_DIR);
     std::fs::create_dir_all(&failure_dir)?;
+    let failure_notice_marker = failure_notice_marker_path(task);
 
     let is_slack = matches!(task.channel, Channel::Slack);
     let user_notice = failure_class.user_notice();
@@ -800,7 +801,13 @@ fn notify_run_task_failure(
     std::fs::create_dir_all(&notice_attachments)?;
 
     if !task.reply_to.is_empty() {
-        if is_slack {
+        if failure_notice_marker.exists() {
+            warn!(
+                "suppressing duplicate run_task failure notice for workspace={} key={}",
+                task.workspace_dir.display(),
+                failure_notice_identity(task),
+            );
+        } else if is_slack {
             let slack_thread_ts = load_reply_context(&task.workspace_dir)
                 .in_reply_to
                 .or_else(|| slack_thread_ts_from_thread_key(task.thread_id.as_deref()));
@@ -822,6 +829,15 @@ fn notify_run_task_failure(
                 channel_metadata: task.normalized_channel_metadata(),
             };
             execute_slack_send(&send_task)?;
+            std::fs::write(
+                &failure_notice_marker,
+                format!(
+                    "task_id={}\nchannel={}\nidentity={}\n",
+                    task_id,
+                    task.channel,
+                    failure_notice_identity(task)
+                ),
+            )?;
         } else {
             let from = task
                 .reply_from
@@ -846,6 +862,15 @@ fn notify_run_task_failure(
             };
             send_emails_module::send_email(&params)
                 .map_err(|err| SchedulerError::TaskFailed(err.to_string()))?;
+            std::fs::write(
+                &failure_notice_marker,
+                format!(
+                    "task_id={}\nchannel={}\nidentity={}\n",
+                    task_id,
+                    task.channel,
+                    failure_notice_identity(task)
+                ),
+            )?;
         }
     } else {
         warn!("no reply_to recipients for task failure notice {}", task_id);
@@ -868,6 +893,38 @@ fn notify_run_task_failure(
     )?;
 
     Ok(())
+}
+
+fn failure_notice_marker_path(task: &RunTaskTask) -> PathBuf {
+    let failure_dir = task.workspace_dir.join(RUN_TASK_FAILURE_DIR);
+    let identity = failure_notice_identity(task);
+    let digest = format!("{:x}", md5::compute(identity.as_bytes()));
+    failure_dir.join(format!("user_notice_sent_{}.marker", digest))
+}
+
+fn failure_notice_identity(task: &RunTaskTask) -> String {
+    let reply_context = load_reply_context(&task.workspace_dir);
+    if let Some(thread_id) = task
+        .thread_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        return format!("channel:{}|thread:{}", task.channel, thread_id);
+    }
+    if let Some(in_reply_to) = reply_context
+        .in_reply_to
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        return format!("channel:{}|reply:{}", task.channel, in_reply_to);
+    }
+    format!(
+        "channel:{}|workspace:{}",
+        task.channel,
+        task.workspace_dir.display()
+    )
 }
 
 fn notify_run_task_retry(

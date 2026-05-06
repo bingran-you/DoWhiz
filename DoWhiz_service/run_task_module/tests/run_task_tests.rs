@@ -25,64 +25,17 @@ fn require_env(key: &'static str) {
     }
 }
 
-fn assert_investment_contract_labels(text: &str) {
-    for label in [
-        "As of:",
-        "Price:",
-        "Investor question:",
-        "Decision Card",
-        "Monitor Status",
-        "New Money Action",
-        "Existing Holder Action",
-        "Thesis Impact",
-        "Signal Quality",
-        "Confidence",
-        "One-line rationale:",
-        "Dual-Horizon Framing",
-        "Near-Term Timing View",
-        "Long-Term Ownership View",
-        "Verified Facts",
-        "Derived Metrics",
-        "Scenarios",
-        "Bull Case",
-        "Base Case",
-        "Bear Case",
-        "Triggers",
-        "Upgrade / Review Now",
-        "Downgrade / De-risk",
-        "Invalidation",
-        "Judgment",
-    ] {
-        assert!(text.contains(label), "missing label {label}");
-    }
+fn assert_non_empty_renderable_html(text: &str) {
+    assert!(!text.trim().is_empty(), "reply should not be empty");
+    let normalized = normalize_email_html("Test subject", text);
     assert!(
-        text.matches("href=\"http").count() + text.matches("href='http").count() >= 3,
-        "missing clickable source links"
+        !normalized.trim().is_empty(),
+        "normalized reply should still contain renderable HTML"
     );
-    for marker in [
-        "Decision Card",
-        "Dual-Horizon Framing",
-        "Verified Facts",
-        "Derived Metrics",
-        "Scenarios",
-        "Triggers",
-        "Judgment",
-    ]
-    .windows(2)
-    {
-        let earlier = text
-            .find(marker[0])
-            .unwrap_or_else(|| panic!("missing marker {}", marker[0]));
-        let later = text
-            .find(marker[1])
-            .unwrap_or_else(|| panic!("missing marker {}", marker[1]));
-        assert!(
-            earlier < later,
-            "expected {} to appear before {}",
-            marker[0],
-            marker[1]
-        );
-    }
+    assert!(
+        normalized.contains('<') && normalized.contains('>'),
+        "normalized reply should still look like HTML"
+    );
 }
 
 fn write_investment_request(workspace: &Path, subject: &str, prompt: &str) {
@@ -1093,10 +1046,11 @@ sleep 20
     let elapsed = started_at.elapsed();
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
     assert!(html.contains("Quick update on NVDA"));
-    assert!(html.contains("literal change-since-last-note check"));
-    assert!(html.contains("low-confidence buy / hold / trim call"));
+    assert!(html.contains("Status:"));
+    assert!(html.contains("Unable to Verify"));
+    assert!(html.contains("Action:"));
+    assert!(html.contains("No recommendation"));
     assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("Insufficient Evidence"));
     assert!(!html.contains("Canonical thread request"));
     assert!(!html.contains("href=\"http"));
     assert!(!counter_path.exists());
@@ -1156,9 +1110,9 @@ sleep 20
         .expect("monitor timeout should produce fail-soft artifact");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
     assert!(html.contains("Quick update on NVDA"));
-    assert!(html.contains("low-confidence buy / hold / trim call"));
+    assert!(html.contains("Unable to Verify"));
+    assert!(html.contains("No recommendation"));
     assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("timed monitor run"));
     assert!(!html.contains("href=\"http"));
     let note = result.recovery_note.as_deref().unwrap_or("");
     assert!(note.contains("deterministic operational monitor fallback"));
@@ -1167,7 +1121,7 @@ sleep 20
 
 #[test]
 #[cfg(unix)]
-fn run_task_timeout_tries_fast_completion_before_failing_soft_for_real_ticker_research() {
+fn run_task_timeout_yields_single_pass_operational_fallback_for_real_ticker_research() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_fail_soft_before_retry").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1244,25 +1198,24 @@ sleep 20
     ]);
 
     let result =
-        run_task(&build_params(&workspace)).expect("fail-soft artifact should recover timeout");
+        run_task(&build_params(&workspace)).expect("timeout should recover with one fallback");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
     assert!(html.contains("Quick update on Nokia (NOK)"));
-    assert!(html.contains("I could not finish a reliable buy-or-avoid review yet"));
-    assert!(html.contains("What I have so far"));
-    assert!(html.contains("What is still missing"));
-    assert!(html.contains("incomplete work rather than a real Buy / Avoid / Add / Exit call"));
+    assert!(html.contains("Unable to Verify"));
+    assert!(html.contains("No recommendation"));
+    assert!(html.contains("deeper report separately"));
     assert!(!html.contains("Decision Card"));
     assert!(!html.contains("href=\"http"));
-    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
-    assert!(workspace.join("codex_fast_completion_context.md").exists());
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
+    assert!(!workspace.join("codex_fast_completion_context.md").exists());
     let note = result.recovery_note.as_deref().unwrap_or("");
     assert!(note.contains("deterministic operational investment fallback"));
-    assert!(!note.contains("Returned early once a valid reply artifact existed"));
+    assert!(!note.contains("Claude fallback"));
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_synthetic_investment_requests_use_assumption_fast_path() {
+fn run_task_synthetic_investment_requests_fall_back_once_without_assumption_mode() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_negative_synthetic_fail_soft").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1294,7 +1247,7 @@ if [ -f "{counter_path}" ]; then
 fi
 count=$((count + 1))
 printf '%s' "$count" > "{counter_path}"
-echo "synthetic fast path should not invoke codex" >&2
+echo "synthetic request invoked codex once" >&2
 sleep 20
 "#,
             counter_path = counter_path.display()
@@ -1314,26 +1267,21 @@ sleep 20
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
-    let result = run_task(&build_params(&workspace))
-        .expect("synthetic request should yield deterministic assumption artifact");
+    let result =
+        run_task(&build_params(&workspace)).expect("synthetic request should still return once");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Assumption-based investment monitor output"));
-    assert!(html.contains("Avoid for now"));
-    assert!(html.contains("Exit"));
-    assert!(html.contains("Review Now"));
-    assert!(html.contains("assumption-based"));
-    assert!(html.contains("Medium"));
-    assert!(!html.contains("High"));
+    assert!(html.contains("Unable to Verify"));
+    assert!(html.contains("No recommendation"));
     assert!(!html.contains("href=\"http"));
-    assert!(!counter_path.exists());
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic assumption-based investment artifact"));
+    assert!(note.contains("deterministic operational"));
     assert!(!note.contains("Claude fallback"));
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_watch_closely_synthetic_prompts_use_assumption_fast_path() {
+fn run_task_watch_closely_synthetic_prompts_fall_back_once_without_fast_path() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_watch_closely_synthetic_fast_path").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1365,7 +1313,7 @@ if [ -f "{counter_path}" ]; then
 fi
 count=$((count + 1))
 printf '%s' "$count" > "{counter_path}"
-echo "watch-closely synthetic fast path should not invoke codex" >&2
+echo "watch-closely synthetic invoked codex once" >&2
 sleep 20
 "#,
             counter_path = counter_path.display()
@@ -1387,24 +1335,19 @@ sleep 20
 
     let started_at = Instant::now();
     let result = run_task(&build_params(&workspace))
-        .expect("synthetic watch-closely request should use fast path");
+        .expect("synthetic watch-closely request should still return once");
     let elapsed = started_at.elapsed();
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Assumption-based investment monitor output"));
-    assert!(html.contains("Watch Closely"));
-    assert!(html.contains("Starter Only"));
-    assert!(html.contains("Hold/Do not add"));
-    assert!(html.contains("assumption-based"));
-    assert!(html.contains("Medium"));
-    assert!(!html.contains("High"));
+    assert!(html.contains("Unable to Verify"));
+    assert!(html.contains("No recommendation"));
     assert!(!html.contains("href=\"http"));
-    assert!(!counter_path.exists());
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
     assert!(
-        elapsed.as_secs_f32() < 6.0,
-        "synthetic watch-closely fast path should return quickly, elapsed={elapsed:?}"
+        elapsed.as_secs_f32() < 25.0,
+        "synthetic fallback should stay within the bounded monitor timeout, elapsed={elapsed:?}"
     );
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic assumption-based investment artifact"));
+    assert!(note.contains("deterministic operational"));
     assert!(!note.contains("Claude fallback"));
 }
 
@@ -1473,7 +1416,7 @@ exit 23
 
 #[test]
 #[cfg(unix)]
-fn run_task_nonzero_completed_turn_with_invalid_investment_reply_triggers_claude_fallback() {
+fn run_task_nonzero_completed_turn_with_generic_investment_reply_is_accepted() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_invalid_nonzero_fallback").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1492,8 +1435,6 @@ fn run_task_nonzero_completed_turn_with_invalid_investment_reply_triggers_claude
         FakeCodexMode::InvestmentGenericTurnCompleteExitNonzero,
     )
     .unwrap();
-    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentStructured).unwrap();
-
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
     let _env = EnvGuard::set(&[
@@ -1505,11 +1446,11 @@ fn run_task_nonzero_completed_turn_with_invalid_investment_reply_triggers_claude
     ]);
 
     let result =
-        run_task(&build_params(&workspace)).expect("invalid nonzero artifact should fall back");
+        run_task(&build_params(&workspace)).expect("generic nonzero artifact should still return");
     let html = fs::read_to_string(result.reply_html_path).unwrap();
-    assert!(html.contains("Decision Card"));
+    assert!(html.contains("wait until after earnings"));
     let note = result.recovery_note.unwrap_or_default();
-    assert!(note.contains("Claude fallback"));
+    assert!(note.contains("late exit as a warning"));
 }
 
 #[test]
@@ -2077,6 +2018,7 @@ fn run_task_accepts_structured_investment_reply_from_fake_codex() {
 
     let result = run_task(&build_params(&workspace)).unwrap();
     let html = fs::read_to_string(result.reply_html_path).unwrap();
+    assert_non_empty_renderable_html(&html);
     assert!(html.contains("Decision Card"));
     assert!(html.contains("Verified Facts"));
     assert!(html.contains("Triggers"));
@@ -2086,7 +2028,7 @@ fn run_task_accepts_structured_investment_reply_from_fake_codex() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_final_artifact_preserves_investment_contract_after_email_normalization() {
+fn run_task_final_artifact_preserves_non_empty_html_after_email_normalization() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_final_artifact").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -2116,15 +2058,15 @@ fn run_task_final_artifact_preserves_investment_contract_after_email_normalizati
     assert!(result.reply_html_path.ends_with("reply_email_draft.html"));
 
     let raw_reply = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert_investment_contract_labels(&raw_reply);
+    assert_non_empty_renderable_html(&raw_reply);
 
     let final_html = normalize_email_html("NVDA investment memo", &raw_reply);
-    assert_investment_contract_labels(&final_html);
+    assert_non_empty_renderable_html(&final_html);
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_investment_contract_violation_triggers_claude_fallback() {
+fn run_task_generic_investment_reply_no_longer_triggers_claude_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_fallback").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -2139,7 +2081,6 @@ fn run_task_investment_contract_violation_triggers_claude_fallback() {
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_fake_codex(&bin_dir, FakeCodexMode::InvestmentGeneric).unwrap();
-    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentStructured).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -2153,15 +2094,16 @@ fn run_task_investment_contract_violation_triggers_claude_fallback() {
 
     let result = run_task(&build_params(&workspace)).unwrap();
     let html = fs::read_to_string(result.reply_html_path).unwrap();
+    assert_non_empty_renderable_html(&html);
+    assert!(html.contains("wait until after earnings"));
+    assert!(!html.contains("Decision Card"));
     let recovery = result.recovery_note.unwrap_or_default();
-    assert!(recovery.contains("Claude fallback"));
-    assert!(html.contains("Decision Card"));
-    assert!(html.contains("Bull Case"));
+    assert!(!recovery.contains("Claude fallback"));
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_investment_contract_violation_uses_fail_soft_artifact_when_fallback_is_still_generic() {
+fn run_task_generic_investment_reply_does_not_require_fail_soft_when_non_empty() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_fail_closed").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -2176,7 +2118,6 @@ fn run_task_investment_contract_violation_uses_fail_soft_artifact_when_fallback_
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_fake_codex(&bin_dir, FakeCodexMode::InvestmentGeneric).unwrap();
-    write_fake_claude(&bin_dir, FakeClaudeMode::InvestmentGeneric).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -2189,18 +2130,14 @@ fn run_task_investment_contract_violation_uses_fail_soft_artifact_when_fallback_
     ]);
 
     let result = run_task(&build_params(&workspace))
-        .expect("generic Codex + generic fallback should still return a fail-soft artifact");
+        .expect("generic non-empty investment reply should return directly");
     let html = fs::read_to_string(result.reply_html_path).unwrap();
+    assert_non_empty_renderable_html(&html);
     let recovery = result.recovery_note.unwrap_or_default();
-    assert!(html.contains("Quick update on NVDA"));
-    assert!(html.contains("I could not finish a reliable buy-or-avoid review yet"));
-    assert!(html.contains("What I have so far"));
-    assert!(html.contains("What is still missing"));
-    assert!(html.contains("incomplete work rather than a real Buy / Avoid / Add / Exit call"));
+    assert!(html.contains("wait until after earnings"));
     assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("href=\"http"));
-    assert!(recovery.contains("deterministic operational investment fallback"));
-    assert!(recovery.contains("Codex and fallback recovery failed"));
+    assert!(!recovery.contains("deterministic operational investment fallback"));
+    assert!(!recovery.contains("Claude fallback"));
 }
 
 #[test]
@@ -2236,7 +2173,7 @@ fn run_task_real_codex_e2e_when_enabled() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_real_codex_investment_contract_e2e_when_enabled() {
+fn run_task_real_codex_investment_e2e_when_enabled() {
     let _lock = ENV_MUTEX.lock().unwrap();
     if !env_enabled("RUN_CODEX_E2E") {
         eprintln!("RUN_CODEX_E2E not set; skipping investment Codex E2E test.");
@@ -2263,5 +2200,9 @@ fn run_task_real_codex_investment_contract_e2e_when_enabled() {
         panic!("Real investment Codex E2E test failed: {err}");
     });
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert_investment_contract_labels(&html);
+    assert_non_empty_renderable_html(&html);
+    assert!(
+        html.len() <= 64 * 1024,
+        "investment reply should stay within bounded artifact size"
+    );
 }

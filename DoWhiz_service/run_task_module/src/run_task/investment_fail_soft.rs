@@ -22,7 +22,7 @@ pub(super) fn maybe_write_fail_soft_investment_artifact(
 
     let request_text = load_inbound_request_text(workspace_dir)?;
     let html = if is_synthetic_request(&request_text) {
-        build_synthetic_assumption_artifact(&canonical_request_line(&request_text))
+        build_real_ticker_operational_fallback(workspace_dir, &request_text)
     } else if investment_monitor_request_for_workspace(workspace_dir)? {
         build_monitor_operational_fallback(workspace_dir, &request_text)
     } else {
@@ -34,12 +34,7 @@ pub(super) fn maybe_write_fail_soft_investment_artifact(
         return Ok(None);
     }
 
-    let note = if is_synthetic_request(&request_text) {
-        format!(
-            "Recovered via deterministic assumption-based investment finalizer after {}",
-            summarize_failure(cause)
-        )
-    } else if investment_monitor_request_for_workspace(workspace_dir)? {
+    let note = if investment_monitor_request_for_workspace(workspace_dir)? {
         format!(
             "Recovered via deterministic operational monitor fallback after {}",
             summarize_failure(cause)
@@ -54,6 +49,7 @@ pub(super) fn maybe_write_fail_soft_investment_artifact(
     Ok(Some(note))
 }
 
+#[allow(dead_code)]
 pub(super) fn maybe_write_synthetic_assumption_artifact(
     workspace_dir: &Path,
     reply_path: &Path,
@@ -123,14 +119,14 @@ fn build_monitor_operational_fallback(workspace_dir: &Path, request_text: &str) 
     let lower_request = request_text.to_ascii_lowercase();
     let prior_note_missing = prior_note_context_missing(workspace_dir);
     let reason = if prior_note_missing && lower_request.contains("last note") {
-        "I could not do a literal change-since-last-note check because the earlier note was not available in the current thread context."
+        "I could not compare against the prior note because that earlier note was not available in the current thread context."
     } else {
-        "I could not verify enough fresh context to support a reliable act-now update yet."
+        "I could not verify enough fresh context within the monitor budget to support a reliable act-now update."
     };
     let next_step = if prior_note_missing && lower_request.contains("last note") {
-        "What would help next: the prior note plus the latest verified issuer update."
+        "Send the earlier note again or ask for a deeper report separately."
     } else {
-        "What would help next: the latest verified issuer update plus a fresh price and valuation check."
+        "If you want more than a quick monitor check, I can run a deeper report separately."
     };
 
     format!(
@@ -138,12 +134,10 @@ fn build_monitor_operational_fallback(workspace_dir: &Path, request_text: &str) 
   <body>
     <h1>{heading}</h1>
     <p><strong>As of:</strong> {today}</p>
-    <p>{reason}</p>
-    <p>I do not want to turn incomplete context into a low-confidence buy / hold / trim call.</p>
-    <ul>
-      <li><strong>What I can say now:</strong> there is no verified act-now signal I would ask you to trade on yet.</li>
-      <li><strong>What would help next:</strong> {next_step}</li>
-    </ul>
+    <p><strong>Status:</strong> Unable to Verify</p>
+    <p><strong>Action:</strong> No recommendation</p>
+    <p><strong>Why:</strong> {reason}</p>
+    <p><strong>Next step:</strong> {next_step}</p>
   </body>
 </html>
 "#
@@ -157,16 +151,6 @@ fn build_real_ticker_operational_fallback(workspace_dir: &Path, request_text: &s
     } else {
         format!("Quick update on {}", display_name)
     };
-    let research_labels = collect_research_labels(workspace_dir);
-    let research_summary = if research_labels.is_empty() {
-        "I do not have preserved issuer-specific research notes worth presenting as evidence yet."
-            .to_string()
-    } else {
-        format!(
-            "I do have partial research notes saved from this pass: {}.",
-            research_labels.join(", ")
-        )
-    };
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
     format!(
@@ -174,12 +158,10 @@ fn build_real_ticker_operational_fallback(workspace_dir: &Path, request_text: &s
   <body>
     <h1>{heading}</h1>
     <p><strong>As of:</strong> {today}</p>
-    <p>I could not finish a reliable buy-or-avoid review yet, so I am not sending a half-verified investment memo.</p>
-    <ul>
-      <li><strong>What I have so far:</strong> {research_summary}</li>
-      <li><strong>What is still missing:</strong> a current price and valuation cross-check, the latest issuer update read-through, and verified implications for margin, cash flow, or guidance.</li>
-      <li><strong>What this means now:</strong> treat this as incomplete work rather than a real Buy / Avoid / Add / Exit call.</li>
-    </ul>
+    <p><strong>Status:</strong> Unable to Verify</p>
+    <p><strong>Action:</strong> No recommendation</p>
+    <p><strong>Why:</strong> I could not finish a reliable investment update within the bounded runtime, so I am not sending a half-verified buy / wait / avoid call.</p>
+    <p><strong>Next step:</strong> If you want more than a bounded monitor reply, I can run a deeper report separately.</p>
   </body>
 </html>
 "#
@@ -454,6 +436,7 @@ fn extract_assumption_bullets(request_text: &str) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn collect_research_labels(workspace_dir: &Path) -> Vec<String> {
     let research_dir = workspace_dir.join("work").join("research");
     let mut labels = Vec::new();

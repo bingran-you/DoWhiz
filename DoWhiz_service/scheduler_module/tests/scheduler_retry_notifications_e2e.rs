@@ -328,6 +328,132 @@ fn run_task_failure_retries_and_notifies() -> Result<(), Box<dyn std::error::Err
 }
 
 #[test]
+fn repeated_failures_for_same_thread_send_only_one_user_notice(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let Some(mongo_uri) =
+        require_mongodb_uri("repeated_failures_for_same_thread_send_only_one_user_notice")
+    else {
+        return Ok(());
+    };
+
+    let Some(mut server) = test_support::start_mockito_server(
+        "repeated_failures_for_same_thread_send_only_one_user_notice",
+    ) else {
+        return Ok(());
+    };
+    let admin_addr = "admin@example.com";
+    let user_addr = "user@example.com";
+
+    let user_mock = server
+        .mock("POST", "/email")
+        .match_header("x-postmark-server-token", "test-token")
+        .match_body(Matcher::Regex(user_addr.to_string()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(success_body(user_addr))
+        .expect(1)
+        .create();
+
+    let admin_mock = server
+        .mock("POST", "/email")
+        .match_header("x-postmark-server-token", "test-token")
+        .match_body(Matcher::Regex(admin_addr.to_string()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(success_body(admin_addr))
+        .expect(2)
+        .create();
+
+    let _guard_token = EnvGuard::set("POSTMARK_SERVER_TOKEN", "test-token");
+    let _guard_api = EnvGuard::set("POSTMARK_API_BASE_URL", server.url());
+    let _guard_admin = EnvGuard::set("ADMIN_EMAIL", admin_addr);
+
+    let temp = TempDir::new()?;
+    let workspace = temp.path().join("workspace");
+    let incoming_dir = workspace.join("incoming_email");
+    fs::create_dir_all(&incoming_dir)?;
+    fs::write(
+        incoming_dir.join("postmark_payload.json"),
+        r#"{"Subject":"Test subject","MessageID":"<msg-id>"}"#,
+    )?;
+
+    let make_task = || RunTaskTask {
+        workspace_dir: workspace.clone(),
+        input_email_dir: PathBuf::from("incoming_email"),
+        input_attachments_dir: PathBuf::from("incoming_attachments"),
+        memory_dir: PathBuf::from("memory"),
+        reference_dir: PathBuf::from("references"),
+        model_name: "gpt-test".to_string(),
+        runner: "codex".to_string(),
+        codex_disabled: false,
+        reply_to: vec![user_addr.to_string()],
+        reply_from: Some("service@example.com".to_string()),
+        archive_root: None,
+        thread_id: Some("email:test-thread-123".to_string()),
+        thread_epoch: None,
+        thread_state_path: None,
+        channel: Channel::Email,
+        slack_team_id: None,
+        employee_id: None,
+        requester_identifier_type: None,
+        requester_identifier: None,
+        account_id: None,
+        channel_metadata: Default::default(),
+    };
+
+    let db_path = temp.path().join("tasks.db");
+    let mut scheduler = Scheduler::load(&db_path, AlwaysFailExecutor)?;
+
+    let task_one =
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(make_task()))?;
+    let _ = scheduler.tick();
+    force_one_shot_due(&mongo_uri, &db_path, task_one)?;
+    scheduler = Scheduler::load(&db_path, AlwaysFailExecutor)?;
+    let _ = scheduler.tick();
+    force_one_shot_due(&mongo_uri, &db_path, task_one)?;
+    scheduler = Scheduler::load(&db_path, AlwaysFailExecutor)?;
+    let _ = scheduler.tick();
+
+    let task_two =
+        scheduler.add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(make_task()))?;
+    let _ = scheduler.tick();
+    force_one_shot_due(&mongo_uri, &db_path, task_two)?;
+    scheduler = Scheduler::load(&db_path, AlwaysFailExecutor)?;
+    let _ = scheduler.tick();
+    force_one_shot_due(&mongo_uri, &db_path, task_two)?;
+    scheduler = Scheduler::load(&db_path, AlwaysFailExecutor)?;
+    let _ = scheduler.tick();
+
+    let failure_dir = workspace.join("failure_notifications");
+    let marker_count = fs::read_dir(&failure_dir)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("marker"))
+        .count();
+    assert_eq!(
+        marker_count, 1,
+        "expected one user-notice suppression marker"
+    );
+
+    let report_dir = env::temp_dir().join("dowhiz_failure_reports");
+    let report_one = report_dir.join(format!("task_failure_{}.html", task_one));
+    let report_two = report_dir.join(format!("task_failure_{}.html", task_two));
+    assert!(
+        report_one.exists(),
+        "first admin failure report should exist"
+    );
+    assert!(
+        report_two.exists(),
+        "second admin failure report should exist"
+    );
+
+    user_mock.assert();
+    admin_mock.assert();
+
+    Ok(())
+}
+
+#[test]
 fn transient_codex_failures_send_retry_alerts_and_terminal_notice(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _lock = ENV_MUTEX.lock().unwrap();
