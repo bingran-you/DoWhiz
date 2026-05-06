@@ -1744,6 +1744,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
         let section = build_user_identities_section(&identities);
 
@@ -2072,6 +2073,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2117,6 +2119,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2171,6 +2174,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2217,6 +2221,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2358,6 +2363,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2412,6 +2418,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2470,6 +2477,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
@@ -2516,6 +2524,7 @@ mod tests {
             organization_id: None,
             organization_name: None,
             notion_database_id: None,
+            organization_members: vec![],
         };
 
         let prompt = build_prompt(
