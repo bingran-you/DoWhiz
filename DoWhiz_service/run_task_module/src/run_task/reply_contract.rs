@@ -230,6 +230,11 @@ pub(super) fn ensure_expected_reply_artifact(
         });
     }
 
+    // Only run contract validation for investment requests
+    if !is_investment_request(&load_inbound_request_text(workspace_dir)?) {
+        return Ok(());
+    }
+
     let Some(violations) = investment_contract_violations(workspace_dir, reply_path)? else {
         return Ok(());
     };
