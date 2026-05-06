@@ -223,7 +223,7 @@
   display: grid;
   justify-items: center;
   gap: 0.9rem;
-  max-width: 46rem;
+  max-width: 56rem;
 }
 
 .oliver-clarity-eyebrow {
@@ -238,11 +238,11 @@
 .oliver-clarity-title {
   margin: 0;
   max-width: none;
-  font-size: clamp(3rem, 5.4vw, 4.9rem);
-  line-height: 0.97;
+  font-size: clamp(2.8rem, 5vw, 4.5rem);
+  line-height: 0.98;
   letter-spacing: -0.06em;
   font-weight: 700;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 
 .oliver-clarity-accent {
