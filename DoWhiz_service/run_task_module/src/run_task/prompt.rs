@@ -289,13 +289,10 @@ Do not pretend the job has been done without actually doing it."#
 - Prioritize delivering a useful reply within the remaining budget over rebuilding the entire original project from scratch.
 - Before starting new research, inspect any existing artifacts from the earlier pass, especially `codex_fast_completion_context.md`, `reply_email_draft.html`, `.codex_remote_output.log`, and `.run_task_trace_codex_primary/` if present. Reuse facts, sources, filenames, and partial drafts instead of starting over.
 - For long research or writing tasks, begin updating the final reply artifact immediately and keep it current as sections become ready.
-- For investment monitoring in this mode, treat the run as `draft first, research second`.
-- If the user asked for investment monitoring, `reply_email_draft.html` must exist within your next two tool actions. Do not start a fresh multi-site quote sweep, broad annual-report extraction, or repeated market-price loop before the draft exists.
-- If the user asked for investment monitoring and the earlier pass already gathered enough support for a calibrated call, stop researching and finalize the artifact now.
-- If the prompt says "only tell me if I should act" and the likely answer is `No Material Change`, write the short update immediately and stop.
-- After the draft exists, allow at most one additional targeted external check when a single missing fact blocks the verdict. Otherwise finalize with an explicit limitation note instead of continuing to search.
-- For incomplete real-ticker investment work, prefer a short honest fallback over a padded pseudo-memo. If you cannot support a real investment view within the remaining budget, do not invent action tables, triggers, or section shells just to make the reply look complete.
-- For monitor-style investment requests, prefer a concise operational update when context is missing instead of expanding into a full decision memo.
+- For investment monitoring in this mode, prefer a short bounded monitor reply over more research.
+- If the user asked for investment monitoring, `reply_email_draft.html` must exist within your next two tool actions.
+- Do not start a fresh multi-site quote sweep, annual-report extraction pass, or repeated market-price loop in recovery mode for investment monitoring.
+- If you cannot verify enough context quickly, finalize a short `Unable to Verify` reply instead of continuing to search.
 - Do not leave `Provisional update`, `still being finalized`, `TBD`, `to be confirmed`, or empty section shells in the final artifact.
 - Investment-monitor requests in this product are allowed. Do not refuse solely because the task concerns a stock, an ETF, or an assumption-based investment scenario. If evidence is limited, answer with calibrated limitation language instead of refusing.
 - If you are still gathering evidence, clearly mark the draft as provisional near the top, and remove or replace that note before you finish if the reply becomes complete.
@@ -628,50 +625,36 @@ See `.agents/skills/notion/SKILL.md` for detailed command reference.
 
 fn build_investment_capabilities_section() -> &'static str {
     r#"Investment research requests:
-- When the user asks about one U.S. stock or one U.S. ETF, asks whether now is a good time to buy, asks about buying before earnings, or wants a decision-useful investment view, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
-- Keep the final user-visible reply structured and scan-first. Do not collapse it into generic commentary or one long research wall.
-- Decide the monitor mode first: `No Material Change`, `Watch Closely`, or `Review Now`.
-- For email replies, render the memo structure from the skill in semantic HTML inside `reply_email_draft.html`.
-- For real-ticker deep-research requests, do a bounded first pass before you go deeper: latest company release or filing, one current price/reference check, and one independent cross-check. Then start or update the draft. Do not spend the whole run on page-by-page annual-report extraction unless that first pass leaves a material unresolved conflict.
-- Create or refresh `reply_email_draft.html` before starting a second layer of research. Keep the draft current as you verify more evidence.
-- Keep these visible sections and labels in the HTML body:
-  - `As of:`
-  - `Price:`
-  - `Investor question:`
-  - `Decision Card`
-  - `Monitor Status`
+- When the user asks about one U.S. stock or ETF, whether now is a good time to buy, or whether anything material changed, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
+- Treat this email path as a simple bounded monitor, not a deep-research pipeline.
+- Produce exactly one concise HTML reply inside `reply_email_draft.html`.
+- Use exactly one of these modes:
+  - `Actionable Update`
+  - `No Material Update`
+  - `Unable to Verify`
+- For `Actionable Update`, keep only:
+  - `Status`
   - `New Money Action`
   - `Existing Holder Action`
-  - `Thesis Impact`
-  - `Signal Quality`
+  - `Why now`
+  - `What changed`
+  - `What would change the view`
   - `Confidence`
-  - `One-line rationale:`
-  - For `Watch Closely` / `Review Now`: `Dual-Horizon Framing`, `Near-Term Timing View`, `Long-Term Ownership View`, `Verified Facts`, `Derived Metrics`, `Scenarios`, `Bull Case`, `Base Case`, `Bear Case`
-  - For `No Material Change`: `Why Now`, `What Would Change The View`, `Evidence Chips`
-  - Inside `What Would Change The View`, keep `Upgrade / Review Now`, `Downgrade / De-risk`, and `Invalidation`
-- Use the exact decision-card values below. Do not paraphrase them into sentence fragments.
-  - `Monitor Status`: `No Material Change` | `Watch Closely` | `Review Now`
-  - `New Money Action`: `Buy` | `Starter Only` | `Wait` | `Avoid for now`
-  - `Existing Holder Action`: `Add` | `Hold/Do not add` | `Hold` | `Trim` | `Exit`
-  - `Thesis Impact`: `No Material Change` | `Positive` | `Mixed` | `Negative`
-  - `Signal Quality`: `Weak` | `Moderate` | `Strong`
-  - `Confidence`: `Low` | `Medium` | `High`
-- Keep clickable source links near the factual claims they support. Compact chip-style links are fine, but regular inline links are also acceptable if they stay close to the claim.
-- Use a mix of source tiers: at least one primary filing or IR source, plus independent or reference cross-checks when relevant.
-- If the correct answer is `No Material Change`, prefer the short update contract instead of padding into a long memo.
-- If the user says "only tell me if I should act" and the correct mode is `No Material Change`, keep the output extremely short: no full memo, no scenario block, and stay under roughly 1200 visible characters.
-- For `No Material Change`, the final artifact should normally be closer to 250-900 visible characters than to 1200. Remove throat-clearing, provisional filler, and repeated caveats.
-- For `No Material Change`, `Evidence Chips` should contain 1 to 3 compact bullets or inline chips with concrete clickable links when those links are available. Do not leave `Evidence Chips` as a placeholder sentence.
-- Do not leave `Provisional update`, `still being finalized`, or similar placeholder language in the final artifact unless the entire point of the reply is to state that evidence remains incomplete.
-- Once a `No Material Change` short update is written, stop. Do not keep researching, and do not spend the final stretch on extra character-count or HTML-dump commands.
-- If the visible recommendation lands on `Wait`, `Hold`, or `Hold/Do not add`, include concrete upgrade, downgrade, and invalidation triggers with numbers or dated events.
-- For synthetic or assumption-based scenarios, label the artifact as `assumption-based`, do not use generic market homepages as placeholder evidence, and cap confidence at `Medium` unless you verified real issuer-specific evidence.
-- For long research paths, update `reply_email_draft.html` early and keep it current. If time is running low, stop searching and finalize the best calibrated artifact you can support, explicitly naming any missing evidence.
-- If the research path stays incomplete near the deadline on a real ticker, prefer a best-available `Watch Closely` artifact with explicit missing evidence over timing out with no reply.
-- If the research path stays incomplete near the deadline on a real ticker, do not leave placeholder lines like `still being finalized` or `will include later`. Replace them with explicit limitation language and a final best-available verdict.
-- Investment monitoring requests in this product are allowed. Do not refuse solely because the task concerns stock analysis, a buy/wait/trim decision, or an assumption-based scenario. If evidence is incomplete, answer with calibrated uncertainty instead of refusing.
-- If you sanity-check the final artifact, keep that check lightweight. Do not print the full visible text body or the entire HTML back to the terminal.
-- If the user states a conflicting earnings date or similar factual premise, correct it explicitly in the final reply instead of silently accepting it.
+- For `No Material Update`, keep only:
+  - `Status`
+  - `Action`
+  - `Why`
+  - `What would matter next`
+- For `Unable to Verify`, keep only:
+  - `Status`
+  - `Action`
+  - `Why`
+  - `Next step`
+- Keep the reply short and scan-first. Do not write a long memo, a bull/base/bear frame, a large derived-metrics table, or a chart block.
+- Do not mine annual reports page by page in this email path.
+- Do not spend the whole run on research. If you cannot verify enough context quickly, send `Unable to Verify` and stop.
+- If a deeper report would help, say that you can run it separately. Do not start it automatically inside this email path.
+- Investment monitoring requests in this product are allowed. Do not refuse solely because the task concerns stock analysis or an assumption-based scenario.
 
 "#
 }
@@ -1857,14 +1840,14 @@ mod tests {
         );
 
         assert!(prompt.contains(".agents/skills/us-equity-daily-monitor/SKILL.md"));
-        assert!(prompt.contains("Decision Card"));
-        assert!(prompt.contains("No Material Change"));
-        assert!(prompt.contains("Monitor Status"));
+        assert!(prompt.contains("simple bounded monitor"));
+        assert!(prompt.contains("Actionable Update"));
+        assert!(prompt.contains("No Material Update"));
+        assert!(prompt.contains("Unable to Verify"));
         assert!(prompt.contains("New Money Action"));
         assert!(prompt.contains("Existing Holder Action"));
-        assert!(prompt.contains("Investor question"));
-        assert!(prompt.contains("clickable source links"));
-        assert!(prompt.contains("final user-visible reply structured"));
+        assert!(prompt.contains("Do not mine annual reports page by page"));
+        assert!(prompt.contains("Do not start it automatically"));
     }
 
     #[test]

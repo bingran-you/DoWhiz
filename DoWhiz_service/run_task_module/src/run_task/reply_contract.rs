@@ -76,6 +76,7 @@ const SHORT_ORDER: &[&str] = &[
     "evidence chips",
 ];
 
+#[allow(dead_code)]
 const GENERIC_PHRASES: &[&str] = &[
     "good company, but do not chase",
     "great business, but wait",
@@ -87,6 +88,7 @@ const GENERIC_PHRASES: &[&str] = &[
     "good business, but not a good all-in buy",
     "wait until after earnings",
 ];
+#[allow(dead_code)]
 const INCOMPLETE_FAIL_SOFT_MARKERS: &[&str] = &[
     "incomplete research artifact",
     "research did not complete within budget",
@@ -101,12 +103,14 @@ const INCOMPLETE_RESEARCH_MARKERS: &[&str] = &[
     "best-available timed artifact",
     "best-available timed reply",
 ];
+#[allow(dead_code)]
 const INTERNAL_THREAD_METADATA_MARKERS: &[&str] = &[
     "canonical thread request",
     "auto-generated merged view for reruns",
     "thread timeline",
     "merged attachments for this rerun",
 ];
+#[allow(dead_code)]
 const INTERNAL_RUNTIME_LANGUAGE_MARKERS: &[&str] = &[
     "verification incomplete in this timed monitor run",
     "verification incomplete in this timed run",
@@ -131,18 +135,14 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "a buy",
     "buy this week",
     "buy before",
-    "sell before",
-    "investing",
-    "investment view",
-    "investment case",
-    "investment memo",
     "starter position",
-    "starter only",
     "buy now",
     "add or trim",
+    "trim or exit",
+    "avoid for now",
 ];
 
-const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research", "analyze"];
+const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research"];
 const INVESTMENT_MONITOR_KEYWORDS: &[&str] = &[
     "material changed",
     "material change",
@@ -169,7 +169,9 @@ const ACTION_ONLY_MONITOR_KEYWORDS: &[&str] = &[
     "only tell me if i should act",
     "just tell me if i should act",
 ];
+#[allow(dead_code)]
 const SHORT_ARTIFACT_VISIBLE_CHAR_LIMIT: usize = 1200;
+const MAX_REPLY_ARTIFACT_BYTES: usize = 64 * 1024;
 const DOWHIZ_EMAIL_CONTENT_START: &str = "<!-- dowhiz-email-content:start -->";
 const DOWHIZ_EMAIL_CONTENT_END: &str = "<!-- dowhiz-email-content:end -->";
 const EMAIL_SHELL_BOILERPLATE: &[&str] = &[
@@ -277,82 +279,27 @@ pub(super) fn action_only_monitor_request_for_workspace(
 }
 
 fn investment_contract_violations(
-    workspace_dir: &Path,
+    _workspace_dir: &Path,
     reply_path: &Path,
 ) -> Result<Option<Vec<String>>, RunTaskError> {
-    let request_text = load_inbound_request_text(workspace_dir)?;
-    if !is_investment_request(&request_text) {
-        return Ok(None);
-    }
-    let synthetic_mode = is_synthetic_investment_request(&request_text);
-
     let reply_body = fs::read_to_string(reply_path)?;
-    let normalized_reply = normalize_search_text(&reply_body);
     let mut violations = Vec::new();
 
-    if contains_any_marker(&normalized_reply, INTERNAL_THREAD_METADATA_MARKERS) {
-        violations.push(
-            "reply leaks internal canonical-thread metadata instead of a user-facing question"
-                .to_string(),
-        );
+    if reply_body.len() > MAX_REPLY_ARTIFACT_BYTES {
+        violations.push("reply artifact exceeds bounded monitor size limit".to_string());
     }
 
-    if contains_any_marker(&normalized_reply, INTERNAL_RUNTIME_LANGUAGE_MARKERS) {
-        violations.push(
-            "reply contains internal timeout/recovery wording that is not user-sendable"
-                .to_string(),
-        );
+    if reply_body.contains('\0') {
+        violations.push("reply artifact contains null bytes".to_string());
     }
 
-    if reply_looks_like_templated_incomplete_investment_output(&normalized_reply) {
-        violations.push(
-            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
-                .to_string(),
-        );
-    }
-
-    let clickable_links = clickable_links(&reply_body);
-    if detect_contract_type(&normalized_reply) == "short"
-        && normalized_reply.contains("no material change")
-        && normalized_reply.len() > SHORT_ARTIFACT_VISIBLE_CHAR_LIMIT
-    {
-        violations.push("No Material Change artifact exceeds short-output budget".to_string());
-    }
-
-    if synthetic_mode {
-        if !normalized_reply.contains("assumption-based") {
-            violations.push(
-                "synthetic scenario output must clearly label itself as assumption-based"
-                    .to_string(),
-            );
-        }
-        if normalized_reply.contains("confidence high")
-            && !clickable_links
-                .iter()
-                .any(|link| link_looks_specific(link) && !is_generic_placeholder_link(link))
-        {
-            violations.push(
-                "synthetic assumption-only output cannot use High confidence without specific source-backed issuer evidence"
-                    .to_string(),
-            );
-        }
-        if clickable_links
-            .iter()
-            .any(|link| is_generic_placeholder_link(link))
-        {
-            violations.push(
-                "synthetic scenario output uses generic placeholder links instead of clearly source-free assumption framing"
-                    .to_string(),
-            );
-        }
-    }
-
-    if GENERIC_PHRASES
-        .iter()
-        .any(|phrase| normalized_reply.contains(phrase))
-    {
-        violations
-            .push("generic hold/wait phrasing is not sendable as an investment reply".to_string());
+    let visible_text = if looks_like_html_reply(reply_path, &reply_body) {
+        rough_html_to_text(&reply_body)
+    } else {
+        reply_body.clone()
+    };
+    if visible_text.trim().is_empty() {
+        violations.push("reply artifact has no visible text".to_string());
     }
 
     if violations.is_empty() {
@@ -362,6 +309,14 @@ fn investment_contract_violations(
     }
 }
 
+fn looks_like_html_reply(reply_path: &Path, body: &str) -> bool {
+    matches!(
+        reply_path.extension().and_then(|value| value.to_str()),
+        Some("html") | Some("htm")
+    ) || body.contains('<')
+}
+
+#[allow(dead_code)]
 fn detect_contract_type(normalized_reply: &str) -> &'static str {
     if normalized_reply.contains("why now")
         && normalized_reply.contains("what would change the view")
@@ -440,6 +395,7 @@ fn neutral_actions_present(normalized_reply: &str) -> bool {
         || normalized_reply.contains("existing holder action hold/do not add")
 }
 
+#[allow(dead_code)]
 fn clickable_links(raw_reply: &str) -> Vec<String> {
     let fragment = visible_html_fragment(raw_reply);
     let document = kuchiki::parse_html().one(fragment);
@@ -768,6 +724,7 @@ fn style_hides_content(style: &str) -> bool {
         || normalized.contains("mso-hide:all")
 }
 
+#[allow(dead_code)]
 fn is_generic_placeholder_link(link: &str) -> bool {
     let lower = link.to_ascii_lowercase();
     let path = url_path(&lower);
@@ -803,6 +760,7 @@ fn is_generic_placeholder_link(link: &str) -> bool {
         .any(|domain| lower.contains(domain) && generic_paths.contains(&trimmed))
 }
 
+#[allow(dead_code)]
 fn link_looks_specific(link: &str) -> bool {
     let lower = link.to_ascii_lowercase();
     let path = url_path(&lower);
@@ -821,12 +779,14 @@ fn link_looks_specific(link: &str) -> bool {
         || trimmed.contains("article")
 }
 
+#[allow(dead_code)]
 fn contains_any_marker(normalized_reply: &str, markers: &[&str]) -> bool {
     markers
         .iter()
         .any(|marker| normalized_reply.contains(marker))
 }
 
+#[allow(dead_code)]
 fn reply_looks_like_templated_incomplete_investment_output(normalized_reply: &str) -> bool {
     let has_decision_card = normalized_reply.contains("decision card");
     let has_action_table = normalized_reply.contains("new money action")
@@ -837,6 +797,7 @@ fn reply_looks_like_templated_incomplete_investment_output(normalized_reply: &st
     (has_decision_card || has_action_table) && has_incomplete_marker
 }
 
+#[allow(dead_code)]
 fn url_path(link: &str) -> &str {
     let without_scheme = link.split_once("://").map(|(_, rest)| rest).unwrap_or(link);
     let Some(path_start) = without_scheme.find('/') else {
@@ -978,25 +939,20 @@ mod tests {
     }
 
     #[test]
-    fn generic_investment_commentary_fails_contract_validation() {
+    fn generic_investment_commentary_passes_mechanical_validation() {
         let workspace = write_workspace(
             "Give me deep research on NVDA and tell me whether now is a good time to buy.",
             "<p>NVIDIA is a good company, but I would wait for clarity and buy in tranches.</p>",
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "tail")
-            .expect_err("expected contract violation");
-        let rendered = err.to_string();
-        assert!(
-            rendered.contains("Output contract violation")
-                || rendered.contains("violates required contract")
-        );
-        assert!(!reply_artifact_ready_for_workspace(&workspace, &reply_path));
+        ensure_expected_reply_artifact(&workspace, &reply_path, "tail")
+            .expect("mechanical validation should not reject generic commentary");
+        assert!(reply_artifact_ready_for_workspace(&workspace, &reply_path));
     }
 
     #[test]
-    fn canonical_thread_metadata_in_reply_fails_sendability_gate() {
+    fn canonical_thread_metadata_is_not_blocked_by_mechanical_gate() {
         let workspace = write_workspace(
             "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
             r#"
@@ -1008,11 +964,8 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect_err("canonical thread metadata should not be sendable");
-        assert!(err
-            .to_string()
-            .contains("reply leaks internal canonical-thread metadata"));
+        ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect("mechanical validation should not reject based on semantics");
     }
 
     #[test]
@@ -1072,8 +1025,9 @@ mod tests {
     }
 
     #[test]
-    fn no_material_change_monitor_prompt_fails_when_short_artifact_is_too_long() {
-        let repeated = "The latest public information does not change the call today. ".repeat(40);
+    fn oversized_reply_artifact_fails_mechanical_validation() {
+        let repeated =
+            "The latest public information does not change the call today. ".repeat(2000);
         let workspace = write_workspace(
             "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
             &format!(
@@ -1119,86 +1073,31 @@ mod tests {
         let reply_path = workspace.join("reply_email_draft.html");
 
         let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect_err("expected short-contract budget violation");
+            .expect_err("expected bounded monitor size violation");
         assert!(err
             .to_string()
-            .contains("No Material Change artifact exceeds short-output budget"));
+            .contains("reply artifact exceeds bounded monitor size limit"));
     }
 
     #[test]
-    fn synthetic_placeholder_links_and_high_confidence_fail_contract_validation() {
+    fn html_reply_with_no_visible_text_fails_mechanical_validation() {
         let workspace = write_workspace(
-            "Assume company X just raised FY revenue guidance by 15%, gross margin expanded 400 bps, free cash flow turned positive, and Reuters/Bloomberg reported stronger order demand. Write the investment monitor output.",
+            "Give me deep research on NVDA and tell me whether now is a good time to buy.",
             r#"
-            <section>
-              <p><strong>As of:</strong> 2026-05-01 · <strong>Price:</strong> Assumption-based scenario</p>
-              <p><strong>Investor question:</strong> Write the investment monitor output.</p>
-            </section>
-            <section>
-              <h2>Decision Card</h2>
-              <table>
-                <tr><td>Monitor Status</td><td>Review Now</td></tr>
-                <tr><td>New Money Action</td><td>Buy</td></tr>
-                <tr><td>Existing Holder Action</td><td>Add</td></tr>
-                <tr><td>Thesis Impact</td><td>Positive</td></tr>
-                <tr><td>Signal Quality</td><td>Strong</td></tr>
-                <tr><td>Confidence</td><td>High</td></tr>
-              </table>
-              <p><strong>One-line rationale:</strong> Assumption-based scenario with improving demand.</p>
-            </section>
-            <section>
-              <h2>Dual-Horizon Framing</h2>
-              <h3>Near-Term Timing View</h3>
-              <p>Momentum is positive.</p>
-              <h3>Long-Term Ownership View</h3>
-              <p>The scenario implies a stronger moat.</p>
-            </section>
-            <section>
-              <h2>Verified Facts</h2>
-              <ul>
-                <li>Assumption-based scenario only. <a href="https://www.reuters.com/markets/">Reuters</a></li>
-                <li>Peer valuation remains supportive. <a href="https://www.bloomberg.com/markets">Bloomberg</a></li>
-                <li>FCF turned positive. <a href="https://www.nasdaq.com/">Nasdaq</a></li>
-              </ul>
-            </section>
-            <section>
-              <h2>Derived Metrics</h2>
-              <p>Revenue uplift / EV-sales gap = 15 / 1.2</p>
-            </section>
-            <section>
-              <h2>Scenarios</h2>
-              <h3>Bull Case</h3>
-              <p>Execution holds.</p>
-              <h3>Base Case</h3>
-              <p>Demand remains healthy.</p>
-              <h3>Bear Case</h3>
-              <p>Demand cools quickly.</p>
-            </section>
-            <section>
-              <h2>Triggers — Verdict Movement</h2>
-              <ul>
-                <li><strong>Upgrade / Review Now:</strong> Revenue guide rises another 5%.</li>
-                <li><strong>Downgrade / De-risk:</strong> Gross margin gives back 200 bps.</li>
-                <li><strong>Invalidation:</strong> Orders soften by more than 10%.</li>
-              </ul>
-            </section>
-            <section>
-              <h2>Judgment</h2>
-              <p>This is assumption-based, but confidence is still high.</p>
-            </section>
+            <html><body><style>.hidden { display:none; }</style><div aria-hidden="true">hidden</div></body></html>
             "#,
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
         let err = ensure_expected_reply_artifact(&workspace, &reply_path, "tail")
-            .expect_err("synthetic placeholder links should fail");
-        let rendered = err.to_string();
-        assert!(rendered.contains("synthetic scenario output uses generic placeholder links"));
-        assert!(rendered.contains("cannot use High confidence"));
+            .expect_err("empty visible html should fail");
+        assert!(err
+            .to_string()
+            .contains("reply artifact has no visible text"));
     }
 
     #[test]
-    fn incomplete_research_investment_memo_fails_sendability_gate() {
+    fn incomplete_research_pseudo_memo_passes_mechanical_validation() {
         let workspace = write_workspace(
             "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
             r#"
@@ -1272,15 +1171,12 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect_err("incomplete pseudo-memo should not be sendable");
-        assert!(err.to_string().contains(
-            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
-        ));
+        ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect("runtime should not block based on semantic completeness");
     }
 
     #[test]
-    fn incomplete_short_monitor_artifact_fails_sendability_gate() {
+    fn incomplete_short_monitor_artifact_passes_mechanical_validation() {
         let workspace = write_workspace(
             "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
             r#"
@@ -1322,14 +1218,7 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect_err("short incomplete monitor pseudo-memo should not be sendable");
-        let rendered = err.to_string();
-        assert!(rendered.contains(
-            "incomplete investment fallbacks must not be sent as investment-looking decision memos"
-        ));
-        assert!(rendered.contains(
-            "reply contains internal timeout/recovery wording that is not user-sendable"
-        ));
+        ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect("runtime should not block based on semantic completeness");
     }
 }

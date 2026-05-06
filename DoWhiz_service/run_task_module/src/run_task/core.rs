@@ -11,10 +11,10 @@ use super::env::read_env_trimmed;
 use super::errors::RunTaskError;
 use super::investment_fail_soft::{
     maybe_write_action_only_monitor_artifact, maybe_write_fail_soft_investment_artifact,
-    maybe_write_synthetic_assumption_artifact,
 };
 use super::reply_contract::{
-    investment_monitor_request_for_workspace, investment_request_for_workspace,
+    action_only_monitor_request_for_workspace, investment_monitor_request_for_workspace,
+    investment_request_for_workspace,
 };
 use super::trace::RUN_TASK_TRACE_DIRNAME;
 use super::types::{RunTaskOutput, RunTaskParams, RunTaskRequest};
@@ -25,28 +25,31 @@ const MAX_INVESTMENT_MONITOR_PRIMARY_TIMEOUT_SECS: u64 = 30;
 const MAX_INVESTMENT_MONITOR_FAST_COMPLETION_TIMEOUT_SECS: u64 = 20;
 const MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS: u64 = 90;
 const MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS: u64 = 30;
+const SIMPLE_INVESTMENT_MONITOR_TIMEOUT_SECS: u64 = 20;
+const SIMPLE_INVESTMENT_RESEARCH_TIMEOUT_SECS: u64 = 45;
 
 pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
     let workspace_dir = remap_workspace_dir(&params.workspace_dir)?;
     let runner = normalize_runner(&params.runner);
     let request = build_request(&workspace_dir, params, params.model_name.as_str());
+    let action_only_monitor_request = action_only_monitor_request_for_workspace(&workspace_dir)?;
+    let investment_request = investment_request_for_workspace(&workspace_dir)?;
+
+    if action_only_monitor_request {
+        if let Some(output) = maybe_finalize_action_only_monitor_artifact(
+            params,
+            &workspace_dir,
+            "action-only monitor fast path",
+        )? {
+            return Ok(output);
+        }
+    }
+
+    if investment_request && !params.reply_to.is_empty() {
+        return run_simple_investment_monitor_task(params, &workspace_dir, &runner);
+    }
+
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
-
-    if let Some(output) = maybe_finalize_synthetic_investment_artifact(
-        params,
-        &workspace_dir,
-        "synthetic assumption-mode fast path",
-    )? {
-        return Ok(output);
-    }
-
-    if let Some(output) = maybe_finalize_action_only_monitor_artifact(
-        params,
-        &workspace_dir,
-        "action-only monitor fast path",
-    )? {
-        return Ok(output);
-    }
 
     if params.codex_disabled {
         if !params.reply_to.is_empty() {
@@ -137,6 +140,106 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
     }
 }
 
+fn run_simple_investment_monitor_task(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    runner: &str,
+) -> Result<RunTaskOutput, RunTaskError> {
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+
+    if params.codex_disabled {
+        let disabled_error = RunTaskError::CodexFailed {
+            status: None,
+            output: "Codex disabled for bounded investment monitor runtime.".to_string(),
+        };
+        if let Some(output) = finalize_simple_investment_fallback(
+            params,
+            workspace_dir,
+            &disabled_error,
+            &reply_html_path,
+            &reply_attachments_dir,
+        )? {
+            return Ok(output);
+        }
+        return Err(disabled_error);
+    }
+
+    let primary_result = match runner {
+        "claude" => run_claude_task(
+            build_request(workspace_dir, params, params.model_name.as_str()),
+            runner,
+            reply_html_path.clone(),
+            reply_attachments_dir.clone(),
+            false,
+        ),
+        _ => run_codex_task_with_timeout(
+            build_request(workspace_dir, params, params.model_name.as_str()),
+            runner,
+            reply_html_path.clone(),
+            reply_attachments_dir.clone(),
+            Some(simple_investment_timeout(workspace_dir)?),
+        ),
+    };
+
+    match primary_result {
+        Ok(output) => Ok(output),
+        Err(primary_err) => {
+            if let Some(output) = finalize_simple_investment_fallback(
+                params,
+                workspace_dir,
+                &primary_err,
+                &reply_html_path,
+                &reply_attachments_dir,
+            )? {
+                Ok(output)
+            } else {
+                Err(primary_err)
+            }
+        }
+    }
+}
+
+fn finalize_simple_investment_fallback(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    primary_err: &RunTaskError,
+    reply_html_path: &Path,
+    reply_attachments_dir: &Path,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if params.reply_to.is_empty() {
+        return Ok(None);
+    }
+
+    let Some(recovery_note) =
+        maybe_write_fail_soft_investment_artifact(workspace_dir, reply_html_path, primary_err)?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(RunTaskOutput {
+        reply_html_path: reply_html_path.to_path_buf(),
+        reply_attachments_dir: reply_attachments_dir.to_path_buf(),
+        codex_output: primary_err.to_string(),
+        scheduled_tasks: Vec::new(),
+        scheduled_tasks_error: None,
+        scheduler_actions: Vec::new(),
+        scheduler_actions_error: None,
+        token_usage: None,
+        recovery_note: Some(recovery_note),
+    }))
+}
+
+fn simple_investment_timeout(workspace_dir: &Path) -> Result<Duration, RunTaskError> {
+    let cap_secs = if investment_monitor_request_for_workspace(workspace_dir)? {
+        SIMPLE_INVESTMENT_MONITOR_TIMEOUT_SECS
+    } else {
+        SIMPLE_INVESTMENT_RESEARCH_TIMEOUT_SECS
+    };
+
+    Ok(codex_command_timeout().min(Duration::from_secs(cap_secs)))
+}
+
 fn should_prefer_investment_fail_soft(
     params: &RunTaskParams,
     workspace_dir: &Path,
@@ -150,36 +253,6 @@ fn should_prefer_investment_fail_soft(
         primary_err,
         RunTaskError::CommandTimeout { .. } | RunTaskError::OutputMissing { .. }
     ))
-}
-
-fn maybe_finalize_synthetic_investment_artifact(
-    params: &RunTaskParams,
-    workspace_dir: &Path,
-    codex_output: &str,
-) -> Result<Option<RunTaskOutput>, RunTaskError> {
-    if params.reply_to.is_empty() {
-        return Ok(None);
-    }
-
-    let request = build_request(workspace_dir, params, params.model_name.as_str());
-    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
-    let Some(recovery_note) =
-        maybe_write_synthetic_assumption_artifact(workspace_dir, &reply_html_path)?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(RunTaskOutput {
-        reply_html_path,
-        reply_attachments_dir,
-        codex_output: codex_output.to_string(),
-        scheduled_tasks: Vec::new(),
-        scheduled_tasks_error: None,
-        scheduler_actions: Vec::new(),
-        scheduler_actions_error: None,
-        token_usage: None,
-        recovery_note: Some(recovery_note),
-    }))
 }
 
 fn maybe_finalize_action_only_monitor_artifact(
