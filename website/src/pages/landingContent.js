@@ -1,8 +1,10 @@
+import { buildEnglishHomepageContent } from './landingExecutionContent';
+
 const EN_LANDING_CONTENT = {
   metadata: {
-    title: 'DoWhiz | AI digital employees in email, Slack, and GitHub',
+    title: 'DoWhiz | Keep launches from drifting',
     description:
-      'Start with Oliver in email, Slack, or Discord. DoWhiz turns real requests into finished work across GitHub, docs, and shared tools.',
+      'Turn messy planning threads into owners, dates, blockers, decisions, and evidence-backed readiness across Slack, email, GitHub, docs, and your systems of record.',
     canonicalUrl: 'https://dowhiz.com/',
     ogLocale: 'en_US',
     themeColor: '#2C2C2E',
@@ -1156,5 +1158,5 @@ const ZH_LANDING_CONTENT = {
 };
 
 export function getLandingContent(locale = 'en-US') {
-  return locale === 'zh-CN' ? ZH_LANDING_CONTENT : EN_LANDING_CONTENT;
+  return locale === 'zh-CN' ? ZH_LANDING_CONTENT : buildEnglishHomepageContent(EN_LANDING_CONTENT);
 }
