@@ -543,7 +543,15 @@ impl MongoSchedulerStore {
                                 }
                             }
                             AciContainerStatus::Terminal(state) => {
-                                if let Err(e) = self.disable_task_by_id(
+                                if state.eq_ignore_ascii_case("Succeeded") {
+                                    // Container succeeded - let ACI recovery handle it
+                                    // ACI recovery will: download output, send outbound, mark success
+                                    tracing::info!(
+                                        "ACI container for task {} succeeded, deferring to ACI recovery",
+                                        task_id
+                                    );
+                                    None
+                                } else if let Err(e) = self.disable_task_by_id(
                                     task_id,
                                     &format!(
                                         "auto-disabled: ACI container terminated with state: {}",
