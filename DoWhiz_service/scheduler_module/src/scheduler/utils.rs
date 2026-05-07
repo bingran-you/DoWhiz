@@ -140,9 +140,28 @@ pub fn load_notion_access_token_for_account(account_id: Option<Uuid>) -> Option<
         }
     };
 
+    // Also resolve the org's notion_workspace_id to select the correct credential
+    let org_workspace_id = resolve_org_notion_workspace_id(account_id);
+
     match store.get_credentials_for_account(effective_account_id) {
         Ok(credentials) => {
-            if let Some(cred) = credentials.first() {
+            // Find credential matching org's workspace_id, or fall back to first
+            let cred = if let Some(ref ws_id) = org_workspace_id {
+                credentials
+                    .iter()
+                    .find(|c| &c.workspace_id == ws_id)
+                    .or_else(|| {
+                        tracing::warn!(
+                            "No credential found for org workspace_id={}, falling back to first",
+                            ws_id
+                        );
+                        credentials.first()
+                    })
+            } else {
+                credentials.first()
+            };
+
+            if let Some(cred) = cred {
                 tracing::debug!(
                     "Loaded Notion access token for account {} (workspace: {})",
                     effective_account_id,
@@ -176,4 +195,14 @@ fn resolve_org_leader_account_id(account_id: Uuid) -> Option<Uuid> {
     let org_id = account.organization_id?;
     let org = account_store.get_organization_by_id(org_id).ok()??;
     org.leader_account_id
+}
+
+/// If the account belongs to an organization with a configured Notion workspace, return the workspace_id.
+/// Returns None if the account is not in an org, or the org has no notion_workspace_id set.
+fn resolve_org_notion_workspace_id(account_id: Uuid) -> Option<String> {
+    let account_store = AccountStore::from_env().ok()?;
+    let account = account_store.get_account(account_id).ok()??;
+    let org_id = account.organization_id?;
+    let org = account_store.get_organization_by_id(org_id).ok()??;
+    org.notion_workspace_id
 }
