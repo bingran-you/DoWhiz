@@ -385,6 +385,7 @@ Rules:
   Prefer creating a work/ directory for clones, patches, and build artifacts.
 - If attachments include version suffixes like _v1, _v2, the highest version should be the latest version.
 - Avoid interactive commands; use non-interactive flags for git/gh (for example, `gh pr create --title ... --body ...`).
+- Content filter handling: If you encounter repeated "content_filter" errors or "I cannot assist with that request" responses when trying to complete a task, you MUST still create a reply informing the user. Write a polite reply explaining that the task could not be completed due to content policy restrictions, and suggest they rephrase or simplify their request. Never leave the user without any response.
 {filesystem_security_section}{registration_section}"#,
         input_email = input_email_dir.display(),
         input_attachments = input_attachments_dir.display(),
