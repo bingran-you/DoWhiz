@@ -67,6 +67,15 @@ If you are new to the repo, use this order:
 3. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the public contributor workflow.
 4. Use [docs/README.md](docs/README.md) for deeper local-development, self-hosting, integration, and troubleshooting docs.
 
+## Maintainer / Codex Docs
+
+If you are trying to understand how the live system is wired today, start here before diving into
+historical notes:
+
+- [docs/repo-map.md](docs/repo-map.md)
+- [docs/runtime-architecture.md](docs/runtime-architecture.md)
+- [docs/documentation-drift-review-2026-05.md](docs/documentation-drift-review-2026-05.md)
+
 ## Open-Source Scope
 
 DoWhiz is now documented as an open-source project, but not every production path in the repository is packaged as turnkey self-hosting.

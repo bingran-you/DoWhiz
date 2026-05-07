@@ -36,7 +36,7 @@ fn parse_args() -> Result<(Option<String>, Option<u16>), String> {
 
 fn help_text() -> String {
     [
-        "Rust email service",
+        "DoWhiz worker service",
         "",
         "Usage:",
         "  cargo run -p scheduler_module --bin rust_service -- --host 0.0.0.0 --port 9001",

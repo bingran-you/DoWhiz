@@ -6,6 +6,13 @@ This service layer currently runs as:
 - `inbound_gateway`: ingress/webhook router + dedupe + raw payload storage + queue enqueue
 - `rust_service`: queue consumer + scheduler + task execution + outbound replies
 
+If you are trying to understand the current runtime shape first, read these before going deeper
+into env details:
+
+- `../docs/repo-map.md`
+- `../docs/runtime-architecture.md`
+- `../docs/documentation-drift-review-2026-05.md`
+
 ## Table of Contents
 
 - [1) Architecture](#1-architecture)
@@ -45,7 +52,8 @@ Inbound (email/slack/discord/sms/telegram/whatsapp/google workspace/bluebubbles)
 ### 1.3 Queue and storage behavior
 
 - Ingestion queue backend resolver defaults to `postgres`.
-- `inbound_gateway` enforces `INGESTION_QUEUE_BACKEND=servicebus` (or alias equivalent).
+- `inbound_gateway` currently accepts `servicebus`, `service_bus`, or `postgres`.
+- Production-style gateway deployments are expected to use Service Bus.
 - Raw payload storage defaults to Supabase; Azure Blob backend is recommended for gateway production.
 - Scheduler/user/index state is Mongo-backed.
 
@@ -162,7 +170,7 @@ cp .env.example DoWhiz_service/.env
 | `AZURE_OPENAI_API_KEY_BACKUP` | Required by Codex/Claude task execution |
 | `AZURE_OPENAI_ENDPOINT_BACKUP` | Required by Codex task execution (Azure OpenAI endpoint) |
 | `POSTMARK_SERVER_TOKEN` | Email outbound and webhook utility |
-| `INGESTION_QUEUE_BACKEND=servicebus` | Required by gateway |
+| `INGESTION_QUEUE_BACKEND=servicebus` | Production-style gateway queue backend |
 | `SERVICE_BUS_CONNECTION_STRING` **or** `SERVICE_BUS_NAMESPACE` + `SERVICE_BUS_POLICY_NAME` + `SERVICE_BUS_POLICY_KEY` | Service Bus queue auth |
 | `SERVICE_BUS_QUEUE_NAME` | Service Bus queue target |
 
@@ -524,13 +532,15 @@ Task debug archival:
 ### Gateway exits immediately with backend error
 
 Symptom:
-- `inbound gateway requires ... INGESTION_QUEUE_BACKEND=servicebus`
+- `unsupported ingestion queue backend`
 
 Fix:
-- set `INGESTION_QUEUE_BACKEND=servicebus`
-- set either `SERVICE_BUS_CONNECTION_STRING`
+- choose a supported backend:
+  - `INGESTION_QUEUE_BACKEND=servicebus` (production-style path)
+  - `INGESTION_QUEUE_BACKEND=postgres` (local/dev path)
+- if using Service Bus, also set either `SERVICE_BUS_CONNECTION_STRING`
   or `SERVICE_BUS_NAMESPACE` + `SERVICE_BUS_POLICY_NAME` + `SERVICE_BUS_POLICY_KEY`
-- set `SERVICE_BUS_QUEUE_NAME`
+- if using Service Bus, set `SERVICE_BUS_QUEUE_NAME`
 
 ### Gateway enqueue works but worker does not process
 

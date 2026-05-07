@@ -112,7 +112,7 @@ pub async fn run_server(
     socket.bind(&addr.into())?;
     socket.listen(1024)?;
     let listener = tokio::net::TcpListener::from_std(socket.into())?;
-    info!("Rust email service listening on {}", addr);
+    info!("DoWhiz worker service listening on {}", addr);
 
     // Export SLACK_STORE_PATH so execute_slack_send can find the OAuth tokens
     std::env::set_var("SLACK_STORE_PATH", &config.slack_store_path);
