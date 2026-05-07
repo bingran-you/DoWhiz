@@ -12,9 +12,9 @@ use uuid::Uuid;
 
 use crate::index_store::{IndexStore, TaskRef};
 use crate::scheduler::check_and_send_alert_if_needed;
+use crate::scheduler::SchedulerStore;
 use crate::thread_state::default_thread_state_path;
 use crate::user_store::UserStore;
-use crate::scheduler::SchedulerStore;
 use crate::{ModuleExecutor, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskKind};
 
 use super::config::ServiceConfig;
