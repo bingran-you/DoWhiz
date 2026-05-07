@@ -14,6 +14,7 @@ use crate::index_store::{IndexStore, TaskRef};
 use crate::scheduler::check_and_send_alert_if_needed;
 use crate::thread_state::default_thread_state_path;
 use crate::user_store::UserStore;
+use crate::scheduler::SchedulerStore;
 use crate::{ModuleExecutor, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskKind};
 
 use super::config::ServiceConfig;
@@ -899,31 +900,46 @@ fn execute_due_task(
         user_paths.tasks_db_path
     };
 
-    let mut scheduler = Scheduler::load(&tasks_db_path, ModuleExecutor::default())?;
-
+    // Run reconciliation BEFORE loading the Scheduler.
+    // This ensures any tasks disabled during reconciliation are already disabled
+    // when we load into the in-memory Vec, preventing race conditions where
+    // execute_task_by_id sees stale enabled state.
     let stale_after = resolve_stale_execution_timeout();
-    match scheduler.reconcile_stale_running_executions_for_task(
-        &task_ref.task_id,
-        Utc::now(),
-        stale_after,
-    ) {
-        Ok(summary) if summary.total_reconciled() > 0 => {
-            info!(
-                "scheduler reconciled stale execution rows task_id={} user_id={} superseded={} failed={}",
-                task_ref.task_id,
-                task_ref.user_id,
-                summary.superseded_count,
-                summary.failed_count
-            );
+    match SchedulerStore::with_shared_client(tasks_db_path.clone()) {
+        Ok(store) => {
+            match store.reconcile_stale_running_executions_for_task(
+                &task_ref.task_id,
+                Utc::now(),
+                stale_after,
+            ) {
+                Ok(summary) if summary.total_reconciled() > 0 => {
+                    info!(
+                        "scheduler reconciled stale execution rows task_id={} user_id={} superseded={} failed={}",
+                        task_ref.task_id,
+                        task_ref.user_id,
+                        summary.superseded_count,
+                        summary.failed_count
+                    );
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    warn!(
+                        "scheduler failed to reconcile stale execution rows task_id={} user_id={}: {}",
+                        task_ref.task_id, task_ref.user_id, err
+                    );
+                }
+            }
         }
-        Ok(_) => {}
         Err(err) => {
             warn!(
-                "scheduler failed to reconcile stale execution rows task_id={} user_id={}: {}",
+                "scheduler failed to create store for reconciliation task_id={} user_id={}: {}",
                 task_ref.task_id, task_ref.user_id, err
             );
         }
     }
+
+    // Now load the Scheduler - any tasks disabled during reconciliation will be loaded as disabled
+    let mut scheduler = Scheduler::load(&tasks_db_path, ModuleExecutor::default())?;
 
     // Check for existing running execution in MongoDB.
     // This prevents duplicate executions when the worker restarts and loses in-memory claims.
