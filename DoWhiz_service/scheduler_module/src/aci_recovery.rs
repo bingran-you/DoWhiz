@@ -14,6 +14,7 @@ use run_task_module::{
 };
 
 use crate::channel::{Channel, ChannelMetadata};
+use crate::employee_config::load_employee_directory;
 use crate::scheduler::mark_execution_finished_by_workspace;
 use crate::scheduler::outbound::{
     execute_bluebubbles_send, execute_discord_send, execute_email_send, execute_google_docs_send,
@@ -242,13 +243,16 @@ fn propagate_results_to_outbound(workspace: &Path) -> Result<(), String> {
         return Err(format!("reply file not found: {}", reply_path.display()));
     }
 
+    // Get from address from employee config
+    let from_address = resolve_employee_from_address();
+
     // Build SendReplyTask with minimal fields from recovery context
     let send_task = SendReplyTask {
         channel: channel.clone(),
         subject: "Re: Your request".to_string(),
         html_path: reply_path,
         attachments_dir,
-        from: None,
+        from: from_address,
         to: context.reply_to,
         cc: Vec::new(),
         bcc: Vec::new(),
@@ -292,4 +296,20 @@ fn propagate_results_to_outbound(workspace: &Path) -> Result<(), String> {
     );
 
     Ok(())
+}
+
+/// Resolve the from address for outbound email from employee config.
+/// Returns the primary address (first in addresses list) for the current employee.
+fn resolve_employee_from_address() -> Option<String> {
+    let employee_id = std::env::var("EMPLOYEE_ID").ok()?;
+
+    // employee.toml is at DoWhiz_service/employee.toml relative to CARGO_MANIFEST_DIR
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let service_root = manifest_dir.parent().unwrap_or(manifest_dir);
+    let config_path = service_root.join("employee.toml");
+
+    let directory = load_employee_directory(&config_path).ok()?;
+    let employee = directory.employee(&employee_id)?;
+
+    employee.addresses.first().cloned()
 }
