@@ -3,37 +3,85 @@
   "evals": [
     {
       "id": 1,
-      "name": "watch-closely-full-artifact",
-      "kind": "fixture",
-      "artifact_file": "fixtures/structured_scan_first_email.html",
-      "expected_monitor_status": "watch closely",
-      "expected_contract_type": "full",
-      "count_toward_distribution": true
+      "prompt": "Give me deep research on NVDA and tell me whether now is a good time to buy.",
+      "expected_output": "A one-page NVDA decision memo that front-loads the verdict in a Decision Card, keeps dual-horizon framing, and anchors factual claims with clickable sources.",
+      "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, share volume 119,383,328, average volume 177,293,377, market cap about $4.91T, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, gross profit $153.463B, operating income $130.387B, pre-tax income $141.450B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B, cash and cash equivalents about $10.605B, remaining buyback authorization about $58.5B.",
+        "Nasdaq analyst earnings forecast for the Apr 2026 fiscal quarter: consensus EPS 1.70, high 1.88, low 1.63."
+      ],
+      "expectations": [
+        "The answer uses the memo structure with Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment.",
+        "The answer includes a Decision Card table with separate New money and Existing holder rows plus a one-line rationale.",
+        "The answer includes at least three clickable source links and keeps them in the Verified Facts section.",
+        "The answer includes a Derived Metrics table with formulas or an explicit not-reliably-derivable statement.",
+        "The answer includes Bull Case, Base Case, and Bear Case.",
+        "The answer includes quantified upgrade/add plus trim or exit conditions.",
+        "Because the prompt does not state a horizon, the answer still provides both near-term timing and long-term ownership views."
+      ]
     },
     {
       "id": 2,
-      "name": "no-material-change-short-artifact",
-      "kind": "fixture",
-      "artifact_file": "fixtures/no_material_change_short_email.html",
-      "expected_monitor_status": "no material change",
-      "expected_contract_type": "short",
-      "count_toward_distribution": true
+      "prompt": "Is NVDA a buy this week for a 3-month position?",
+      "expected_output": "A tactical NVDA memo that recognizes the stated 3-month horizon and treats the decision as a short-to-medium holding window rather than generic long-term accumulation.",
+      "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, share volume 119,383,328, average volume 177,293,377, market cap about $4.91T, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, gross profit $153.463B, operating income $130.387B, pre-tax income $141.450B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B, cash and cash equivalents about $10.605B, remaining buyback authorization about $58.5B.",
+        "Nasdaq analyst earnings forecast for the Apr 2026 fiscal quarter: consensus EPS 1.70, high 1.88, low 1.63."
+      ],
+      "expectations": [
+        "The answer uses the memo structure with Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment.",
+        "The answer explicitly reflects the stated 3-month holding period in the memo itself.",
+        "The answer includes tactical timing logic for this week or the next one to two quarters rather than only broad long-term accumulation language.",
+        "The answer includes a Decision Card, a formula-bearing Derived Metrics table, and quantified trigger conditions.",
+        "The answer keeps the memo scan-first rather than turning it into a long research wall."
+      ]
     },
     {
       "id": 3,
-      "name": "review-now-decisive-artifact",
-      "kind": "fixture",
-      "artifact_file": "fixtures/review_now_email.html",
-      "expected_monitor_status": "review now",
-      "expected_contract_type": "full",
-      "count_toward_distribution": true
+      "prompt": "NVDA earnings are on May 27, right? Should I buy before them?",
+      "expected_output": "An event-driven NVDA memo that does not silently absorb the user's earnings-date premise and gives a direct pre-earnings timing view.",
+      "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "NVIDIA investor relations says the conference call for first quarter fiscal 2027 financial results is scheduled for Wednesday, May 20, 2026 at 2:00 PM Pacific time.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $202.06, previous close $201.68, 52-week range $95.04 to $212.19, market status Closed.",
+        "NVIDIA fiscal 2026 annual financials from Nasdaq/10-K: revenue $215.938B, net income about $120.067B, diluted EPS $4.90.",
+        "NVIDIA Feb. 25, 2026 Q4 FY2026 earnings release: Q4 revenue $68.1B, GAAP gross margin 75.0%, GAAP diluted EPS $1.76, Data Center revenue $62.3B."
+      ],
+      "expectations": [
+        "The answer uses the memo structure with Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment.",
+        "The answer does not uncritically accept the user's May 27 earnings-date premise. It either corrects the date or qualifies it as estimated or unconfirmed.",
+        "The answer gives a direct pre-earnings timing view inside the dual-horizon framing.",
+        "The answer includes quantified trigger conditions rather than only generic volatility warnings.",
+        "The answer keeps the memo bounded and decision-useful."
+      ]
     },
     {
       "id": 4,
-      "name": "anti-generic-polished-waffle",
-      "kind": "fixture",
-      "artifact_file": "fixtures/polished_waffle_email.html",
-      "expected_failure": true
+      "prompt": "Analyze PLUG and tell me whether now is a good time to buy.",
+      "expected_output": "A weaker or messier-case investment memo that stays structured, degrades confidence appropriately, and does not pretend certainty where the public evidence is noisy or incomplete.",
+      "files": [],
+      "notes": [
+        "Use these current public-source notes if helpful. Do not spend time re-sourcing them unless you need one missing field.",
+        "Nasdaq quote data as of Apr 20, 2026 close: last sale $3.22, previous close $2.78, share volume 112,240,552, average volume 81,245,561, market cap about $4.49B, 52-week range $0.69 to $4.58, one-year target $2.25, market status Closed.",
+        "Plug Power annual financials from Nasdaq for FY2025: revenue $709.919M, gross profit -$242.040M, operating income -$1.467B, pre-tax income -$1.693B, net income from continuing operations roughly -$1.687B.",
+        "Nasdaq analyst earnings forecast: Mar 2026 quarter consensus EPS -0.10, FY2026 consensus EPS -0.32.",
+        "SEC filings show a 10-K filed on Mar. 2, 2026 and a heavy run of 8-K filings in early 2026, which supports a messy or event-driven context rather than a clean stable setup."
+      ],
+      "expectations": [
+        "The answer uses the memo structure with Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment.",
+        "The answer keeps confidence at Low or Medium rather than High for this weaker case.",
+        "The answer explicitly acknowledges uncertainty, mixed evidence, missing inputs, or metrics that are not reliably derivable.",
+        "The answer still includes quantified trigger conditions and scenario analysis instead of collapsing into generic cautionary prose.",
+        "The answer remains decision-useful even when the evidence is messy."
+      ]
     }
   ]
 }
