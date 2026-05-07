@@ -1,4 +1,4 @@
 interface:
   display_name: "Stock Investment Research"
-  short_description: "Calibrated monitor update or decision memo for one U.S. stock or ETF"
-  default_prompt: "Use $us-equity-daily-monitor to analyze a single U.S. stock or ETF. Decide whether this is `No Material Change`, `Watch Closely`, or `Review Now`, separate `New Money Action` from `Existing Holder Action`, and return the scan-first contract from the skill. Keep no-edge cases short, keep decisive cases explicit, and if the answer lands on `Wait`, `Hold`, or `Hold/Do not add`, include concrete `Upgrade / Review Now`, `Downgrade / De-risk`, and `Invalidation` triggers."
+  short_description: "Decision memo for one U.S. stock or ETF"
+  default_prompt: "Use $us-equity-daily-monitor to analyze a single U.S. stock or ETF and return the one-page decision memo structure from the skill: Decision Card, Dual-Horizon Framing, Verified Facts, Derived Metrics, Scenarios, Triggers, and Judgment. Keep separate actions for new money and existing holders, quantify the scenario and trigger thresholds, and keep the memo scan-first."

@@ -1,60 +1,76 @@
-# {TICKER} — Equity Decision Memo
+# {TICKER} — Investment Decision Memo
 **As of:** {YYYY-MM-DD} · **Price:** ${PRICE}
 
 **Investor question:** {one-line restatement of what the reader actually asked}
 
 ## Decision Card
 
-| Field | Value |
-|---|---|
-| Monitor Status | {No Material Change / Watch Closely / Review Now} |
-| New Money Action | {Buy / Starter Only / Wait / Avoid for now} |
-| Existing Holder Action | {Add / Hold / Hold/Do not add / Trim / Exit} |
-| Thesis Impact | {No material change / Positive / Mixed / Negative} |
-| Signal Quality | {Weak / Moderate / Strong} |
-| Confidence | {Low / Medium / High} |
+| Audience | Action | Confidence |
+|---|---|---|
+| New money | {Buy / Wait / Starter Only / Avoid for now} | {Low / Medium / High} |
+| Existing holder | {Hold / Add / Trim / Exit / Hold/Do not add} | {Low / Medium / High} |
 
-**One-line rationale:** {one sentence naming what changed, why it matters now, and why the actions diverge or align.}
+**One-line rationale:** {one sentence explaining why the actions diverge or align across the two audiences, anchored to the dominant near-term catalyst}.
 
 ## Dual-Horizon Framing
 
-### Near-Term Timing View
-{2-4 sentences. Name the dominant catalyst or confirmation point and tie it to the new-money action.}
+### Near-Term Timing View (next 1–2 quarters)
+{2–4 sentences. Name the dominant catalyst (earnings print, guide, regulatory event, product cycle), say which setup is most likely, and tie it to the new-money action.}
 
-### Long-Term Ownership View
-{2-4 sentences. Tie the multi-year thesis to the existing-holder action.}
+### Long-Term Ownership View (multi-year)
+{2–4 sentences. Structural drivers — TAM, secular demand, competitive moat, capital-return policy. Tie to the existing-holder action; explain whether position-sizing or entry timing dominates.}
 
-## Verified Facts
+## Verified Facts (Evidence Layer)
 
-- {reported figure with units} ([{Source name}]({URL}))
-- {guidance figure or management statement} ([{Source name}]({URL}))
-- {industry, regulatory, or competitive datapoint} ([{Source name}]({URL}))
+- {Reported figure with units} ([{Source name}]({URL}))
+- {Guidance figure} ([{Source name}]({URL}))
+- {Industry data point} ([{Source name}]({URL}))
+- {Disclosure or risk factor from a filing} ([SEC EDGAR]({URL}))
+- {Macro or competitive datapoint} ([{Source name}]({URL}))
+
+> Aim for ≥3 distinct sources spanning ≥2 tiers, with at least one primary (filing or IR).
 
 ## Derived Metrics
 
 | Metric | Value | Formula / Inputs |
 |---|---|---|
 | P/E (TTM) | {VALUE}x | ${PRICE} / TTM diluted EPS ${TTM_EPS} |
-| Revenue YoY ({Q}) | {VALUE}% | ${LAST_REV}M / ${PRIOR_REV}M - 1 |
+| Revenue YoY ({Q}) | {VALUE}% | ${LAST_REV}M / ${PRIOR_REV}M − 1 |
 | FCF margin (TTM) | {VALUE}% | TTM FCF ${TTM_FCF}M / TTM revenue ${TTM_REV}M |
+| Peer median P/E | {VALUE}x | Median of {peer tickers} |
+
+> If your inputs match the canonical schema in `references/data-adapters.md`, run `scripts/compute_metrics.py` to generate this block.
 
 ## Scenarios
 
 ### Bull Case
-**Trigger:** {explicit numeric condition}. Implied 12-month price approx. ${TARGET}.
+**Trigger:** {explicit numeric condition, e.g. "Q1 revenue ≥ $44B AND Q2 GM ≥ 73%"}. Implied 12-month price ≈ ${TARGET} (≈{N}x forward EPS of ${FWD_EPS}).
 
 ### Base Case
-**Trigger:** {explicit numeric range or base assumptions}. Implied 12-month price approx. ${TARGET}.
+**Trigger:** {explicit numeric range, e.g. "Q1 revenue $42–44B AND GM 70–73%"}. Implied 12-month price ≈ ${TARGET} (≈{N}x forward EPS of ${FWD_EPS}).
 
 ### Bear Case
-**Invalidation:** {explicit numeric condition}. Implied 12-month price approx. ${TARGET}.
+**Invalidation:** {explicit numeric condition, e.g. "Q1 revenue < $40B OR GM < 70% OR top-3 customer cuts capex guide ≥ 10%"}. Implied 12-month price ≈ ${TARGET}.
 
 ## Triggers — Verdict Movement
 
-- **Upgrade / Review Now:** {numeric threshold or dated event that would make the call more constructive or force a fresh decision.}
-- **Downgrade / De-risk:** {numeric threshold or event that weakens the current stance.}
-- **Invalidation:** {condition that breaks the thesis rather than merely weakens it.}
+- **Upgrade to Buy (new money):** {numeric threshold, e.g. "GM print ≥ 71% in Q1 with FY commentary ≥ $200B run-rate"}.
+- **Add (existing holder):** {numeric threshold, e.g. "Stock pulls back ≥ 15% from ${REF_PRICE} with no fundamental reset"}.
+- **Trim/Exit:** {numeric threshold, e.g. "Two consecutive quarters of GM decline > 200bps without recovery roadmap, OR a disclosed top-3-customer design-win loss"}.
 
 ## Judgment
 
-{One short paragraph. This is the only section where inference is acceptable. State confidence and the single biggest reason it is not higher.}
+{One short paragraph. This is the only section where inference is acceptable; label it as such. State confidence and the single biggest reason it isn't higher.}
+
+---
+
+### Author checklist (delete before publishing)
+
+- [ ] Both audiences have an action drawn from the controlled vocabulary.
+- [ ] Confidence is `Low`, `Medium`, or `High`.
+- [ ] ≥ 3 distinct sources cited, ≥ 1 primary, ≥ 2 tiers represented.
+- [ ] `P/E (TTM)` and `Revenue YoY` shown with formula and inputs.
+- [ ] ≥ 6 quantitative thresholds (`%`, `$`, `bps`, `x`) across triggers and scenarios.
+- [ ] Length ~1,500–6,000 characters (one-page memo).
+- [ ] Every fact in **Verified Facts** ends in a source chip; every metric in **Derived Metrics** ends in a formula.
+- [ ] Inference confined to the **Judgment** section.

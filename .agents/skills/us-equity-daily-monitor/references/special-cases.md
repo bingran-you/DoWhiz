@@ -33,7 +33,7 @@ The metrics script returns `n/a` for Revenue YoY when fewer than five quarters a
 
 - Move the **Long-Term Ownership View** above **Near-Term Timing View** — IPO multi-year theses are the dominant question; the next print is mostly a noise event.
 - Add a `Lock-up expiry` row in **Verified Facts** with the exact date (S-1 prospectus is primary) and a calculated supply-overhang number (insider shares releasable / float).
-- The **Triggers** section should key the `Upgrade / Review Now` or `Downgrade / De-risk` thresholds to the first post-lockup print, since that is the most common decision point.
+- The **Triggers** section should include an `Add (existing holder)` line keyed to the first post-lockup print, since that is the most common entry point.
 - Sequential (QoQ) growth, not YoY, is the headline growth metric until four full comparable quarters exist.
 
 ## Spin-offs and recent restructurings
