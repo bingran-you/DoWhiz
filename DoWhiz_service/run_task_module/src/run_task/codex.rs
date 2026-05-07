@@ -301,15 +301,17 @@ pub fn query_aci_container_status(
     }
 
     let state = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    // If az container show succeeds, the container exists. Terminal states are explicit.
+    // Empty state means the container is provisioning (e.g., image pulling).
+    // If the container didn't exist, the command would have failed with ResourceNotFound.
     let result = if state.eq_ignore_ascii_case("Succeeded")
         || state.eq_ignore_ascii_case("Failed")
         || state.eq_ignore_ascii_case("Terminated")
         || state.eq_ignore_ascii_case("Stopped")
     {
         AciContainerStatus::Terminal(state)
-    } else if state.is_empty() {
-        AciContainerStatus::NotFound
     } else {
+        // Empty or other state (e.g., "Running", "Pending", "Waiting") = still running/provisioning
         AciContainerStatus::Running
     };
     tracing::info!(
