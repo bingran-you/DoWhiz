@@ -364,6 +364,13 @@
         margin-top: 0.5rem;
         font-size: 0.9rem;
       }
+
+      .billing-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+      }
       .identifier-list {
         list-style: none;
         padding: 0;
@@ -1224,6 +1231,7 @@
       .dashboard-sidebar {
         position: sticky;
         top: 6.2rem;
+        min-width: 0;
         padding: 1.2rem;
         border-radius: 1.35rem;
         border: 1px solid color-mix(in srgb, var(--text, #fff) 10%, var(--border, #333));
@@ -1340,6 +1348,16 @@
             180deg,
             color-mix(in srgb, var(--card) 96%, transparent) 0%,
             color-mix(in srgb, var(--surface) 88%, transparent) 100%
+          );
+      }
+
+      .dashboard-billing-section {
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 34%),
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--card) 96%, transparent) 0%,
+            color-mix(in srgb, var(--surface) 90%, transparent) 100%
           );
       }
 
@@ -2041,6 +2059,26 @@
         margin-bottom: 0.75rem;
       }
 
+      .dashboard-billing-panel {
+        display: grid;
+        gap: 0.9rem;
+      }
+
+      .dashboard-billing-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      .dashboard-billing-controls .auth-input {
+        flex: 1 1 220px;
+      }
+
+      .dashboard-billing-status {
+        margin: 0;
+      }
+
       .connection-onboarding-panel {
         margin-top: 1rem;
       }
@@ -2149,11 +2187,11 @@
         }
 
         .dashboard-shell {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .dashboard-home-shell {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .dashboard-sidebar {
@@ -2199,6 +2237,7 @@
         }
 
         .account-grid,
+        .billing-stats,
         .workspace-recommendation-grid,
         .settings-grid {
           grid-template-columns: 1fr;
@@ -2207,6 +2246,11 @@
         .workspace-summary-card-head {
           flex-direction: column;
           align-items: flex-start;
+        }
+
+        .dashboard-billing-controls {
+          flex-direction: column;
+          align-items: stretch;
         }
       }
 
@@ -2343,10 +2387,10 @@
                 <span class="dashboard-home-link-name">DoWhiz Home</span>
               </span>
             </a>
-            <h1 id="page-title">Manage your Oliver setup</h1>
+            <h1 id="page-title">Manage your Oliver dashboard</h1>
           </div>
           <p class="lead" id="page-subtitle">
-            Sign in to connect apps, review tasks, save memory, and adjust how Oliver should work for you.
+            Sign in to review work, top up hours, manage connections, and adjust how Oliver should work for you.
           </p>
         </section>
 
@@ -2442,10 +2486,10 @@
                 <h2 class="sidebar-title">Personal workspace</h2>
                 <p class="sidebar-description">Keep one clear next step, your live connections, and the work Oliver is already handling for you.</p>
                 <nav class="sidebar-nav" aria-label="Dashboard Sections">
-                  <a class="sidebar-link is-active" href="#section-overview">Home</a>
+                  <a class="sidebar-link is-active" href="#section-billing">Purchase more hours</a>
+                  <a class="sidebar-link" href="#section-work">Work</a>
                   <a class="sidebar-link" href="#section-channels">Connections</a>
                   <a class="sidebar-link" href="#section-workspace">Setup</a>
-                  <a class="sidebar-link" href="#section-work">Work</a>
                   <a class="sidebar-link" href="#section-memo">Memory</a>
                   <a class="sidebar-link" href="#section-settings">Settings</a>
                 </nav>
@@ -2459,104 +2503,46 @@
               </aside>
 
               <div class="dashboard-main">
-                <section id="section-overview" class="legal-card dashboard-section dashboard-home-section">
-                  <div class="dashboard-home-shell">
-                    <div class="dashboard-home-main">
-                      <div class="dashboard-header dashboard-home-header">
-                        <div>
-                          <p class="dashboard-section-eyebrow">Home</p>
-                          <h2>Today with Oliver</h2>
-                          <p class="dashboard-overview-copy">Current state, one honest next move, and where work will show up.</p>
-                        </div>
-                      </div>
-                      <div id="workspace-recommendation-card" class="workspace-recommendation-card">
-                        <div class="workspace-recommendation-empty">Looking at your setup for the clearest next step...</div>
-                      </div>
-                      <div id="workspace-summary-content" class="workspace-summary-grid dashboard-home-summary-grid">
-                        <div class="workspace-summary-empty">Loading your setup snapshot...</div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section id="section-channels" class="legal-card dashboard-section">
-                  <p class="dashboard-section-eyebrow">Connections</p>
-                  <h2>Connections</h2>
-                  <p>Connect and manage the apps Oliver can use for your account.</p>
-                  <div class="settings-panel">
-                    <h3>Add a connection</h3>
-                    <p>Connect the apps Oliver can already work in.</p>
-                    <div class="channel-connect-actions">
-                      <button id="discord-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-                        </svg>
-                        Discord
-                      </button>
-                      <button id="slack-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
-                        </svg>
-                        Slack
-                      </button>
-                      <button id="github-connect-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 0C5.37 0 0 5.37 0 12a12 12 0 0 0 8.2 11.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.3 3.6 1 .1-.8.4-1.3.8-1.7-2.7-.3-5.5-1.3-5.5-6a4.7 4.7 0 0 1 1.3-3.3c-.1-.3-.6-1.5.1-3.2 0 0 1-.3 3.4 1.3a11.7 11.7 0 0 1 6.2 0c2.4-1.6 3.4-1.3 3.4-1.3.7 1.7.2 2.9.1 3.2a4.7 4.7 0 0 1 1.3 3.3c0 4.7-2.8 5.7-5.5 6 .4.4.8 1 .8 2.1v3.1c0 .4.2.7.8.6A12 12 0 0 0 24 12C24 5.37 18.63 0 12 0z"/>
-                        </svg>
-                        GitHub
-                      </button>
-                      <button id="notion-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.4 2.297c-.466-.373-.98-.56-2.055-.466L3.525 3.033c-.466.047-.56.28-.373.466l1.307.709zM5.252 7.27v14.083c0 .793.466 1.073 1.446.933l14.008-.793c.98-.14 1.073-.606 1.073-1.306V6.29c0-.7-.28-1.026-.933-.933l-14.615.84c-.653.094-.98.467-.98 1.073zm13.868.84c.14.653 0 1.306-.653 1.353l-.7.14v10.41c-.606.327-1.166.514-1.632.514-.746 0-.933-.234-1.493-.933l-4.666-7.334v7.1l1.446.327s0 1.306-1.819 1.306l-5.006.28c-.14-.28 0-.98.466-1.12l1.213-.327V9.476L4.679 9.29c-.14-.653.234-1.586 1.306-1.68l5.359-.327 4.852 7.428V8.083l-1.213-.14c-.14-.793.42-1.353 1.12-1.4l5.016-.326z"/>
-                        </svg>
-                        Notion
-                      </button>
-                      <button id="lark-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <img src="../svgs/lark.svg" width="20" height="20" alt="Lark">
-                        Lark
-                      </button>
-                      <button id="wechat-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
-                        <img src="../svgs/wecom.svg" width="20" height="20" alt="WeCom">
-                        WeCom
-                      </button>
-                    </div>
-                    <div class="settings-status-stack">
-                      <span id="discord-oauth-status"></span>
-                      <span id="slack-oauth-status"></span>
-                      <span id="github-connect-status"></span>
-                      <span id="notion-oauth-status"></span>
-                      <span id="lark-oauth-status"></span>
-                      <span id="wechat-oauth-status"></span>
-                    </div>
-                    <div id="connect-onboarding-panel" class="connection-onboarding-panel hidden" aria-live="polite"></div>
-                  </div>
-                  <ul id="identifier-list" class="identifier-list">
-                    <li class="identifier-item">Loading...</li>
-                  </ul>
-                </section>
-
-                <section id="section-workspace" class="legal-card dashboard-section">
+                <section id="section-billing" class="legal-card dashboard-section dashboard-billing-section">
                   <div class="dashboard-header">
                     <div>
-                      <p class="dashboard-section-eyebrow">Setup</p>
-                      <h2>Setup</h2>
+                      <p class="dashboard-section-eyebrow">Billing</p>
+                      <h2>Purchase more hours</h2>
+                      <p class="dashboard-overview-copy">Top up time before you need it so work does not stall.</p>
                     </div>
-                    <a id="update-team-brief-btn" class="auth-btn auth-btn-oauth" href="#section-channels">Open Connections</a>
                   </div>
-                  <p class="dashboard-overview-copy">
-                    Keep setup lean: connect one app, send one request there, then review it in Work.
-                  </p>
-                  <div id="workspace-next-steps" class="workspace-next-steps" style="margin-top: 2rem;">
-                    <div class="dashboard-header">
-                      <div>
-                        <h3 style="margin-bottom: 0.35rem;">Core setup loop</h3>
-                        <p class="next-step-section-intro">This should stay small. More setup only helps after the first review loop works.</p>
+                  <div class="settings-panel dashboard-billing-panel">
+                    <div class="billing-stats">
+                      <div class="settings-stat">
+                        <div id="dashboard-purchased-hours" class="settings-stat-value">--</div>
+                        <div class="settings-stat-label">Purchased</div>
                       </div>
-                      <span id="next-steps-progress" class="next-step-progress">0 of 3 core steps done</span>
+                      <div class="settings-stat">
+                        <div id="dashboard-used-hours" class="settings-stat-value">--</div>
+                        <div class="settings-stat-label">Used</div>
+                      </div>
+                      <div class="settings-stat">
+                        <div id="dashboard-balance-hours" class="settings-stat-value" style="color: var(--accent, #38bdf8);">--</div>
+                        <div class="settings-stat-label">Balance</div>
+                      </div>
                     </div>
-                    <div id="next-steps-list" class="next-steps-list">
-                      <p style="color: var(--text-muted, #888);">Loading your setup loop...</p>
+                    <div class="dashboard-billing-controls">
+                      <select id="dashboard-hours-select" class="auth-input">
+                        <option value="1">1 hour - $10</option>
+                        <option value="5">5 hours - $50</option>
+                        <option value="10" selected>10 hours - $100</option>
+                        <option value="25">25 hours - $250</option>
+                        <option value="50">50 hours - $500</option>
+                      </select>
+                      <button id="dashboard-buy-hours-btn" class="auth-btn auth-btn-primary" type="button">
+                        Purchase more hours
+                      </button>
+                      <button id="dashboard-view-billing-btn" class="auth-btn auth-btn-oauth" type="button">
+                        View billing
+                      </button>
                     </div>
+                    <p class="settings-panel-note">Balance stays visible here. Billing details and receipts stay one click away.</p>
+                    <p id="dashboard-checkout-status" class="settings-inline-status dashboard-billing-status"></p>
                   </div>
                 </section>
 
@@ -2647,6 +2633,87 @@
                     </div>
                     <div id="routine-list" class="routine-list work-item-list" aria-live="polite">
                       <div class="routine-empty-state work-item-empty-state">Loading routines...</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section id="section-channels" class="legal-card dashboard-section">
+                  <p class="dashboard-section-eyebrow">Connections</p>
+                  <h2>Connections</h2>
+                  <p>Connect and manage the apps Oliver can use for your account.</p>
+                  <div class="settings-panel">
+                    <h3>Add a connection</h3>
+                    <p>Connect the apps Oliver can already work in.</p>
+                    <div class="channel-connect-actions">
+                      <button id="discord-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                        </svg>
+                        Discord
+                      </button>
+                      <button id="slack-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                        </svg>
+                        Slack
+                      </button>
+                      <button id="github-connect-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.37 0 0 5.37 0 12a12 12 0 0 0 8.2 11.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.3 3.6 1 .1-.8.4-1.3.8-1.7-2.7-.3-5.5-1.3-5.5-6a4.7 4.7 0 0 1 1.3-3.3c-.1-.3-.6-1.5.1-3.2 0 0 1-.3 3.4 1.3a11.7 11.7 0 0 1 6.2 0c2.4-1.6 3.4-1.3 3.4-1.3.7 1.7.2 2.9.1 3.2a4.7 4.7 0 0 1 1.3 3.3c0 4.7-2.8 5.7-5.5 6 .4.4.8 1 .8 2.1v3.1c0 .4.2.7.8.6A12 12 0 0 0 24 12C24 5.37 18.63 0 12 0z"/>
+                        </svg>
+                        GitHub
+                      </button>
+                      <button id="notion-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L18.4 2.297c-.466-.373-.98-.56-2.055-.466L3.525 3.033c-.466.047-.56.28-.373.466l1.307.709zM5.252 7.27v14.083c0 .793.466 1.073 1.446.933l14.008-.793c.98-.14 1.073-.606 1.073-1.306V6.29c0-.7-.28-1.026-.933-.933l-14.615.84c-.653.094-.98.467-.98 1.073zm13.868.84c.14.653 0 1.306-.653 1.353l-.7.14v10.41c-.606.327-1.166.514-1.632.514-.746 0-.933-.234-1.493-.933l-4.666-7.334v7.1l1.446.327s0 1.306-1.819 1.306l-5.006.28c-.14-.28 0-.98.466-1.12l1.213-.327V9.476L4.679 9.29c-.14-.653.234-1.586 1.306-1.68l5.359-.327 4.852 7.428V8.083l-1.213-.14c-.14-.793.42-1.353 1.12-1.4l5.016-.326z"/>
+                        </svg>
+                        Notion
+                      </button>
+                      <button id="lark-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <img src="../svgs/lark.svg" width="20" height="20" alt="Lark">
+                        Lark
+                      </button>
+                      <button id="wechat-oauth-btn" class="auth-btn auth-btn-oauth" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <img src="../svgs/wecom.svg" width="20" height="20" alt="WeCom">
+                        WeCom
+                      </button>
+                    </div>
+                    <div class="settings-status-stack">
+                      <span id="discord-oauth-status"></span>
+                      <span id="slack-oauth-status"></span>
+                      <span id="github-connect-status"></span>
+                      <span id="notion-oauth-status"></span>
+                      <span id="lark-oauth-status"></span>
+                      <span id="wechat-oauth-status"></span>
+                    </div>
+                    <div id="connect-onboarding-panel" class="connection-onboarding-panel hidden" aria-live="polite"></div>
+                  </div>
+                  <ul id="identifier-list" class="identifier-list">
+                    <li class="identifier-item">Loading...</li>
+                  </ul>
+                </section>
+
+                <section id="section-workspace" class="legal-card dashboard-section">
+                  <div class="dashboard-header">
+                    <div>
+                      <p class="dashboard-section-eyebrow">Setup</p>
+                      <h2>Setup</h2>
+                    </div>
+                    <a id="update-team-brief-btn" class="auth-btn auth-btn-oauth" href="#section-channels">Open Connections</a>
+                  </div>
+                  <p class="dashboard-overview-copy">
+                    Keep setup lean: connect one app, send one request there, then review it in Work.
+                  </p>
+                  <div id="workspace-next-steps" class="workspace-next-steps" style="margin-top: 2rem;">
+                    <div class="dashboard-header">
+                      <div>
+                        <h3 style="margin-bottom: 0.35rem;">Core setup loop</h3>
+                        <p class="next-step-section-intro">This should stay small. More setup only helps after the first review loop works.</p>
+                      </div>
+                      <span id="next-steps-progress" class="next-step-progress">0 of 3 core steps done</span>
+                    </div>
+                    <div id="next-steps-list" class="next-steps-list">
+                      <p style="color: var(--text-muted, #888);">Loading your setup loop...</p>
                     </div>
                   </div>
                 </section>
@@ -2798,26 +2865,8 @@
                 <section id="section-settings" class="legal-card dashboard-section">
                   <p class="dashboard-section-eyebrow">Settings</p>
                   <h2>Settings</h2>
-                  <p>Manage account details, entry points, and how proactive Oliver should be.</p>
+                  <p>Manage entry points and how proactive Oliver should be.</p>
                   <div class="settings-grid">
-                    <div class="settings-panel">
-                      <h3>Account and billing</h3>
-                      <p>Keep billing and account details out of the homepage and here with the rest of your settings.</p>
-                      <div class="account-grid">
-                        <div class="account-meta-item">
-                          <p class="account-meta-label">Account</p>
-                          <span id="account-id">Loading...</span>
-                        </div>
-                        <div class="account-meta-item">
-                          <p class="account-meta-label">Sign-in email</p>
-                          <span id="user-email">Loading...</span>
-                        </div>
-                      </div>
-                      <button id="info-btn" class="auth-btn auth-btn-oauth" style="margin-top: 0.85rem;">
-                        View billing
-                      </button>
-                    </div>
-
                     <div class="settings-panel">
                       <h3>Manual linking</h3>
                       <p>Add an email, phone number, or chat identifier Oliver should recognize for your account.</p>
@@ -2867,7 +2916,7 @@
                   <h3>Account Balance</h3>
                   <button id="settings-close-btn" class="settings-close-btn">&times;</button>
                 </div>
-                <div class="billing-stats" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 1.5rem;">
+                <div class="billing-stats">
                   <div class="settings-stat">
                     <div id="purchased-hours" class="settings-stat-value">--</div>
                     <div class="settings-stat-label">Purchased</div>
@@ -3182,7 +3231,6 @@
       const dashboardSidebarEyebrow = document.querySelector('.sidebar-eyebrow');
       const dashboardSidebarTitle = document.querySelector('.sidebar-title');
       const dashboardSidebarDescription = document.querySelector('.sidebar-description');
-      const dashboardOverviewCopy = document.querySelector('#section-overview .dashboard-overview-copy');
       const existingAccountContainer = document.getElementById('existing-account-container');
       const existingAccountEmail = document.getElementById('existing-account-email');
       const sendResetEmailBtn = document.getElementById('send-reset-email');
@@ -3208,6 +3256,8 @@
       let lastEmailActionAt = 0;
       const EMAIL_ACTION_COOLDOWN_MS = 30000;
       const AUTH_POPUP_SUCCESS_EVENT = 'dowhiz-auth-popup-success';
+      const DEFAULT_DASHBOARD_HASH = '#section-billing';
+      const LOCAL_DASHBOARD_PREVIEW_QUERY_KEY = 'previewDashboard';
       const RECOMMENDATION_TRIGGER_LABELS = {
         active_blocker: 'Active blocker',
         first_value_gap: 'First value',
@@ -3288,15 +3338,13 @@
         if (dashboardSidebarDescription) {
           dashboardSidebarDescription.textContent = copy.sidebarDescription;
         }
-        if (dashboardOverviewCopy) {
-          dashboardOverviewCopy.textContent = copy.overviewCopy;
-        }
       }
 
       // Check if user came from logged-in state (expecting dashboard)
       const authQueryParams = new URLSearchParams(window.location.search);
       const expectingDashboard = authQueryParams.get('loggedIn') === 'true';
       const popupAuthFlow = authQueryParams.get('popupAuth') === '1';
+      const localDashboardPreviewEnabled = isLocalDevHost && authQueryParams.get(LOCAL_DASHBOARD_PREVIEW_QUERY_KEY) === '1';
       activeEntrySurface = resolveAuthEntrySurface(authQueryParams, expectingDashboard);
       const authIntentParams = new URLSearchParams();
       if (expectingDashboard) {
@@ -3310,7 +3358,7 @@
         : authRedirectUrl;
       // If expecting dashboard, keep everything hidden until ready
       // If not, show sign-in form immediately
-      if (!expectingDashboard) {
+      if (!expectingDashboard && !localDashboardPreviewEnabled) {
         setDashboardMode(false);
         signinFormContainer.classList.remove('hidden');
       }
@@ -3358,6 +3406,207 @@
 
       function setDashboardMode(enabled) {
         document.body.classList.toggle('dashboard-mode', enabled);
+      }
+
+      function previewDate(hoursFromNow = 0) {
+        return new Date(Date.now() + hoursFromNow * 60 * 60 * 1000).toISOString();
+      }
+
+      function buildLocalDashboardPreviewData() {
+        return {
+          accountId: 'preview-account-001',
+          email: 'preview@dowhiz.local',
+          balance: {
+            purchased_hours: 30,
+            used_hours: 18.5,
+            balance_hours: 11.5
+          },
+          identifiers: [
+            { identifier_type: 'slack', identifier: '#launch-ops', verified: true },
+            { identifier_type: 'github', identifier: 'KnoWhiz/DoWhiz', verified: true },
+            { identifier_type: 'notion', identifier: 'Launch board', verified: true }
+          ],
+          memo: [
+            'Keep launch updates concise and concrete',
+            'Flag blockers before writing long summaries',
+            'Link proof before marking anything ready'
+          ].join('\n'),
+          proactivityLevel: 'minimal',
+          tasks: [
+            {
+              id: 'preview-task-1',
+              request_summary: 'Triage launch blocker from Slack',
+              channel: 'slack',
+              status: 'success',
+              created_at: previewDate(-30),
+              last_run: previewDate(-0.9),
+              status_changed_at: previewDate(-0.9),
+              enabled: true,
+              can_cancel: false,
+              can_resubmit: false,
+              schedule_type: 'one_shot'
+            },
+            {
+              id: 'preview-task-2',
+              request_summary: 'Open GitHub issue for checkout regression',
+              channel: 'github',
+              status: 'running',
+              created_at: previewDate(-3),
+              execution_started_at: previewDate(-0.15),
+              status_changed_at: previewDate(-0.15),
+              status_reason: 'Waiting on final staging validation',
+              enabled: true,
+              can_cancel: true,
+              can_resubmit: false,
+              schedule_type: 'one_shot'
+            },
+            {
+              id: 'preview-task-3',
+              request_summary: 'Sync launch board in Notion',
+              channel: 'notion',
+              status: 'failed',
+              created_at: previewDate(-9),
+              last_run: previewDate(-4),
+              status_changed_at: previewDate(-4),
+              enabled: true,
+              can_cancel: false,
+              can_resubmit: true,
+              schedule_type: 'one_shot',
+              error_message: 'API rate limit hit while updating launch board'
+            }
+          ],
+          routines: {
+            active: [
+              {
+                id: 'preview-routine-1',
+                name: 'Daily launch readiness digest',
+                channel: 'slack',
+                enabled: true,
+                schedule_type: 'cron',
+                created_at: previewDate(-120),
+                next_run: previewDate(6),
+                last_run: previewDate(-18),
+                execution_status: 'success'
+              }
+            ],
+            history: [
+              {
+                id: 'preview-routine-2',
+                name: 'Weekly release recap',
+                channel: 'email',
+                enabled: false,
+                schedule_type: 'cron',
+                created_at: previewDate(-240),
+                last_run: previewDate(-72),
+                execution_status: 'success'
+              }
+            ]
+          }
+        };
+      }
+
+      function renderPreviewIdentifierList(identifiers = []) {
+        const list = document.getElementById('identifier-list');
+        if (!list) {
+          return;
+        }
+
+        if (!Array.isArray(identifiers) || identifiers.length === 0) {
+          list.innerHTML = '<li class="identifier-item">No preview connections configured.</li>';
+          return;
+        }
+
+        list.innerHTML = identifiers.map((item) => `
+          <li class="identifier-item">
+            <span><strong>${escapeHtml(String(item.identifier_type || 'connection'))}</strong>: ${escapeHtml(String(item.identifier || ''))}</span>
+            <div class="identifier-actions">
+              <span class="identifier-badge">${item.verified ? 'Verified' : 'Pending'}</span>
+              <span class="identifier-badge">Preview</span>
+            </div>
+          </li>
+        `).join('');
+      }
+
+      function showLocalDashboardPreview() {
+        const preview = buildLocalDashboardPreviewData();
+        stopTaskPolling();
+        setDashboardMode(true);
+        loadingContainer.classList.add('hidden');
+        signinFormContainer.classList.add('hidden');
+        signupFormContainer.classList.add('hidden');
+        passwordResetContainer.classList.add('hidden');
+        hideExistingAccountOptions();
+        hideMessage();
+        dashboardContainer.classList.remove('hidden');
+        pageTitle.textContent = 'Your Oliver dashboard';
+        pageSubtitle.textContent = 'Top up hours, review work, manage connections, and decide how Oliver should work for you.';
+        applyEntryAwareCopy({ dashboardMode: true });
+
+        const accountIdElement = document.getElementById('account-id');
+        const userEmailElement = document.getElementById('user-email');
+        if (accountIdElement) {
+          accountIdElement.textContent = preview.accountId;
+        }
+        if (userEmailElement) {
+          userEmailElement.textContent = preview.email;
+        }
+
+        cachedBalance = preview.balance;
+        updateAchievementBadges(cachedBalance.used_hours || 0);
+        renderBillingStats({ modalFallbackToZero: true });
+        setBillingStatus('Local preview only', 'default', ['dashboard-checkout-status', 'checkout-status']);
+
+        cachedIdentifiers = preview.identifiers;
+        renderPreviewIdentifierList(preview.identifiers);
+        setPendingConnectionOnboarding(null);
+        renderConnectionOnboardingCard();
+
+        taskActionBusyIds = new Set();
+        taskActionErrors = {};
+        cachedTasks = preview.tasks;
+        document.getElementById('task-list').innerHTML = cachedTasks.map((task) => renderTask(task)).join('');
+        document.getElementById('tasks-status').textContent = 'Preview data';
+
+        routineActionBusyIds = new Set();
+        routineActionErrors = {};
+        cachedRoutines = preview.routines;
+        activeRoutineTab = 'active';
+        renderRoutineList();
+        document.getElementById('routines-status').textContent = 'Preview data';
+
+        cachedMemoContent = preview.memo;
+        document.getElementById('memo-content').value = preview.memo;
+        document.getElementById('memo-status').textContent = 'Local preview';
+        document.getElementById('memo-status').style.color = 'var(--text-muted, #888)';
+
+        setProactivityLevelUi(preview.proactivityLevel);
+        setProactivityLevelStatus('Local preview only', 'success');
+
+        dashboardHomeLoading = false;
+        workspaceRecommendationStatus = 'idle';
+        workspaceRecommendationErrorMessage = '';
+        workspaceRecommendationSelectedKey = null;
+        workspaceRecommendationAlternativesVisible = false;
+        workspaceRecommendationWhyVisible = false;
+        workspaceRecommendationResponse = buildLocalWorkspaceRecommendationResponse(buildWorkspaceRecommendationRequest());
+        const previewRecommendation = currentWorkspaceRecommendation();
+        workspaceRecommendationSelectedKey = recommendationIdentity(previewRecommendation);
+        renderWorkspaceRecommendationCard();
+
+        setActiveWorkView('tasks');
+        loadWorkspaceSummaryFromStorage();
+        const connectOnboardingPanel = document.getElementById('connect-onboarding-panel');
+        if (connectOnboardingPanel) {
+          connectOnboardingPanel.innerHTML = '';
+          connectOnboardingPanel.classList.add('hidden');
+        }
+        updateSidebarNavigation();
+        window.setTimeout(scrollToDashboardHashTarget, 80);
+
+        const signoutBtn = document.getElementById('signout-btn');
+        if (signoutBtn) {
+          signoutBtn.textContent = 'Exit preview';
+        }
       }
 
       function completePopupAuthIfNeeded(session, accountData) {
@@ -3843,29 +4092,30 @@
       }
 
       function loadWorkspaceSummaryFromStorage() {
-        if (!workspaceSummaryContent) {
-          return;
-        }
         updateTeamBriefLinkFromStorage();
 
         if (dashboardHomeLoading) {
-          workspaceSummaryContent.innerHTML = `
-            <div class="workspace-summary-empty">Loading your current state...</div>
-          `;
+          if (workspaceSummaryContent) {
+            workspaceSummaryContent.innerHTML = `
+              <div class="workspace-summary-empty">Loading your current state...</div>
+            `;
+          }
           renderNextSteps(cachedIdentifiers || []);
           renderConnectionOnboardingCard();
           return;
         }
 
-        const homeModel = buildDashboardHomepageModel(buildDashboardHomeContext());
-        workspaceSummaryContent.innerHTML = `
-          ${homeModel.chips.map((chip) => `
-            <article class="dashboard-home-chip">
-              <p class="dashboard-home-chip-label">${escapeHtml(chip.label)}</p>
-              <p class="dashboard-home-chip-value">${escapeHtml(chip.value)}</p>
-            </article>
-          `).join('')}
-        `;
+        if (workspaceSummaryContent) {
+          const homeModel = buildDashboardHomepageModel(buildDashboardHomeContext());
+          workspaceSummaryContent.innerHTML = `
+            ${homeModel.chips.map((chip) => `
+              <article class="dashboard-home-chip">
+                <p class="dashboard-home-chip-label">${escapeHtml(chip.label)}</p>
+                <p class="dashboard-home-chip-value">${escapeHtml(chip.value)}</p>
+              </article>
+            `).join('')}
+          `;
+        }
 
         // Render next steps with current cached identifiers
         renderNextSteps(cachedIdentifiers || []);
@@ -5447,6 +5697,11 @@
 
       // Sign out
       document.getElementById('signout-btn').addEventListener('click', async () => {
+        if (localDashboardPreviewEnabled) {
+          const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+          window.location.replace(cleanUrl);
+          return;
+        }
         stopTaskPolling();
         cachedIdentifiers = [];
         cachedTasks = [];
@@ -5472,63 +5727,112 @@
         window.location.reload();
       });
 
-      // Settings modal handlers
-      document.getElementById('info-btn').addEventListener('click', async () => {
-        const modal = document.getElementById('settings-modal');
-        const purchasedEl = document.getElementById('purchased-hours');
-        const usedEl = document.getElementById('used-hours');
-        const balanceEl = document.getElementById('balance-hours');
+      function renderBillingStats(options = {}) {
+        const { modalFallbackToZero = false } = options;
+        const targets = [
+          {
+            purchased: document.getElementById('dashboard-purchased-hours'),
+            used: document.getElementById('dashboard-used-hours'),
+            balance: document.getElementById('dashboard-balance-hours'),
+            fallbackToZero: false
+          },
+          {
+            purchased: document.getElementById('purchased-hours'),
+            used: document.getElementById('used-hours'),
+            balance: document.getElementById('balance-hours'),
+            fallbackToZero: modalFallbackToZero
+          }
+        ];
 
+        targets.forEach((target) => {
+          if (!target.purchased || !target.used || !target.balance) {
+            return;
+          }
+
+          const purchasedValue = typeof cachedBalance?.purchased_hours === 'number'
+            ? cachedBalance.purchased_hours.toFixed(2)
+            : target.fallbackToZero
+              ? '0.00'
+              : '--';
+          const usedValue = typeof cachedBalance?.used_hours === 'number'
+            ? cachedBalance.used_hours.toFixed(2)
+            : target.fallbackToZero
+              ? '0.00'
+              : '--';
+          const balanceValue = typeof cachedBalance?.balance_hours === 'number'
+            ? cachedBalance.balance_hours.toFixed(2)
+            : target.fallbackToZero
+              ? '0.00'
+              : '--';
+
+          target.purchased.textContent = purchasedValue;
+          target.used.textContent = usedValue;
+          target.balance.textContent = balanceValue;
+          target.balance.style.color = (cachedBalance?.balance_hours || 0) > 0
+            ? 'var(--accent, #38bdf8)'
+            : '#ef4444';
+        });
+      }
+
+      function setBillingStatus(message, type = 'default', statusIds = ['checkout-status']) {
+        const color = type === 'success'
+          ? '#22c55e'
+          : type === 'error'
+            ? '#ef4444'
+            : 'var(--text-muted, #888)';
+        statusIds.forEach((id) => {
+          const element = document.getElementById(id);
+          if (!element) {
+            return;
+          }
+          element.textContent = message;
+          element.style.color = color;
+        });
+      }
+
+      async function openBillingModal(entryPoint = 'auth_dashboard_settings') {
+        const modal = document.getElementById('settings-modal');
         modal.classList.remove('hidden');
+        renderBillingStats({ modalFallbackToZero: true });
 
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          trackAnalyticsEvent(
-            'upgrade_viewed_or_paywall_seen',
-            {
-              trigger_reason: 'settings_modal_opened',
-              entry_point: 'auth_dashboard_settings'
-            },
-            { accessToken: session.access_token }
-          );
-          if (cachedBalance) {
-            purchasedEl.textContent = (cachedBalance.purchased_hours || 0).toFixed(2);
-            usedEl.textContent = (cachedBalance.used_hours || 0).toFixed(2);
-            balanceEl.textContent = (cachedBalance.balance_hours || 0).toFixed(2);
-            balanceEl.style.color = cachedBalance.balance_hours > 0 ? 'var(--accent, #38bdf8)' : '#ef4444';
-          } else {
-            purchasedEl.textContent = '0.00';
-            usedEl.textContent = '0.00';
-            balanceEl.textContent = '0.00';
-          }
+        if (!session) {
+          return;
         }
-      });
 
-      // Buy hours button handler
-      document.getElementById('buy-hours-btn').addEventListener('click', async () => {
-        const hoursSelect = document.getElementById('hours-select');
-        const statusEl = document.getElementById('checkout-status');
-        const hours = parseInt(hoursSelect.value, 10);
+        trackAnalyticsEvent(
+          'upgrade_viewed_or_paywall_seen',
+          {
+            trigger_reason: 'settings_modal_opened',
+            entry_point: entryPoint
+          },
+          { accessToken: session.access_token }
+        );
+      }
 
-        statusEl.textContent = 'Creating checkout session...';
-        statusEl.style.color = 'var(--text-muted, #888)';
+      async function startCheckout(hours, options = {}) {
+        const {
+          entryPoint = 'settings_modal_buy_hours',
+          statusIds = ['checkout-status']
+        } = options;
+
+        setBillingStatus('Creating checkout session...', 'default', statusIds);
 
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
           trackAnalyticsEvent('checkout_error', {
             error_reason: 'unauthenticated',
-            checkout_entry_point: 'settings_modal_buy_hours',
+            checkout_entry_point: entryPoint,
             hours
           });
-          statusEl.textContent = 'Please sign in first.';
-          statusEl.style.color = '#ef4444';
+          setBillingStatus('Please sign in first.', 'error', statusIds);
           return;
         }
 
         trackAnalyticsEvent(
           'upgrade_clicked',
           {
-            checkout_entry_point: 'settings_modal_buy_hours',
+            checkout_entry_point: entryPoint,
             hours
           },
           { accessToken: session.access_token }
@@ -5539,7 +5843,7 @@
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
-              'x-dowhiz-checkout-entry': 'settings_modal_buy_hours',
+              'x-dowhiz-checkout-entry': entryPoint,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ hours })
@@ -5547,23 +5851,23 @@
 
           if (res.ok) {
             const data = await res.json();
-            statusEl.textContent = 'Redirecting to checkout...';
+            setBillingStatus('Redirecting to checkout...', 'default', statusIds);
             window.location.href = data.checkout_url;
-          } else {
-            const error = await res.text();
-            trackAnalyticsEvent(
-              'checkout_error',
-              {
-                error_reason: 'checkout_create_failed',
-                error: error || 'Failed to create checkout session',
-                checkout_entry_point: 'settings_modal_buy_hours',
-                hours
-              },
-              { accessToken: session.access_token }
-            );
-            statusEl.textContent = error || 'Failed to create checkout session.';
-            statusEl.style.color = '#ef4444';
+            return;
           }
+
+          const error = await res.text();
+          trackAnalyticsEvent(
+            'checkout_error',
+            {
+              error_reason: 'checkout_create_failed',
+              error: error || 'Failed to create checkout session',
+              checkout_entry_point: entryPoint,
+              hours
+            },
+            { accessToken: session.access_token }
+          );
+          setBillingStatus(error || 'Failed to create checkout session.', 'error', statusIds);
         } catch (err) {
           console.error('Checkout error:', err);
           trackAnalyticsEvent(
@@ -5571,14 +5875,37 @@
             {
               error_reason: 'network_error',
               error: err.message,
-              checkout_entry_point: 'settings_modal_buy_hours',
+              checkout_entry_point: entryPoint,
               hours
             },
             { accessToken: session.access_token }
           );
-          statusEl.textContent = 'Network error. Please try again.';
-          statusEl.style.color = '#ef4444';
+          setBillingStatus('Network error. Please try again.', 'error', statusIds);
         }
+      }
+
+      document.getElementById('info-btn')?.addEventListener('click', async () => {
+        await openBillingModal('auth_dashboard_settings');
+      });
+
+      document.getElementById('dashboard-view-billing-btn').addEventListener('click', async () => {
+        await openBillingModal('auth_dashboard_top_billing');
+      });
+
+      document.getElementById('buy-hours-btn').addEventListener('click', async () => {
+        const hours = parseInt(document.getElementById('hours-select').value, 10);
+        await startCheckout(hours, {
+          entryPoint: 'settings_modal_buy_hours',
+          statusIds: ['checkout-status', 'dashboard-checkout-status']
+        });
+      });
+
+      document.getElementById('dashboard-buy-hours-btn').addEventListener('click', async () => {
+        const hours = parseInt(document.getElementById('dashboard-hours-select').value, 10);
+        await startCheckout(hours, {
+          entryPoint: 'dashboard_top_buy_hours',
+          statusIds: ['dashboard-checkout-status', 'checkout-status']
+        });
       });
 
       document.getElementById('settings-close-btn').addEventListener('click', () => {
@@ -5749,12 +6076,18 @@
         passwordResetContainer.classList.add('hidden');
         hideExistingAccountOptions();
         dashboardContainer.classList.remove('hidden');
-        pageTitle.textContent = 'Your Oliver setup';
-        pageSubtitle.textContent = 'Connect apps, review work, save memory, and decide how Oliver should work for you.';
+        pageTitle.textContent = 'Your Oliver dashboard';
+        pageSubtitle.textContent = 'Top up hours, review work, manage connections, and decide how Oliver should work for you.';
         applyEntryAwareCopy({ dashboardMode: true });
 
-        document.getElementById('account-id').textContent = accountData.account_id;
-        document.getElementById('user-email').textContent = session.user.email;
+        const accountIdElement = document.getElementById('account-id');
+        const userEmailElement = document.getElementById('user-email');
+        if (accountIdElement) {
+          accountIdElement.textContent = accountData.account_id;
+        }
+        if (userEmailElement) {
+          userEmailElement.textContent = session.user.email;
+        }
         initOrganizationUI(accountData);
         setupOrganizationListeners();
         dashboardHomeLoading = true;
@@ -6609,18 +6942,18 @@
       const paymentResult = urlParams.get('payment');
       if (paymentResult) {
         // Show the settings modal with payment result
-        const modal = document.getElementById('settings-modal');
-        const statusEl = document.getElementById('checkout-status');
-        modal.classList.remove('hidden');
+        await openBillingModal('auth_dashboard_payment_result');
 
         if (paymentResult === 'success') {
-          statusEl.textContent = 'Payment successful! Your hours have been added.';
-          statusEl.style.color = '#22c55e';
+          setBillingStatus(
+            'Payment successful! Your hours have been added.',
+            'success',
+            ['checkout-status', 'dashboard-checkout-status']
+          );
           const { data: { session } } = await supabase.auth.getSession();
           if (session) await loadBalanceAndBadges(session.access_token);
         } else if (paymentResult === 'cancelled') {
-          statusEl.textContent = 'Payment was cancelled.';
-          statusEl.style.color = '#ef4444';
+          setBillingStatus('Payment was cancelled.', 'error', ['checkout-status', 'dashboard-checkout-status']);
           supabase.auth.getSession().then(({ data: { session } }) => {
             trackAnalyticsEvent(
               'checkout_abandoned',
@@ -6632,10 +6965,8 @@
             );
           });
         }
-        // Refresh balance display for both success and cancelled
-        document.getElementById('info-btn').click();
         // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname + '?loggedIn=true');
+        window.history.replaceState({}, document.title, buildDashboardReturnUrl(DEFAULT_DASHBOARD_HASH));
       }
 
       // Check for Discord bot installation result
@@ -7145,6 +7476,7 @@
           if (res.ok) {
             cachedBalance = await res.json();
             updateAchievementBadges(cachedBalance.used_hours || 0);
+            renderBillingStats();
           }
         } catch (err) {
           console.error('Failed to load balance:', err);
@@ -8287,7 +8619,7 @@
             window.history.replaceState(
               {},
               document.title,
-              `${window.location.pathname}${expectingDashboard ? '#section-workspace' : ''}`
+              `${window.location.pathname}${expectingDashboard ? DEFAULT_DASHBOARD_HASH : ''}`
             );
             return true;
           }
@@ -8300,7 +8632,7 @@
           window.history.replaceState(
             {},
             document.title,
-            `${window.location.pathname}${expectingDashboard ? '#section-workspace' : ''}`
+            `${window.location.pathname}${expectingDashboard ? DEFAULT_DASHBOARD_HASH : ''}`
           );
           return true;
         }
@@ -8319,7 +8651,7 @@
         const { data: { session } } = await supabase.auth.getSession();
 
         // Clean up loggedIn parameter from URL
-        if (expectingDashboard) {
+        if (expectingDashboard && !localDashboardPreviewEnabled) {
           window.history.replaceState(
             {},
             document.title,
@@ -8333,6 +8665,8 @@
             authMethod: 'existing_session',
             flow: expectingDashboard ? 'existing_session_dashboard' : 'existing_session'
           });
+        } else if (localDashboardPreviewEnabled) {
+          showLocalDashboardPreview();
         } else {
           // No session - show sign-in form
           setDashboardMode(false);
