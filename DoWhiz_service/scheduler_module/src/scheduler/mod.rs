@@ -14,6 +14,7 @@ mod utils;
 
 pub use core::Scheduler;
 pub use executor::{ModuleExecutor, TaskExecutor};
+pub(crate) use store::SchedulerStore;
 pub use store::{
     check_and_send_alert_if_needed, mark_execution_finished_by_workspace,
     reset_reconciliation_failure_counter, RoutineSummary, TaskExecutionSummary, TaskStatusSummary,
