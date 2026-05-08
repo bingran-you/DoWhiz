@@ -245,7 +245,65 @@ DeepTutor Development Board
 - `sync_from_notion()` — Pull updates developers made directly in Notion
 - `add_comment(task_id, message)` — Oliver comments on progress/blockers
 
-### 5. Developer Assignment & Notifications
+### 5. Overdue Task Follow-ups (Added 2026-05-08)
+
+During scheduled TPM syncs, Oliver checks for tasks with overdue ETAs and sends follow-up emails to assignees.
+
+**How it works:**
+
+1. Oliver queries the task board for tasks where `ETA < today` and `Status != Done/Archived`
+2. For each overdue task, Oliver looks up the assignee's email from the org members list (matched via `notion_user_id`)
+3. Oliver emits a `SCHEDULED_TASKS_JSON` block with one `send_email` entry per overdue task
+4. The scheduler parses this block and executes each email as a separate `SendReplyTask`
+
+**Scheduled Tasks Format:**
+
+Oliver outputs follow-up emails using delimited JSON that the scheduler parses:
+
+```
+SCHEDULED_TASKS_JSON_BEGIN
+[
+  {"type":"send_email","delay_minutes":0,"subject":"Task overdue: Fix PDF crash","html_path":"followup_abc123.html","to":["alice@example.com"]},
+  {"type":"send_email","delay_minutes":0,"subject":"Task overdue: Add dark mode","html_path":"followup_def456.html","to":["bob@example.com"]}
+]
+SCHEDULED_TASKS_JSON_END
+```
+
+**Scheduler Parsing (`run_task_module/src/run_task/scheduled.rs`):**
+
+```rust
+pub fn extract_scheduled_tasks(output: &str) -> (Vec<ScheduledTaskRequest>, Option<String>) {
+    let segments = extract_json_segments(output, SCHEDULED_TASKS_BEGIN, SCHEDULED_TASKS_END);
+    // Parses JSON array between delimiters
+    // Returns Vec<ScheduledTaskRequest> for scheduler to execute
+}
+```
+
+Each entry in the array becomes a separate `SendReplyTask` that the scheduler executes independently.
+
+**Org Member → Email Resolution:**
+
+The prompt includes org members with their Notion user IDs:
+```
+Known Organization Members (from DoWhiz):
+- Alice (alice@example.com) | notion_id: abc-123
+- Bob (bob@example.com) | notion_id: def-456
+```
+
+Oliver matches the task's Notion assignee ID to the org member's `notion_id`, then uses their email for the follow-up.
+
+**Schema Discovery:**
+
+The default task board schema includes an `ETA` date field (added 2026-05-08):
+```json
+"ETA": { "date": {} }
+```
+
+However, custom boards may use different names ("Due Date", "Deadline", "Target Date", etc.). Oliver discovers the date property by:
+1. Try `tpm_cli get-schema` first
+2. If that fails (e.g., page ID instead of database), fall back to `notion_api_cli get-database` or query tasks directly to inspect properties
+
+### 6. Developer Assignment & Notifications
 
 **Assignee Discovery (Three Sources - Added 2026-05-05):**
 
@@ -414,9 +472,9 @@ Creates a Notion database with TPM schema:
 - **Status** (select: Backlog, In Progress, Review, Done, Blocked, Archived)
 - **Priority** (select: P0, P1, P2, P3)
 - **Assignee** (people)
+- **ETA** (date) — for tracking deadlines and triggering overdue follow-ups
 - **Tags** (multi-select)
 - **Source** (select: User Feedback, Notetaker, Market Research, Manual)
-- **MongoDB ID** (rich_text — links to `dev_tasks` collection)
 
 Returns `database_id` to store in `organizations.notion_database_id`.
 
@@ -612,6 +670,18 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/8/26
+**Completed:**
+- ✅ **ETA Field for Deadlines** — Added `ETA` date property to task board schema (`tpm_cli.rs`)
+- ✅ **Notion User ID in Org Members** — `OrgMember` struct now includes `notion_user_id` (from `user_identities` table)
+  - `account_store.rs`: Updated `list_org_members_with_info()` SQL to join `user_identities` for Notion ID
+  - `types.rs`: Added `notion_user_id: Option<String>` to `OrgMember`
+  - `prompt.rs`: Displays org members with format `- Name (email) | notion_id: xxx`
+- ✅ **Overdue Task Follow-up Instructions** — Added prompt section for checking overdue ETAs during TPM sync
+  - Oliver checks tasks where `ETA < today` and status not Done/Archived
+  - Emits `SCHEDULED_TASKS_JSON` block with follow-up emails for each overdue task
+  - Scheduler parses delimiters and executes each email as separate `SendReplyTask`
+
 ### 5/5/26
 **Completed:**
 - ✅ **Organization Leader Notion Credentials** — All org members now use the leader's Notion token

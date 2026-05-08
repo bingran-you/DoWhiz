@@ -205,6 +205,7 @@ pub struct OrgMember {
     pub account_id: Uuid,
     pub email: String,
     pub name: Option<String>,
+    pub notion_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -2008,14 +2009,17 @@ impl AccountStore {
     }
 
     /// List all org members with their name/email from auth.users.
-    /// Joins accounts with auth.users to get user info.
+    /// Joins accounts with auth.users to get user info, and user_identities for notion_user_id.
     pub fn list_org_members_with_info(
         &self,
         organization_id: Uuid,
     ) -> Result<Vec<OrgMember>, AccountStoreError> {
         let mut conn = self.conn()?;
         let rows = conn.query(
-            "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name
+            "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name,
+                    (SELECT ui.identifier FROM user_identities ui
+                     WHERE ui.account_id = a.id AND ui.identifier_type = 'notion' AND ui.verified = true
+                     LIMIT 1) as notion_user_id
              FROM accounts a
              JOIN auth.users u ON a.auth_user_id = u.id
              WHERE a.organization_id = $1",
@@ -2028,6 +2032,7 @@ impl AccountStore {
                 account_id: r.get(0),
                 email: r.get::<_, Option<String>>(1).unwrap_or_default(),
                 name: r.get(2),
+                notion_user_id: r.get(3),
             })
             .collect())
     }

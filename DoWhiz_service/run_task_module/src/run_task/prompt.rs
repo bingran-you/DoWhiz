@@ -920,15 +920,17 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
             .organization_members
             .iter()
             .map(|m| {
-                if let Some(name) = &m.name {
-                    format!("- {} ({})", name, m.email)
-                } else {
-                    format!("- {}", m.email)
-                }
+                let name_part = m.name.as_deref().unwrap_or(&m.email);
+                let notion_part = m
+                    .notion_user_id
+                    .as_ref()
+                    .map(|id| format!(" | notion_id: {}", id))
+                    .unwrap_or_default();
+                format!("- {} ({}){}",  name_part, m.email, notion_part)
             })
             .collect();
         format!(
-            "\n**Known Organization Members (from DoWhiz):**\n{}\n\nWhen assigning tasks:\n- Match org members to Notion users by email when possible\n- If no Notion user match exists, add \"Assigned to: [name]\" in the task description\n",
+            "\n**Known Organization Members (from DoWhiz):**\n{}\n\nWhen assigning tasks:\n- Use the notion_id directly if available for Notion assignee field\n- If no notion_id, match org members to Notion users by email\n- If no Notion user match exists, add \"Assigned to: [name]\" in the task description\n",
             members_list.join("\n")
         )
     };
@@ -996,6 +998,28 @@ Before running TPM commands, gather context about {org_name}:
 9. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
 10. **Create more tasks** if the board looks sparse - from GitHub issues, competitive research, or new ideas
 11. Report in your summary which assignees came from each source (Notion users / org members / discovered)
+
+**Overdue Task Follow-ups (during scheduled syncs):**
+During TPM syncs, check for tasks with overdue deadlines and schedule follow-up emails:
+
+1. Discover the date property name (could be "ETA", "Due Date", "Deadline", "Target Date", etc.):
+   - Try `tpm_cli get-schema` first
+   - If that fails (e.g., page ID instead of database), use `notion_api_cli get-database` or query tasks directly
+2. Query tasks and check the date property against today's date
+3. For tasks where the date is 3+ days past AND status is not "Done" or "Archived":
+   - Look up the assignee's email from Known Organization Members (match by notion_id or name)
+   - Schedule a follow-up email using SCHEDULED_TASKS_JSON
+4. Format for scheduling follow-up emails:
+   ```
+   SCHEDULED_TASKS_JSON_BEGIN
+   [{{"type":"send_email","delay_minutes":0,"subject":"Task overdue: [Task Name]","html_path":"followup_[task_id].html","to":["assignee@email.com"]}}]
+   SCHEDULED_TASKS_JSON_END
+   ```
+5. Create the HTML file (e.g., `followup_abc123.html`) with a brief, friendly reminder:
+   - Task name and link to Notion page
+   - How many days overdue
+   - Ask for a status update or new ETA
+6. In your summary, list which overdue tasks triggered follow-ups
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.

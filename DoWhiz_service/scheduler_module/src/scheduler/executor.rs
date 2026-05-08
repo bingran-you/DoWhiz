@@ -429,6 +429,7 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
                         account_id: m.account_id.to_string(),
                         email: m.email,
                         name: m.name,
+                        notion_user_id: m.notion_user_id,
                     })
                     .collect();
             }
