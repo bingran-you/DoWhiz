@@ -40,7 +40,7 @@
             GitHub issues, or shared document comments. Agents execute in the right tools and return
             results with shared memory across channels.
           </p>
-          <div class="updated">Last updated: February 25, 2026</div>
+          <div class="updated">Last updated: May 8, 2026</div>
         </section>
 
         <section class="legal-card">
@@ -86,7 +86,57 @@
         </section>
 
         <section class="legal-card">
-          <h2>5. Request templates by surface</h2>
+          <h2>5. Organization setup</h2>
+          <p>
+            Organizations allow teams to share Notion workspaces and coordinate across members.
+            You can create an organization from your DoWhiz dashboard.
+          </p>
+          <h3>Required fields</h3>
+          <ul>
+            <li>
+              <strong>Organization name:</strong> Your team or company name.
+            </li>
+            <li>
+              <strong>Leader account ID:</strong> The DoWhiz account UUID of the organization owner.
+              Find this in your DoWhiz dashboard under Account Settings.
+            </li>
+            <li>
+              <strong>Member account IDs:</strong> DoWhiz account UUIDs for each team member.
+              Members inherit access to the organization's shared Notion workspace.
+            </li>
+          </ul>
+          <h3>Connecting Notion</h3>
+          <p>
+            The organization leader must connect their Notion workspace via OAuth:
+          </p>
+          <ol>
+            <li>Go to the DoWhiz dashboard and click "Connect Notion".</li>
+            <li>Authorize DoWhiz to access your Notion workspace.</li>
+            <li>Select the pages and databases you want agents to access.</li>
+          </ol>
+          <h3>Notion Task Board setup</h3>
+          <p>
+            If you don't have a task board, DoWhiz will create one for you automatically when you first use TPM sync.
+            To use an existing database instead:
+          </p>
+          <ol>
+            <li>Open your task board database in Notion.</li>
+            <li>Click "..." menu → "Copy link".</li>
+            <li>Paste the URL into the "Change Notion task board" field in your DoWhiz dashboard.</li>
+          </ol>
+          <p>
+            The Workspace ID is auto-detected from your linked Notion account. If you need to override it
+            (e.g., for a different workspace), find it in Notion: Profile (top-left) → Settings → General → bottom of page.
+          </p>
+          <p>
+            Once configured, all organization members can trigger TPM sync and task board updates
+            using the leader's Notion credentials. If no organization leader is set, DoWhiz falls back
+            to the user's own Notion credentials.
+          </p>
+        </section>
+
+        <section class="legal-card">
+          <h2>6. Request templates by surface</h2>
           <h3>Email template</h3>
           <ul>
             <li>"Devin: implement this issue scope, add tests, and reply with PR + rollout notes."</li>
@@ -110,7 +160,7 @@
         </section>
 
         <section class="legal-card">
-          <h2>6. What happens after you trigger</h2>
+          <h2>7. What happens after you trigger</h2>
           <ul>
             <li>Requests are routed to the best-fit agent and tools.</li>
             <li>Execution happens with explicit permissions and tracked context.</li>
@@ -120,7 +170,7 @@
         </section>
 
         <section class="legal-card">
-          <h2>7. Support</h2>
+          <h2>8. Support</h2>
           <p>
             Reply in the same channel if you need revisions. For account, integrations, or access
             help, contact admin@dowhiz.com.
