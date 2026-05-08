@@ -165,10 +165,6 @@ const SYNTHETIC_SCENARIO_KEYWORDS: &[&str] = &[
     "company x",
     "company y",
 ];
-const ACTION_ONLY_MONITOR_KEYWORDS: &[&str] = &[
-    "only tell me if i should act",
-    "just tell me if i should act",
-];
 #[allow(dead_code)]
 const SHORT_ARTIFACT_VISIBLE_CHAR_LIMIT: usize = 1200;
 const MAX_REPLY_ARTIFACT_BYTES: usize = 64 * 1024;
@@ -267,22 +263,6 @@ pub(super) fn investment_monitor_request_for_workspace(
     )?))
 }
 
-pub(super) fn synthetic_investment_request_for_workspace(
-    workspace_dir: &Path,
-) -> Result<bool, RunTaskError> {
-    Ok(is_synthetic_investment_request(&load_inbound_request_text(
-        workspace_dir,
-    )?))
-}
-
-pub(super) fn action_only_monitor_request_for_workspace(
-    workspace_dir: &Path,
-) -> Result<bool, RunTaskError> {
-    Ok(is_action_only_monitor_request(&load_inbound_request_text(
-        workspace_dir,
-    )?))
-}
-
 fn investment_contract_violations(
     _workspace_dir: &Path,
     reply_path: &Path,
@@ -291,7 +271,7 @@ fn investment_contract_violations(
     let mut violations = Vec::new();
 
     if reply_body.len() > MAX_REPLY_ARTIFACT_BYTES {
-        violations.push("reply artifact exceeds bounded monitor size limit".to_string());
+        violations.push("reply artifact exceeds investment reply size limit".to_string());
     }
 
     if reply_body.contains('\0') {
@@ -581,14 +561,6 @@ fn is_synthetic_investment_request(raw: &str) -> bool {
         .any(|keyword| normalized.contains(keyword))
 }
 
-fn is_action_only_monitor_request(raw: &str) -> bool {
-    let normalized = normalize_search_text(raw);
-    is_investment_monitor_request(raw)
-        && ACTION_ONLY_MONITOR_KEYWORDS
-            .iter()
-            .any(|keyword| normalized.contains(keyword))
-}
-
 fn contains_probable_ticker(raw: &str) -> bool {
     const STOPWORDS: &[&str] = &[
         "A", "AI", "ACI", "AM", "AND", "API", "ARE", "AWS", "BUY", "CI", "CLI", "CSS", "CSV",
@@ -816,8 +788,8 @@ fn url_path(link: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_expected_reply_artifact, is_action_only_monitor_request,
-        is_investment_monitor_request, is_investment_request, reply_artifact_ready_for_workspace,
+        ensure_expected_reply_artifact, is_investment_monitor_request, is_investment_request,
+        reply_artifact_ready_for_workspace,
     };
     use send_emails_module::normalize_email_html;
     use std::fs;
@@ -863,9 +835,6 @@ mod tests {
         ));
         assert!(is_investment_monitor_request(
             "Assume company Z reported revenue slightly above expectations, but lowered next-quarter margin guidance because of temporary supply-chain costs. Demand commentary improved, but free cash flow remained negative. Write the investment monitor output."
-        ));
-        assert!(is_action_only_monitor_request(
-            "Check whether anything material changed for NVDA since your last note. Only tell me if I should act."
         ));
     }
 
@@ -1078,10 +1047,10 @@ mod tests {
         let reply_path = workspace.join("reply_email_draft.html");
 
         let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect_err("expected bounded monitor size violation");
+            .expect_err("expected investment reply size violation");
         assert!(err
             .to_string()
-            .contains("reply artifact exceeds bounded monitor size limit"));
+            .contains("reply artifact exceeds investment reply size limit"));
     }
 
     #[test]

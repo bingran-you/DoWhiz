@@ -28,6 +28,15 @@ A structured framework for one-page single-name U.S. equity decision memos. The 
    - Existing-holder action: `Hold` | `Add` | `Trim` | `Exit` | `Hold/Do not add`
    - Confidence: `Low` | `Medium` | `High` (lower it when data is incomplete, conflicting, or heavily catalyst-dependent)
 
+## Concise monitor mode
+
+When the user frames the request as a delta check such as "what changed," "since your last note," or "only tell me if I should act," shorten the output instead of changing the analysis method.
+
+- Still verify the key facts and keep judgment clearly labelled.
+- In the compressed version, answer four things: the current action or non-action takeaway, what changed or did not change, why that matters, and what would change the view next.
+- If only one audience is relevant, say so explicitly rather than forcing both new-money and existing-holder sections.
+- Do not substitute canned placeholders like `Unable to Verify` or `No recommendation` for real analysis. If evidence is incomplete, name the missing fact and lower confidence accordingly.
+
 ## What this framework rejects
 
 - Vague hedges ("watch for a pullback," "wait for clarity," "buy in tranches") unless translated into explicit measurable conditions.

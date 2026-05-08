@@ -983,9 +983,9 @@ PY
 
 #[test]
 #[cfg(unix)]
-fn run_task_action_only_monitor_requests_use_fast_path() {
+fn run_task_action_only_monitor_requests_still_run_real_analysis() {
     let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_action_only_monitor_fast_path").unwrap();
+    let temp = TempDir::new("codex_task_action_only_monitor_analysis").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
     write_investment_request(
         &workspace,
@@ -1020,8 +1020,11 @@ if [ -f "{counter_path}" ]; then
 fi
 count=$((count + 1))
 printf '%s' "$count" > "{counter_path}"
-echo "action-only monitor fast path should not invoke codex" >&2
-sleep 20
+cat > reply_email_draft.html <<'HTML'
+<html><body><h1>NVDA act-now check</h1><p><strong>Action:</strong> No immediate action.</p><p><strong>What changed:</strong> No fresh filing or earnings delta was established in the available workspace evidence.</p><p><strong>What would change the view:</strong> A material guidance reset, margin break, or fresh demand signal.</p></body></html>
+HTML
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
 "#,
             counter_path = counter_path.display()
         ),
@@ -1040,34 +1043,26 @@ sleep 20
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
-    let started_at = Instant::now();
     let result = run_task(&build_params(&workspace))
-        .expect("action-only monitor request should use fast path");
-    let elapsed = started_at.elapsed();
+        .expect("action-only monitor request should still run real analysis");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Quick update on NVDA"));
-    assert!(html.contains("Status:"));
-    assert!(html.contains("Unable to Verify"));
-    assert!(html.contains("Action:"));
-    assert!(html.contains("No recommendation"));
-    assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("Canonical thread request"));
-    assert!(!html.contains("href=\"http"));
-    assert!(!counter_path.exists());
-    assert!(
-        elapsed.as_secs_f32() < 6.0,
-        "action-only monitor fast path should return quickly, elapsed={elapsed:?}"
-    );
-    let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic action-only monitor fallback"));
+    assert!(html.contains("NVDA act-now check"));
+    assert!(html.contains("No immediate action"));
+    assert!(html.contains("What changed"));
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
+    assert!(!html.contains("Quick update on"));
+    assert!(!html.contains("Unable to Verify"));
+    assert!(!html.contains("No recommendation"));
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(!note.contains("deterministic"));
     assert!(!note.contains("Claude fallback"));
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_monitor_timeout_yields_short_fail_soft_artifact() {
+fn run_task_monitor_timeout_uses_codex_retry_then_claude_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_monitor_fail_soft").unwrap();
+    let temp = TempDir::new("codex_task_monitor_claude_fallback").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
     write_investment_request(
         &workspace,
@@ -1078,21 +1073,31 @@ fn run_task_monitor_timeout_yields_short_fail_soft_artifact() {
 
     let home_dir = temp.path.join("home");
     let bin_dir = temp.path.join("bin");
+    let counter_path = temp.path.join("codex_invocations.txt");
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_shell_script(
         &bin_dir,
         "codex",
-        r#"#!/bin/sh
+        &format!(
+            r#"#!/bin/sh
 set -e
 if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
   printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
   exit 0
 fi
+count=0
+if [ -f "{counter_path}" ]; then
+  count="$(cat "{counter_path}")"
+fi
+count=$((count + 1))
+printf '%s' "$count" > "{counter_path}"
 sleep 20
 "#,
+            counter_path = counter_path.display()
+        ),
     );
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::EnsureModel).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -1103,27 +1108,27 @@ sleep 20
         ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
         ("RUN_TASK_TIMEOUT_SECS", "20"),
         ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "3"),
+        ("EXPECTED_CLAUDE_MODEL", "claude-sonnet-4-5"),
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
     let result = run_task(&build_params(&workspace))
-        .expect("monitor timeout should produce fail-soft artifact");
+        .expect("monitor timeout should reach the real fallback chain");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Quick update on NVDA"));
-    assert!(html.contains("Unable to Verify"));
-    assert!(html.contains("No recommendation"));
-    assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("href=\"http"));
+    assert!(html.contains("Claude fallback reply"));
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
+    assert!(workspace.join("codex_fast_completion_context.md").exists());
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic operational monitor fallback"));
-    assert!(!note.contains("Claude fallback"));
+    assert!(note.contains("Claude fallback"));
+    assert!(!note.contains("deterministic operational"));
 }
 
 #[test]
 #[cfg(unix)]
-fn run_task_timeout_yields_single_pass_operational_fallback_for_real_ticker_research() {
+fn run_task_deep_research_timeout_returns_operational_failure_after_real_attempts() {
     let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_fail_soft_before_retry").unwrap();
+    let temp = TempDir::new("codex_task_operational_failure_reply").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
     write_investment_request(
         &workspace,
@@ -1131,18 +1136,6 @@ fn run_task_timeout_yields_single_pass_operational_fallback_for_real_ticker_rese
         "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
     );
     install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
-    let research_dir = workspace.join("work").join("research");
-    fs::create_dir_all(&research_dir).unwrap();
-    fs::write(
-        research_dir.join("nokia_q1_release.md"),
-        "Nokia release notes placeholder",
-    )
-    .unwrap();
-    fs::write(
-        research_dir.join("nokia_margin_notes.txt"),
-        "Operating margin notes placeholder",
-    )
-    .unwrap();
 
     let home_dir = temp.path.join("home");
     let bin_dir = temp.path.join("bin");
@@ -1192,162 +1185,24 @@ sleep 20
         ("PATH", &new_path),
         ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
         ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
-        ("RUN_TASK_TIMEOUT_SECS", "30"),
-        ("RUN_TASK_CODEX_TIMEOUT_SECS", "20"),
-        ("GH_AUTH_DISABLED", "1"),
-    ]);
-
-    let result =
-        run_task(&build_params(&workspace)).expect("timeout should recover with one fallback");
-    let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Quick update on Nokia (NOK)"));
-    assert!(html.contains("Unable to Verify"));
-    assert!(html.contains("No recommendation"));
-    assert!(html.contains("deeper report separately"));
-    assert!(!html.contains("Decision Card"));
-    assert!(!html.contains("href=\"http"));
-    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
-    assert!(!workspace.join("codex_fast_completion_context.md").exists());
-    let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic operational investment fallback"));
-    assert!(!note.contains("Claude fallback"));
-}
-
-#[test]
-#[cfg(unix)]
-fn run_task_synthetic_investment_requests_fall_back_once_without_assumption_mode() {
-    let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_negative_synthetic_fail_soft").unwrap();
-    let workspace = create_workspace(&temp.path).unwrap();
-    write_investment_request(
-        &workspace,
-        "Synthetic downside scenario",
-        "Assume company Y cut revenue guidance by 20%, lost its largest customer, gross margin collapsed, management withdrew long-term targets, and the stock still trades above peer multiples. Write the investment monitor output.",
-    );
-    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
-
-    let home_dir = temp.path.join("home");
-    let bin_dir = temp.path.join("bin");
-    let counter_path = temp.path.join("codex_invocations.txt");
-    fs::create_dir_all(&home_dir).unwrap();
-    fs::create_dir_all(&bin_dir).unwrap();
-    write_shell_script(
-        &bin_dir,
-        "codex",
-        &format!(
-            r#"#!/bin/sh
-set -e
-if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
-  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
-  exit 0
-fi
-count=0
-if [ -f "{counter_path}" ]; then
-  count="$(cat "{counter_path}")"
-fi
-count=$((count + 1))
-printf '%s' "$count" > "{counter_path}"
-echo "synthetic request invoked codex once" >&2
-sleep 20
-"#,
-            counter_path = counter_path.display()
-        ),
-    );
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
-
-    let old_path = env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", bin_dir.display(), old_path);
-    let _env = EnvGuard::set(&[
-        ("HOME", home_dir.to_str().unwrap()),
-        ("PATH", &new_path),
-        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
-        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
         ("RUN_TASK_TIMEOUT_SECS", "20"),
         ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
+        ("RUN_TASK_REPLY_DRAFT_RESERVE_SECS", "3"),
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
-    let result =
-        run_task(&build_params(&workspace)).expect("synthetic request should still return once");
-    let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Unable to Verify"));
-    assert!(html.contains("No recommendation"));
-    assert!(!html.contains("href=\"http"));
-    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
-    let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic operational"));
-    assert!(!note.contains("Claude fallback"));
-}
-
-#[test]
-#[cfg(unix)]
-fn run_task_watch_closely_synthetic_prompts_fall_back_once_without_fast_path() {
-    let _lock = ENV_MUTEX.lock().unwrap();
-    let temp = TempDir::new("codex_task_watch_closely_synthetic_fast_path").unwrap();
-    let workspace = create_workspace(&temp.path).unwrap();
-    write_investment_request(
-        &workspace,
-        "Watch Closely synthetic",
-        "Assume company Z reported revenue slightly above expectations, but lowered next-quarter margin guidance because of temporary supply-chain costs. Demand commentary improved, but free cash flow remained negative. Write the investment monitor output.",
-    );
-    install_runtime_skills_and_employee_guidance(&workspace, "little_bear").unwrap();
-
-    let home_dir = temp.path.join("home");
-    let bin_dir = temp.path.join("bin");
-    let counter_path = temp.path.join("codex_invocations.txt");
-    fs::create_dir_all(&home_dir).unwrap();
-    fs::create_dir_all(&bin_dir).unwrap();
-    write_shell_script(
-        &bin_dir,
-        "codex",
-        &format!(
-            r#"#!/bin/sh
-set -e
-if [ "$1" = "exec" ] && [ "$2" = "--help" ]; then
-  printf '%s\n' '--search' '--ask-for-approval' '--sandbox' '--dangerously-bypass-approvals-and-sandbox' '--cd'
-  exit 0
-fi
-count=0
-if [ -f "{counter_path}" ]; then
-  count="$(cat "{counter_path}")"
-fi
-count=$((count + 1))
-printf '%s' "$count" > "{counter_path}"
-echo "watch-closely synthetic invoked codex once" >&2
-sleep 20
-"#,
-            counter_path = counter_path.display()
-        ),
-    );
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
-
-    let old_path = env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", bin_dir.display(), old_path);
-    let _env = EnvGuard::set(&[
-        ("HOME", home_dir.to_str().unwrap()),
-        ("PATH", &new_path),
-        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
-        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
-        ("RUN_TASK_TIMEOUT_SECS", "20"),
-        ("RUN_TASK_CODEX_TIMEOUT_SECS", "8"),
-        ("GH_AUTH_DISABLED", "1"),
-    ]);
-
-    let started_at = Instant::now();
     let result = run_task(&build_params(&workspace))
-        .expect("synthetic watch-closely request should still return once");
-    let elapsed = started_at.elapsed();
+        .expect("all analysis failures should still produce an operational reply");
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(html.contains("Unable to Verify"));
-    assert!(html.contains("No recommendation"));
-    assert!(!html.contains("href=\"http"));
-    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
-    assert!(
-        elapsed.as_secs_f32() < 25.0,
-        "synthetic fallback should stay within the bounded monitor timeout, elapsed={elapsed:?}"
-    );
+    assert!(html.contains("Investment analysis could not be completed"));
+    assert!(html.contains("No investment recommendation is included"));
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
+    assert!(workspace.join("codex_fast_completion_context.md").exists());
+    assert!(!html.contains("Quick update on"));
+    assert!(!html.contains("Unable to Verify"));
+    assert!(!html.contains("No recommendation"));
     let note = result.recovery_note.as_deref().unwrap_or("");
-    assert!(note.contains("deterministic operational"));
+    assert!(note.contains("operational failure reply"));
     assert!(!note.contains("Claude fallback"));
 }
 
@@ -1565,8 +1420,10 @@ fn run_task_investment_content_filter_retry_recovers_without_claude_fallback() {
     let params = build_params(&workspace);
     let result = run_task(&params).unwrap();
     let reply = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(reply.contains("Quick update on NVO"));
-    assert!(reply.contains("Unable to Verify"));
+    assert!(reply.contains("Decision Card"));
+    assert!(reply.contains("Verified Facts"));
+    assert!(!reply.contains("Unable to Verify"));
+    assert!(!reply.contains("No recommendation"));
     let note = result.recovery_note.unwrap_or_default();
     assert!(note.contains("content-filter-safe Codex retry"));
     assert!(!note.contains("Claude fallback"));
@@ -1574,7 +1431,7 @@ fn run_task_investment_content_filter_retry_recovers_without_claude_fallback() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_investment_content_filter_failure_returns_bounded_fallback_without_claude() {
+fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_content_filter_fallback").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1589,7 +1446,7 @@ fn run_task_investment_content_filter_failure_returns_bounded_fallback_without_c
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_fake_codex(&bin_dir, FakeCodexMode::InvestmentContentFilterAlwaysFail).unwrap();
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::EnsureModel).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -1598,17 +1455,17 @@ fn run_task_investment_content_filter_failure_returns_bounded_fallback_without_c
         ("PATH", &new_path),
         ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
         ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("EXPECTED_CLAUDE_MODEL", "claude-sonnet-4-5"),
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
     let params = build_params(&workspace);
     let result = run_task(&params).unwrap();
     let reply = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(reply.contains("Status:</strong> Unable to Verify"));
-    assert!(reply.contains("Action:</strong> No recommendation"));
+    assert!(reply.contains("Claude fallback reply"));
     let note = result.recovery_note.unwrap_or_default();
-    assert!(note.contains("deterministic operational investment fallback"));
-    assert!(!note.contains("Claude fallback"));
+    assert!(note.contains("Claude fallback"));
+    assert!(!note.contains("deterministic operational"));
 }
 
 #[test]
