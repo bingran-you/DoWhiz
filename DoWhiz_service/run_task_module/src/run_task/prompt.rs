@@ -926,7 +926,7 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
                     .as_ref()
                     .map(|id| format!(" | notion_id: {}", id))
                     .unwrap_or_default();
-                format!("- {} ({}){}",  name_part, m.email, notion_part)
+                format!("- {} ({}){}", name_part, m.email, notion_part)
             })
             .collect();
         format!(
