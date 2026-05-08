@@ -57,6 +57,17 @@ if [ -f "$CADDY_LOG" ]; then
     fi
 fi
 
+# 6. Orphaned debug archive temp directories (older than 1 day)
+# These are created by TempDir::new() in debug_archive.rs and left behind on upload failure
+# Delete in batches to avoid stalling on large counts
+TMP_DIRS=$(ls -d /tmp/.tmp* 2>/dev/null | wc -l)
+if [ "$TMP_DIRS" -gt 0 ]; then
+    echo "$LOG_PREFIX Cleaning orphaned temp directories ($TMP_DIRS found)..."
+    for _ in 1 2 3 4 5; do
+        ls -d /tmp/.tmp* 2>/dev/null | head -100 | xargs rm -rf 2>/dev/null || true
+    done
+fi
+
 # Final status
 NEW_USAGE=$(df / | awk 'NR==2 {gsub(/%/,""); print $5}')
 echo "$LOG_PREFIX Cleanup complete. Disk usage: ${USAGE}% -> ${NEW_USAGE}%"
