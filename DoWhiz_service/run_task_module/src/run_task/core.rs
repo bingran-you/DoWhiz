@@ -9,12 +9,9 @@ use super::codex::{
 };
 use super::env::read_env_trimmed;
 use super::errors::RunTaskError;
-use super::investment_fail_soft::{
-    maybe_write_action_only_monitor_artifact, maybe_write_fail_soft_investment_artifact,
-};
+use super::investment_fail_soft::maybe_write_investment_operational_failure_artifact;
 use super::reply_contract::{
-    action_only_monitor_request_for_workspace, investment_monitor_request_for_workspace,
-    investment_request_for_workspace,
+    investment_monitor_request_for_workspace, investment_request_for_workspace,
 };
 use super::trace::RUN_TASK_TRACE_DIRNAME;
 use super::types::{RunTaskOutput, RunTaskParams, RunTaskRequest};
@@ -27,29 +24,12 @@ const MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS: u64 = 90;
 const MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS: u64 = 30;
 const MAX_INVESTMENT_CONTENT_FILTER_MONITOR_RETRY_TIMEOUT_SECS: u64 = 20;
 const MAX_INVESTMENT_CONTENT_FILTER_RESEARCH_RETRY_TIMEOUT_SECS: u64 = 45;
-const SIMPLE_INVESTMENT_MONITOR_TIMEOUT_SECS: u64 = 20;
-const SIMPLE_INVESTMENT_RESEARCH_TIMEOUT_SECS: u64 = 45;
 
 pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
     let workspace_dir = remap_workspace_dir(&params.workspace_dir)?;
     let runner = normalize_runner(&params.runner);
     let request = build_request(&workspace_dir, params, params.model_name.as_str());
-    let action_only_monitor_request = action_only_monitor_request_for_workspace(&workspace_dir)?;
     let investment_request = investment_request_for_workspace(&workspace_dir)?;
-
-    if action_only_monitor_request {
-        if let Some(output) = maybe_finalize_action_only_monitor_artifact(
-            params,
-            &workspace_dir,
-            "action-only monitor fast path",
-        )? {
-            return Ok(output);
-        }
-    }
-
-    if investment_request && !params.reply_to.is_empty() {
-        return run_simple_investment_monitor_task(params, &workspace_dir, &runner);
-    }
 
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
 
@@ -100,6 +80,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
         Ok(output) => Ok(output),
         Err(primary_err) => {
             let mut fallback_primary_err = primary_err;
+            let mut allow_fast_completion_retry = codex_budget_split.is_some();
             if runner.eq_ignore_ascii_case("codex")
                 && investment_request
                 && !params.reply_to.is_empty()
@@ -113,45 +94,30 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                 ) {
                     Ok(output) => return Ok(output),
                     Err(retry_err) => {
-                        if let Some(output) = maybe_finalize_investment_artifact_before_fallback(
-                            params,
-                            &workspace_dir,
-                            &retry_err,
-                        )? {
-                            return Ok(output);
-                        }
-                        return Err(retry_err);
+                        fallback_primary_err = retry_err;
+                        allow_fast_completion_retry = false;
                     }
                 }
             }
-            if let Some((_, fast_completion_timeout)) = codex_budget_split {
-                match maybe_run_codex_fast_completion_retry(
-                    params,
-                    &workspace_dir,
-                    &runner,
-                    &fallback_primary_err,
-                    fast_completion_timeout,
-                ) {
-                    Ok(Some(output)) => return Ok(output),
-                    Ok(None) => {}
-                    Err(retry_err) => fallback_primary_err = retry_err,
-                }
-            }
-            let prefer_fail_soft =
-                should_prefer_investment_fail_soft(params, &workspace_dir, &fallback_primary_err)?;
-            if prefer_fail_soft {
-                if let Some(output) = maybe_finalize_investment_artifact_before_fallback(
-                    params,
-                    &workspace_dir,
-                    &fallback_primary_err,
-                )? {
-                    return Ok(output);
+            if allow_fast_completion_retry {
+                if let Some((_, fast_completion_timeout)) = codex_budget_split {
+                    match maybe_run_codex_fast_completion_retry(
+                        params,
+                        &workspace_dir,
+                        &runner,
+                        &fallback_primary_err,
+                        fast_completion_timeout,
+                    ) {
+                        Ok(Some(output)) => return Ok(output),
+                        Ok(None) => {}
+                        Err(retry_err) => fallback_primary_err = retry_err,
+                    }
                 }
             }
             match run_claude_fallback_after_codex_failure(params, fallback_primary_err) {
                 Ok(output) => Ok(output),
                 Err(fallback_err) => {
-                    if let Some(output) = maybe_finalize_investment_artifact_before_fallback(
+                    if let Some(output) = maybe_finalize_investment_operational_failure_reply(
                         params,
                         &workspace_dir,
                         &fallback_err,
@@ -166,130 +132,6 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
     }
 }
 
-fn run_simple_investment_monitor_task(
-    params: &RunTaskParams,
-    workspace_dir: &Path,
-    runner: &str,
-) -> Result<RunTaskOutput, RunTaskError> {
-    let request = build_request(workspace_dir, params, params.model_name.as_str());
-    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
-
-    if params.codex_disabled {
-        let disabled_error = RunTaskError::CodexFailed {
-            status: None,
-            output: "Codex disabled for bounded investment monitor runtime.".to_string(),
-        };
-        if let Some(output) = finalize_simple_investment_fallback(
-            params,
-            workspace_dir,
-            &disabled_error,
-            &reply_html_path,
-            &reply_attachments_dir,
-        )? {
-            return Ok(output);
-        }
-        return Err(disabled_error);
-    }
-
-    let primary_result = match runner {
-        "claude" => run_claude_task(
-            build_request(workspace_dir, params, params.model_name.as_str()),
-            runner,
-            reply_html_path.clone(),
-            reply_attachments_dir.clone(),
-            false,
-        ),
-        _ => run_codex_task_with_timeout(
-            build_request(workspace_dir, params, params.model_name.as_str()),
-            runner,
-            reply_html_path.clone(),
-            reply_attachments_dir.clone(),
-            Some(simple_investment_timeout(workspace_dir)?),
-        ),
-    };
-
-    match primary_result {
-        Ok(output) => Ok(output),
-        Err(primary_err) => {
-            if runner.eq_ignore_ascii_case("codex")
-                && is_investment_content_filter_failure(&primary_err)
-            {
-                match run_investment_content_filter_retry(
-                    params,
-                    workspace_dir,
-                    runner,
-                    &primary_err,
-                ) {
-                    Ok(output) => return Ok(output),
-                    Err(retry_err) => {
-                        if let Some(output) = finalize_simple_investment_fallback(
-                            params,
-                            workspace_dir,
-                            &retry_err,
-                            &reply_html_path,
-                            &reply_attachments_dir,
-                        )? {
-                            return Ok(output);
-                        }
-                        return Err(retry_err);
-                    }
-                }
-            }
-            if let Some(output) = finalize_simple_investment_fallback(
-                params,
-                workspace_dir,
-                &primary_err,
-                &reply_html_path,
-                &reply_attachments_dir,
-            )? {
-                Ok(output)
-            } else {
-                Err(primary_err)
-            }
-        }
-    }
-}
-
-fn finalize_simple_investment_fallback(
-    params: &RunTaskParams,
-    workspace_dir: &Path,
-    primary_err: &RunTaskError,
-    reply_html_path: &Path,
-    reply_attachments_dir: &Path,
-) -> Result<Option<RunTaskOutput>, RunTaskError> {
-    if params.reply_to.is_empty() {
-        return Ok(None);
-    }
-
-    let Some(recovery_note) =
-        maybe_write_fail_soft_investment_artifact(workspace_dir, reply_html_path, primary_err)?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(RunTaskOutput {
-        reply_html_path: reply_html_path.to_path_buf(),
-        reply_attachments_dir: reply_attachments_dir.to_path_buf(),
-        codex_output: primary_err.to_string(),
-        scheduled_tasks: Vec::new(),
-        scheduled_tasks_error: None,
-        scheduler_actions: Vec::new(),
-        scheduler_actions_error: None,
-        token_usage: None,
-        recovery_note: Some(recovery_note),
-    }))
-}
-
-fn simple_investment_timeout(workspace_dir: &Path) -> Result<Duration, RunTaskError> {
-    let cap_secs = if investment_monitor_request_for_workspace(workspace_dir)? {
-        SIMPLE_INVESTMENT_MONITOR_TIMEOUT_SECS
-    } else {
-        SIMPLE_INVESTMENT_RESEARCH_TIMEOUT_SECS
-    };
-
-    Ok(codex_command_timeout().min(Duration::from_secs(cap_secs)))
-}
-
 fn investment_content_filter_retry_timeout(workspace_dir: &Path) -> Result<Duration, RunTaskError> {
     let cap_secs = if investment_monitor_request_for_workspace(workspace_dir)? {
         MAX_INVESTMENT_CONTENT_FILTER_MONITOR_RETRY_TIMEOUT_SECS
@@ -298,51 +140,6 @@ fn investment_content_filter_retry_timeout(workspace_dir: &Path) -> Result<Durat
     };
 
     Ok(codex_command_timeout().min(Duration::from_secs(cap_secs)))
-}
-
-fn should_prefer_investment_fail_soft(
-    params: &RunTaskParams,
-    workspace_dir: &Path,
-    primary_err: &RunTaskError,
-) -> Result<bool, RunTaskError> {
-    if params.reply_to.is_empty() || !investment_request_for_workspace(workspace_dir)? {
-        return Ok(false);
-    }
-
-    Ok(matches!(
-        primary_err,
-        RunTaskError::CommandTimeout { .. } | RunTaskError::OutputMissing { .. }
-    ))
-}
-
-fn maybe_finalize_action_only_monitor_artifact(
-    params: &RunTaskParams,
-    workspace_dir: &Path,
-    codex_output: &str,
-) -> Result<Option<RunTaskOutput>, RunTaskError> {
-    if params.reply_to.is_empty() {
-        return Ok(None);
-    }
-
-    let request = build_request(workspace_dir, params, params.model_name.as_str());
-    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
-    let Some(recovery_note) =
-        maybe_write_action_only_monitor_artifact(workspace_dir, &reply_html_path)?
-    else {
-        return Ok(None);
-    };
-
-    Ok(Some(RunTaskOutput {
-        reply_html_path,
-        reply_attachments_dir,
-        codex_output: codex_output.to_string(),
-        scheduled_tasks: Vec::new(),
-        scheduled_tasks_error: None,
-        scheduler_actions: Vec::new(),
-        scheduler_actions_error: None,
-        token_usage: None,
-        recovery_note: Some(recovery_note),
-    }))
 }
 
 fn is_investment_content_filter_failure(err: &RunTaskError) -> bool {
@@ -411,13 +208,15 @@ This workspace is running exactly one bounded retry because the earlier pass was
 Remaining retry budget: approximately {budget_secs} seconds.\n\n\
 Primary failure class: {primary_summary}\n\n\
 Required behavior now:\n\
-- Normalize the user's request into a neutral public-company monitoring task before doing any other work.\n\
+- Normalize the user's request into a neutral public-company analysis task before doing any other work.\n\
 - Do not repeat roleplay framing such as `Wall Street trader`, `deep research`, `investment advice`, or open-ended buy/sell solicitation language in your own task framing.\n\
-- Focus on verified public developments about the company or ticker and map them into the product's bounded monitor labels.\n\
-- Produce exactly one concise HTML reply in `reply_email_draft.html`.\n\
-- Use only `Actionable Update`, `No Material Update`, or `Unable to Verify`.\n\
-- Do not restart broad page-by-page filing extraction, long quote sweeps, or a new multi-site research loop.\n\
-- If the request still cannot be answered safely within this retry budget, finalize `Unable to Verify` instead of refusing or timing out.\n\
+- Continue the real analysis path. Do not collapse the request into canned monitor labels or a pseudo-answer.\n\
+- Reuse existing workspace evidence first and add only the minimum targeted verification needed to finish.\n\
+- If the original request was a deep-research memo, still aim for a structured substantive investment reply.\n\
+- If the original request was a monitor or delta check, you may keep the reply concise, but it still must reflect real analysis rather than a placeholder status.\n\
+- Produce exactly one final HTML reply in `reply_email_draft.html`.\n\
+- If you cannot support a conclusion, say exactly what remains unverified and why. Do not emit canned shells like `Unable to Verify`, `No Material Update`, `Actionable Update`, or `No recommendation` just to end the run.\n\
+- Do not restart a broad filing scrape, long quote sweep, or repeated market-price loop.\n\
 - Do not mention internal policy machinery unless the user explicitly asks why the system could not answer.\n",
         budget_secs = retry_timeout.as_secs(),
         primary_summary = primary_error_summary(primary_err),
@@ -429,10 +228,10 @@ Required behavior now:\n\
     Ok(())
 }
 
-fn maybe_finalize_investment_artifact_before_fallback(
+fn maybe_finalize_investment_operational_failure_reply(
     params: &RunTaskParams,
     workspace_dir: &Path,
-    primary_err: &RunTaskError,
+    cause: &RunTaskError,
 ) -> Result<Option<RunTaskOutput>, RunTaskError> {
     if params.reply_to.is_empty() {
         return Ok(None);
@@ -440,8 +239,11 @@ fn maybe_finalize_investment_artifact_before_fallback(
 
     let request = build_request(workspace_dir, params, params.model_name.as_str());
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
-    let Some(recovery_note) =
-        maybe_write_fail_soft_investment_artifact(workspace_dir, &reply_html_path, primary_err)?
+    let Some(recovery_note) = maybe_write_investment_operational_failure_artifact(
+        workspace_dir,
+        &reply_html_path,
+        cause,
+    )?
     else {
         return Ok(None);
     };
@@ -449,7 +251,7 @@ fn maybe_finalize_investment_artifact_before_fallback(
     Ok(Some(RunTaskOutput {
         reply_html_path,
         reply_attachments_dir,
-        codex_output: primary_err.to_string(),
+        codex_output: cause.to_string(),
         scheduled_tasks: Vec::new(),
         scheduled_tasks_error: None,
         scheduler_actions: Vec::new(),
@@ -606,10 +408,7 @@ fn should_retry_codex_fast_completion(primary_err: &RunTaskError) -> bool {
                 "codex" | "docker" | "docker run" | "az container create" | "az container show"
             )
         }
-        RunTaskError::OutputMissing { .. } => true,
-        RunTaskError::OutputContractViolation { reason, .. } => {
-            reason.contains("No Material Change artifact exceeds short-output budget")
-        }
+        RunTaskError::OutputMissing { .. } | RunTaskError::OutputContractViolation { .. } => true,
         _ => false,
     }
 }
@@ -640,12 +439,13 @@ Primary failure class: {primary_summary}\n\n\
 Artifact status:\n- {reply_status}\n- Prior trace to reuse if needed: {trace_hint}\n\n\
 Required behavior now:\n- Use existing workspace evidence first. Do not restart the same search loop that already consumed the research budget.\n\
 - Create or update `reply_email_draft.html` before any new broad research.\n\
-- If this is an investment monitor request and the likely answer is `No Material Change`, write the short artifact now instead of doing more price sweeps.\n\
+- If this is an investment monitor request, keep the reply concise and decision-first, but still base it on real analysis.\n\
 - If a single missing fact still blocks the verdict, do at most one targeted follow-up check after the draft exists.\n\
 - Reuse evidence already gathered in this workspace.\n\
 - Do not restart broad page-by-page annual-report extraction.\n\
 - If evidence is incomplete, say so explicitly and finalize the best calibrated artifact now.\n\
 - For real-ticker investment work, finish a complete final artifact instead of a provisional shell. Fill every required section, include concrete upgrade / downgrade / invalidation triggers, and remove `still being finalized`, `TBD`, or similar placeholders before you stop.\n\
+- Do not fall back to canned labels like `Unable to Verify`, `No Material Update`, or `No recommendation` just to end the run.\n\
 - Do not refuse solely because the request concerns stock analysis or a synthetic investment-monitor scenario. If certainty is limited, answer with calibrated uncertainty instead of refusal.\n",
         budget_secs = fast_completion_timeout.as_secs(),
         primary_summary = primary_error_summary(primary_err),

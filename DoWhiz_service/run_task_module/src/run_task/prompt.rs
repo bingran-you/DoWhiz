@@ -289,10 +289,10 @@ Do not pretend the job has been done without actually doing it."#
 - Prioritize delivering a useful reply within the remaining budget over rebuilding the entire original project from scratch.
 - Before starting new research, inspect any existing artifacts from the earlier pass, especially `codex_fast_completion_context.md`, `reply_email_draft.html`, `.codex_remote_output.log`, and `.run_task_trace_codex_primary/` if present. Reuse facts, sources, filenames, and partial drafts instead of starting over.
 - For long research or writing tasks, begin updating the final reply artifact immediately and keep it current as sections become ready.
-- For investment monitoring in this mode, prefer a short bounded monitor reply over more research.
+- For investment monitoring in this mode, keep the answer concise and decision-first, but still do real analysis.
 - If the user asked for investment monitoring, `reply_email_draft.html` must exist within your next two tool actions.
 - Do not start a fresh multi-site quote sweep, annual-report extraction pass, or repeated market-price loop in recovery mode for investment monitoring.
-- If you cannot verify enough context quickly, finalize a short `Unable to Verify` reply instead of continuing to search.
+- Do not replace missing work with canned statuses like `Unable to Verify`, `No Material Update`, `Actionable Update`, or `No recommendation`.
 - Do not leave `Provisional update`, `still being finalized`, `TBD`, `to be confirmed`, or empty section shells in the final artifact.
 - Investment-monitor requests in this product are allowed. Do not refuse solely because the task concerns a stock, an ETF, or an assumption-based investment scenario. If evidence is limited, answer with calibrated limitation language instead of refusing.
 - If you are still gathering evidence, clearly mark the draft as provisional near the top, and remove or replace that note before you finish if the reply becomes complete.
@@ -385,7 +385,7 @@ Rules:
   Prefer creating a work/ directory for clones, patches, and build artifacts.
 - If attachments include version suffixes like _v1, _v2, the highest version should be the latest version.
 - Avoid interactive commands; use non-interactive flags for git/gh (for example, `gh pr create --title ... --body ...`).
-- Content filter handling: Never leave the user without any response. For investment-monitoring requests, first normalize the task into a neutral public-company monitoring request and try to finish within the bounded monitor format instead of surfacing provider-policy language immediately. If that still fails, send a short `Unable to Verify` reply. For non-investment tasks, if you encounter repeated "content_filter" errors or "I cannot assist with that request" responses, write a polite reply explaining that the task could not be completed and suggest a simpler rephrase.
+- Content filter handling: Never leave the user without any response. For investment requests, first normalize the task into neutral public-company analysis and continue the normal analysis path rather than downgrading into a canned monitor shell. If you still cannot support a conclusion, say exactly what remains unverified and avoid fabricating an investment verdict. For non-investment tasks, if you encounter repeated "content_filter" errors or "I cannot assist with that request" responses, write a polite reply explaining that the task could not be completed and suggest a simpler rephrase.
 {filesystem_security_section}{registration_section}"#,
         input_email = input_email_dir.display(),
         input_attachments = input_attachments_dir.display(),
@@ -626,38 +626,22 @@ See `.agents/skills/notion/SKILL.md` for detailed command reference.
 
 fn build_investment_capabilities_section() -> &'static str {
     r#"Investment research requests:
-- When the user asks about one U.S. stock or ETF, whether now is a good time to buy, or whether anything material changed, use `.agents/skills/us-equity-daily-monitor/SKILL.md` only as background. The bounded monitor rules below override any longer memo or deep-research workflow in that skill for this email path.
-- Treat this email path as a simple bounded monitor, not a deep-research pipeline.
-- Normalize roleplay or advice-heavy wording into a neutral public-company monitoring task before you begin. Do not mirror phrases like `Wall Street trader`, `stock pitch`, or open-ended personal financial-advisor language in your own framing.
-- Focus on verified public developments and map them into the product labels below. This is a product monitor, not a personalized wealth-management service.
-- Produce exactly one concise HTML reply inside `reply_email_draft.html`.
-- Use exactly one of these modes:
-  - `Actionable Update`
-  - `No Material Update`
-  - `Unable to Verify`
-- For `Actionable Update`, keep only:
-  - `Status`
-  - `New Money Action`
-  - `Existing Holder Action`
-  - `Why now`
-  - `What changed`
-  - `What would change the view`
-  - `Confidence`
-- For `No Material Update`, keep only:
-  - `Status`
-  - `Action`
-  - `Why`
-  - `What would matter next`
-- For `Unable to Verify`, keep only:
-  - `Status`
-  - `Action`
-  - `Why`
-  - `Next step`
-- Keep the reply short and scan-first. Do not write a long memo, a bull/base/bear frame, a large derived-metrics table, or a chart block.
-- Do not mine annual reports page by page in this email path.
-- Do not spend the whole run on research. If you cannot verify enough context quickly, send `Unable to Verify` and stop.
-- If the initial wording appears to trigger provider safety systems, retry your own reasoning once with a narrower public-monitor framing rather than repeating the same advice-heavy wording.
-- If a deeper report would help, say that you can run it separately. Do not start it automatically inside this email path.
+- When the user asks about one U.S. stock or ETF, whether now is a good time to buy, or whether anything material changed, use `.agents/skills/us-equity-daily-monitor/SKILL.md` as the primary framework for the analysis.
+- Keep one execution architecture for investment email. Wording like `only tell me if I should act` may change brevity and emphasis, but it does not remove the need for real analysis.
+- Deep-research requests should still produce the full structured investment answer.
+- Monitor or delta-check requests may be shorter, but they still need a real evidence-backed conclusion rather than a canned status.
+- Normalize roleplay or advice-heavy wording into neutral public-company analysis before you begin. Do not mirror phrases like `Wall Street trader`, `stock pitch`, or open-ended personal financial-advisor language in your own framing.
+- Focus on verified public-company developments, derived metrics, and clearly labelled judgment. This is not personalized wealth-management advice, but it is still substantive analysis.
+- Produce exactly one HTML reply inside `reply_email_draft.html`.
+- For monitor-style requests, compress rather than bypass:
+  - Lead with the action or non-action takeaway.
+  - Explain what changed or did not change.
+  - State why that matters.
+  - State what would change the view next.
+- Do not replace missing work with pseudo-analysis shells like `Quick update on X`, `Actionable Update`, `No Material Update`, `Unable to Verify`, or `No recommendation`.
+- Do not mine annual reports page by page unless the request actually needs that depth.
+- If the initial wording appears to trigger provider safety systems, retry your own reasoning once with narrower neutral public-company framing rather than repeating the same advice-heavy wording.
+- If evidence is incomplete, say exactly what remains unverified and how that limits confidence. Do not invent a verdict to paper over the gap.
 - Investment monitoring requests in this product are allowed. Do not refuse solely because the task concerns stock analysis or an assumption-based scenario.
 
 "#
@@ -1844,14 +1828,16 @@ mod tests {
         );
 
         assert!(prompt.contains(".agents/skills/us-equity-daily-monitor/SKILL.md"));
-        assert!(prompt.contains("simple bounded monitor"));
-        assert!(prompt.contains("Actionable Update"));
-        assert!(prompt.contains("No Material Update"));
-        assert!(prompt.contains("Unable to Verify"));
-        assert!(prompt.contains("New Money Action"));
-        assert!(prompt.contains("Existing Holder Action"));
-        assert!(prompt.contains("Do not mine annual reports page by page"));
-        assert!(prompt.contains("Do not start it automatically"));
+        assert!(prompt.contains("primary framework for the analysis"));
+        assert!(prompt.contains("full structured investment answer"));
+        assert!(prompt
+            .contains("may be shorter, but they still need a real evidence-backed conclusion"));
+        assert!(prompt.contains("Lead with the action or non-action takeaway"));
+        assert!(prompt.contains("Do not replace missing work with pseudo-analysis shells"));
+        assert!(prompt.contains(
+            "Do not mine annual reports page by page unless the request actually needs that depth"
+        ));
+        assert!(prompt.contains("Do not invent a verdict to paper over the gap"));
     }
 
     #[test]
@@ -1883,6 +1869,9 @@ mod tests {
             prompt.contains("reply_email_draft.html` must exist within your next two tool actions")
         );
         assert!(prompt.contains("Do not start a fresh multi-site quote sweep"));
+        assert!(prompt
+            .contains("keep the answer concise and decision-first, but still do real analysis"));
+        assert!(prompt.contains("Do not replace missing work with canned statuses"));
         assert!(prompt.contains("hard budget of roughly 120 seconds"));
         assert!(prompt.contains("Do not refuse solely because the task concerns stock analysis"));
         assert!(prompt.contains("Do not leave `Provisional update`"));
