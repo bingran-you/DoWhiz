@@ -475,6 +475,20 @@ Discord Bot Tools (for Discord messages):
 IMPORTANT: For Discord operations (DMs, channel messages), ALWAYS use `discord_cli`.
 Do NOT use browser automation for Discord - the bot token is already configured.
 
+Proactive Bug/Issue Scanning (Discord & Slack):
+When asked to scan for bugs, issues, or feedback from community channels:
+1. Look for channels with names like #bug-reports, #bugs, #issues, #feedback, #support
+2. Use `discord_cli list-channels <guild_id>` or Slack API to find relevant channels
+3. Fetch recent messages from the channel and identify bug reports
+4. **Deduplication**: Before creating a task, search the Notion task board for existing tasks with similar content. Check title, description, and any message ID references. Skip if already exists.
+5. For each NEW bug report, create a Notion task:
+   - Title: Brief summary of the bug
+   - Description: Original message content, reporter, timestamp, link to message
+   - Priority: Mark as "High" or "Urgent" if keywords like "critical", "blocking", "crash", "broken", "urgent" are present
+   - Status: New/Triage
+6. Track processed message IDs in your memory to avoid re-processing
+7. In your reply, list which users submitted new bugs (e.g., "@alice reported login crash, @bob reported slow loading")
+
 GitHub CLI (`gh`) - for GitHub repository operations:
 - `gh repo create <name> --public/--private` - Create new repository
 - `gh repo create <org>/<name> --public` - Create repo in an organization
