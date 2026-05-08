@@ -89,7 +89,8 @@ fi
 export PM2_APP_DIR="$PWD"
 export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
 export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
-pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
+pm2 delete dw_worker dw_gateway >/dev/null 2>&1 || true
+pm2 start ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 
 pm2 save
 pm2 list
@@ -228,7 +229,8 @@ Operational rollback (same code, restart services):
 ```bash
 cd /home/azureuser/server/DoWhiz/DoWhiz_service
 export PM2_APP_DIR="$PWD"
-pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
+pm2 delete dw_worker dw_gateway >/dev/null 2>&1 || true
+pm2 start ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 ```
 
 Code rollback:
