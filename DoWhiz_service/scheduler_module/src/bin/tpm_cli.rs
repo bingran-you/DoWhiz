@@ -428,6 +428,7 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
             }
         },
         "Assignee": { "people": {} },
+        "ETA": { "date": {} },
         "Tags": { "multi_select": { "options": [] } },
         "Source": {
             "select": {
