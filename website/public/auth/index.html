@@ -2700,21 +2700,26 @@
                           Leave Organization
                         </button>
                       </div>
-                      <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 1rem; flex-wrap: wrap;">
-                        <input type="time" id="tpm-cron-time" class="auth-input" value="09:00" style="width: auto;" />
-                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                          <input type="checkbox" id="tpm-cron-weekdays" checked />
-                          Weekdays only
-                        </label>
-                        <button id="setup-tpm-cron-btn" class="auth-btn auth-btn-oauth">
-                          Setup TPM Cron
-                        </button>
-                      </div>
                       <span id="org-sync-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
 
                       <a href="#" id="org-advanced-toggle" style="display: block; margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted, #888);">Advanced</a>
                       <div id="org-advanced-section" class="hidden" style="display: block; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #333); width: 100%;">
-                        <h4 style="margin-bottom: 0.5rem;">Change Notion task board</h4>
+                        <h4 style="margin-bottom: 0.5rem;">TPM Cron Schedule</h4>
+                        <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
+                          Set a recurring schedule for automatic TPM syncs.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                            <input type="time" id="tpm-cron-time" class="auth-input" value="09:00" style="width: auto;" />
+                            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                              <input type="checkbox" id="tpm-cron-weekdays" checked />
+                              Weekdays only
+                            </label>
+                          </div>
+                          <button id="setup-tpm-cron-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Setup Cron</button>
+                        </div>
+
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Change Notion task board</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
                           Connect an existing Notion database for TPM task management.
                         </p>
