@@ -86,13 +86,10 @@ if [ -s /home/azureuser/.nvm/nvm.sh ]; then
   source /home/azureuser/.nvm/nvm.sh
 fi
 
-# worker
-pm2 restart dw_worker --update-env || \
-  pm2 start ./target/release/rust_service --name dw_worker --cwd "$PWD" -- --host 0.0.0.0 --port "${RUST_SERVICE_PORT:-9001}"
-
-# gateway
-pm2 restart dw_gateway --update-env || \
-  pm2 start ./target/release/inbound_gateway --name dw_gateway --cwd "$PWD"
+export PM2_APP_DIR="$PWD"
+export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
+export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
+pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 
 pm2 save
 pm2 list
@@ -230,8 +227,8 @@ Operational rollback (same code, restart services):
 
 ```bash
 cd /home/azureuser/server/DoWhiz/DoWhiz_service
-pm2 restart dw_gateway --update-env
-pm2 restart dw_worker --update-env
+export PM2_APP_DIR="$PWD"
+pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 ```
 
 Code rollback:

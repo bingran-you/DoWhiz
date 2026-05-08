@@ -117,7 +117,7 @@ pub fn persist_scheduled_task(
     task: &ScheduledTask,
 ) -> Result<(), SchedulerError> {
     let store = store::SchedulerStore::new(tasks_db_path.to_path_buf())?;
-    store.update_task(task)
+    store.replace_task(task)
 }
 
 /// Insert a new scheduled task into scheduler storage.

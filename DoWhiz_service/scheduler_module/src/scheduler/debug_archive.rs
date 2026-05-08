@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use reqwest::{blocking::Client, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tempfile::TempDir;
+use tempfile::{Builder as TempDirBuilder, TempDir};
 use uuid::Uuid;
 use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -28,6 +28,7 @@ const ARCHIVE_VERSION: i32 = 1;
 const DEFAULT_ARCHIVE_CONTAINER: &str = "task-debug-archives";
 const DEFAULT_ARCHIVE_PATH_PREFIX: &str = "task_debug_archives";
 const LOCAL_FALLBACK_DIRNAME: &str = ".task_debug_archives_failed";
+const LOCAL_STAGING_DIRNAME: &str = ".task_debug_archives_staging";
 const MAX_GIT_CAPTURE_BYTES: usize = 1_000_000;
 const MAX_TOOL_OUTPUT_BYTES: usize = 32_000;
 const HEAVY_SKIP_DIRS: &[&str] = &[
@@ -87,7 +88,7 @@ pub(crate) struct PendingTaskDebugArchive {
     deploy_target: String,
     started_at: DateTime<Utc>,
     before_capture_duration_ms: i64,
-    temp_dir: TempDir,
+    staging_dir: TempDir,
     before_snapshot: SnapshotCollection,
     storage_plan: ArchiveStoragePlan,
 }
@@ -237,15 +238,14 @@ impl PendingTaskDebugArchive {
             return Ok(None);
         };
 
-        let temp_dir = TempDir::new()?;
-        let before_root = temp_dir.path().join("workspace_before");
-        fs::create_dir_all(&before_root)?;
+        let staging_dir =
+            create_archive_staging_dir(&run_task.workspace_dir, run_task.archive_root.as_deref())?;
 
         let capture_started = Instant::now();
         let before_snapshot = collect_snapshot(
             &run_task.workspace_dir,
             "workspace_before",
-            SnapshotMode::CopyTo(before_root),
+            SnapshotMode::MetadataOnly,
         )?;
         let before_capture_duration_ms = capture_started.elapsed().as_millis() as i64;
 
@@ -262,7 +262,7 @@ impl PendingTaskDebugArchive {
                 .to_ascii_lowercase(),
             started_at,
             before_capture_duration_ms,
-            temp_dir,
+            staging_dir,
             before_snapshot,
             storage_plan: resolve_archive_storage_plan(),
         }))
@@ -336,7 +336,7 @@ impl PendingTaskDebugArchive {
             error_summary: error_summary.map(|value| truncate_string(value, 4000)),
         };
 
-        let zip_path = self.temp_dir.path().join("task_debug_bundle.zip");
+        let zip_path = self.staging_dir.path().join("task_debug_bundle.zip");
         build_archive_zip(
             &zip_path,
             &manifest,
@@ -409,9 +409,23 @@ impl PendingTaskDebugArchive {
     }
 }
 
+fn create_archive_staging_dir(
+    workspace_dir: &Path,
+    archive_root: Option<&Path>,
+) -> Result<TempDir, SchedulerError> {
+    let staging_parent = archive_root
+        .and_then(|path| path.parent())
+        .unwrap_or(workspace_dir)
+        .join(LOCAL_STAGING_DIRNAME);
+    fs::create_dir_all(&staging_parent)?;
+    Ok(TempDirBuilder::new()
+        .prefix("bundle-")
+        .tempdir_in(staging_parent)?)
+}
+
 #[derive(Debug, Clone)]
 enum SnapshotMode {
-    CopyTo(PathBuf),
+    MetadataOnly,
     InPlace,
 }
 
@@ -520,18 +534,13 @@ fn collect_snapshot_dir(
             }
             SnapshotDecision::Include => {
                 let (sha256, size_bytes, copied_path) = match mode {
-                    SnapshotMode::CopyTo(target_root) => {
-                        let copied_path = target_root.join(&relative_path);
-                        if let Some(parent) = copied_path.parent() {
-                            fs::create_dir_all(parent)?;
-                        }
-                        let (sha256, size_bytes) =
-                            copy_file_and_hash(&absolute_path, &copied_path)?;
-                        (sha256, size_bytes, copied_path)
+                    SnapshotMode::MetadataOnly => {
+                        let (sha256, size_bytes) = hash_file(&absolute_path)?;
+                        (sha256, size_bytes, None)
                     }
                     SnapshotMode::InPlace => {
                         let (sha256, size_bytes) = hash_file(&absolute_path)?;
-                        (sha256, size_bytes, absolute_path.clone())
+                        (sha256, size_bytes, Some(absolute_path.clone()))
                     }
                 };
                 snapshot.summary.file_count += 1;
@@ -545,10 +554,12 @@ fn collect_snapshot_dir(
                     sha256: Some(sha256),
                     reason: None,
                 });
-                snapshot.included_files.push(SnapshotFileSource {
-                    relative_path: relative_display,
-                    source_path: copied_path,
-                });
+                if let Some(source_path) = copied_path {
+                    snapshot.included_files.push(SnapshotFileSource {
+                        relative_path: relative_display,
+                        source_path,
+                    });
+                }
             }
         }
     }
@@ -1248,24 +1259,6 @@ fn capture_command(mut command: Command) -> String {
     }
 }
 
-fn copy_file_and_hash(source: &Path, destination: &Path) -> Result<(String, u64), SchedulerError> {
-    let mut input = File::open(source)?;
-    let mut output = File::create(destination)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
-    let mut total_bytes = 0u64;
-    loop {
-        let read = input.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        output.write_all(&buffer[..read])?;
-        hasher.update(&buffer[..read]);
-        total_bytes += read as u64;
-    }
-    Ok((format!("{:x}", hasher.finalize()), total_bytes))
-}
-
 fn hash_file(path: &Path) -> Result<(String, u64), SchedulerError> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
@@ -1409,6 +1402,18 @@ mod tests {
     }
 
     #[test]
+    fn create_archive_staging_dir_stays_near_workspace_instead_of_system_tmp() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let staging = create_archive_staging_dir(temp.path(), None).expect("staging dir");
+        assert!(
+            staging
+                .path()
+                .starts_with(temp.path().join(LOCAL_STAGING_DIRNAME)),
+            "staging dir should live under the workspace-managed staging root"
+        );
+    }
+
+    #[test]
     fn pending_archive_finalize_local_only_writes_zip_with_expected_entries() {
         let _guard = env_lock().lock().expect("env lock");
         let _env_guards = vec![
@@ -1482,6 +1487,10 @@ mod tests {
         assert!(zip.by_name("manifest.json").is_ok());
         assert!(zip.by_name("task/task_before.json").is_ok());
         assert!(zip.by_name("manifests/workspace_before.json").is_ok());
+        assert!(
+            zip.by_name("workspace_before/incoming_email/body.txt").is_err(),
+            "pre-run snapshot should stay metadata-only to avoid duplicating the workspace before execution"
+        );
         assert!(
             zip.by_name("workspace_after/reply_email_draft.html")
                 .is_ok(),
