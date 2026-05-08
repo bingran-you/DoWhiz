@@ -413,8 +413,19 @@ const formatTaskOpsTiming = (value) => {
 const summarizeTaskOpsError = (message) => {
   const raw = String(message || '').trim();
   if (!raw) return '';
-  const firstLine = raw.split('\n').map((line) => line.trim()).find(Boolean) || raw;
-  return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine;
+  const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+  const genericPrefixes = [
+    'task execution failed:',
+    'task_execution failed:',
+    'task failed:',
+    'primary runner failed:',
+    'runner failed:',
+  ];
+  const informative =
+    lines.find((line) => !genericPrefixes.includes(line.toLowerCase())) ||
+    lines[0] ||
+    raw;
+  return informative.length > 200 ? `${informative.slice(0, 197)}...` : informative;
 };
 
 function TaskOpsStatusBadge({ status, isRunningLong }) {

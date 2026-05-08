@@ -843,6 +843,53 @@ fn reconcile_stale_running_execution_supersedes_overlap_after_later_completion()
 }
 
 #[test]
+fn record_execution_finish_is_idempotent_after_reconciliation_closes_row() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "late-finish-user");
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::Noop)
+            .expect("add task")
+    };
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let handle = store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:00:00Z"))
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-02T02:00:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+    assert_eq!(summary.failed_count, 1);
+
+    store
+        .record_execution_finish(
+            task_id,
+            handle,
+            parse_utc("2026-04-02T02:05:00Z"),
+            "failed",
+            Some("late finish after reconciliation"),
+        )
+        .expect("late finish should be tolerated");
+
+    let executions = load_execution_documents("late-finish-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].get_str("status").expect("status"), "failed");
+}
+
+#[test]
 fn scheduler_load_ignores_zero_byte_placeholder_path() {
     let temp = TempDir::new().expect("tempdir");
     let tasks_db = temp.path().join("tasks.db");

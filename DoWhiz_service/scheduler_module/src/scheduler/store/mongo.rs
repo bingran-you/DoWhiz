@@ -29,6 +29,7 @@ use super::{
 
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
+const DEFAULT_ACI_REGISTRATION_GRACE_SECS: i64 = 15 * 60;
 
 #[derive(Debug, Clone)]
 struct ExecutionRow {
@@ -178,6 +179,7 @@ impl MongoSchedulerStore {
                 }
             }
             let mut task = deserialize_task_document(&document)?;
+            apply_persisted_task_fields(&document, &mut task)?;
             if maybe_repair_legacy_weekday_cron_task(&mut task, now)? {
                 self.update_task(&task)?;
             }
@@ -200,6 +202,7 @@ impl MongoSchedulerStore {
         };
 
         let mut task = deserialize_task_document(&document)?;
+        apply_persisted_task_fields(&document, &mut task)?;
         if maybe_repair_legacy_weekday_cron_task(&mut task, Utc::now())? {
             self.update_task(&task)?;
         }
@@ -245,21 +248,49 @@ impl MongoSchedulerStore {
     }
 
     pub(crate) fn update_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
+        self.update_task_internal(task, false)
+    }
+
+    pub(crate) fn replace_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
+        self.update_task_internal(task, true)
+    }
+
+    fn update_task_internal(
+        &self,
+        task: &ScheduledTask,
+        allow_reenable_and_clear_auto_disable: bool,
+    ) -> Result<(), SchedulerError> {
         let task_json = serde_json::to_string(task)
             .map_err(|err| SchedulerError::Storage(format!("serialize task failed: {err}")))?;
-        let filter = doc! { "task_id": task.id.to_string() };
-        let update = doc! {
+        let mut filter = doc! { "task_id": task.id.to_string() };
+        if task.enabled && !allow_reenable_and_clear_auto_disable {
+            filter.insert(
+                "$or",
+                Bson::Array(vec![
+                    Bson::Document(doc! { "enabled": { "$ne": false } }),
+                    Bson::Document(doc! { "auto_disabled_reason": { "$exists": false } }),
+                    Bson::Document(doc! { "auto_disabled_reason": Bson::Null }),
+                    Bson::Document(doc! { "auto_disabled_reason": "" }),
+                ]),
+            );
+        }
+        let mut update = doc! {
             "$set": {
                 "enabled": task.enabled,
                 "last_run": task.last_run.map(BsonDateTime::from_chrono).map(Bson::DateTime).unwrap_or(Bson::Null),
                 "schedule": schedule_doc(&task.schedule),
                 "task_json": task_json,
             },
-            "$unset": {
-                "auto_disabled_reason": "",
-                "auto_disabled_at": "",
-            },
         };
+        if allow_reenable_and_clear_auto_disable {
+            update.insert(
+                "$unset",
+                Bson::Document(doc! {
+                    "auto_disabled_reason": "",
+                    "auto_disabled_at": "",
+                }),
+            );
+        }
         let result = retry_mongo_write("tasks.update_task", || {
             self.tasks.update_many(filter.clone(), update.clone(), None)
         })
@@ -277,11 +308,12 @@ impl MongoSchedulerStore {
             );
         } else {
             tracing::debug!(
-                "update_task succeeded: task_id={} matched={} modified={} enabled={}",
+                "update_task succeeded: task_id={} matched={} modified={} enabled={} force_replace={}",
                 task.id,
                 result.matched_count,
                 result.modified_count,
-                task.enabled
+                task.enabled,
+                allow_reenable_and_clear_auto_disable
             );
         }
         Ok(())
@@ -400,12 +432,28 @@ impl MongoSchedulerStore {
         })
         .map_err(mongo_err)?;
         if result.matched_count == 0 {
-            return Err(SchedulerError::Storage(format!(
-                "missing running execution row for task {} execution_id={} started_at={}",
-                task_id,
+            let existing = self.find_execution_row(
+                &task_id.to_string(),
                 execution.execution_id,
-                execution.started_at.to_rfc3339()
-            )));
+                execution.started_at,
+            )?;
+            return match existing {
+                Some(row) if row.status != "running" => {
+                    tracing::warn!(
+                        "record_execution_finish observed terminal row already written for task {} execution_id={} status={}",
+                        task_id,
+                        execution.execution_id,
+                        row.status
+                    );
+                    Ok(())
+                }
+                _ => Err(SchedulerError::Storage(format!(
+                    "missing running execution row for task {} execution_id={} started_at={}",
+                    task_id,
+                    execution.execution_id,
+                    execution.started_at.to_rfc3339()
+                ))),
+            };
         }
         Ok(())
     }
@@ -574,14 +622,21 @@ impl MongoSchedulerStore {
                                     ))
                                 }
                             }
-                            _ => {
-                                // Container still running or error querying - fall through to stale check
+                            AciContainerStatus::Running => {
+                                tracing::debug!(
+                                    "ACI container for task {} still running; leaving execution row as running",
+                                    task_id
+                                );
+                                None
+                            }
+                            AciContainerStatus::Error(err) => {
                                 if row.started_at <= stale_before {
                                     Some((
                                         "failed",
                                         format!(
-                                            "reconciled stale running execution after worker restart; execution exceeded {}s without a terminal status",
-                                            stale_timeout_secs
+                                            "reconciled stale running execution after worker restart; ACI status query kept failing for {}s: {}",
+                                            stale_timeout_secs,
+                                            err
                                         ),
                                     ))
                                 } else {
@@ -593,7 +648,7 @@ impl MongoSchedulerStore {
                     None => {
                         // No container registered for this workspace
                         // Either: never created (danger zone) or already deregistered (completed)
-                        let aci_grace_period = ChronoDuration::minutes(60);
+                        let aci_grace_period = resolve_aci_registration_grace_period();
                         let execution_age = now - row.started_at;
 
                         if execution_age > aci_grace_period {
@@ -819,11 +874,56 @@ impl MongoSchedulerStore {
         })
         .map_err(mongo_err)?;
         if result.matched_count == 0 {
+            let document = retry_mongo_read("task_executions.finish_execution_row.lookup", || {
+                self.executions.find_one(
+                    doc! {
+                        "_id": doc_id.clone(),
+                        "owner_scope.kind": &self.owner_kind,
+                        "owner_scope.id": &self.owner_id,
+                    },
+                    None,
+                )
+            })
+            .map_err(mongo_err)?;
+            if let Some(document) = document {
+                let row = parse_execution_row(document)?;
+                if row.status != "running" {
+                    tracing::warn!(
+                        "finish_execution_row observed terminal row already written for task {} execution_id={} status={}",
+                        row.task_id,
+                        row.execution_id,
+                        row.status
+                    );
+                    return Ok(());
+                }
+            }
             return Err(SchedulerError::Storage(
                 "missing running execution row while reconciling stale execution".to_string(),
             ));
         }
         Ok(())
+    }
+
+    fn find_execution_row(
+        &self,
+        task_id: &str,
+        execution_id: i64,
+        started_at: chrono::DateTime<Utc>,
+    ) -> Result<Option<ExecutionRow>, SchedulerError> {
+        let document = retry_mongo_read("task_executions.find_execution_row", || {
+            self.executions.find_one(
+                doc! {
+                    "owner_scope.kind": &self.owner_kind,
+                    "owner_scope.id": &self.owner_id,
+                    "task_id": task_id,
+                    "execution_id": execution_id,
+                    "started_at": BsonDateTime::from_chrono(started_at),
+                },
+                None,
+            )
+        })
+        .map_err(mongo_err)?;
+        document.map(parse_execution_row).transpose()
     }
 
     pub(crate) fn get_retry_count(&self, task_id: &str) -> Result<u32, SchedulerError> {
@@ -1405,6 +1505,70 @@ fn humanize_auto_disabled_reason(raw: &str) -> String {
         .to_string()
 }
 
+fn resolve_aci_registration_grace_period() -> ChronoDuration {
+    std::env::var("RUN_TASK_ACI_REGISTRATION_GRACE_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0)
+        .map(ChronoDuration::seconds)
+        .unwrap_or_else(|| ChronoDuration::seconds(DEFAULT_ACI_REGISTRATION_GRACE_SECS))
+}
+
+fn apply_persisted_task_fields(
+    document: &Document,
+    task: &mut ScheduledTask,
+) -> Result<(), SchedulerError> {
+    if let Ok(enabled) = document.get_bool("enabled") {
+        task.enabled = enabled;
+    }
+    if let Ok(last_run) = document.get_datetime("last_run") {
+        task.last_run = Some(last_run.to_chrono());
+    }
+    if matches!(document.get("last_run"), Some(Bson::Null)) {
+        task.last_run = None;
+    }
+    if let Ok(schedule) = document.get_document("schedule") {
+        task.schedule = parse_schedule_doc(schedule)?;
+    }
+    Ok(())
+}
+
+fn parse_schedule_doc(document: &Document) -> Result<Schedule, SchedulerError> {
+    let schedule_type = document
+        .get_str("type")
+        .map_err(|err| SchedulerError::Storage(format!("missing schedule.type: {err}")))?;
+    match schedule_type {
+        "cron" => {
+            let expression = document
+                .get_str("cron_expression")
+                .map_err(|err| {
+                    SchedulerError::Storage(format!("missing schedule.cron_expression: {err}"))
+                })?
+                .to_string();
+            let next_run = document
+                .get_datetime("next_run")
+                .map_err(|err| {
+                    SchedulerError::Storage(format!("missing schedule.next_run: {err}"))
+                })?
+                .to_chrono();
+            Ok(Schedule::Cron {
+                expression,
+                next_run,
+            })
+        }
+        "one_shot" => {
+            let run_at = document
+                .get_datetime("run_at")
+                .map_err(|err| SchedulerError::Storage(format!("missing schedule.run_at: {err}")))?
+                .to_chrono();
+            Ok(Schedule::OneShot { run_at })
+        }
+        other => Err(SchedulerError::Storage(format!(
+            "unsupported schedule.type: {other}"
+        ))),
+    }
+}
+
 fn bson_i64(value: Option<&Bson>, field: &str) -> Result<i64, SchedulerError> {
     match value {
         Some(Bson::Int64(value)) => Ok(*value),
@@ -1618,9 +1782,11 @@ mod tests {
     use std::path::PathBuf;
 
     use chrono::{Duration as ChronoDuration, TimeZone, Utc};
-    use mongodb::bson::Bson;
+    use mongodb::bson::{doc, Bson, DateTime as BsonDateTime};
 
-    use super::{build_task_status_summary, resolve_owner_scope, ExecutionRow};
+    use super::{
+        apply_persisted_task_fields, build_task_status_summary, resolve_owner_scope, ExecutionRow,
+    };
     use crate::channel::Channel;
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
 
@@ -1694,6 +1860,33 @@ mod tests {
         assert_eq!(summary.status, "scheduled");
         assert!(summary.can_cancel);
         assert!(!summary.can_resubmit);
+    }
+
+    #[test]
+    fn apply_persisted_task_fields_overrides_stale_task_json_state() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let mut task = sample_one_shot_task(now + ChronoDuration::minutes(15));
+        let document = doc! {
+            "enabled": false,
+            "last_run": BsonDateTime::from_chrono(now),
+            "schedule": doc! {
+                "type": "one_shot",
+                "cron_expression": Bson::Null,
+                "next_run": Bson::Null,
+                "run_at": BsonDateTime::from_chrono(now + ChronoDuration::minutes(45)),
+            },
+        };
+
+        apply_persisted_task_fields(&document, &mut task).expect("apply persisted fields");
+
+        assert!(!task.enabled);
+        assert_eq!(task.last_run, Some(now));
+        match task.schedule {
+            Schedule::OneShot { run_at } => {
+                assert_eq!(run_at, now + ChronoDuration::minutes(45));
+            }
+            other => panic!("expected one-shot schedule, got {other:?}"),
+        }
     }
 
     #[test]

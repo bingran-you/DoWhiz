@@ -230,7 +230,6 @@ want = [
     "runtime/env_redacted.json",
     "runtime/tool_versions.json",
     "runtime/git.json",
-    "workspace_before/thread_state.json",
     "workspace_after/thread_state.json",
     "workspace_after/reply_email_draft.html",
     "workspace_after/.run_task_trace/metadata.json",
@@ -253,7 +252,8 @@ PY
 What these files are for:
 - `manifest.json`: top-level archive metadata
 - `manifests/workspace_before.json`, `workspace_after.json`, `workspace_diff.json`: file-level
-  inventory and delta
+  inventory and delta. `workspace_before` is metadata-only by design, so the archive may omit
+  `workspace_before/*` file bodies.
 - `runtime/*`: sanitized env view, tool versions, and git snapshot
 - `.run_task_trace/logs/*`: stdout, stderr, and combined run logs
 - `.run_task_trace/aci/*`: the captured Azure container metadata and logs, even after the live
@@ -280,8 +280,8 @@ POSTMARK_TEST_SERVICE_ADDRESS=dowhiz@deep-tutor.com \
 POSTMARK_TEST_FROM=deep-tutor@deep-tutor.com \
 cargo test -p scheduler_module --test service_real_email -- --nocapture
 
-pm2 restart dw_gateway --update-env
-pm2 restart dw_worker --update-env
+export PM2_APP_DIR="$PWD"
+pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 pm2 save
 ```
 

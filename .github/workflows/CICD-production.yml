@@ -388,56 +388,14 @@ jobs:
           echo "KROGER_CLIENT_SECRET=${{ secrets.KROGER_CLIENT_SECRET }}" >> /home/${{ secrets.PROD_AZURE_VM_USER }}/server/DoWhiz/DoWhiz_service/.env
           EOF
 
-      - name: Restart DoWhiz services before ACI build
+      - name: Disable legacy service before ACI build
         run: |
           ssh -F ~/.ssh/config azureproduction << 'EOF'
           set -e
-          if [ -s /home/${{ secrets.PROD_AZURE_VM_USER }}/.nvm/nvm.sh ]; then
-            source /home/${{ secrets.PROD_AZURE_VM_USER }}/.nvm/nvm.sh
-          fi
-          APP_DIR=/home/${{ secrets.PROD_AZURE_VM_USER }}/server/DoWhiz/DoWhiz_service
-          ENV_FILE="$APP_DIR/.env"
-          set -a
-          source "$ENV_FILE"
-          set +a
 
           if systemctl list-unit-files 'dowhiz-oliver.service' --no-legend 2>/dev/null | grep -q '^dowhiz-oliver\.service'; then
             sudo systemctl disable --now dowhiz-oliver.service || true
           fi
-
-          if pm2 describe dw_worker >/dev/null 2>&1; then
-            pm2 restart dw_worker --update-env
-          else
-            pm2 start "$APP_DIR/target/release/rust_service" --name dw_worker --cwd "$APP_DIR" -- --host 0.0.0.0 --port "${RUST_SERVICE_PORT:-9001}"
-          fi
-
-          if pm2 describe dw_gateway >/dev/null 2>&1; then
-            pm2 restart dw_gateway --update-env
-          else
-            pm2 start "$APP_DIR/target/release/inbound_gateway" --name dw_gateway --cwd "$APP_DIR"
-          fi
-
-          wait_for_health() {
-            local label="$1"
-            local url="$2"
-            local http_code=""
-            local attempt
-            for attempt in $(seq 1 12); do
-              http_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 15 "$url" || true)"
-              if [[ "$http_code" == "200" ]]; then
-                printf '%s' "$http_code"
-                return 0
-              fi
-              echo "Waiting for $label health endpoint (${attempt}/12), last HTTP ${http_code:-000}..."
-              sleep 5
-            done
-            echo "Early $label health check failed after retries (HTTP ${http_code:-000})" >&2
-            return 1
-          }
-
-          worker_health="$(wait_for_health worker "http://127.0.0.1:${RUST_SERVICE_PORT:-9001}/health")"
-          gateway_health="$(wait_for_health gateway "http://127.0.0.1:${GATEWAY_PORT:-9100}/health")"
-          echo "Early health check passed: worker=$worker_health gateway=$gateway_health"
           EOF
 
       - name: Resolve ACI build configuration
@@ -713,37 +671,16 @@ jobs:
             fi
           done
 
-          worker_running=0
-          for service in dw_worker dowhiz_rust_service dowhiz-rust-service; do
-            if pm2 describe "$service" >/dev/null 2>&1; then
-              if pm2 restart "$service" --update-env; then
-                worker_running=1
-                break
-              fi
-              echo "PM2 restart failed for $service, deleting stale entry and trying next option." >&2
-              pm2 delete "$service" >/dev/null 2>&1 || true
+          for stale_service in dowhiz_rust_service dowhiz-rust-service dowhiz_inbound_gateway dowhiz_gateway dowhiz-inbound-gateway; do
+            if pm2 describe "$stale_service" >/dev/null 2>&1; then
+              pm2 delete "$stale_service" >/dev/null 2>&1 || true
             fi
           done
-          if [ "$worker_running" -eq 0 ]; then
-            echo "No worker process found in PM2, starting dw_worker."
-            pm2 start "$APP_DIR/target/release/rust_service" --name dw_worker --cwd "$APP_DIR" -- --host 0.0.0.0 --port "${RUST_SERVICE_PORT:-9001}"
-          fi
 
-          gateway_running=0
-          for service in dw_gateway dowhiz_inbound_gateway dowhiz_gateway dowhiz-inbound-gateway; do
-            if pm2 describe "$service" >/dev/null 2>&1; then
-              if pm2 restart "$service" --update-env; then
-                gateway_running=1
-                break
-              fi
-              echo "PM2 restart failed for $service, deleting stale entry and trying next option." >&2
-              pm2 delete "$service" >/dev/null 2>&1 || true
-            fi
-          done
-          if [ "$gateway_running" -eq 0 ]; then
-            echo "No gateway process found in PM2, starting dw_gateway."
-            pm2 start "$APP_DIR/target/release/inbound_gateway" --name dw_gateway --cwd "$APP_DIR"
-          fi
+          export PM2_APP_DIR="$APP_DIR"
+          export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
+          export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
+          pm2 startOrRestart "$APP_DIR/ecosystem.config.cjs" --only dw_worker,dw_gateway --update-env
 
           pm2 save
           pm2 list

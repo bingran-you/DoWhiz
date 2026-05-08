@@ -48,6 +48,24 @@ fn help_text() -> String {
     .join("\n")
 }
 
+async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut sigterm = signal(SignalKind::terminate()).expect("register SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
     tracing_subscriber::fmt().with_target(false).init();
@@ -70,9 +88,8 @@ async fn main() -> Result<(), BoxError> {
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            let _ = shutdown_tx.send(());
-        }
+        wait_for_shutdown_signal().await;
+        let _ = shutdown_tx.send(());
     });
 
     info!(

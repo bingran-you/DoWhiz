@@ -75,6 +75,10 @@ impl SchedulerStore {
         self.mongo.update_task(task)
     }
 
+    pub(crate) fn replace_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
+        self.mongo.replace_task(task)
+    }
+
     /// Check if there's already a running execution for this task.
     ///
     /// This prevents duplicate executions when the worker process restarts

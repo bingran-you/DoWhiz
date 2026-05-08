@@ -57,15 +57,24 @@ if [ -f "$CADDY_LOG" ]; then
     fi
 fi
 
-# 6. Orphaned debug archive temp directories (older than 1 day)
-# These are created by TempDir::new() in debug_archive.rs and left behind on upload failure
-# Delete in batches to avoid stalling on large counts
-TMP_DIRS=$(ls -d /tmp/.tmp* 2>/dev/null | wc -l)
-if [ "$TMP_DIRS" -gt 0 ]; then
-    echo "$LOG_PREFIX Cleaning orphaned temp directories ($TMP_DIRS found)..."
-    for _ in 1 2 3 4 5; do
-        ls -d /tmp/.tmp* 2>/dev/null | head -100 | xargs rm -rf 2>/dev/null || true
-    done
+# 6. Debug archive staging directories (older than 1 day)
+if [ -d "$HOME/server" ]; then
+    echo "$LOG_PREFIX Cleaning stale debug archive staging directories..."
+    find "$HOME/server" -type d -name ".task_debug_archives_staging" -prune \
+        -exec find {} -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} + \; \
+        2>/dev/null || true
+fi
+
+# 7. AzCopy job plans/logs older than 2 days
+if [ -d "$HOME/.azcopy" ]; then
+    echo "$LOG_PREFIX Cleaning stale AzCopy artifacts..."
+    find "$HOME/.azcopy" -mindepth 1 -mtime +2 -delete 2>/dev/null || true
+fi
+
+# 8. Old deploy snapshots older than 7 days
+if [ -d "$HOME/server/DoWhiz" ]; then
+    echo "$LOG_PREFIX Cleaning old deploy snapshots..."
+    find "$HOME/server/DoWhiz" -maxdepth 1 -type d -name '.deploy_*' -mtime +7 -exec rm -rf {} + 2>/dev/null || true
 fi
 
 # Final status
