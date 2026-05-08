@@ -671,7 +671,26 @@ jobs:
             fi
           done
 
-          for stale_service in dowhiz_rust_service dowhiz-rust-service dowhiz_inbound_gateway dowhiz_gateway dowhiz-inbound-gateway; do
+          dump_pm2_diagnostics() {
+            echo "--- pm2 list ---"
+            pm2 list || true
+            echo "--- pm2 describe dw_worker ---"
+            pm2 describe dw_worker || true
+            echo "--- pm2 describe dw_gateway ---"
+            pm2 describe dw_gateway || true
+            echo "--- worker error log ---"
+            tail -n 120 "/home/${{ secrets.PROD_AZURE_VM_USER }}/.pm2/logs/dw_worker-error.log" || true
+            echo "--- worker out log ---"
+            tail -n 120 "/home/${{ secrets.PROD_AZURE_VM_USER }}/.pm2/logs/dw_worker-out.log" || true
+            echo "--- gateway error log ---"
+            tail -n 120 "/home/${{ secrets.PROD_AZURE_VM_USER }}/.pm2/logs/dw_gateway-error.log" || true
+            echo "--- gateway out log ---"
+            tail -n 120 "/home/${{ secrets.PROD_AZURE_VM_USER }}/.pm2/logs/dw_gateway-out.log" || true
+            echo "--- listening ports 9001/9100 ---"
+            ss -ltnp '( sport = :9001 or sport = :9100 )' || true
+          }
+
+          for stale_service in dowhiz_rust_service dowhiz-rust-service dowhiz_inbound_gateway dowhiz_gateway dowhiz-inbound-gateway dw_worker dw_gateway; do
             if pm2 describe "$stale_service" >/dev/null 2>&1; then
               pm2 delete "$stale_service" >/dev/null 2>&1 || true
             fi
@@ -680,7 +699,10 @@ jobs:
           export PM2_APP_DIR="$APP_DIR"
           export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
           export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
-          pm2 startOrRestart "$APP_DIR/ecosystem.config.cjs" --only dw_worker,dw_gateway --update-env
+          pm2 start "$APP_DIR/ecosystem.config.cjs" --only dw_worker,dw_gateway --update-env || {
+            dump_pm2_diagnostics
+            exit 1
+          }
 
           pm2 save
           pm2 list
@@ -700,8 +722,8 @@ jobs:
 
           worker_pid="$(find_pm2_pid dw_worker dowhiz_rust_service dowhiz-rust-service || true)"
           gateway_pid="$(find_pm2_pid dw_gateway dowhiz_inbound_gateway dowhiz_gateway dowhiz-inbound-gateway || true)"
-          [[ -n "$worker_pid" ]] || { echo "No running worker PID found after restart" >&2; exit 1; }
-          [[ -n "$gateway_pid" ]] || { echo "No running gateway PID found after restart" >&2; exit 1; }
+          [[ -n "$worker_pid" ]] || { echo "No running worker PID found after restart" >&2; dump_pm2_diagnostics; exit 1; }
+          [[ -n "$gateway_pid" ]] || { echo "No running gateway PID found after restart" >&2; dump_pm2_diagnostics; exit 1; }
 
           wait_for_health() {
             local label="$1"
@@ -720,7 +742,13 @@ jobs:
             return 1
           }
 
-          worker_health="$(wait_for_health worker "http://127.0.0.1:${RUST_SERVICE_PORT:-9001}/health")"
-          gateway_health="$(wait_for_health gateway "http://127.0.0.1:${GATEWAY_PORT:-9100}/health")"
+          worker_health="$(wait_for_health worker "http://127.0.0.1:${RUST_SERVICE_PORT:-9001}/health")" || {
+            dump_pm2_diagnostics
+            exit 1
+          }
+          gateway_health="$(wait_for_health gateway "http://127.0.0.1:${GATEWAY_PORT:-9100}/health")" || {
+            dump_pm2_diagnostics
+            exit 1
+          }
           echo "Post-restart health check passed: worker=$worker_health gateway=$gateway_health"
           EOF

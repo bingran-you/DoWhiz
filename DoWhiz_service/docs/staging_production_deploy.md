@@ -104,7 +104,8 @@ sudo systemctl disable --now dowhiz-oliver.service || true
 export PM2_APP_DIR="$PWD"
 export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
 export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
-pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
+pm2 delete dw_worker dw_gateway >/dev/null 2>&1 || true
+pm2 start ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 pm2 save
 pm2 list
 ```
@@ -120,7 +121,8 @@ sudo systemctl disable --now dowhiz-oliver.service || true
 export PM2_APP_DIR="$PWD"
 export PM2_KILL_TIMEOUT_MS="${PM2_KILL_TIMEOUT_MS:-300000}"
 export PM2_LISTEN_TIMEOUT_MS="${PM2_LISTEN_TIMEOUT_MS:-15000}"
-pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
+pm2 delete dw_worker dw_gateway >/dev/null 2>&1 || true
+pm2 start ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 pm2 save
 pm2 list
 ```
@@ -152,7 +154,7 @@ Deployment workflows should:
 - inject artifact binaries (`rust_service`, `inbound_fanout`, `inbound_gateway`, `google-docs`)
 - run `az acr build`
 - do not run `cargo build` during image build
-13. Use `pm2 restart --update-env` so runtime env changes (for example `EMPLOYEE_ID`) are applied to existing processes, and finish with local health checks that allow a short retry window while worker/gateway bind their ports.
+13. Remove stale canonical PM2 entries (`dw_worker`, `dw_gateway`) and start them fresh from `ecosystem.config.cjs`, then finish with local health checks that allow a short retry window while worker/gateway bind their ports.
 14. Staging may skip ACI rebuild for gateway-only source changes to reduce unnecessary image churn.
 
 ### CI/CD Maintenance Notes

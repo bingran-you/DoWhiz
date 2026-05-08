@@ -281,7 +281,8 @@ POSTMARK_TEST_FROM=deep-tutor@deep-tutor.com \
 cargo test -p scheduler_module --test service_real_email -- --nocapture
 
 export PM2_APP_DIR="$PWD"
-pm2 startOrRestart ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
+pm2 delete dw_worker dw_gateway >/dev/null 2>&1 || true
+pm2 start ./ecosystem.config.cjs --only dw_worker,dw_gateway --update-env
 pm2 save
 ```
 
