@@ -1531,6 +1531,88 @@ fn run_task_times_out_with_codex() {
 
 #[test]
 #[cfg(unix)]
+fn run_task_investment_content_filter_retry_recovers_without_claude_fallback() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_content_filter_retry").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Novo Nordisk - NYSE NVO",
+        "Please deep research Novo Nordisk stock (NYSE: NVO) and give me investment advice.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(
+        &bin_dir,
+        FakeCodexMode::InvestmentContentFilterThenRetrySuccess,
+    )
+    .unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).unwrap();
+    let reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(reply.contains("Quick update on NVO"));
+    assert!(reply.contains("Unable to Verify"));
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("content-filter-safe Codex retry"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_investment_content_filter_failure_returns_bounded_fallback_without_claude() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_content_filter_fallback").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Novo Nordisk - NYSE NVO",
+        "Please deep research Novo Nordisk stock (NYSE: NVO) and give me investment advice.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_codex(&bin_dir, FakeCodexMode::InvestmentContentFilterAlwaysFail).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).unwrap();
+    let reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(reply.contains("Status:</strong> Unable to Verify"));
+    assert!(reply.contains("Action:</strong> No recommendation"));
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("deterministic operational investment fallback"));
+    assert!(!note.contains("Claude fallback"));
+}
+
+#[test]
+#[cfg(unix)]
 fn run_task_preserves_primary_draft_when_fallback_fails_after_timeout() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_timeout_preserve_primary_draft").unwrap();

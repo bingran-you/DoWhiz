@@ -123,6 +123,8 @@ pub enum FakeCodexMode {
     Success,
     InvestmentStructured,
     InvestmentGeneric,
+    InvestmentContentFilterAlwaysFail,
+    InvestmentContentFilterThenRetrySuccess,
     NoOutput,
     EmptyReply,
     Fail,
@@ -239,6 +241,31 @@ cat > reply_email_draft.html <<'HTML'
 HTML
 mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
+"#
+        }
+        FakeCodexMode::InvestmentContentFilterAlwaysFail => {
+            r#"#!/bin/sh
+set -e
+echo "I'm sorry, but I cannot assist with that request." >&2
+echo "stream disconnected before completion: Incomplete response returned, reason: content_filter" >&2
+exit 1
+"#
+        }
+        FakeCodexMode::InvestmentContentFilterThenRetrySuccess => {
+            r#"#!/bin/sh
+set -e
+if [ -f codex_fast_completion_context.md ] && grep -q "provider content filtering" codex_fast_completion_context.md; then
+  cat > reply_email_draft.html <<'HTML'
+<html><body><h1>Quick update on NVO</h1><p><strong>Status:</strong> Unable to Verify</p><p><strong>Action:</strong> No recommendation</p><p><strong>Why:</strong> Fresh public context remained too thin for a reliable act-now update.</p><p><strong>Next step:</strong> Run a deeper report separately if needed.</p></body></html>
+HTML
+  mkdir -p reply_email_attachments
+  echo "attachment" > reply_email_attachments/attachment.txt
+  exit 0
+fi
+echo "I'm sorry, but I cannot assist with that request." >&2
+echo "turn.failed" >&2
+echo "stream disconnected before completion: Incomplete response returned, reason: content_filter" >&2
+exit 1
 "#
         }
         FakeCodexMode::NoOutput => {

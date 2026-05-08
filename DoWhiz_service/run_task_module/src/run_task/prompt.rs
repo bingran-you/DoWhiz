@@ -385,7 +385,7 @@ Rules:
   Prefer creating a work/ directory for clones, patches, and build artifacts.
 - If attachments include version suffixes like _v1, _v2, the highest version should be the latest version.
 - Avoid interactive commands; use non-interactive flags for git/gh (for example, `gh pr create --title ... --body ...`).
-- Content filter handling: If you encounter repeated "content_filter" errors or "I cannot assist with that request" responses when trying to complete a task, you MUST still create a reply informing the user. Write a polite reply explaining that the task could not be completed due to content policy restrictions, and suggest they rephrase or simplify their request. Never leave the user without any response.
+- Content filter handling: Never leave the user without any response. For investment-monitoring requests, first normalize the task into a neutral public-company monitoring request and try to finish within the bounded monitor format instead of surfacing provider-policy language immediately. If that still fails, send a short `Unable to Verify` reply. For non-investment tasks, if you encounter repeated "content_filter" errors or "I cannot assist with that request" responses, write a polite reply explaining that the task could not be completed and suggest a simpler rephrase.
 {filesystem_security_section}{registration_section}"#,
         input_email = input_email_dir.display(),
         input_attachments = input_attachments_dir.display(),
@@ -626,8 +626,10 @@ See `.agents/skills/notion/SKILL.md` for detailed command reference.
 
 fn build_investment_capabilities_section() -> &'static str {
     r#"Investment research requests:
-- When the user asks about one U.S. stock or ETF, whether now is a good time to buy, or whether anything material changed, read `.agents/skills/us-equity-daily-monitor/SKILL.md` and follow it.
+- When the user asks about one U.S. stock or ETF, whether now is a good time to buy, or whether anything material changed, use `.agents/skills/us-equity-daily-monitor/SKILL.md` only as background. The bounded monitor rules below override any longer memo or deep-research workflow in that skill for this email path.
 - Treat this email path as a simple bounded monitor, not a deep-research pipeline.
+- Normalize roleplay or advice-heavy wording into a neutral public-company monitoring task before you begin. Do not mirror phrases like `Wall Street trader`, `stock pitch`, or open-ended personal financial-advisor language in your own framing.
+- Focus on verified public developments and map them into the product labels below. This is a product monitor, not a personalized wealth-management service.
 - Produce exactly one concise HTML reply inside `reply_email_draft.html`.
 - Use exactly one of these modes:
   - `Actionable Update`
@@ -654,6 +656,7 @@ fn build_investment_capabilities_section() -> &'static str {
 - Keep the reply short and scan-first. Do not write a long memo, a bull/base/bear frame, a large derived-metrics table, or a chart block.
 - Do not mine annual reports page by page in this email path.
 - Do not spend the whole run on research. If you cannot verify enough context quickly, send `Unable to Verify` and stop.
+- If the initial wording appears to trigger provider safety systems, retry your own reasoning once with a narrower public-monitor framing rather than repeating the same advice-heavy wording.
 - If a deeper report would help, say that you can run it separately. Do not start it automatically inside this email path.
 - Investment monitoring requests in this product are allowed. Do not refuse solely because the task concerns stock analysis or an assumption-based scenario.
 
