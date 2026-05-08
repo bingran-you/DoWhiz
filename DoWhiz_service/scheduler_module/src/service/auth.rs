@@ -856,13 +856,19 @@ fn should_prefer_task_summary(candidate: &TaskStatusSummary, existing: &TaskStat
         return candidate_rank > existing_rank;
     }
 
+    let candidate_activity = task_latest_activity_at(candidate);
+    let existing_activity = task_latest_activity_at(existing);
+    if candidate_activity != existing_activity {
+        return candidate_activity > existing_activity;
+    }
+
     let candidate_error = candidate.error_message.as_deref().unwrap_or("").trim();
     let existing_error = existing.error_message.as_deref().unwrap_or("").trim();
     if !candidate_error.is_empty() && existing_error.is_empty() {
         return true;
     }
 
-    task_latest_activity_at(candidate) > task_latest_activity_at(existing)
+    false
 }
 
 fn task_status_rank(status: &str) -> i32 {
@@ -995,13 +1001,19 @@ fn should_prefer_routine_summary(candidate: &RoutineSummary, existing: &RoutineS
         return candidate_rank > existing_rank;
     }
 
+    let candidate_activity = routine_latest_activity_at(candidate);
+    let existing_activity = routine_latest_activity_at(existing);
+    if candidate_activity != existing_activity {
+        return candidate_activity > existing_activity;
+    }
+
     let candidate_error = candidate.error_message.as_deref().unwrap_or("").trim();
     let existing_error = existing.error_message.as_deref().unwrap_or("").trim();
     if !candidate_error.is_empty() && existing_error.is_empty() {
         return true;
     }
 
-    routine_latest_activity_at(candidate) > routine_latest_activity_at(existing)
+    false
 }
 
 fn routine_status_rank(status: Option<&str>) -> i32 {
@@ -8203,6 +8215,55 @@ mod tests {
     }
 
     #[test]
+    fn merged_account_routines_prefer_newer_success_over_older_failed_with_error() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let newer_success = sample_routine_summary(
+            "task-1",
+            false,
+            Some("success"),
+            Some(now + ChronoDuration::minutes(5)),
+            None,
+            now,
+        );
+        let older_failed = sample_routine_summary(
+            "task-1",
+            false,
+            Some("failed"),
+            Some(now + ChronoDuration::minutes(1)),
+            None,
+            now,
+        );
+
+        let merged = merge_routine_summaries(vec![newer_success], vec![older_failed]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].execution_status.as_deref(), Some("success"));
+        assert_eq!(merged[0].error_message, None);
+        assert_eq!(
+            merged[0].last_run.as_deref(),
+            Some((now + ChronoDuration::minutes(5)).to_rfc3339().as_str())
+        );
+    }
+
+    #[test]
+    fn merged_account_tasks_prefer_newer_success_over_older_failed_with_error() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let newer_success =
+            sample_task_status_summary("task-1", "success", now + ChronoDuration::minutes(5));
+        let older_failed =
+            sample_task_status_summary("task-1", "failed", now + ChronoDuration::minutes(1));
+
+        let merged = merge_task_summaries(vec![newer_success], vec![older_failed]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].status, "success");
+        assert_eq!(merged[0].execution_status.as_deref(), Some("success"));
+        assert_eq!(merged[0].error_message, None);
+        assert_eq!(
+            merged[0].status_changed_at.as_deref(),
+            Some((now + ChronoDuration::minutes(5)).to_rfc3339().as_str())
+        );
+    }
+
+    #[test]
     fn routine_lookup_identifiers_include_all_verified_account_links() {
         let identifiers = vec![
             sample_account_identifier("email", "logan@example.com", true),
@@ -8404,6 +8465,46 @@ mod tests {
             preferred_task_write_match_index(&matches, account_path.as_path()),
             Some(1)
         );
+    }
+
+    #[test]
+    fn preferred_task_match_index_prefers_newer_success_over_older_failed_with_error() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at: now },
+            enabled: false,
+            created_at: now - ChronoDuration::minutes(5),
+            last_run: Some(now),
+        };
+        let task_id = task.id.to_string();
+        let success_path = PathBuf::from("/tmp/users/user-success/state/tasks.db");
+        let failed_path = PathBuf::from("/tmp/users/user-failed/state/tasks.db");
+        let matches = vec![
+            TaskStorageMatch {
+                path: success_path,
+                task: task.clone(),
+                summary: sample_task_status_summary(
+                    &task_id,
+                    "success",
+                    now + ChronoDuration::minutes(5),
+                ),
+                executions: Vec::new(),
+            },
+            TaskStorageMatch {
+                path: failed_path,
+                task,
+                summary: sample_task_status_summary(
+                    &task_id,
+                    "failed",
+                    now + ChronoDuration::minutes(1),
+                ),
+                executions: Vec::new(),
+            },
+        ];
+
+        assert_eq!(preferred_task_match_index(&matches), Some(0));
     }
 
     // ==================== WeCom OAuth Tests ====================
