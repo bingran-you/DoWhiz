@@ -107,6 +107,18 @@ impl SchedulerStore {
             .record_execution_finish(task_id, execution, finished_at, status, error_message)
     }
 
+    pub(crate) fn upsert_terminal_execution(
+        &self,
+        task_id: Uuid,
+        execution: ExecutionRecordHandle,
+        finished_at: DateTime<Utc>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        self.mongo
+            .upsert_terminal_execution(task_id, execution, finished_at, status, error_message)
+    }
+
     pub(crate) fn reconcile_stale_running_executions(
         &self,
         now: DateTime<Utc>,

@@ -8507,6 +8507,48 @@ mod tests {
         assert_eq!(preferred_task_match_index(&matches), Some(0));
     }
 
+    #[test]
+    fn merged_task_execution_history_dedupes_identical_mirror_rows() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at: now },
+            enabled: false,
+            created_at: now - ChronoDuration::minutes(5),
+            last_run: Some(now),
+        };
+        let task_id = task.id.to_string();
+        let execution = TaskExecutionSummary {
+            execution_id: 1778001442579447,
+            status: "failed".to_string(),
+            started_at: now.to_rfc3339(),
+            finished_at: Some((now + ChronoDuration::minutes(10)).to_rfc3339()),
+            error_message: Some("primary runner failed".to_string()),
+            duration_seconds: Some(600),
+        };
+        let matches = vec![
+            TaskStorageMatch {
+                path: PathBuf::from("/tmp/users/live-user/state/tasks.db"),
+                task: task.clone(),
+                summary: sample_task_status_summary(&task_id, "failed", now),
+                executions: vec![execution.clone()],
+            },
+            TaskStorageMatch {
+                path: PathBuf::from("/tmp/users/account-mirror/state/tasks.db"),
+                task,
+                summary: sample_task_status_summary(&task_id, "failed", now),
+                executions: vec![execution.clone()],
+            },
+        ];
+
+        let merged = merge_task_execution_summaries(&matches);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].execution_id, execution.execution_id);
+        assert_eq!(merged[0].started_at, execution.started_at);
+        assert_eq!(merged[0].finished_at, execution.finished_at);
+    }
+
     // ==================== WeCom OAuth Tests ====================
 
     #[test]

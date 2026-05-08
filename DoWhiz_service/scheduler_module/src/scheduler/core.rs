@@ -16,7 +16,8 @@ use super::reply::load_reply_context;
 use super::schedule::{next_run_after, validate_cron_expression};
 use super::snapshot::{snapshot_reply_draft, write_scheduler_snapshot};
 use super::store::{
-    reset_reconciliation_failure_counter, ExecutionReconciliationSummary, SchedulerStore,
+    reset_reconciliation_failure_counter, ExecutionReconciliationSummary, ExecutionRecordHandle,
+    SchedulerStore,
 };
 use super::types::{
     RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind,
@@ -328,6 +329,7 @@ impl<E: TaskExecutor> Scheduler<E> {
                         sync_task_status_to_user_storage(
                             task_id,
                             task,
+                            execution_handle,
                             executed_at,
                             terminal_status,
                             terminal_note.as_deref(),
@@ -396,7 +398,14 @@ impl<E: TaskExecutor> Scheduler<E> {
                         );
                     }
                     // Sync success status to user's account-level storage for Discord/Slack
-                    sync_task_status_to_user_storage(task_id, task, executed_at, "success", None);
+                    sync_task_status_to_user_storage(
+                        task_id,
+                        task,
+                        execution_handle,
+                        executed_at,
+                        "success",
+                        None,
+                    );
                 }
                 if let Some(session) = archive_session.take() {
                     match session.finalize(
@@ -437,6 +446,7 @@ impl<E: TaskExecutor> Scheduler<E> {
                     sync_task_status_to_user_storage(
                         task_id,
                         task,
+                        execution_handle,
                         executed_at,
                         "failed",
                         Some(&message),
@@ -606,7 +616,8 @@ impl<E: TaskExecutor> Scheduler<E> {
 fn sync_task_status_to_user_storage(
     task_id: Uuid,
     task: &RunTaskTask,
-    executed_at: DateTime<Utc>,
+    execution: ExecutionRecordHandle,
+    finished_at: DateTime<Utc>,
     status: &str,
     error_message: Option<&str>,
 ) {
@@ -682,33 +693,22 @@ fn sync_task_status_to_user_storage(
     // Open the user's scheduler store and update the task
     match SchedulerStore::new(user_tasks_db_path.clone()) {
         Ok(store) => {
-            // Record execution start and finish to update status
-            match store.record_execution_start(task_id, executed_at) {
-                Ok(execution) => {
-                    if let Err(err) = store.record_execution_finish(
-                        task_id,
-                        execution,
-                        executed_at,
-                        status,
-                        error_message,
-                    ) {
-                        warn!(
-                            "failed to record execution finish for task {} in user storage: {}",
-                            task_id, err
-                        );
-                    } else {
-                        info!(
-                            "synced task {} status '{}' to user storage account={}",
-                            task_id, status, account_id
-                        );
-                    }
-                }
-                Err(err) => {
-                    warn!(
-                        "failed to record execution start for task {} in user storage: {}",
-                        task_id, err
-                    );
-                }
+            if let Err(err) = store.upsert_terminal_execution(
+                task_id,
+                execution,
+                finished_at,
+                status,
+                error_message,
+            ) {
+                warn!(
+                    "failed to mirror execution {} for task {} in user storage: {}",
+                    execution.execution_id, task_id, err
+                );
+            } else {
+                info!(
+                    "mirrored task {} execution {} status '{}' to user storage account={}",
+                    task_id, execution.execution_id, status, account_id
+                );
             }
         }
         Err(err) => {

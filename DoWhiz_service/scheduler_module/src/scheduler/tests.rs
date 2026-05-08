@@ -3,6 +3,7 @@ use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -142,6 +143,33 @@ fn load_execution_documents(user_id: &str, task_id: Uuid) -> Vec<Document> {
         .expect("find executions")
         .map(|row| row.expect("execution document"))
         .collect()
+}
+
+struct EnvGuard {
+    key: &'static str,
+    prev: Option<String>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let prev = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, prev }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        match &self.prev {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
+fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
 }
 
 #[test]
@@ -785,6 +813,150 @@ fn reconcile_stale_running_execution_fails_orphaned_latest_row_after_timeout() {
 }
 
 #[test]
+fn reconcile_stale_running_execution_keeps_active_fallback_open() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-active-fallback-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let primary_aci_dir = workspace.join(".run_task_trace_codex_primary/aci");
+    fs::create_dir_all(&primary_aci_dir).expect("primary trace dir");
+    fs::write(primary_aci_dir.join("container_show.json"), "{}").expect("container show");
+
+    let fallback_trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&fallback_trace_dir).expect("fallback trace dir");
+    fs::write(
+        fallback_trace_dir.join("metadata.json"),
+        r#"{
+  "backend": "claude_local",
+  "current_stage": "executing_claude_local",
+  "finished_at_unix_ms": null,
+  "success": null
+}"#,
+    )
+    .expect("fallback metadata");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:00:00Z"))
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:20:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 0);
+    assert_eq!(summary.failed_count, 0);
+    assert!(store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-active-fallback-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].get_str("status").expect("status"), "running");
+}
+
+#[test]
+fn reconcile_stale_running_execution_fails_abandoned_fallback_after_watchdog() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-abandoned-fallback-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let primary_aci_dir = workspace.join(".run_task_trace_codex_primary/aci");
+    fs::create_dir_all(&primary_aci_dir).expect("primary trace dir");
+    fs::write(primary_aci_dir.join("container_show.json"), "{}").expect("container show");
+
+    let fallback_trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&fallback_trace_dir).expect("fallback trace dir");
+    fs::write(
+        fallback_trace_dir.join("metadata.json"),
+        r#"{
+  "backend": "claude_local",
+  "current_stage": "executing_claude_local",
+  "finished_at_unix_ms": null,
+  "success": null
+}"#,
+    )
+    .expect("fallback metadata");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    store
+        .record_execution_start(task_id, parse_utc("2026-04-01T00:00:00Z"))
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-02T02:00:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 0);
+    assert_eq!(summary.failed_count, 1);
+    assert!(!store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-abandoned-fallback-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].get_str("status").expect("status"), "failed");
+    assert_eq!(
+        executions[0].get_str("error_message").expect("error"),
+        "reconciled stale running execution after primary ACI run failed and fallback never reached a terminal state"
+    );
+}
+
+#[test]
 fn reconcile_stale_running_execution_supersedes_overlap_after_later_completion() {
     use super::store::SchedulerStore;
 
@@ -1247,6 +1419,81 @@ fn full_slack_flow_task_sync_and_status_update() {
             Some(error_message.to_string())
         );
     }
+}
+
+#[test]
+fn mirrored_terminal_execution_preserves_source_execution_identity() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping mirror execution test; MongoDB config not set.");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let workspace_db = user_scoped_tasks_db(&temp, "mirror-live-user");
+    let account_db = user_scoped_tasks_db(&temp, "mirror-account-user");
+    let workspace_dir = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace_dir).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let run_task = base_run_task(&workspace_dir, &mail_root);
+    let task_id = {
+        let mut scheduler =
+            Scheduler::load(&workspace_db, NoopExecutor::default()).expect("load workspace");
+        scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task.clone()))
+            .expect("add workspace task")
+    };
+
+    {
+        let mut scheduler =
+            Scheduler::load(&account_db, NoopExecutor::default()).expect("load account");
+        scheduler
+            .add_one_shot_in_with_id(task_id, Duration::from_secs(0), TaskKind::RunTask(run_task))
+            .expect("add account task");
+    }
+
+    let started_at = parse_utc("2026-04-01T00:00:00Z");
+    let finished_at = parse_utc("2026-04-01T00:10:00Z");
+    let workspace_store = SchedulerStore::new(workspace_db).expect("open workspace");
+    let execution = workspace_store
+        .record_execution_start(task_id, started_at)
+        .expect("record source start");
+    workspace_store
+        .record_execution_finish(task_id, execution, finished_at, "success", None)
+        .expect("record source finish");
+
+    let account_store = SchedulerStore::new(account_db).expect("open account");
+    account_store
+        .upsert_terminal_execution(task_id, execution, finished_at, "success", None)
+        .expect("mirror execution");
+    account_store
+        .upsert_terminal_execution(task_id, execution, finished_at, "success", None)
+        .expect("mirror execution idempotent");
+
+    let executions = load_execution_documents("mirror-account-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(
+        executions[0].get_i64("execution_id").expect("execution id"),
+        execution.execution_id
+    );
+    assert_eq!(
+        executions[0]
+            .get_datetime("started_at")
+            .expect("started_at")
+            .to_chrono(),
+        started_at
+    );
+    assert_eq!(
+        executions[0]
+            .get_datetime("finished_at")
+            .expect("finished_at")
+            .to_chrono(),
+        finished_at
+    );
+    assert_eq!(executions[0].get_str("status").expect("status"), "success");
 }
 
 #[test]
