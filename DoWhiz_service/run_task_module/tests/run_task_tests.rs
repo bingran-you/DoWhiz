@@ -1224,16 +1224,6 @@ fn run_task_recovers_reply_from_session_log_after_codex_failure() {
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     fs::create_dir_all(&sessions_dir).unwrap();
-    write_shell_script(
-        &bin_dir,
-        "codex",
-        r#"#!/bin/sh
-echo "simulated failure" >&2
-exit 23
-"#,
-    );
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
-
     let recovered_reply = workspace.join("reply_email_draft.html");
     let session_path = sessions_dir.join("rollout-session-recovery.jsonl");
     let patch_payload = format!(
@@ -1248,7 +1238,24 @@ exit 23
             "input": patch_payload,
         }
     });
-    fs::write(session_path, format!("{}\n", session_line)).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        &format!(
+            r#"#!/bin/sh
+mkdir -p "{sessions_dir}"
+cat > "{session_path}" <<'EOF'
+{session_line}
+EOF
+echo "simulated failure" >&2
+exit 23
+"#,
+            sessions_dir = sessions_dir.display(),
+            session_path = session_path.display(),
+            session_line = session_line
+        ),
+    );
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);

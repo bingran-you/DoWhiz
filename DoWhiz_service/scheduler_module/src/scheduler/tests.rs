@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use mongodb::bson::{doc, Document};
+use mongodb::bson::{doc, Bson, Document};
 use mongodb::options::FindOptions;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -142,6 +142,26 @@ fn load_execution_documents(user_id: &str, task_id: Uuid) -> Vec<Document> {
         )
         .expect("find executions")
         .map(|row| row.expect("execution document"))
+        .collect()
+}
+
+fn load_task_documents(user_id: &str, task_id: Uuid) -> Vec<Document> {
+    let client = create_client_from_env().expect("mongo client");
+    let db = database_from_env(&client);
+    let collection = db.collection::<Document>("tasks");
+    collection
+        .find(
+            doc! {
+                "owner_scope.kind": "user",
+                "owner_scope.id": user_id,
+                "task_id": task_id.to_string(),
+            },
+            FindOptions::builder()
+                .sort(doc! { "updated_at": 1 })
+                .build(),
+        )
+        .expect("find tasks")
+        .map(|row| row.expect("task document"))
         .collect()
 }
 
@@ -883,6 +903,80 @@ fn reconcile_stale_running_execution_keeps_active_fallback_open() {
 }
 
 #[test]
+fn reconcile_stale_running_execution_keeps_active_aci_result_handling_open() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "stale-active-result-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let started_at = parse_utc("2026-04-01T00:00:00Z");
+    let activity_at = parse_utc("2026-04-01T00:15:00Z");
+    let trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&trace_dir).expect("trace dir");
+    fs::write(
+        trace_dir.join("metadata.json"),
+        format!(
+            r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "downloading_results",
+  "started_at_unix_ms": {},
+  "stage_updated_at_unix_ms": {},
+  "finished_at_unix_ms": null,
+  "success": null
+}}"#,
+            started_at.timestamp_millis(),
+            activity_at.timestamp_millis()
+        ),
+    )
+    .expect("trace metadata");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    store
+        .record_execution_start(task_id, started_at)
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:20:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+
+    assert_eq!(summary.superseded_count, 0);
+    assert_eq!(summary.failed_count, 0);
+    assert!(store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let executions = load_execution_documents("stale-active-result-user", task_id);
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].get_str("status").expect("status"), "running");
+}
+
+#[test]
 fn reconcile_stale_running_execution_fails_abandoned_fallback_after_watchdog() {
     use super::store::SchedulerStore;
 
@@ -1059,6 +1153,122 @@ fn record_execution_finish_is_idempotent_after_reconciliation_closes_row() {
     let executions = load_execution_documents("late-finish-user", task_id);
     assert_eq!(executions.len(), 1);
     assert_eq!(executions[0].get_str("status").expect("status"), "failed");
+}
+
+#[test]
+fn record_execution_finish_replaces_stale_reconciliation_failure_with_success() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "late-success-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let started_at = parse_utc("2026-04-01T00:00:00Z");
+    let stale_finished_at = parse_utc("2026-04-01T00:19:00Z");
+    let success_finished_at = parse_utc("2026-04-01T00:21:00Z");
+    let trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&trace_dir).expect("trace dir");
+    fs::write(
+        trace_dir.join("metadata.json"),
+        format!(
+            r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "completed",
+  "started_at_unix_ms": {},
+  "finished_at_unix_ms": {},
+  "success": true
+}}"#,
+            started_at.timestamp_millis(),
+            stale_finished_at.timestamp_millis()
+        ),
+    )
+    .expect("trace metadata");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let handle = store
+        .record_execution_start(task_id, started_at)
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:20:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+    assert_eq!(summary.failed_count, 1);
+    assert!(!store
+        .has_running_execution(&task_id.to_string())
+        .expect("running check"));
+
+    let tasks_before = load_task_documents("late-success-user", task_id);
+    assert_eq!(tasks_before.len(), 1);
+    assert_eq!(
+        tasks_before[0]
+            .get_str("auto_disabled_reason")
+            .expect("auto disabled reason"),
+        "auto-disabled: execution lost terminal reconciliation after an ACI-backed runner failure"
+    );
+
+    let executions_before = load_execution_documents("late-success-user", task_id);
+    assert_eq!(executions_before.len(), 1);
+    assert_eq!(
+        executions_before[0]
+            .get_str("status")
+            .expect("status before"),
+        "failed"
+    );
+    assert_eq!(
+        executions_before[0]
+            .get_str("error_message")
+            .expect("error before"),
+        "reconciled stale running execution after an ACI-backed runner executed but no live registry record remained"
+    );
+
+    store
+        .record_execution_finish(task_id, handle, success_finished_at, "success", None)
+        .expect("late success should overwrite stale failure");
+
+    let executions_after = load_execution_documents("late-success-user", task_id);
+    assert_eq!(executions_after.len(), 1);
+    assert_eq!(
+        executions_after[0].get_str("status").expect("status after"),
+        "success"
+    );
+    assert_eq!(
+        executions_after[0]
+            .get("error_message")
+            .expect("error field after"),
+        &Bson::Null
+    );
+
+    let tasks_after = load_task_documents("late-success-user", task_id);
+    assert_eq!(tasks_after.len(), 1);
+    assert!(
+        !tasks_after[0].contains_key("auto_disabled_reason"),
+        "late success should clear auto-disabled state"
+    );
 }
 
 #[test]
