@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
 use crate::mongo_store::{
@@ -31,6 +32,8 @@ use super::{
 static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 const DEFAULT_ACI_REGISTRATION_GRACE_SECS: i64 = 15 * 60;
+const DEFAULT_ACI_TRACE_ACTIVITY_GRACE_SECS: i64 = 15 * 60;
+const CURRENT_TRACE_START_MATCH_TOLERANCE_MS: i64 = 10 * 60 * 1000;
 
 #[derive(Debug, Clone)]
 struct ExecutionRow {
@@ -41,6 +44,16 @@ struct ExecutionRow {
     finished_at: Option<chrono::DateTime<Utc>>,
     status: String,
     error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RunTaskTraceMetadata {
+    backend: String,
+    current_stage: String,
+    started_at_unix_ms: Option<i64>,
+    finished_at_unix_ms: Option<i64>,
+    stage_updated_at_unix_ms: Option<i64>,
+    success: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -449,6 +462,25 @@ impl MongoSchedulerStore {
             )?;
             return match existing {
                 Some(row) if row.status != "running" => {
+                    if should_replace_stale_reconciliation_terminal_row(&row, status) {
+                        self.overwrite_terminal_execution_row(
+                            &row.doc_id,
+                            finished_at,
+                            status,
+                            error_message,
+                        )?;
+                        if matches!(status, "success" | "superseded") {
+                            self.clear_auto_disabled_reason(task_id)?;
+                        }
+                        tracing::info!(
+                            "record_execution_finish replaced stale terminal row for task {} execution_id={} old_status={} new_status={}",
+                            task_id,
+                            execution.execution_id,
+                            row.status,
+                            status
+                        );
+                        return Ok(());
+                    }
                     tracing::warn!(
                         "record_execution_finish observed terminal row already written for task {} execution_id={} status={}",
                         task_id,
@@ -465,6 +497,48 @@ impl MongoSchedulerStore {
                 ))),
             };
         }
+        Ok(())
+    }
+
+    fn overwrite_terminal_execution_row(
+        &self,
+        doc_id: &Bson,
+        finished_at: chrono::DateTime<Utc>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        let filter = doc! {
+            "_id": doc_id.clone(),
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+        };
+        let update = doc! {
+            "$set": {
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        retry_mongo_write("task_executions.overwrite_terminal_execution_row", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
+        Ok(())
+    }
+
+    fn clear_auto_disabled_reason(&self, task_id: Uuid) -> Result<(), SchedulerError> {
+        let filter = doc! { "task_id": task_id.to_string() };
+        let update = doc! {
+            "$unset": {
+                "auto_disabled_reason": "",
+                "auto_disabled_at": "",
+            }
+        };
+        retry_mongo_write("tasks.clear_auto_disabled_reason", || {
+            self.tasks.update_many(filter.clone(), update.clone(), None)
+        })
+        .map_err(mongo_err)?;
         Ok(())
     }
 
@@ -586,6 +660,15 @@ impl MongoSchedulerStore {
                 row.started_at,
                 stale_before,
             );
+            let inflight_aci_result_handling = workspace_path
+                .map(|workspace| {
+                    workspace_suggests_recent_inflight_aci_result_handling(
+                        workspace,
+                        row.started_at,
+                        now,
+                    )
+                })
+                .unwrap_or(false);
             let action = if latest_terminal_finished_at
                 .map(|finished_at| row.started_at <= finished_at)
                 .unwrap_or(false)
@@ -628,6 +711,13 @@ impl MongoSchedulerStore {
                                         );
                                         None
                                     }
+                                    None if inflight_aci_result_handling => {
+                                        tracing::info!(
+                                            "leaving task {} running because local ACI result handling is still active after Azure no longer reported the container",
+                                            task_id
+                                        );
+                                        None
+                                    }
                                     Some(UnfinishedFallbackReconciliationAction::Fail {
                                         disable_reason,
                                         error_reason,
@@ -657,6 +747,14 @@ impl MongoSchedulerStore {
                                         Some(UnfinishedFallbackReconciliationAction::KeepRunning) => {
                                             tracing::info!(
                                                 "leaving task {} running because primary ACI terminated with state={} but local fallback is still active",
+                                                task_id,
+                                                state
+                                            );
+                                            None
+                                        }
+                                        None if inflight_aci_result_handling => {
+                                            tracing::info!(
+                                                "leaving task {} running because primary ACI terminated with state={} while local result handling is still active",
                                                 task_id,
                                                 state
                                             );
@@ -698,6 +796,13 @@ impl MongoSchedulerStore {
                                 ) {
                                     tracing::info!(
                                         "ignoring ACI status query error for task {} because local fallback is still active: {}",
+                                            task_id,
+                                            err
+                                        );
+                                    None
+                                } else if inflight_aci_result_handling {
+                                    tracing::info!(
+                                        "ignoring ACI status query error for task {} because local result handling is still active: {}",
                                         task_id,
                                         err
                                     );
@@ -731,6 +836,13 @@ impl MongoSchedulerStore {
                                 );
                                 None
                             }
+                            None if inflight_aci_result_handling => {
+                                tracing::info!(
+                                    "leaving task {} running because ACI registry is gone while local result handling is still active",
+                                    task_id
+                                );
+                                None
+                            }
                             Some(UnfinishedFallbackReconciliationAction::Fail {
                                 disable_reason,
                                 error_reason,
@@ -742,7 +854,8 @@ impl MongoSchedulerStore {
                             None if execution_age > aci_grace_period => {
                                 let (disable_reason, error_reason) =
                                     missing_aci_registry_reconciliation_reason(
-                                        workspace_dir.as_deref(),
+                                        workspace_path,
+                                        row.started_at,
                                     );
                                 self.auto_disable_failed_action(
                                     task_id,
@@ -1612,24 +1725,34 @@ fn resolve_aci_registration_grace_period() -> ChronoDuration {
         .unwrap_or_else(|| ChronoDuration::seconds(DEFAULT_ACI_REGISTRATION_GRACE_SECS))
 }
 
+fn resolve_aci_trace_activity_grace_period() -> ChronoDuration {
+    std::env::var("RUN_TASK_ACI_TRACE_ACTIVITY_GRACE_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0)
+        .map(ChronoDuration::seconds)
+        .unwrap_or_else(|| ChronoDuration::seconds(DEFAULT_ACI_TRACE_ACTIVITY_GRACE_SECS))
+}
+
 fn missing_aci_registry_reconciliation_reason(
-    workspace_dir: Option<&str>,
+    workspace_dir: Option<&Path>,
+    started_at: chrono::DateTime<Utc>,
 ) -> (&'static str, String) {
-    let Some(workspace_dir) = workspace_dir.map(Path::new) else {
+    let Some(workspace_dir) = workspace_dir else {
         return (
             "auto-disabled: execution started but ACI container was never created",
             "reconciled stale running execution; ACI container not found".to_string(),
         );
     };
 
-    if workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir) {
+    if workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
         return (
             "auto-disabled: primary runner failed and fallback never reached a terminal state",
             "reconciled stale running execution after primary ACI run failed and fallback never reached a terminal state".to_string(),
         );
     }
 
-    if workspace_has_aci_execution_evidence(workspace_dir) {
+    if workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
         return (
             "auto-disabled: execution lost terminal reconciliation after an ACI-backed runner failure",
             "reconciled stale running execution after an ACI-backed runner executed but no live registry record remained".to_string(),
@@ -1648,7 +1771,7 @@ fn unfinished_fallback_reconciliation_action(
     stale_before: chrono::DateTime<Utc>,
 ) -> Option<UnfinishedFallbackReconciliationAction> {
     let workspace_dir = workspace_dir?;
-    if !workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir) {
+    if !workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
         return None;
     }
 
@@ -1670,7 +1793,16 @@ fn unfinished_fallback_reconciliation_reason() -> (&'static str, String) {
     )
 }
 
-fn workspace_has_aci_execution_evidence(workspace_dir: &Path) -> bool {
+fn workspace_has_current_aci_execution_evidence(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+) -> bool {
+    if let Some(metadata) = load_run_task_trace_metadata(workspace_dir) {
+        if trace_started_at_matches_execution(metadata.started_at_unix_ms, started_at) {
+            return true;
+        }
+    }
+
     [
         workspace_dir.join(".run_task_trace_codex_primary/aci/container_show.json"),
         workspace_dir.join(".run_task_trace_codex_primary/aci/remote_exit_code.txt"),
@@ -1679,36 +1811,134 @@ fn workspace_has_aci_execution_evidence(workspace_dir: &Path) -> bool {
         workspace_dir.join(".aci_recovery_context.json"),
     ]
     .iter()
-    .any(|path| path.exists())
+    .any(|path| path.exists() && path_mtime_matches_execution(path, started_at))
 }
 
-fn workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir: &Path) -> bool {
-    if !workspace_has_aci_execution_evidence(workspace_dir) {
+fn workspace_suggests_recent_inflight_aci_result_handling(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+    now: chrono::DateTime<Utc>,
+) -> bool {
+    if !workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
         return false;
     }
 
-    let fallback_metadata = workspace_dir.join(".run_task_trace/metadata.json");
-    let Ok(contents) = fs::read_to_string(fallback_metadata) else {
+    let Some(metadata) = load_run_task_trace_metadata(workspace_dir) else {
         return false;
     };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&contents) else {
+    if metadata.backend != "codex_azure_aci" {
         return false;
-    };
-    let backend = value
-        .get("backend")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    let current_stage = value
-        .get("current_stage")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    let finished = value.get("finished_at_unix_ms").and_then(|v| v.as_i64());
-    let success = value.get("success").and_then(|v| v.as_bool());
+    }
+    if metadata.current_stage.is_empty() || metadata.current_stage == "completed" {
+        return false;
+    }
+    if metadata.finished_at_unix_ms.is_some() || metadata.success.is_some() {
+        return false;
+    }
 
-    backend == "claude_local"
-        && current_stage == "executing_claude_local"
-        && finished.is_none()
-        && success.is_none()
+    let activity_at_ms = metadata
+        .stage_updated_at_unix_ms
+        .or(metadata.started_at_unix_ms)
+        .unwrap_or_default();
+    if activity_at_ms == 0 {
+        return false;
+    }
+
+    let grace = resolve_aci_trace_activity_grace_period();
+    let activity_age_ms = now.timestamp_millis().saturating_sub(activity_at_ms);
+    activity_age_ms <= grace.num_milliseconds()
+}
+
+fn workspace_suggests_unfinished_fallback_after_aci_run(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+) -> bool {
+    if !workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
+        return false;
+    }
+    let Some(metadata) = load_run_task_trace_metadata(workspace_dir) else {
+        return false;
+    };
+
+    metadata.backend == "claude_local"
+        && metadata.current_stage == "executing_claude_local"
+        && metadata.finished_at_unix_ms.is_none()
+        && metadata.success.is_none()
+}
+
+fn load_run_task_trace_metadata(workspace_dir: &Path) -> Option<RunTaskTraceMetadata> {
+    let metadata_path = workspace_dir.join(".run_task_trace/metadata.json");
+    let contents = fs::read_to_string(metadata_path).ok()?;
+    let value = serde_json::from_str::<serde_json::Value>(&contents).ok()?;
+    Some(RunTaskTraceMetadata {
+        backend: value
+            .get("backend")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        current_stage: value
+            .get("current_stage")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        started_at_unix_ms: value.get("started_at_unix_ms").and_then(|v| v.as_i64()),
+        finished_at_unix_ms: value.get("finished_at_unix_ms").and_then(|v| v.as_i64()),
+        stage_updated_at_unix_ms: value
+            .get("stage_updated_at_unix_ms")
+            .and_then(|v| v.as_i64()),
+        success: value.get("success").and_then(|v| v.as_bool()),
+    })
+}
+
+fn trace_started_at_matches_execution(
+    trace_started_at_unix_ms: Option<i64>,
+    started_at: chrono::DateTime<Utc>,
+) -> bool {
+    let Some(trace_started_at_unix_ms) = trace_started_at_unix_ms else {
+        return false;
+    };
+    trace_started_at_unix_ms
+        .saturating_sub(started_at.timestamp_millis())
+        .abs()
+        <= CURRENT_TRACE_START_MATCH_TOLERANCE_MS
+}
+
+fn path_mtime_matches_execution(path: &Path, started_at: chrono::DateTime<Utc>) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    let Ok(modified_at) = metadata.modified() else {
+        return false;
+    };
+    let Ok(duration) = modified_at.duration_since(UNIX_EPOCH) else {
+        return false;
+    };
+    let Ok(modified_at_ms) = i64::try_from(duration.as_millis()) else {
+        return false;
+    };
+    modified_at_ms
+        .saturating_sub(started_at.timestamp_millis())
+        .abs()
+        <= CURRENT_TRACE_START_MATCH_TOLERANCE_MS
+}
+
+fn is_stale_reconciliation_error(reason: Option<&str>) -> bool {
+    reason
+        .map(|value| {
+            value
+                .trim_start()
+                .starts_with("reconciled stale running execution")
+        })
+        .unwrap_or(false)
+}
+
+fn should_replace_stale_reconciliation_terminal_row(
+    row: &ExecutionRow,
+    desired_status: &str,
+) -> bool {
+    row.status == "failed"
+        && matches!(desired_status, "success" | "superseded")
+        && is_stale_reconciliation_error(row.error_message.as_deref())
 }
 
 fn apply_persisted_task_fields(
@@ -2188,8 +2418,9 @@ mod tests {
     #[test]
     fn missing_aci_reason_stays_never_created_when_no_trace_exists() {
         let workspace = temp_workspace("aci_not_created");
+        let started_at = Utc::now();
         let (disable_reason, error_reason) =
-            missing_aci_registry_reconciliation_reason(Some(workspace.to_str().unwrap()));
+            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at);
         assert_eq!(
             disable_reason,
             "auto-disabled: execution started but ACI container was never created"
@@ -2204,6 +2435,7 @@ mod tests {
     #[test]
     fn missing_aci_reason_prefers_primary_failure_when_trace_shows_fallback_stuck() {
         let workspace = temp_workspace("aci_trace_exists");
+        let started_at = Utc::now();
         let primary_aci_dir = workspace.join(".run_task_trace_codex_primary/aci");
         fs::create_dir_all(&primary_aci_dir).unwrap();
         fs::write(primary_aci_dir.join("container_show.json"), "{}").unwrap();
@@ -2221,7 +2453,7 @@ mod tests {
         .unwrap();
 
         let (disable_reason, error_reason) =
-            missing_aci_registry_reconciliation_reason(Some(workspace.to_str().unwrap()));
+            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at);
         assert_eq!(
             disable_reason,
             "auto-disabled: primary runner failed and fallback never reached a terminal state"
@@ -2229,6 +2461,49 @@ mod tests {
         assert_eq!(
             error_reason,
             "reconciled stale running execution after primary ACI run failed and fallback never reached a terminal state"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn missing_aci_reason_ignores_stale_trace_from_prior_execution() {
+        let workspace = temp_workspace("aci_old_trace");
+        let old_started_at = Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 0).unwrap();
+        let current_started_at = Utc.with_ymd_and_hms(2026, 4, 1, 2, 0, 0).unwrap();
+
+        let primary_aci_dir = workspace.join(".run_task_trace_codex_primary/aci");
+        fs::create_dir_all(&primary_aci_dir).unwrap();
+        fs::write(primary_aci_dir.join("container_show.json"), "{}").unwrap();
+
+        let trace_dir = workspace.join(".run_task_trace");
+        fs::create_dir_all(&trace_dir).unwrap();
+        fs::write(
+            trace_dir.join("metadata.json"),
+            format!(
+                r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "completed",
+  "started_at_unix_ms": {},
+  "finished_at_unix_ms": {},
+  "success": true
+}}"#,
+                old_started_at.timestamp_millis(),
+                old_started_at.timestamp_millis() + 60_000
+            ),
+        )
+        .unwrap();
+
+        let (disable_reason, error_reason) = missing_aci_registry_reconciliation_reason(
+            Some(workspace.as_path()),
+            current_started_at,
+        );
+        assert_eq!(
+            disable_reason,
+            "auto-disabled: execution started but ACI container was never created"
+        );
+        assert_eq!(
+            error_reason,
+            "reconciled stale running execution; ACI container not found"
         );
         let _ = fs::remove_dir_all(workspace);
     }
