@@ -1266,7 +1266,7 @@ exit 23
     assert!(html.contains("Recovered from session log"));
     let recovery_note = result.recovery_note.as_deref().unwrap_or("");
     assert!(recovery_note.contains("Recovered reply artifact from Codex session log"));
-    assert!(recovery_note.contains("Codex exited with status 23"));
+    assert!(recovery_note.contains("status 23"));
 }
 
 #[test]
@@ -1470,13 +1470,14 @@ fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry()
 
 #[test]
 #[cfg(unix)]
-fn run_task_preserves_primary_draft_when_fallback_fails_after_timeout() {
+fn run_task_recovers_generic_reply_after_timeout_without_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_timeout_preserve_primary_draft").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
 
     let home_dir = temp.path.join("home");
     let bin_dir = temp.path.join("bin");
+    let claude_counter_path = temp.path.join("claude_invocations.txt");
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_shell_script(
@@ -1490,7 +1491,19 @@ HTML
 sleep "${SLEEP_SECS:-2}"
 "#,
     );
-    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        &format!(
+            r#"#!/bin/sh
+set -e
+printf '1' > "{claude_counter_path}"
+echo "Claude fallback should not have run" >&2
+exit 17
+"#,
+            claude_counter_path = claude_counter_path.display()
+        ),
+    );
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -1505,21 +1518,20 @@ sleep "${SLEEP_SECS:-2}"
     ]);
 
     let params = build_params(&workspace);
-    let err = run_task(&params).unwrap_err();
-    match err {
-        RunTaskError::FallbackFailed { primary, fallback } => {
-            let preserved = workspace
-                .join(".run_task_trace_codex_primary")
-                .join("preserved_artifacts")
-                .join("reply_email_draft.html");
-            assert!(preserved.exists(), "preserved primary draft should exist");
-            let preserved_html = fs::read_to_string(&preserved).unwrap();
-            assert!(preserved_html.contains("Draft exists"));
-            assert!(primary.contains("Preserved primary Codex draft at"));
-            assert!(fallback.contains("Claude failed"));
-        }
-        other => panic!("expected FallbackFailed, got {:?}", other),
-    }
+    let result = run_task(&params).expect("generic reply should recover after timeout");
+    let reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(reply.contains("Draft exists"));
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("Recovered ready reply artifact written during this run"));
+    assert!(!note.contains("Claude fallback"));
+    assert!(
+        !claude_counter_path.exists(),
+        "Claude fallback should not run once a generic reply artifact is recovered"
+    );
+    assert!(
+        !workspace.join(".run_task_trace_codex_primary").exists(),
+        "primary trace should not be archived into a fallback directory when fallback never runs"
+    );
 }
 
 #[test]
