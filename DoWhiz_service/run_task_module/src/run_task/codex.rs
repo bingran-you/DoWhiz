@@ -519,22 +519,50 @@ fn late_codex_failure_description(exit_status: Option<i32>, failure_output: &str
     let lowered = failure_output.to_ascii_lowercase();
     if lowered.contains("response.failed event received") {
         "Codex stream disconnect during finalization".to_string()
+    } else if lowered.contains("command timed out (az container create") {
+        "ACI container provisioning timed out after writing output".to_string()
+    } else if lowered.contains("command timed out (az container show") {
+        "ACI container polling timed out after writing output".to_string()
     } else if lowered.contains("command timed out") || lowered.contains("timed out (codex") {
-        "Codex timed out after writing output".to_string()
+        "the run timed out after writing output".to_string()
     } else if lowered.contains("cannot assist with that request") {
         "a late Codex refusal".to_string()
     } else if lowered.contains("task_complete reported status=") {
         "Codex reported a late task_complete failure".to_string()
     } else if let Some(code) = exit_status.filter(|code| *code != 0) {
-        format!("Codex exited with status {code} after writing output")
+        format!("the runner exited with status {code} after writing output")
     } else {
-        "a late Codex failure".to_string()
+        "a late runner failure".to_string()
     }
 }
 
 fn maybe_recover_reply_artifact_from_recent_session(
     workspace_dir: &Path,
     expected_reply_path: &Path,
+) -> Option<PathBuf> {
+    maybe_recover_reply_artifact_from_recent_session_with_min_mtime(
+        workspace_dir,
+        expected_reply_path,
+        None,
+    )
+}
+
+fn maybe_recover_reply_artifact_from_recent_session_since(
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+    min_mtime: SystemTime,
+) -> Option<PathBuf> {
+    maybe_recover_reply_artifact_from_recent_session_with_min_mtime(
+        workspace_dir,
+        expected_reply_path,
+        Some(min_mtime),
+    )
+}
+
+fn maybe_recover_reply_artifact_from_recent_session_with_min_mtime(
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+    min_mtime: Option<SystemTime>,
 ) -> Option<PathBuf> {
     let home = env::var("HOME").ok()?;
     let sessions_root = PathBuf::from(home).join(".codex").join("sessions");
@@ -567,6 +595,15 @@ fn maybe_recover_reply_artifact_from_recent_session(
 
     let workspace_marker = workspace_dir.to_string_lossy();
     for session_path in session_files.into_iter().take(40) {
+        if let Some(min_mtime) = min_mtime {
+            let modified = session_path
+                .metadata()
+                .ok()
+                .and_then(|meta| meta.modified().ok());
+            if modified.is_none_or(|modified| modified < min_mtime) {
+                continue;
+            }
+        }
         let Ok(contents) = fs::read_to_string(&session_path) else {
             continue;
         };
@@ -756,6 +793,65 @@ fn maybe_recover_from_ready_reply_artifact(
     ))
 }
 
+const TIMEOUT_REPLY_ARTIFACT_FRESHNESS_SLACK: Duration = Duration::from_secs(2);
+
+fn timeout_reply_artifact_freshness_floor(run_started_at: SystemTime) -> SystemTime {
+    run_started_at
+        .checked_sub(TIMEOUT_REPLY_ARTIFACT_FRESHNESS_SLACK)
+        .unwrap_or(UNIX_EPOCH)
+}
+
+fn reply_artifact_modified_after(path: &Path, earliest_mtime: SystemTime) -> bool {
+    fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .is_ok_and(|modified| modified >= earliest_mtime)
+}
+
+fn timeout_reply_recovery_supported_command(command: &str) -> bool {
+    matches!(command, "codex" | "docker run" | "az container create")
+}
+
+fn maybe_recover_from_recent_ready_reply_artifact(
+    run_started_at: SystemTime,
+    reply_expected: bool,
+    workspace_dir: &Path,
+    expected_reply_path: &Path,
+    exit_status: Option<i32>,
+    failure_output: &str,
+) -> Option<String> {
+    if !reply_expected {
+        return None;
+    }
+
+    let failure_description = late_codex_failure_description(exit_status, failure_output);
+    let freshness_floor = timeout_reply_artifact_freshness_floor(run_started_at);
+    if reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
+        && reply_artifact_modified_after(expected_reply_path, freshness_floor)
+    {
+        return Some(format!(
+            "Recovered ready reply artifact written during this run after {}",
+            failure_description
+        ));
+    }
+
+    let session_path = maybe_recover_reply_artifact_from_recent_session_since(
+        workspace_dir,
+        expected_reply_path,
+        freshness_floor,
+    )?;
+    if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
+        || !reply_artifact_modified_after(expected_reply_path, freshness_floor)
+    {
+        return None;
+    }
+
+    Some(format!(
+        "Recovered reply artifact from a current Codex session log ({}) after {}",
+        session_path.display(),
+        failure_description
+    ))
+}
+
 fn codex_turn_completed(output: &str) -> bool {
     output
         .lines()
@@ -786,21 +882,21 @@ fn maybe_accept_nonfatal_post_completion_reply_artifact(
 }
 
 fn maybe_accept_timeout_with_ready_reply_artifact(
-    investment_request: bool,
+    run_started_at: SystemTime,
     reply_expected: bool,
     workspace_dir: &Path,
     expected_reply_path: &Path,
     err: &RunTaskError,
 ) -> Option<String> {
-    if !investment_request {
+    let RunTaskError::CommandTimeout { command, .. } = err else {
         return None;
-    }
-    if !matches!(err, RunTaskError::CommandTimeout { command, .. } if *command == "codex" || *command == "docker run")
-    {
+    };
+    if !timeout_reply_recovery_supported_command(command) {
         return None;
     }
 
-    maybe_recover_from_ready_reply_artifact(
+    maybe_recover_from_recent_ready_reply_artifact(
+        run_started_at,
         reply_expected,
         workspace_dir,
         expected_reply_path,
@@ -1326,6 +1422,7 @@ fn run_codex_task_with_options(
             )
         };
 
+        let command_started_at = SystemTime::now();
         match run_command_with_timeout_and_cancel_with_ready_check(
             cmd,
             timeout,
@@ -1342,7 +1439,7 @@ fn run_codex_task_with_options(
             }
             Err(err) => {
                 if let Some(recovery_note) = maybe_accept_timeout_with_ready_reply_artifact(
-                    investment_request,
+                    command_started_at,
                     !request.reply_to.is_empty(),
                     request.workspace_dir,
                     &expected_reply_path,
@@ -1474,6 +1571,7 @@ fn run_codex_task_with_options(
             )
         };
 
+        let command_started_at = SystemTime::now();
         match run_command_with_timeout_and_cancel_with_ready_check(
             cmd,
             timeout,
@@ -1490,7 +1588,7 @@ fn run_codex_task_with_options(
             }
             Err(err) => {
                 if let Some(recovery_note) = maybe_accept_timeout_with_ready_reply_artifact(
-                    investment_request,
+                    command_started_at,
                     !request.reply_to.is_empty(),
                     request.workspace_dir,
                     &expected_reply_path,
@@ -2102,6 +2200,7 @@ fn run_codex_task_azure_aci(
         container_name, config.resource_group, config.image
     );
     let _ = trace.set_stage("starting_aci_container");
+    let execution_started_at = SystemTime::now();
     let execution = run_azure_aci_execution(
         &config,
         &container_name,
@@ -2169,13 +2268,66 @@ fn run_codex_task_azure_aci(
     if remote_exit_code_path.exists() {
         let _ = trace.copy_file(&remote_exit_code_path, "aci/remote_exit_code.txt");
     }
+    let expected_reply_path =
+        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
     let execution = match execution {
         Ok(execution) => execution,
         Err(err) => {
             let _ = trace.record_text("logs/combined.log", &output_content);
+            let token_usage = extract_token_usage(&output_content);
+            if let Some(recovery_note) = maybe_accept_timeout_with_ready_reply_artifact(
+                execution_started_at,
+                !request.reply_to.is_empty(),
+                request.workspace_dir,
+                &expected_reply_path,
+                &err,
+            ) {
+                let output_tail = if output_content.trim().is_empty() {
+                    tail_string(&err.to_string(), 4000)
+                } else {
+                    tail_string(&output_content, 4000)
+                };
+                let (
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                ) = parse_scheduling_from_outputs(
+                    &output_content,
+                    "",
+                    &output_content,
+                    request.workspace_dir,
+                );
+                let completed_timing = timing.finish();
+                let _ = trace.record_timing(&completed_timing);
+                record_codex_success(
+                    &mut trace,
+                    exit_status,
+                    &output_tail,
+                    Some(&recovery_note),
+                    token_usage.as_ref(),
+                );
+                TIMING_COLLECTOR.record(completed_timing);
+                return Ok(RunTaskOutput {
+                    reply_html_path: expected_reply_path.clone(),
+                    reply_attachments_dir: reply_attachments_dir.clone(),
+                    codex_output: output_tail,
+                    scheduled_tasks,
+                    scheduled_tasks_error,
+                    scheduler_actions,
+                    scheduler_actions_error,
+                    token_usage,
+                    recovery_note: Some(recovery_note),
+                });
+            }
             let completed_timing = timing.finish();
             let _ = trace.record_timing(&completed_timing);
-            let _ = trace.finish(exit_status, false, Some(&err.to_string()), None);
+            let _ = trace.finish(
+                exit_status,
+                false,
+                Some(&err.to_string()),
+                token_usage.as_ref(),
+            );
             TIMING_COLLECTOR.record(completed_timing);
             return Err(err);
         }
@@ -2208,9 +2360,6 @@ fn run_codex_task_azure_aci(
         );
     let token_usage = extract_token_usage(&combined_output);
     let output_tail = tail_string(&combined_output, 4000);
-    let expected_reply_path =
-        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
-
     if !azure_aci_execution_succeeded(&execution, exit_status) {
         let err = RunTaskError::CodexFailed {
             status: exit_status,
@@ -3444,6 +3593,59 @@ fn aci_show_indicates_container_started(show_json: &str) -> bool {
         || instance_state.eq_ignore_ascii_case("Stopped")
 }
 
+fn confirm_aci_container_started_after_create_timeout(
+    config: &AzureAciConfig,
+    container_name: &str,
+    attempts: usize,
+    sleep_between_attempts: Duration,
+) -> Option<String> {
+    let attempts = attempts.max(1);
+    for attempt in 1..=attempts {
+        if let Ok(show_json) = fetch_aci_show_json(config, container_name) {
+            if aci_show_indicates_container_started(&show_json) {
+                let note = if let Some((provisioning_state, instance_state)) =
+                    parse_aci_show_states(&show_json)
+                {
+                    format!(
+                        "show-json observed provisioning_state={} instance_state={} on attempt {}",
+                        provisioning_state.as_deref().unwrap_or("-"),
+                        instance_state.as_deref().unwrap_or("-"),
+                        attempt
+                    )
+                } else {
+                    format!(
+                        "show-json observed a started container on attempt {}",
+                        attempt
+                    )
+                };
+                return Some(note);
+            }
+        }
+
+        match query_aci_container_status(container_name, &config.resource_group) {
+            AciContainerStatus::Running => {
+                return Some(format!(
+                    "status query reported Running on attempt {}",
+                    attempt
+                ));
+            }
+            AciContainerStatus::Terminal(state) => {
+                return Some(format!(
+                    "status query reported terminal state {} on attempt {}",
+                    state, attempt
+                ));
+            }
+            AciContainerStatus::NotFound | AciContainerStatus::Error(_) => {}
+        }
+
+        if attempt < attempts && !sleep_between_attempts.is_zero() {
+            thread::sleep(sleep_between_attempts);
+        }
+    }
+
+    None
+}
+
 fn create_aci_container(
     config: &AzureAciConfig,
     container_name: &str,
@@ -3468,27 +3670,22 @@ fn create_aci_container(
     ) {
         Ok(output) => output,
         Err(timeout @ RunTaskError::CommandTimeout { .. }) => {
-            match fetch_aci_show_json(config, container_name) {
-                Ok(show_json) if aci_show_indicates_container_started(&show_json) => {
-                    if let Some((provisioning_state, instance_state)) =
-                        parse_aci_show_states(&show_json)
-                    {
-                        eprintln!(
-                            "[run_task] azure_aci create timeout but container is present container={} provisioning_state={} instance_state={}; continuing with state polling",
-                            container_name,
-                            provisioning_state.as_deref().unwrap_or("-"),
-                            instance_state.as_deref().unwrap_or("-")
-                        );
-                    } else {
-                        eprintln!(
-                            "[run_task] azure_aci create timeout but container is present container={}; continuing with state polling",
-                            container_name
-                        );
-                    }
+            match confirm_aci_container_started_after_create_timeout(
+                config,
+                container_name,
+                6,
+                Duration::from_secs(5),
+            ) {
+                Some(observation) => {
+                    eprintln!(
+                        "[run_task] azure_aci create timeout but container became visible container={} observation={}; continuing with state polling",
+                        container_name, observation
+                    );
                     return Ok(());
                 }
-                Ok(_) => return Err(timeout),
-                Err(_) => return Err(timeout),
+                None => {
+                    return Err(timeout);
+                }
             }
         }
         Err(RunTaskError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
@@ -6357,6 +6554,115 @@ printf '%s\n' "$@" > "$capture_file"
     }
 
     #[test]
+    #[cfg(unix)]
+    fn test_confirm_aci_container_started_after_create_timeout_uses_status_query_fallback() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _lock = env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let az_path = bin_dir.join("az");
+        fs::write(
+            &az_path,
+            r#"#!/bin/sh
+set -e
+if echo "$*" | grep -q -- "--query instanceView.state"; then
+    printf 'Running\n'
+    exit 0
+fi
+printf 'not-json\n'
+"#,
+        )
+        .expect("write fake az");
+        let mut perms = fs::metadata(&az_path).expect("az metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&az_path, perms).expect("chmod fake az");
+
+        let original_path = env::var("PATH").unwrap_or_default();
+        let path_value = format!("{}:{}", bin_dir.display(), original_path);
+        let _guards = [EnvVarGuard::set("PATH", &path_value)];
+
+        let config = AzureAciConfig {
+            resource_group: "stg-rg".to_string(),
+            image: "stg.azurecr.io/dowhiz-service:test".to_string(),
+            location: None,
+            registry_server: None,
+            registry_username: None,
+            registry_password: None,
+            cpu: "1.0".to_string(),
+            memory_gb: "2.0".to_string(),
+            storage_account: "storageacct".to_string(),
+            storage_key: "storagekey".to_string(),
+            file_share: "run-task-share".to_string(),
+            host_share_root: PathBuf::from("/host/share"),
+            container_share_root: PathBuf::from("/mnt/dowhiz-share"),
+        };
+
+        let observation = confirm_aci_container_started_after_create_timeout(
+            &config,
+            "dwz-codex-timeout-test",
+            1,
+            Duration::ZERO,
+        )
+        .expect("expected timeout recovery observation");
+
+        assert!(observation.contains("status query reported Running"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_confirm_aci_container_started_after_create_timeout_returns_none_when_absent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _lock = env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir_all(&bin_dir).expect("create bin dir");
+        let az_path = bin_dir.join("az");
+        fs::write(
+            &az_path,
+            r#"#!/bin/sh
+echo 'ERROR: (ResourceNotFound) The Resource was not found' >&2
+exit 3
+"#,
+        )
+        .expect("write fake az");
+        let mut perms = fs::metadata(&az_path).expect("az metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&az_path, perms).expect("chmod fake az");
+
+        let original_path = env::var("PATH").unwrap_or_default();
+        let path_value = format!("{}:{}", bin_dir.display(), original_path);
+        let _guards = [EnvVarGuard::set("PATH", &path_value)];
+
+        let config = AzureAciConfig {
+            resource_group: "stg-rg".to_string(),
+            image: "stg.azurecr.io/dowhiz-service:test".to_string(),
+            location: None,
+            registry_server: None,
+            registry_username: None,
+            registry_password: None,
+            cpu: "1.0".to_string(),
+            memory_gb: "2.0".to_string(),
+            storage_account: "storageacct".to_string(),
+            storage_key: "storagekey".to_string(),
+            file_share: "run-task-share".to_string(),
+            host_share_root: PathBuf::from("/host/share"),
+            container_share_root: PathBuf::from("/mnt/dowhiz-share"),
+        };
+
+        let observation = confirm_aci_container_started_after_create_timeout(
+            &config,
+            "dwz-codex-timeout-missing",
+            1,
+            Duration::ZERO,
+        );
+
+        assert!(observation.is_none());
+    }
+
+    #[test]
     fn test_reply_artifact_ready_rejects_empty_email_reply() {
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
@@ -6546,6 +6852,61 @@ printf '%s\n' "$@" > "$capture_file"
         .expect("expected recovery note");
 
         assert!(note.contains("Recovered ready reply artifact"));
+    }
+
+    #[test]
+    fn test_maybe_accept_timeout_with_ready_reply_artifact_recovers_recent_non_investment_reply() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let reply = temp.path().join("reply_email_draft.html");
+        let run_started_at = SystemTime::now();
+        fs::write(&reply, "<html><body>ready</body></html>").expect("write reply");
+
+        let err = RunTaskError::CommandTimeout {
+            command: "az container create",
+            timeout_secs: 300,
+            output: "create timed out".to_string(),
+        };
+
+        let note = maybe_accept_timeout_with_ready_reply_artifact(
+            run_started_at,
+            true,
+            temp.path(),
+            &reply,
+            &err,
+        )
+        .expect("expected timeout recovery");
+
+        assert!(note.contains("Recovered ready reply artifact written during this run"));
+        assert!(note.contains("ACI container provisioning timed out"));
+    }
+
+    #[test]
+    fn test_maybe_accept_timeout_with_ready_reply_artifact_rejects_stale_reply() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let reply = temp.path().join("reply_email_draft.html");
+        fs::write(&reply, "<html><body>stale</body></html>").expect("write reply");
+        let run_started_at = SystemTime::now()
+            .checked_add(Duration::from_secs(5))
+            .expect("future system time");
+
+        let err = RunTaskError::CommandTimeout {
+            command: "codex",
+            timeout_secs: 30,
+            output: "timed out".to_string(),
+        };
+
+        let note = maybe_accept_timeout_with_ready_reply_artifact(
+            run_started_at,
+            true,
+            temp.path(),
+            &reply,
+            &err,
+        );
+
+        assert!(
+            note.is_none(),
+            "stale reply artifact should not be accepted"
+        );
     }
 
     #[test]

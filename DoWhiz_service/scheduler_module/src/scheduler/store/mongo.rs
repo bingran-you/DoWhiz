@@ -43,6 +43,15 @@ struct ExecutionRow {
     error_message: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum UnfinishedFallbackReconciliationAction {
+    KeepRunning,
+    Fail {
+        disable_reason: &'static str,
+        error_reason: String,
+    },
+}
+
 fn next_execution_id(started_at: chrono::DateTime<Utc>) -> i64 {
     let base = started_at.timestamp_micros();
     let mut current = EXECUTION_SEQ.load(Ordering::Relaxed);
@@ -459,6 +468,40 @@ impl MongoSchedulerStore {
         Ok(())
     }
 
+    pub(crate) fn upsert_terminal_execution(
+        &self,
+        task_id: Uuid,
+        execution: ExecutionRecordHandle,
+        finished_at: chrono::DateTime<Utc>,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> Result<(), SchedulerError> {
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+            "task_id": task_id.to_string(),
+            "execution_id": execution.execution_id,
+        };
+        let update = doc! {
+            "$set": {
+                "owner_scope": self.owner_scope_doc(),
+                "execution_id": execution.execution_id,
+                "task_id": task_id.to_string(),
+                "started_at": BsonDateTime::from_chrono(execution.started_at),
+                "finished_at": BsonDateTime::from_chrono(finished_at),
+                "status": status,
+                "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
+            }
+        };
+        let options = UpdateOptions::builder().upsert(Some(true)).build();
+        retry_mongo_write("task_executions.upsert_terminal_execution", || {
+            self.executions
+                .update_one(filter.clone(), update.clone(), options.clone())
+        })
+        .map_err(mongo_err)?;
+        Ok(())
+    }
+
     /// Get workspace_dir from a task's task_json field.
     /// Returns None if task not found or workspace_dir cannot be parsed.
     fn get_task_workspace_dir(&self, task_id: &str) -> Option<String> {
@@ -533,9 +576,16 @@ impl MongoSchedulerStore {
         let stale_before = now - stale_after;
         let stale_timeout_secs = stale_after.num_seconds();
         let aci_resource_group = std::env::var("RUN_TASK_AZURE_ACI_RESOURCE_GROUP").ok();
+        let workspace_dir = self.get_task_workspace_dir(task_id);
+        let workspace_path = workspace_dir.as_deref().map(Path::new);
 
         let mut summary = ExecutionReconciliationSummary::default();
         for row in rows.iter().filter(|row| row.status == "running") {
+            let unfinished_fallback_action = unfinished_fallback_reconciliation_action(
+                workspace_path,
+                row.started_at,
+                stale_before,
+            );
             let action = if latest_terminal_finished_at
                 .map(|finished_at| row.started_at <= finished_at)
                 .unwrap_or(false)
@@ -561,8 +611,6 @@ impl MongoSchedulerStore {
                     ),
                 ))
             } else if let Some(ref rg) = aci_resource_group {
-                // Look up ACI container by workspace_dir from tasks
-                let workspace_dir = self.get_task_workspace_dir(task_id);
                 let container_record = workspace_dir
                     .as_ref()
                     .and_then(|ws| find_aci_container_by_workspace(ws));
@@ -572,23 +620,27 @@ impl MongoSchedulerStore {
                         // Container found in registry, check its actual Azure status
                         match query_aci_container_status(&record.container_name, rg) {
                             AciContainerStatus::NotFound => {
-                                // Container was registered but no longer exists in Azure
-                                // This means it completed but execution wasn't marked done (crash/restart)
-                                if let Err(e) = self.disable_task_by_id(
-                                    task_id,
-                                    "auto-disabled: ACI container was registered but no longer exists in Azure",
-                                ) {
-                                    tracing::error!(
-                                        "failed to disable task {} after ACI gone from Azure: {}",
+                                match unfinished_fallback_action.as_ref() {
+                                    Some(UnfinishedFallbackReconciliationAction::KeepRunning) => {
+                                        tracing::info!(
+                                            "leaving task {} running because primary ACI is gone but local fallback is still active",
+                                            task_id
+                                        );
+                                        None
+                                    }
+                                    Some(UnfinishedFallbackReconciliationAction::Fail {
+                                        disable_reason,
+                                        error_reason,
+                                    }) => self.auto_disable_failed_action(
                                         task_id,
-                                        e
-                                    );
-                                    None
-                                } else {
-                                    Some((
-                                        "failed",
+                                        disable_reason,
+                                        error_reason.clone(),
+                                    ),
+                                    None => self.auto_disable_failed_action(
+                                        task_id,
+                                        "auto-disabled: ACI container was registered but no longer exists in Azure",
                                         "reconciled stale running execution; ACI container was registered but no longer exists in Azure".to_string(),
-                                    ))
+                                    ),
                                 }
                             }
                             AciContainerStatus::Terminal(state) => {
@@ -600,27 +652,36 @@ impl MongoSchedulerStore {
                                         task_id
                                     );
                                     None
-                                } else if let Err(e) = self.disable_task_by_id(
-                                    task_id,
-                                    &format!(
-                                        "auto-disabled: ACI container terminated with state: {}",
-                                        state
-                                    ),
-                                ) {
-                                    tracing::error!(
-                                        "failed to disable task {} after ACI terminal state: {}",
-                                        task_id,
-                                        e
-                                    );
-                                    None
                                 } else {
-                                    Some((
-                                        "failed",
-                                        format!(
-                                            "reconciled stale running execution; ACI container terminated with state: {}",
-                                            state
+                                    match unfinished_fallback_action.as_ref() {
+                                        Some(UnfinishedFallbackReconciliationAction::KeepRunning) => {
+                                            tracing::info!(
+                                                "leaving task {} running because primary ACI terminated with state={} but local fallback is still active",
+                                                task_id,
+                                                state
+                                            );
+                                            None
+                                        }
+                                        Some(UnfinishedFallbackReconciliationAction::Fail {
+                                            disable_reason,
+                                            error_reason,
+                                        }) => self.auto_disable_failed_action(
+                                            task_id,
+                                            disable_reason,
+                                            error_reason.clone(),
                                         ),
-                                    ))
+                                        None => self.auto_disable_failed_action(
+                                            task_id,
+                                            &format!(
+                                                "auto-disabled: ACI container terminated with state: {}",
+                                                state
+                                            ),
+                                            format!(
+                                                "reconciled stale running execution; ACI container terminated with state: {}",
+                                                state
+                                            ),
+                                        ),
+                                    }
                                 }
                             }
                             AciContainerStatus::Running => {
@@ -631,7 +692,17 @@ impl MongoSchedulerStore {
                                 None
                             }
                             AciContainerStatus::Error(err) => {
-                                if row.started_at <= stale_before {
+                                if matches!(
+                                    unfinished_fallback_action,
+                                    Some(UnfinishedFallbackReconciliationAction::KeepRunning)
+                                ) {
+                                    tracing::info!(
+                                        "ignoring ACI status query error for task {} because local fallback is still active: {}",
+                                        task_id,
+                                        err
+                                    );
+                                    None
+                                } else if row.started_at <= stale_before {
                                     Some((
                                         "failed",
                                         format!(
@@ -652,30 +723,43 @@ impl MongoSchedulerStore {
                         let aci_grace_period = resolve_aci_registration_grace_period();
                         let execution_age = now - row.started_at;
 
-                        if execution_age > aci_grace_period {
-                            let (disable_reason, error_reason) =
-                                missing_aci_registry_reconciliation_reason(
-                                    workspace_dir.as_deref(),
-                                );
-                            if let Err(e) = self.disable_task_by_id(task_id, disable_reason) {
-                                tracing::error!(
-                                    "failed to disable task {} after ACI not found: {}",
-                                    task_id,
-                                    e
+                        match unfinished_fallback_action.as_ref() {
+                            Some(UnfinishedFallbackReconciliationAction::KeepRunning) => {
+                                tracing::info!(
+                                    "leaving task {} running because ACI registry is gone but local fallback is still active",
+                                    task_id
                                 );
                                 None
-                            } else {
-                                Some(("failed", error_reason))
                             }
-                        } else {
-                            // Within grace period - might still be uploading ephemeral share
-                            tracing::debug!(
-                                "ACI container not found for task {} but within grace period ({} < {}), skipping",
+                            Some(UnfinishedFallbackReconciliationAction::Fail {
+                                disable_reason,
+                                error_reason,
+                            }) => self.auto_disable_failed_action(
                                 task_id,
-                                execution_age,
-                                aci_grace_period
-                            );
-                            None
+                                disable_reason,
+                                error_reason.clone(),
+                            ),
+                            None if execution_age > aci_grace_period => {
+                                let (disable_reason, error_reason) =
+                                    missing_aci_registry_reconciliation_reason(
+                                        workspace_dir.as_deref(),
+                                    );
+                                self.auto_disable_failed_action(
+                                    task_id,
+                                    disable_reason,
+                                    error_reason,
+                                )
+                            }
+                            None => {
+                                // Within grace period - might still be uploading ephemeral share
+                                tracing::debug!(
+                                    "ACI container not found for task {} but within grace period ({} < {}), skipping",
+                                    task_id,
+                                    execution_age,
+                                    aci_grace_period
+                                );
+                                None
+                            }
                         }
                     }
                 }
@@ -703,6 +787,24 @@ impl MongoSchedulerStore {
             }
         }
         Ok(summary)
+    }
+
+    fn auto_disable_failed_action(
+        &self,
+        task_id: &str,
+        disable_reason: &str,
+        error_reason: String,
+    ) -> Option<(&'static str, String)> {
+        if let Err(err) = self.disable_task_by_id(task_id, disable_reason) {
+            tracing::error!(
+                "failed to disable task {} during stale reconciliation: {}",
+                task_id,
+                err
+            );
+            None
+        } else {
+            Some(("failed", error_reason))
+        }
     }
 
     pub(crate) fn record_task_debug_archive(
@@ -1537,6 +1639,34 @@ fn missing_aci_registry_reconciliation_reason(
     (
         "auto-disabled: execution started but ACI container was never created",
         "reconciled stale running execution; ACI container not found".to_string(),
+    )
+}
+
+fn unfinished_fallback_reconciliation_action(
+    workspace_dir: Option<&Path>,
+    started_at: chrono::DateTime<Utc>,
+    stale_before: chrono::DateTime<Utc>,
+) -> Option<UnfinishedFallbackReconciliationAction> {
+    let workspace_dir = workspace_dir?;
+    if !workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir) {
+        return None;
+    }
+
+    if started_at <= stale_before {
+        let (disable_reason, error_reason) = unfinished_fallback_reconciliation_reason();
+        Some(UnfinishedFallbackReconciliationAction::Fail {
+            disable_reason,
+            error_reason,
+        })
+    } else {
+        Some(UnfinishedFallbackReconciliationAction::KeepRunning)
+    }
+}
+
+fn unfinished_fallback_reconciliation_reason() -> (&'static str, String) {
+    (
+        "auto-disabled: primary runner failed and fallback never reached a terminal state",
+        "reconciled stale running execution after primary ACI run failed and fallback never reached a terminal state".to_string(),
     )
 }
 
