@@ -1,64 +1,89 @@
-# Memo Sections
+# Monitor Sections
 
-The memo is a single markdown document with the sections below, in order. Each section has a job; collapsing or reordering them weakens the memo. The order here matches the recommended layout below — facts and computed metrics come **before** scenarios so the scenarios visibly stand on the data.
+The monitor is a single document with the sections below, in order. The structure is intentionally scan-first: the badge, thesis impact, and `Why Now` appear before the supporting evidence so the reader gets the signal quickly without losing the evidence trail.
 
 | # | Section | Why it exists |
 |---|---|---|
-| 1 | `## Decision Card` | Two-row table front-loading the verdict for new money and existing holders. A reader who stops here must still know the action. |
-| 2 | `### Near-Term Timing View` | Catalysts and setup over the next 1–2 quarters. Tied to the new-money action. |
-| 3 | `### Long-Term Ownership View` | Multi-year structural thesis. Tied to the existing-holder action. |
-| 4 | `## Verified Facts` | Bullet list. Every line ends in a tier-graded source chip; this is the only place external claims live. |
-| 5 | `## Derived Metrics` | Table of computed values, each with the formula and inputs in the same row. No external citations needed — the formula is the citation. |
-| 6 | `### Bull Case` | Upside scenario with an explicit numeric trigger and price target showing the math. |
-| 7 | `### Base Case` | Central scenario with an explicit numeric trigger and price target. |
-| 8 | `### Bear Case` | Downside scenario with an explicit invalidation condition and price target. |
-| 9 | `## Triggers` | Explicit upgrade / add / trim / exit conditions, all quantitative. |
-| 10 | `## Judgment` | One short paragraph. The only section where inference is acceptable; label it as such and state confidence. |
+| 1 | `## Decision Card` | Front-loads the badge plus the supporting signal fields. This is the headline judgment. |
+| 2 | `## Why Now` | Explains why the signal matters now, or why there is no material signal now. |
+| 3 | `## Dual-Horizon Framing` | Full monitors only. Separates near-term timing from long-term ownership. |
+| 4 | `## Verified Facts` | Full monitors only. Bullet list of sourced factual claims. |
+| 5 | `## Derived Metrics` | Full monitors only. Computed values with formulas and inputs. |
+| 6 | `## Scenarios` | Full monitors only. Bull/base/bear framing with explicit conditions. |
+| 7 | `## What Would Change The View` | The explicit thresholds or events that move the signal. |
+| 8 | `## Judgment` | Full monitors only. One short paragraph of labelled inference. |
+| 9 | `## Evidence Chips` | Concise monitors only. Short sourced fact list in place of the full evidence stack. |
+
+## Required Decision Card fields
+
+The `Decision Card` is a field/value table. Always include:
+
+- `Monitor Status`
+- `Signal Direction`
+- `Thesis Impact`
+- `Signal Quality`
+- `Urgency`
+- `Confidence`
+- `Main Risk To The Signal`
+- `Not Personalized Advice`
+
+When the channel or product contract already expects them, also include:
+
+- `New Money Action`
+- `Existing Holder Action`
+
+Those action rows are secondary translations. They do not replace the monitor badge.
 
 ## Recommended top-to-bottom layout
 
-```
-# {TICKER} — Investment Decision Memo
+```markdown
+# {TICKER} — Equity Signal Monitor
 **As of:** {YYYY-MM-DD} · **Price:** ${PRICE}
 
 **Investor question:** {one-line restatement}
 
-## Decision Card                           (table: Audience | Action | Confidence)
+## Decision Card                    (table: Field | Value)
 **One-line rationale:** ...
+**Main Risk To The Signal:** ...
+**Not Personalized Advice:** This is a public-market signal assessment, not personalized financial advice.
 
-## Dual-Horizon Framing
-### Near-Term Timing View (next 1–2 quarters)
+## Why Now
+
+## Dual-Horizon Framing             (full monitor only)
+### Near-Term Timing View (next 1-2 quarters)
 ### Long-Term Ownership View (multi-year)
 
-## Verified Facts (Evidence Layer)
+## Verified Facts                   (full monitor only)
 - ... ([Source name](URL))
 
-## Derived Metrics
+## Derived Metrics                  (full monitor only)
 | Metric | Value | Formula / Inputs |
 
-## Scenarios
+## Scenarios                        (full monitor only)
 ### Bull Case
 ### Base Case
 ### Bear Case
 
-## Triggers — Verdict Movement
-- **Upgrade to Buy (new money):** ...
-- **Add (existing holder):** ...
-- **Trim/Exit:** ...
+## What Would Change The View
+- **Upgrade / Review Now:** ...
+- **Downgrade / De-risk:** ...
+- **Invalidation:** ...
 
-## Judgment
-(brief paragraph; state confidence and the single biggest reason it isn't higher)
+## Judgment                         (full monitor only)
+
+## Evidence Chips                   (concise monitor only)
+- ... ([Source name](URL))
 ```
 
 ## Header conventions
 
-- Use ATX headers (`#`, `##`, `###`). Setext headers underlined with `===` or `---` are harder to parse downstream.
-- The H1 may include the ticker for human readability.
-- Keep `Bull Case` / `Base Case` / `Bear Case` as exact strings — many downstream tools and templates depend on those literals.
-- One-line bold prefixes inside bullets (`**Trigger:** ...`) are preferred over sub-headers; they keep the memo dense.
+- Use ATX headers (`#`, `##`, `###`).
+- Keep `Why Now`, `What Would Change The View`, and `Evidence Chips` as exact strings in concise monitors.
+- Keep `Bull Case`, `Base Case`, and `Bear Case` as exact strings in full monitors.
+- Prefer short bold labels inside paragraphs over long prose preambles.
 
 ## Length and density
 
-- Target 1,500–6,000 characters. Below 1,500 the memo is usually missing scenarios or triggers; above 6,000 it stops being a one-pager.
-- Prefer tables over prose for anything with two or more comparable values.
-- Bullets > paragraphs for facts and triggers.
+- Full monitors should stay roughly one page. If the answer is drifting into a long essay, cut repetition before cutting the signal fields.
+- Concise monitors should still feel decision-useful. Short means compressed, not vague.
+- Bullets and tables beat generic paragraphs for evidence, scenarios, and thresholds.
