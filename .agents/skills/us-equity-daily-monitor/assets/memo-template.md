@@ -1,76 +1,88 @@
-# {TICKER} — Investment Decision Memo
+# {TICKER} — Equity Signal Monitor
 **As of:** {YYYY-MM-DD} · **Price:** ${PRICE}
 
 **Investor question:** {one-line restatement of what the reader actually asked}
 
 ## Decision Card
 
-| Audience | Action | Confidence |
-|---|---|---|
-| New money | {Buy / Wait / Starter Only / Avoid for now} | {Low / Medium / High} |
-| Existing holder | {Hold / Add / Trim / Exit / Hold/Do not add} | {Low / Medium / High} |
+| Field | Value |
+|---|---|
+| Monitor Status | {Review Now / Watch Closely / No Material Change / Insufficient Evidence} |
+| Signal Direction | {Positive / Neutral / Negative} |
+| Thesis Impact | {Positive / Neutral / Negative} |
+| Signal Quality | {Strong / Mixed / Thin} |
+| Urgency | {High / Medium / Low} |
+| Confidence | {High / Medium / Low} |
+| New Money Action* | {Starter Only / Wait / Avoid for now / n/a} |
+| Existing Holder Action* | {Hold/Do not add / Trim / Exit / n/a} |
 
-**One-line rationale:** {one sentence explaining why the actions diverge or align across the two audiences, anchored to the dominant near-term catalyst}.
+**One-line rationale:** {one sentence explaining why the badge is the right calibrated signal call now.}
+
+**Main Risk To The Signal:** {the single most important risk or evidence gap that could blunt, reverse, or overstate the signal.}
+
+**Not Personalized Advice:** This is a public-market signal assessment, not personalized financial advice.
+
+## Why Now
+
+{2-4 sentences. Explain why the signal matters now, or why there is no material signal now. If the signal is weak or incomplete, name the exact missing fact or unresolved variable.}
 
 ## Dual-Horizon Framing
 
-### Near-Term Timing View (next 1–2 quarters)
-{2–4 sentences. Name the dominant catalyst (earnings print, guide, regulatory event, product cycle), say which setup is most likely, and tie it to the new-money action.}
+### Near-Term Timing View (next 1-2 quarters)
+{2-4 sentences. Name the dominant catalyst and explain the near-term setup without collapsing into generic caution.}
 
 ### Long-Term Ownership View (multi-year)
-{2–4 sentences. Structural drivers — TAM, secular demand, competitive moat, capital-return policy. Tie to the existing-holder action; explain whether position-sizing or entry timing dominates.}
+{2-4 sentences. Structural drivers, competitive position, or capital structure. Keep this separate from the near-term signal.}
 
-## Verified Facts (Evidence Layer)
+## Verified Facts
 
 - {Reported figure with units} ([{Source name}]({URL}))
-- {Guidance figure} ([{Source name}]({URL}))
-- {Industry data point} ([{Source name}]({URL}))
+- {Guidance figure or management comment} ([{Source name}]({URL}))
+- {Industry or competitor datapoint} ([{Source name}]({URL}))
 - {Disclosure or risk factor from a filing} ([SEC EDGAR]({URL}))
-- {Macro or competitive datapoint} ([{Source name}]({URL}))
 
-> Aim for ≥3 distinct sources spanning ≥2 tiers, with at least one primary (filing or IR).
+> Aim for >=3 distinct sources in a full monitor, spanning >=2 tiers, with at least one primary source.
 
 ## Derived Metrics
 
 | Metric | Value | Formula / Inputs |
 |---|---|---|
-| P/E (TTM) | {VALUE}x | ${PRICE} / TTM diluted EPS ${TTM_EPS} |
-| Revenue YoY ({Q}) | {VALUE}% | ${LAST_REV}M / ${PRIOR_REV}M − 1 |
-| FCF margin (TTM) | {VALUE}% | TTM FCF ${TTM_FCF}M / TTM revenue ${TTM_REV}M |
-| Peer median P/E | {VALUE}x | Median of {peer tickers} |
+| {Core valuation or setup metric} | {VALUE} | {Formula / Inputs} |
+| {Growth or margin metric} | {VALUE} | {Formula / Inputs} |
+| {Balance-sheet or cash-flow metric} | {VALUE} | {Formula / Inputs or "Not reliably derivable"} |
 
 > If your inputs match the canonical schema in `references/data-adapters.md`, run `scripts/compute_metrics.py` to generate this block.
 
 ## Scenarios
 
 ### Bull Case
-**Trigger:** {explicit numeric condition, e.g. "Q1 revenue ≥ $44B AND Q2 GM ≥ 73%"}. Implied 12-month price ≈ ${TARGET} (≈{N}x forward EPS of ${FWD_EPS}).
+**Trigger:** {explicit numeric condition}. {Explain what becomes true if the bullish signal is confirmed.}
 
 ### Base Case
-**Trigger:** {explicit numeric range, e.g. "Q1 revenue $42–44B AND GM 70–73%"}. Implied 12-month price ≈ ${TARGET} (≈{N}x forward EPS of ${FWD_EPS}).
+**Trigger:** {explicit numeric range or expected path}. {Explain the most likely read-through.}
 
 ### Bear Case
-**Invalidation:** {explicit numeric condition, e.g. "Q1 revenue < $40B OR GM < 70% OR top-3 customer cuts capex guide ≥ 10%"}. Implied 12-month price ≈ ${TARGET}.
+**Invalidation:** {explicit numeric condition}. {Explain what breaks the thesis or weakens the signal materially.}
 
-## Triggers — Verdict Movement
+## What Would Change The View
 
-- **Upgrade to Buy (new money):** {numeric threshold, e.g. "GM print ≥ 71% in Q1 with FY commentary ≥ $200B run-rate"}.
-- **Add (existing holder):** {numeric threshold, e.g. "Stock pulls back ≥ 15% from ${REF_PRICE} with no fundamental reset"}.
-- **Trim/Exit:** {numeric threshold, e.g. "Two consecutive quarters of GM decline > 200bps without recovery roadmap, OR a disclosed top-3-customer design-win loss"}.
+- **Upgrade / Review Now:** {numeric threshold or verified event that would justify a more urgent review.}
+- **Downgrade / De-risk:** {numeric threshold or verified event that would worsen the signal materially.}
+- **Invalidation:** {specific fact pattern that would break the current framing.}
 
 ## Judgment
 
-{One short paragraph. This is the only section where inference is acceptable; label it as such. State confidence and the single biggest reason it isn't higher.}
+*Inference, {High / Medium / Low} confidence.* {One short paragraph. Explain the calibrated signal call, the biggest reason confidence is not higher, and keep any remaining caution specific rather than generic.}
 
 ---
 
 ### Author checklist (delete before publishing)
 
-- [ ] Both audiences have an action drawn from the controlled vocabulary.
-- [ ] Confidence is `Low`, `Medium`, or `High`.
-- [ ] ≥ 3 distinct sources cited, ≥ 1 primary, ≥ 2 tiers represented.
-- [ ] `P/E (TTM)` and `Revenue YoY` shown with formula and inputs.
-- [ ] ≥ 6 quantitative thresholds (`%`, `$`, `bps`, `x`) across triggers and scenarios.
-- [ ] Length ~1,500–6,000 characters (one-page memo).
-- [ ] Every fact in **Verified Facts** ends in a source chip; every metric in **Derived Metrics** ends in a formula.
-- [ ] Inference confined to the **Judgment** section.
+- [ ] I chose exactly one badge from `Review Now / Watch Closely / No Material Change / Insufficient Evidence`.
+- [ ] I stated `Signal Direction`, `Thesis Impact`, `Signal Quality`, `Urgency`, and `Confidence`.
+- [ ] `Why Now` is specific and evidence-based.
+- [ ] I named the `Main Risk To The Signal`.
+- [ ] `What Would Change The View` contains explicit thresholds or concrete events.
+- [ ] I avoided generic `wait/hold/be careful/it depends` filler.
+- [ ] I kept any action rows secondary rather than as the headline answer.
+- [ ] The compliance sentence appears once and stays concise.

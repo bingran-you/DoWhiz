@@ -4,7 +4,7 @@ Read this only when running inside the SkillsBench `equity-investment-memo` task
 
 ## Fixed paths
 
-The task fixture provides inputs at `/root/data/` and expects the memo at `/root/memo.md`:
+The task fixture provides inputs at `/root/data/` and expects the monitor artifact at `/root/memo.md`:
 
 | Path | Role |
 |---|---|
@@ -15,15 +15,15 @@ The task fixture provides inputs at `/root/data/` and expects the memo at `/root
 | `/root/data/prices.csv` | Trailing 252 trading days of daily closes |
 | `/root/data/transcript_excerpt.txt` | Earnings-call passages |
 | `/root/data/analyst_consensus.json` | Sell-side mean target, rating distribution, next-quarter consensus |
-| `/root/data/question.txt` | Investor's actual question — the memo must answer it |
-| `/root/memo.md` | **Output** — write the GitHub-flavored markdown memo here |
+| `/root/data/question.txt` | Investor's actual question — the monitor must answer it |
+| `/root/memo.md` | **Output** — write the GitHub-flavored markdown monitor here |
 
 ## Constraints specific to the task
 
 - Use only the files in `/root/data/`; do not fetch external data. The grader reproduces metrics from these inputs, so anything pulled live would either fail to verify or introduce a mismatch.
 - Treat `snapshot.json.snapshot_date` as "today" — the news set, prices, and fundamentals are all cut to that date.
 - Cite source URLs verbatim from `news.json`. The grader matches by exact URL, so paraphrased or trimmed URLs will not count toward the citation threshold. The `tier` field on each item maps directly to the three-tier framework in `references/evidence.md` (`primary` / `independent` / `reference`).
-- Memo length is bounded at 800–12,000 characters; aim for 1,500–6,000.
+- Monitor length is bounded at 800–12,000 characters; aim for 1,500–6,000.
 
 ## Recommended invocation
 
@@ -31,7 +31,7 @@ The task fixture provides inputs at `/root/data/` and expects the memo at `/root
 python3 scripts/compute_metrics.py --data-dir /root/data
 ```
 
-Paste the resulting Derived Metrics block into the memo, then fill the rest from `assets/memo-template.md`.
+Paste the resulting Derived Metrics block into the monitor, then fill the rest from `assets/memo-template.md`.
 
 ## Mapping `news.json` to source chips
 

@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 """
-Run final-artifact investment regressions through the real DoWhiz email reply path.
+Run anti-waffle regressions for the U.S. equity daily monitor skill.
 
-This runner does not grade an intermediate model transcript. It invokes the
-`investment_eval` helper, which:
-1. creates a DoWhiz-style workspace
-2. copies runtime skills from DoWhiz_service/skills
-3. runs `run_task`
-4. writes `reply_email_draft.html`
-5. renders the final user-visible email artifact to `final_rendered_email.html`
-
-The grader then checks the final rendered email artifact against the updated
-U.S. equity decision-memo contract.
+The suite supports both fixture-based contract checks and optional live runs
+through the existing `investment_eval` helper. The goal is to verify the
+user-visible artifact contract rather than an internal model transcript.
 """
 
 from __future__ import annotations
@@ -29,17 +22,24 @@ SERVICE_ROOT = Path(__file__).resolve().parents[3]
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 EVALS_ROOT = SKILL_ROOT / "evals"
 WORKSPACE_ROOT = SKILL_ROOT.parent.parent / "us-equity-daily-monitor-workspace"
-REQUIRED_LABELS = [
+
+FULL_REQUIRED_LABELS = [
     "as of:",
     "price:",
     "investor question:",
     "decision card",
-    "audience",
-    "action",
+    "monitor status",
+    "signal direction",
+    "thesis impact",
+    "signal quality",
+    "urgency",
     "confidence",
-    "new money",
-    "existing holder",
+    "new money action",
+    "existing holder action",
     "one-line rationale:",
+    "main risk to the signal:",
+    "not personalized advice:",
+    "why now",
     "dual-horizon framing",
     "near-term timing view",
     "long-term ownership view",
@@ -49,24 +49,75 @@ REQUIRED_LABELS = [
     "bull case",
     "base case",
     "bear case",
-    "triggers",
+    "what would change the view",
+    "upgrade / review now",
+    "downgrade / de-risk",
+    "invalidation",
     "judgment",
 ]
-SECTION_ORDER = [
+
+SHORT_REQUIRED_LABELS = [
+    "as of:",
+    "price:",
+    "investor question:",
     "decision card",
+    "monitor status",
+    "signal direction",
+    "thesis impact",
+    "signal quality",
+    "urgency",
+    "confidence",
+    "new money action",
+    "existing holder action",
+    "one-line rationale:",
+    "main risk to the signal:",
+    "not personalized advice:",
+    "why now",
+    "what would change the view",
+    "upgrade / review now",
+    "downgrade / de-risk",
+    "invalidation",
+    "evidence chips",
+]
+
+FULL_ORDER = [
+    "decision card",
+    "why now",
     "dual-horizon framing",
     "verified facts",
     "derived metrics",
     "scenarios",
-    "triggers",
+    "what would change the view",
     "judgment",
 ]
-LINKED_EVIDENCE_SECTIONS = ["verified facts"]
+
+SHORT_ORDER = [
+    "decision card",
+    "why now",
+    "what would change the view",
+    "evidence chips",
+]
+
+DEFAULT_BANNED_PHRASES = [
+    "wait and see",
+    "do not rush",
+    "hold for now",
+    "it depends",
+    "be careful",
+    "markets are uncertain",
+    "could go either way",
+    "consult a financial advisor",
+    "great business, but",
+    "good company, but",
+    "wait until after earnings",
+    "wait for clarity",
+    "do not chase",
+]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--iteration", default="iteration-final-artifact")
+    parser.add_argument("--iteration", default="iteration-anti-waffle")
     parser.add_argument("--eval-ids", nargs="*", type=int)
     return parser.parse_args()
 
@@ -98,20 +149,20 @@ def contains_in_order(text: str, markers: list[str]) -> bool:
 
 
 def find_heading_position(html_lower: str, heading: str) -> int | None:
-    for marker in [f">{heading}", f">{heading} "]:
+    for marker in [f">{heading}<", f">{heading} ", f">{heading}\n"]:
         idx = html_lower.find(marker)
         if idx != -1:
             return idx
     return None
 
 
-def extract_section(html_lower: str, heading: str) -> str | None:
+def extract_section(html_lower: str, heading: str, headings: list[str]) -> str | None:
     start = find_heading_position(html_lower, heading)
     if start is None:
         return None
     section_start = start + 1
     end = len(html_lower)
-    for next_heading in SECTION_ORDER:
+    for next_heading in headings:
         if next_heading == heading:
             continue
         idx = find_heading_position(html_lower[section_start:], next_heading)
@@ -120,76 +171,97 @@ def extract_section(html_lower: str, heading: str) -> str | None:
     return html_lower[start:end]
 
 
-def section_contains_link(html_lower: str, heading: str) -> bool:
-    section = extract_section(html_lower, heading)
+def count_clickable_links(html_lower: str) -> int:
+    return html_lower.count('href="http') + html_lower.count("href='http")
+
+
+def section_contains_link(html_lower: str, heading: str, headings: list[str]) -> bool:
+    section = extract_section(html_lower, heading, headings)
     if not section:
         return False
     return 'href="http' in section or "href='http" in section
 
 
-def count_clickable_links(html_lower: str) -> int:
-    return html_lower.count('href="http') + html_lower.count("href='http")
-
-
 def derived_metrics_has_formula(html_lower: str) -> bool:
-    section = extract_section(html_lower, "derived metrics")
+    section = extract_section(html_lower, "derived metrics", FULL_ORDER)
     if not section:
         return False
     text = normalize_text(section)
     return (
-        "/" in text
+        "formula / inputs" in text
+        or "/" in text
         or "=" in text
         or "not reliably derivable" in text
-        or "formula" in text
         or "<table" in section
     )
 
 
-def triggers_section_has_required_markers(html_lower: str) -> bool:
-    section = extract_section(html_lower, "triggers")
+def count_numeric_hits(text: str) -> int:
+    digit_runs = re.findall(r"\d+", text)
+    explicit_units = text.count("%") + text.count("$") + text.count("bps") + text.count("x")
+    word_hits = 0
+    number_words = r"(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    time_units = r"(day|days|week|weeks|month|months|quarter|quarters|year|years)"
+    word_hits += len(re.findall(rf"\b{number_words}\s+{time_units}\b", text))
+    word_hits += len(re.findall(rf"\b{number_words}\s+more\s+{time_units}\b", text))
+    return len(digit_runs) + explicit_units + word_hits
+
+
+def decision_card_core_precedes_actions(text: str) -> bool:
+    required = [
+        "monitor status",
+        "signal direction",
+        "thesis impact",
+        "signal quality",
+        "urgency",
+        "confidence",
+        "new money action",
+        "existing holder action",
+    ]
+    positions = [text.find(marker) for marker in required]
+    if any(position == -1 for position in positions):
+        return False
+    return positions == sorted(positions)
+
+
+def why_now_specific(html_lower: str, contract: str) -> bool:
+    headings = FULL_ORDER if contract == "full" else SHORT_ORDER
+    section = extract_section(html_lower, "why now", headings)
     if not section:
         return False
+    words = normalize_text(section).split()
+    return len(words) >= 12
+
+
+def main_risk_present(text: str) -> bool:
+    return "main risk to the signal:" in text and len(text.split("main risk to the signal:", 1)[1].split()) >= 8
+
+
+def change_view_ok(html_lower: str, contract: str) -> tuple[bool, str]:
+    headings = FULL_ORDER if contract == "full" else SHORT_ORDER
+    section = extract_section(html_lower, "what would change the view", headings)
+    if not section:
+        return False, "missing section"
     text = normalize_text(section)
-    has_upgrade = "upgrade to buy" in text
-    has_add = "add" in text
-    has_trim_or_exit = "trim/exit" in text or "trim" in text or "exit" in text
-    return has_upgrade and has_add and has_trim_or_exit
+    markers = ["upgrade / review now", "downgrade / de-risk", "invalidation"]
+    if not all(marker in text for marker in markers):
+        return False, "missing upgrade/downgrade/invalidation markers"
+    numeric_hits = count_numeric_hits(text)
+    if numeric_hits < 3:
+        return False, f"not enough numeric specificity ({numeric_hits})"
+    return True, f"numeric_hits={numeric_hits}"
 
 
-def extract_confidence_phrase(text: str) -> str | None:
-    for phrase in ["low confidence", "medium confidence", "high confidence"]:
-        if phrase in text:
-            return phrase
-    return None
+def compliance_sentence_once(text: str) -> bool:
+    return text.count("not personalized financial advice") == 1
 
 
-def audit_artifact(artifact_html: str) -> dict[str, Any]:
-    text = normalize_text(artifact_html)
-    html_lower = artifact_html.lower()
-    missing_labels = [label for label in REQUIRED_LABELS if label not in text]
-    decision_card_pos = text.find("decision card")
-    return {
-        "normalized_text": text,
-        "missing_labels": missing_labels,
-        "decision_card_rows_ok": all(
-            label in text
-            for label in ["audience", "action", "confidence", "new money", "existing holder"]
-        ),
-        "dual_horizon_ok": all(
-            label in text for label in ["near-term timing view", "long-term ownership view"]
-        ),
-        "scenarios_ok": all(label in text for label in ["bull case", "base case", "bear case"]),
-        "triggers_ok": triggers_section_has_required_markers(html_lower),
-        "derived_metrics_ok": derived_metrics_has_formula(html_lower),
-        "summary_first_ok": contains_in_order(text, SECTION_ORDER),
-        "decision_card_near_top": decision_card_pos != -1 and decision_card_pos < 700,
-        "clickable_link_count": count_clickable_links(html_lower),
-        "linked_evidence_sections": {
-            heading: section_contains_link(html_lower, heading)
-            for heading in LINKED_EVIDENCE_SECTIONS
-        },
-        "confidence_phrase": extract_confidence_phrase(text),
-    }
+def banned_phrases_found(text: str, extra: list[str] | None = None) -> list[str]:
+    scan_text = text.split("decision card", 1)[1] if "decision card" in text else text
+    phrases = list(DEFAULT_BANNED_PHRASES)
+    if extra:
+        phrases.extend(extra)
+    return [phrase for phrase in phrases if phrase in scan_text]
 
 
 def run_live_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
@@ -251,10 +323,7 @@ def run_live_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
 
 
 def run_fixture_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
-    if case.get("artifact_file"):
-        artifact_html = (EVALS_ROOT / case["artifact_file"]).read_text()
-    else:
-        artifact_html = case["artifact_html"]
+    artifact_html = (EVALS_ROOT / case["artifact_file"]).read_text()
     rendered_path = eval_dir / "final_rendered_email.html"
     rendered_path.write_text(artifact_html)
     return {
@@ -265,139 +334,189 @@ def run_fixture_eval(case: dict[str, Any], eval_dir: Path) -> dict[str, Any]:
     }
 
 
+def audit_artifact(case: dict[str, Any], artifact_html: str) -> dict[str, Any]:
+    contract = case.get("contract", "full")
+    text = normalize_text(artifact_html)
+    html_lower = artifact_html.lower()
+    labels = FULL_REQUIRED_LABELS if contract == "full" else SHORT_REQUIRED_LABELS
+    order = FULL_ORDER if contract == "full" else SHORT_ORDER
+    evidence_heading = "verified facts" if contract == "full" else "evidence chips"
+    change_view_passed, change_view_detail = change_view_ok(html_lower, contract)
+
+    return {
+        "contract": contract,
+        "text": text,
+        "html_lower": html_lower,
+        "missing_labels": [label for label in labels if label not in text],
+        "summary_first_ok": contains_in_order(text, order),
+        "decision_card_near_top": text.find("decision card") != -1 and text.find("decision card") < 500,
+        "decision_card_order_ok": decision_card_core_precedes_actions(text),
+        "clickable_link_count": count_clickable_links(html_lower),
+        "evidence_section_has_link": section_contains_link(html_lower, evidence_heading, order),
+        "derived_metrics_ok": derived_metrics_has_formula(html_lower) if contract == "full" else True,
+        "why_now_specific": why_now_specific(html_lower, contract),
+        "main_risk_present": main_risk_present(text),
+        "change_view_ok": change_view_passed,
+        "change_view_detail": change_view_detail,
+        "compliance_sentence_once": compliance_sentence_once(text),
+        "banned_phrases": banned_phrases_found(text, case.get("banned_phrases")),
+    }
+
+
+def make_check(name: str, passed: bool, detail: str) -> dict[str, Any]:
+    return {"name": name, "passed": passed, "detail": detail}
+
+
 def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, Any]:
-    audit = audit_artifact(run_result["artifact_html"])
-    text = audit["normalized_text"]
+    audit = audit_artifact(case, run_result["artifact_html"])
+    text = audit["text"]
     checks: list[dict[str, Any]] = []
 
     if case.get("expected_failure"):
-        failed_reasons = []
+        reasons = []
         if audit["missing_labels"]:
-            failed_reasons.append(f"missing labels: {', '.join(audit['missing_labels'])}")
-        if not audit["summary_first_ok"]:
-            failed_reasons.append("section order missing")
-        if not audit["decision_card_rows_ok"]:
-            failed_reasons.append("decision card rows missing")
-        if audit["clickable_link_count"] < 3:
-            failed_reasons.append("citations missing")
-        if audit["derived_metrics_ok"]:
-            failed_reasons.append("generic fixture unexpectedly contains metric structure")
+            reasons.append(f"missing labels: {', '.join(audit['missing_labels'])}")
+        if not audit["why_now_specific"]:
+            reasons.append("why now is generic")
+        if not audit["main_risk_present"]:
+            reasons.append("main risk missing")
+        if not audit["change_view_ok"]:
+            reasons.append(audit["change_view_detail"])
+        if audit["banned_phrases"]:
+            reasons.append(f"banned phrases: {', '.join(audit['banned_phrases'])}")
+        if not audit["compliance_sentence_once"]:
+            reasons.append("compliance sentence missing or repeated")
         checks.append(
-            {
-                "name": "generic_commentary_fixture_rejected",
-                "passed": bool(failed_reasons),
-                "detail": "; ".join(failed_reasons)
-                if failed_reasons
-                else "fixture unexpectedly passed the stronger contract",
-            }
+            make_check(
+                "anti_waffle_fixture_rejected",
+                bool(reasons),
+                "; ".join(reasons) if reasons else "fixture unexpectedly passed the anti-waffle contract",
+            )
         )
-    elif case.get("require_contract"):
+        return {
+            "checks": checks,
+            "passed": all(check["passed"] for check in checks),
+            "artifact_path": run_result["final_rendered_path"],
+            "reply_draft_path": run_result["reply_draft_path"],
+            "recovery_note": run_result.get("recovery_note"),
+        }
+
+    checks.append(
+        make_check(
+            "required_labels_present",
+            not audit["missing_labels"],
+            "ok" if not audit["missing_labels"] else f"missing={audit['missing_labels']}",
+        )
+    )
+
+    checks.append(
+        make_check(
+            "decision_card_keeps_signal_primary",
+            audit["decision_card_order_ok"],
+            "ok" if audit["decision_card_order_ok"] else "core signal rows do not precede action rows",
+        )
+    )
+
+    for field_name, case_key in [
+        ("monitor status", "expected_status"),
+        ("signal direction", "expected_signal_direction"),
+        ("thesis impact", "expected_thesis_impact"),
+        ("signal quality", "expected_signal_quality"),
+        ("urgency", "expected_urgency"),
+        ("confidence", "expected_confidence"),
+    ]:
+        if case_key not in case:
+            continue
+        expected = case[case_key].lower()
         checks.append(
-            {
-                "name": "required_contract_labels_present",
-                "passed": not audit["missing_labels"] and audit["derived_metrics_ok"],
-                "detail": "ok"
-                if not audit["missing_labels"] and audit["derived_metrics_ok"]
-                else (
-                    f"missing={audit['missing_labels']} derived_metrics_ok={audit['derived_metrics_ok']}"
-                ),
-            }
+            make_check(
+                f"{field_name.replace(' ', '_')}_matches",
+                f"{field_name} {expected}" in text,
+                "ok" if f"{field_name} {expected}" in text else f"expected `{field_name} {expected}`",
+            )
         )
 
-    if case.get("require_decision_card"):
+    if case.get("require_why_now"):
         checks.append(
-            {
-                "name": "decision_card_rows_present",
-                "passed": audit["decision_card_rows_ok"],
-                "detail": "ok" if audit["decision_card_rows_ok"] else "missing audience/action/confidence rows",
-            }
+            make_check(
+                "why_now_is_specific",
+                audit["why_now_specific"],
+                "ok" if audit["why_now_specific"] else "why now section missing or too generic",
+            )
         )
 
-    if case.get("require_dual_horizon"):
+    if case.get("require_main_risk"):
         checks.append(
-            {
-                "name": "dual_horizon_present",
-                "passed": audit["dual_horizon_ok"],
-                "detail": "ok"
-                if audit["dual_horizon_ok"]
-                else "near-term or long-term view missing",
-            }
+            make_check(
+                "main_risk_present",
+                audit["main_risk_present"],
+                "ok" if audit["main_risk_present"] else "main risk to the signal missing",
+            )
         )
 
-    if case.get("require_scenarios"):
+    if case.get("require_change_view"):
         checks.append(
-            {
-                "name": "scenario_block_present",
-                "passed": audit["scenarios_ok"],
-                "detail": "ok" if audit["scenarios_ok"] else "bull/base/bear missing",
-            }
+            make_check(
+                "change_view_is_specific",
+                audit["change_view_ok"],
+                audit["change_view_detail"],
+            )
         )
 
-    if case.get("require_triggers"):
+    if case.get("require_citations") or case.get("min_clickable_links"):
+        min_links = case.get("min_clickable_links", 0)
         checks.append(
-            {
-                "name": "trigger_block_present",
-                "passed": audit["triggers_ok"],
-                "detail": "ok"
-                if audit["triggers_ok"]
-                else "missing upgrade/add plus trim or exit conditions",
-            }
-        )
-
-    if case.get("require_citations"):
-        linked_sections_ok = all(audit["linked_evidence_sections"].values())
-        checks.append(
-            {
-                "name": "clickable_citations_present",
-                "passed": audit["clickable_link_count"] >= 3 and linked_sections_ok,
-                "detail": (
-                    f"links={audit['clickable_link_count']} "
-                    f"linked_sections={audit['linked_evidence_sections']}"
-                ),
-            }
+            make_check(
+                "evidence_links_present",
+                audit["clickable_link_count"] >= min_links and audit["evidence_section_has_link"],
+                f"links={audit['clickable_link_count']} evidence_section_has_link={audit['evidence_section_has_link']}",
+            )
         )
 
     if case.get("require_scan_first"):
         checks.append(
-            {
-                "name": "scan_first_information_architecture",
-                "passed": audit["summary_first_ok"] and audit["decision_card_near_top"],
-                "detail": (
-                    f"summary_first_ok={audit['summary_first_ok']} "
-                    f"decision_card_near_top={audit['decision_card_near_top']}"
-                ),
-            }
+            make_check(
+                "scan_first_order_preserved",
+                audit["summary_first_ok"] and audit["decision_card_near_top"],
+                f"summary_first_ok={audit['summary_first_ok']} decision_card_near_top={audit['decision_card_near_top']}",
+            )
         )
 
-    if case.get("require_live_path_alignment"):
+    if audit["contract"] == "full":
         checks.append(
-            {
-                "name": "live_path_alignment",
-                "passed": str(run_result["reply_draft_path"]).endswith("reply_email_draft.html")
-                and str(run_result["final_rendered_path"]).endswith("final_rendered_email.html"),
-                "detail": f"reply={run_result['reply_draft_path']} final={run_result['final_rendered_path']}",
-            }
+            make_check(
+                "derived_metrics_are_formula_based",
+                audit["derived_metrics_ok"],
+                "ok" if audit["derived_metrics_ok"] else "derived metrics block lacks formula-like content",
+            )
         )
+
+    if case.get("require_compliance_sentence"):
+        checks.append(
+            make_check(
+                "single_concise_compliance_sentence",
+                audit["compliance_sentence_once"],
+                "ok" if audit["compliance_sentence_once"] else "missing or repeated compliance sentence",
+            )
+        )
+
+    checks.append(
+        make_check(
+            "generic_waffle_phrases_absent",
+            not audit["banned_phrases"],
+            "ok" if not audit["banned_phrases"] else f"found={audit['banned_phrases']}",
+        )
+    )
 
     if case.get("must_contain_any"):
-        passed = any(s.lower() in run_result["artifact_html"].lower() for s in case["must_contain_any"])
+        lower_html = run_result["artifact_html"].lower()
+        passed = any(needle.lower() in lower_html for needle in case["must_contain_any"])
         checks.append(
-            {
-                "name": "required_correction_or_phrase_present",
-                "passed": passed,
-                "detail": "ok" if passed else f"missing any of {case['must_contain_any']}",
-            }
-        )
-
-    if case.get("allowed_confidence"):
-        confidence_phrase = audit["confidence_phrase"] or ""
-        allowed = [f"{value.lower()} confidence" for value in case["allowed_confidence"]]
-        checks.append(
-            {
-                "name": "confidence_degrades_for_weaker_case",
-                "passed": any(value in confidence_phrase for value in allowed),
-                "detail": f"confidence={confidence_phrase or '(missing)'}",
-            }
+            make_check(
+                "required_specific_phrase_present",
+                passed,
+                "ok" if passed else f"missing any of {case['must_contain_any']}",
+            )
         )
 
     return {
@@ -420,11 +539,7 @@ def main() -> None:
     for case in selected:
         eval_dir = iteration_dir / f"eval-{case['id']}-{case['name']}"
         eval_dir.mkdir(parents=True, exist_ok=True)
-        if case["kind"] == "live_run":
-            run_result = run_live_eval(case, eval_dir)
-        else:
-            run_result = run_fixture_eval(case, eval_dir)
-
+        run_result = run_live_eval(case, eval_dir) if case["kind"] == "live_run" else run_fixture_eval(case, eval_dir)
         grading = grade_case(case, run_result)
         (eval_dir / "final_rendered_email.html").write_text(run_result["artifact_html"])
         (eval_dir / "grading.json").write_text(json.dumps(grading, indent=2))
