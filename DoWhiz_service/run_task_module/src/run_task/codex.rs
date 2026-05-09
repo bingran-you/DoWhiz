@@ -536,6 +536,28 @@ fn late_codex_failure_description(exit_status: Option<i32>, failure_output: &str
     }
 }
 
+fn clear_stale_session_files_for_workspace(workspace_dir: &Path) {
+    let Ok(home) = env::var("HOME") else {
+        return;
+    };
+    let sessions_root = PathBuf::from(home).join(".codex").join("sessions");
+    if !sessions_root.exists() {
+        return;
+    }
+    let mut session_files = Vec::new();
+    if collect_session_jsonl_files(&sessions_root, &mut session_files).is_err() {
+        return;
+    }
+    let workspace_marker = workspace_dir.to_string_lossy();
+    for session_path in session_files {
+        if let Ok(contents) = fs::read_to_string(&session_path) {
+            if contents.contains(workspace_marker.as_ref()) {
+                let _ = fs::remove_file(&session_path);
+            }
+        }
+    }
+}
+
 fn maybe_recover_reply_artifact_from_recent_session(
     workspace_dir: &Path,
     expected_reply_path: &Path,
@@ -628,7 +650,7 @@ fn maybe_recover_reply_artifact_from_recent_session_with_min_mtime(
 }
 
 fn extract_reply_artifact_from_session_jsonl(output: &str, target_name: &str) -> Option<String> {
-    for line in output.lines() {
+    for line in output.lines().rev() {
         if !line.contains(target_name) {
             continue;
         }
@@ -1037,6 +1059,7 @@ fn run_codex_task_with_options(
     options: CodexExecutionOptions,
 ) -> Result<RunTaskOutput, RunTaskError> {
     super::env::load_env_sources(request.workspace_dir)?;
+    clear_stale_session_files_for_workspace(request.workspace_dir);
     if options.prefer_fast_completion {
         ensure_fast_completion_context_file(request.workspace_dir)?;
     }
