@@ -591,7 +591,7 @@ fn maybe_recover_reply_artifact_from_recent_session(
 }
 
 fn extract_reply_artifact_from_session_jsonl(output: &str, target_name: &str) -> Option<String> {
-    for line in output.lines() {
+    for line in output.lines().rev() {
         if !line.contains(target_name) {
             continue;
         }
