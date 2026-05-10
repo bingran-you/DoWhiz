@@ -72,6 +72,9 @@ pub struct UserIdentities {
     /// Notion database ID for TPM task board (pre-fetched to avoid container Supabase queries)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notion_database_id: Option<String>,
+    /// Discord guild (server) ID for TPM bug scanning
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discord_guild_id: Option<String>,
     /// Organization members for task assignment (name + email from auth.users)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organization_members: Vec<OrgMember>,

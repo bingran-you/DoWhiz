@@ -420,6 +420,7 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
             if let Ok(Some(org)) = store.get_organization_by_id(org_id) {
                 result.organization_name = Some(org.name);
                 result.notion_database_id = org.notion_database_id;
+                result.discord_guild_id = org.discord_guild_id;
             }
             // Fetch org members for task assignment
             if let Ok(members) = store.list_org_members_with_info(org_id) {
