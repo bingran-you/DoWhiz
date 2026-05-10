@@ -482,15 +482,15 @@ struct DeveloperProfile {
 ## Implementation
 
 ### Organization-Based Routing
-- ✅ Add `organizations` table to Supabase
-- ✅ Add `organization_id` column to `accounts` table
-- ✅ Update gateway to fetch account's organization and route accordingly
+- Add `organizations` table to Supabase
+- Add `organization_id` column to `accounts` table
+- Update gateway to fetch account's organization and route accordingly
 - Frontend: org search + join flow in DoWhiz account settings
 
 ### Core Task Queue
-- ✅ MongoDB collection + CRUD operations (`dev_task_store.rs`)
-- ✅ TPM CLI commands (`tpm_cli.rs`): setup-board, create-task, list-tasks, sync-tasks
-- ✅ Cron job initialization (via `setup_tpm_cron` function with synthetic trigger)
+- MongoDB collection + CRUD operations (`dev_task_store.rs`)
+- TPM CLI commands (`tpm_cli.rs`): setup-board, create-task, list-tasks, sync-tasks
+- Cron job initialization (via `setup_tpm_cron` function with synthetic trigger)
 - Manual task creation via Oliver
 - Assignment notifications
 
@@ -521,11 +521,11 @@ Task board commands for managing DevTasks across MongoDB and Notion:
 2. **Before `list-tasks`**, run `sync-tasks` to pull any status changes developers made directly in Notion
 
 **Command purposes:**
-- ✅ `setup-board` — Create Notion database for an organization
-- ✅ `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
-- ✅ `update-task` — Update existing task's assignee, status, or priority
-- ✅ `list-tasks` — List tasks from Notion with filters
-- ✅ `list-users` — List Notion workspace users (for task assignment)
+- `setup-board` — Create Notion database for an organization
+- `create-task` — Oliver autonomously creates tasks (from user feedback, notetaker, market research)
+- `update-task` — Update existing task's assignee, status, or priority
+- `list-tasks` — List tasks from Notion with filters
+- `list-users` — List Notion workspace users (for task assignment)
 - ⚠️ `sync-tasks` — **LEGACY** (was for Notion ↔ MongoDB sync, no longer used)
 
 #### `setup-board` — Create Notion database for an organization
@@ -742,99 +742,99 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ## Progress Log
 ### 5/10/26
 **Completed:**
-- ✅ **Organization Discord Guild Linking** — Organizations can now link a Discord server for community bug scanning
+- **Organization Discord Guild Linking** — Organizations can now link a Discord server for community bug scanning
   - `account_store.rs`: Added `discord_guild_id` field to `Organization` struct and SQL queries
   - `auth.rs`: Added `PUT /auth/organization/:name/discord` endpoint to set guild ID
   - `executor.rs`: Populates `UserIdentities.discord_guild_id` from org config
   - `prompt.rs`: Displays "Discord Server: {guild_id}" in TPM prompt when configured
   - Frontend: Added Discord server ID input in organization settings (Community Bug Tracking section)
-- ✅ **Discord CLI Bug Scanning Commands** — Added channel/message reading for bug scanning workflow
+- **Discord CLI Bug Scanning Commands** — Added channel/message reading for bug scanning workflow
   - `discord_cli list-channels --guild-id <id>` — List all channels in a Discord server
   - `discord_cli read-messages --channel-id <id> --limit 50` — Read recent messages from a channel
   - Updated `prompt.rs` with correct command syntax and TPM workflow step 6 instructions
-- ✅ **Multiple SendReplyTask Follow-ups** — Oliver can now emit multiple follow-up emails in a single run
+- **Multiple SendReplyTask Follow-ups** — Oliver can now emit multiple follow-up emails in a single run
   - Each overdue task gets its own `send_email` entry in `SCHEDULED_TASKS_JSON`
   - Scheduler parses and executes each as a separate `SendReplyTask`
   - Enables per-assignee overdue notifications in a single TPM sync
 
 ### 5/8/26
 **Completed:**
-- ✅ **ETA Field for Deadlines** — Added `ETA` date property to task board schema (`tpm_cli.rs`)
-- ✅ **Notion User ID in Org Members** — `OrgMember` struct now includes `notion_user_id` (from `user_identities` table)
+- **ETA Field for Deadlines** — Added `ETA` date property to task board schema (`tpm_cli.rs`)
+- **Notion User ID in Org Members** — `OrgMember` struct now includes `notion_user_id` (from `user_identities` table)
   - `account_store.rs`: Updated `list_org_members_with_info()` SQL to join `user_identities` for Notion ID
   - `types.rs`: Added `notion_user_id: Option<String>` to `OrgMember`
   - `prompt.rs`: Displays org members with format `- Name (email) | notion_id: xxx`
-- ✅ **Overdue Task Follow-up Instructions** — Added prompt section for checking overdue ETAs during TPM sync
+- **Overdue Task Follow-up Instructions** — Added prompt section for checking overdue ETAs during TPM sync
   - Oliver checks tasks where `ETA < today` and status not Done/Archived
   - Emits `SCHEDULED_TASKS_JSON` block with follow-up emails for each overdue task
   - Scheduler parses delimiters and executes each email as separate `SendReplyTask`
 
 ### 5/5/26
 **Completed:**
-- ✅ **Organization Leader Notion Credentials** — All org members now use the leader's Notion token
+- **Organization Leader Notion Credentials** — All org members now use the leader's Notion token
   - `utils.rs`: `resolve_org_leader_account_id()` checks if user is in org, returns leader's account_id
   - `load_notion_access_token_for_account()` uses leader's credentials for all org members
   - Enables any org member to trigger TPM via any channel (Discord, email, etc.)
-- ✅ **Prevent .notion_env overwrite** — `codex.rs` checks `if !notion_env_file.exists()` before writing
+- **Prevent .notion_env overwrite** — `codex.rs` checks `if !notion_env_file.exists()` before writing
   - Prevents overwriting TPM cron's pre-written leader token
   - Applied to all 4 execution paths: Docker, Local, ACI, Warm Pool
-- ✅ **Organization Members for Task Assignment** — Pass DoWhiz org members to prompt
+- **Organization Members for Task Assignment** — Pass DoWhiz org members to prompt
   - `account_store.rs`: Added `OrgMember` struct and `list_org_members_with_info()` (joins accounts + auth.users)
   - `executor.rs`: Fetches org members when building `UserIdentities`
   - `prompt.rs`: Displays "Known Organization Members" list with name + email
   - Updated Task Assignment Workflow to use three sources (Notion users, org members, discovered from tasks)
-- ✅ **Disabled investment contract validation** — `reply_contract.rs` returns `Ok(None)` early
+- **Disabled investment contract validation** — `reply_contract.rs` returns `Ok(None)` early
   - Was causing 10+ hour task loops due to false positives ("TPM" detected as ticker, etc.)
-- ✅ **Prompt page fallback** — Oliver tries reading page ID before searching when database lookup fails
+- **Prompt page fallback** — Oliver tries reading page ID before searching when database lookup fails
 
 ### 4/21/26
 **Completed:**
-- ✅ Added `list-users` command — Lists all Notion workspace users (for task assignment)
-- ✅ Added `update-task` command — Update existing task's assignee, status, or priority
-- ✅ Added "Archived" status option — Soft-delete tasks by setting status to archived
-- ✅ Fixed `--assignee` flag — Now uses Notion `people` type (was incorrectly using `rich_text`)
-- ✅ Created TPM skill file (`skills/tpm/SKILL.md`) — Comprehensive guide covering:
+- Added `list-users` command — Lists all Notion workspace users (for task assignment)
+- Added `update-task` command — Update existing task's assignee, status, or priority
+- Added "Archived" status option — Soft-delete tasks by setting status to archived
+- Fixed `--assignee` flag — Now uses Notion `people` type (was incorrectly using `rich_text`)
+- Created TPM skill file (`skills/tpm/SKILL.md`) — Comprehensive guide covering:
   - Task management rules (no duplicates, required fields, archive don't delete)
   - Assignment & load balancing workflows
   - Competitive research via web search
   - GitHub → Notion sync patterns
   - Daily TPM sync workflow with report template
-- ✅ Added skill reference in `prompt.rs` — Oliver reads `.agents/skills/tpm/SKILL.md` for detailed workflows
-- ✅ Fixed `.notion_context.json` and `.notion_env` injection — `tpm_cron.rs` now writes workspace_id and NOTION_API_TOKEN to workspace
+- Added skill reference in `prompt.rs` — Oliver reads `.agents/skills/tpm/SKILL.md` for detailed workflows
+- Fixed `.notion_context.json` and `.notion_env` injection — `tpm_cron.rs` now writes workspace_id and NOTION_API_TOKEN to workspace
 
 ###  4/20/26
 **Completed:**
-- ✅ Completed E2E debugging of manual trigger
-- ✅ Fixed incorrect `model` in RunTaskTask, and empty `reply_to` by reading from employee config.
-- ✅ Refactor TPM CLIs to only use notion API (no mongoDB bidirectional sync, which can get messy with many corner cases)
-- ✅ Pass in organization's `notion_database_id` via `UserIdentities` struct, upsert in TPM prompt in `prompt.rs`
+- Completed E2E debugging of manual trigger
+- Fixed incorrect `model` in RunTaskTask, and empty `reply_to` by reading from employee config.
+- Refactor TPM CLIs to only use notion API (no mongoDB bidirectional sync, which can get messy with many corner cases)
+- Pass in organization's `notion_database_id` via `UserIdentities` struct, upsert in TPM prompt in `prompt.rs`
 
 ### 4/17/26
 **Completed:**
-- ✅ Added `sync_user_tasks` to `setup_tpm_cron` — cron tasks now sync to `task_index` immediately so the worker can discover them (previously cron tasks were only in `tasks` collection and would never fire unless another sync happened for the user)
+- Added `sync_user_tasks` to `setup_tpm_cron` — cron tasks now sync to `task_index` immediately so the worker can discover them (previously cron tasks were only in `tasks` collection and would never fire unless another sync happened for the user)
 
 ### 4/16/26
 **Completed:**
-- ✅ Fixed TPM cron user ID mismatch bug — `tpm_cron.rs` now uses `UserStore` to resolve `email_user_id` instead of `account_uuid` for workspace paths and index sync (matches email handler pattern)
-- ✅ Cleaned up 170 stale tasks from `task_index` and 141 from `tasks` collection caused by the mismatch
+- Fixed TPM cron user ID mismatch bug — `tpm_cron.rs` now uses `UserStore` to resolve `email_user_id` instead of `account_uuid` for workspace paths and index sync (matches email handler pattern)
+- Cleaned up 170 stale tasks from `task_index` and 141 from `tasks` collection caused by the mismatch
 
 ### 4/14/26
 **Completed:**
-- ✅ Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
-- ✅ DevTaskStore (`dev_task_store.rs`) — MongoDB CRUD for DevTask with multi-tenant organization scoping
-- ✅ TPM CLI (`tpm_cli.rs`) — Task board commands implemented:
+- Organization-based routing — Supabase `organizations` table, `organization_id` on accounts, gateway routing
+- DevTaskStore (`dev_task_store.rs`) — MongoDB CRUD for DevTask with multi-tenant organization scoping
+- TPM CLI (`tpm_cli.rs`) — Task board commands implemented:
   - `setup-board` — Create Notion database with TPM schema
   - `create-task` — Create task in MongoDB + Notion
   - `list-tasks` — Query tasks with status/assignee filters
   - `sync-tasks` — Pull Notion updates back to MongoDB
-- ✅ TPM Cron module (`tpm_cron.rs`) — `setup_tpm_cron` function for daily cron job setup
-- ✅ TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
-- ✅ Cron job infrastructure — Uses proper Scheduler API (`add_cron_task`) with account-level `tasks.db` storage; synthetic `postmark_payload.json` persists across cron runs (workspace is reused, not recreated)
-- ✅ Automatic cron setup — `setup_tpm_cron()` function called via `POST /api/tpm/setup-cron` when user joins organization
-- ✅ Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
-- ✅ Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
-- ✅ Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
-- ✅ TPM cron trigger endpoint (`POST /api/tpm/setup-cron`) — Calls `setup_tpm_cron()` function directly when first member joins org
+- TPM Cron module (`tpm_cron.rs`) — `setup_tpm_cron` function for daily cron job setup
+- TPM system prompt injection (`prompt.rs`) — Organization-based TPM mode activation
+- Cron job infrastructure — Uses proper Scheduler API (`add_cron_task`) with account-level `tasks.db` storage; synthetic `postmark_payload.json` persists across cron runs (workspace is reused, not recreated)
+- Automatic cron setup — `setup_tpm_cron()` function called via `POST /api/tpm/setup-cron` when user joins organization
+- Organization API endpoints — `POST /auth/organization` (create), `GET /auth/organizations?search=` (list with search), `GET /auth/organization/:name/member-count`
+- Account response includes organization — `GET /auth/account` returns `organization_id` and `organization_name`
+- Frontend organization UI (`website/public/auth/index.html`) — Search, select, join, leave organization flow
+- TPM cron trigger endpoint (`POST /api/tpm/setup-cron`) — Calls `setup_tpm_cron()` function directly when first member joins org
 
 **Remaining:**
 - Organization creation UI (frontend)
