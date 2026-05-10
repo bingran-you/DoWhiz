@@ -1102,14 +1102,19 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
    - If "No notion_database_id configured" error, create board first via setup-board
 4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
 5. **Archive stale tasks** - tasks with no updates in 2+ weeks that are no longer relevant
-6. **Add new tasks** discovered from:
+6. **IMPORTANT - Scan community channels for bugs/feedback**:
+   - Use `discord_cli list-channels <guild_id>` to find #bug-reports, #feedback, #support channels
+   - Fetch recent messages and identify new bug reports or feature requests
+   - Create Notion tasks for each NEW item (deduplicate against existing tasks first)
+   - See "Proactive Bug/Issue Scanning" section above for full workflow
+7. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
    - Recent PRs that need follow-up
    - Blockers mentioned in PR comments
    - Competitive research findings
    - Your own ideas for product improvements
-7. **Assign all unassigned tasks** - aim for ~10 active tasks per person
-8. Compile summary report for {org_name}
+8. **Assign all unassigned tasks** - aim for ~10 active tasks per person
+9. Compile summary report for {org_name}
 
 **Proactive Task Creation:**
 You SHOULD add tasks when you discover:

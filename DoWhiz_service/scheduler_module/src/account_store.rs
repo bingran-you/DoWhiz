@@ -196,6 +196,8 @@ pub struct Organization {
     pub notion_workspace_id: Option<String>,
     /// Account ID of the organization leader (whose Notion credentials are used for TPM)
     pub leader_account_id: Option<Uuid>,
+    /// Discord guild (server) ID for bug scanning during TPM syncs
+    pub discord_guild_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -1698,7 +1700,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at
              FROM organizations
              WHERE name = $1",
             &[&name],
@@ -1710,7 +1712,8 @@ impl AccountStore {
             notion_database_id: r.get(2),
             notion_workspace_id: r.get(3),
             leader_account_id: r.get(4),
-            created_at: r.get(5),
+            discord_guild_id: r.get(5),
+            created_at: r.get(6),
         }))
     }
 
@@ -1721,7 +1724,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at
              FROM organizations
              WHERE id = $1",
             &[&org_id],
@@ -1733,7 +1736,8 @@ impl AccountStore {
             notion_database_id: r.get(2),
             notion_workspace_id: r.get(3),
             leader_account_id: r.get(4),
-            created_at: r.get(5),
+            discord_guild_id: r.get(5),
+            created_at: r.get(6),
         }))
     }
 
@@ -1764,14 +1768,14 @@ impl AccountStore {
                 "UPDATE organizations
                  SET notion_database_id = $1, notion_workspace_id = $2
                  WHERE name = $3
-                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at",
+                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at",
                 &[&notion_database_id, &ws_id, &organization_name],
             )?,
             None => conn.query_opt(
                 "UPDATE organizations
                  SET notion_database_id = $1
                  WHERE name = $2
-                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at",
+                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at",
                 &[&notion_database_id, &organization_name],
             )?,
         };
@@ -1783,7 +1787,8 @@ impl AccountStore {
                 notion_database_id: r.get(2),
                 notion_workspace_id: r.get(3),
                 leader_account_id: r.get(4),
-                created_at: r.get(5),
+                discord_guild_id: r.get(5),
+                created_at: r.get(6),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1803,7 +1808,7 @@ impl AccountStore {
             "UPDATE organizations
              SET leader_account_id = $1
              WHERE name = $2
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at",
             &[&leader_account_id, &organization_name],
         )?;
 
@@ -1814,7 +1819,39 @@ impl AccountStore {
                 notion_database_id: r.get(2),
                 notion_workspace_id: r.get(3),
                 leader_account_id: r.get(4),
-                created_at: r.get(5),
+                discord_guild_id: r.get(5),
+                created_at: r.get(6),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Set the Discord guild (server) ID for an organization.
+    ///
+    /// Used for TPM bug scanning in Discord channels.
+    pub fn update_organization_discord_guild(
+        &self,
+        organization_name: &str,
+        discord_guild_id: &str,
+    ) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE organizations
+             SET discord_guild_id = $1
+             WHERE name = $2
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at",
+            &[&discord_guild_id, &organization_name],
+        )?;
+
+        match row {
+            Some(r) => Ok(Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                notion_workspace_id: r.get(3),
+                leader_account_id: r.get(4),
+                discord_guild_id: r.get(5),
+                created_at: r.get(6),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1838,7 +1875,7 @@ impl AccountStore {
 
         let row = conn.query_one(
             "INSERT INTO organizations (name) VALUES ($1)
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at",
             &[&name],
         )?;
 
@@ -1848,7 +1885,8 @@ impl AccountStore {
             notion_database_id: row.get(2),
             notion_workspace_id: row.get(3),
             leader_account_id: row.get(4),
-            created_at: row.get(5),
+            discord_guild_id: row.get(5),
+            created_at: row.get(6),
         })
     }
 
@@ -1865,7 +1903,7 @@ impl AccountStore {
             Some(term) => {
                 let pattern = format!("%{}%", term.to_lowercase());
                 conn.query(
-                    "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at
+                    "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at
                      FROM organizations
                      WHERE LOWER(name) LIKE $1
                      ORDER BY name
@@ -1874,7 +1912,7 @@ impl AccountStore {
                 )?
             }
             None => conn.query(
-                "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, created_at
+                "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, created_at
                  FROM organizations
                  ORDER BY name
                  LIMIT 50",
@@ -1890,7 +1928,8 @@ impl AccountStore {
                 notion_database_id: r.get(2),
                 notion_workspace_id: r.get(3),
                 leader_account_id: r.get(4),
-                created_at: r.get(5),
+                discord_guild_id: r.get(5),
+                created_at: r.get(6),
             })
             .collect())
     }
