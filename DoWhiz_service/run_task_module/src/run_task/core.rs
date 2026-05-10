@@ -84,7 +84,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
             if runner.eq_ignore_ascii_case("codex")
                 && investment_request
                 && !params.reply_to.is_empty()
-                && is_investment_content_filter_failure(&fallback_primary_err)
+                && is_content_filter_failure(&fallback_primary_err)
             {
                 match run_investment_content_filter_retry(
                     params,
@@ -97,6 +97,19 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                         fallback_primary_err = retry_err;
                         allow_fast_completion_retry = false;
                     }
+                }
+            }
+            if runner.eq_ignore_ascii_case("codex")
+                && !investment_request
+                && !params.reply_to.is_empty()
+                && is_content_filter_failure(&fallback_primary_err)
+            {
+                if let Some(output) = maybe_finalize_generic_content_filter_reply(
+                    params,
+                    &workspace_dir,
+                    &fallback_primary_err,
+                )? {
+                    return Ok(output);
                 }
             }
             if allow_fast_completion_retry {
@@ -142,7 +155,7 @@ fn investment_content_filter_retry_timeout(workspace_dir: &Path) -> Result<Durat
     Ok(codex_command_timeout().min(Duration::from_secs(cap_secs)))
 }
 
-fn is_investment_content_filter_failure(err: &RunTaskError) -> bool {
+fn is_content_filter_failure(err: &RunTaskError) -> bool {
     let output = match err {
         RunTaskError::CodexFailed { output, .. }
         | RunTaskError::ClaudeFailed { output, .. }
@@ -157,6 +170,44 @@ fn is_investment_content_filter_failure(err: &RunTaskError) -> bool {
     };
 
     output_looks_like_content_filter_failure(output)
+}
+
+fn maybe_finalize_generic_content_filter_reply(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    cause: &RunTaskError,
+) -> Result<Option<RunTaskOutput>, RunTaskError> {
+    if params.reply_to.is_empty() {
+        return Ok(None);
+    }
+
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let lower_channel = params.channel.trim().to_ascii_lowercase();
+    let reply_body = match lower_channel.as_str() {
+        "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
+        | "wechat" | "wechat_mp" | "notion" => {
+            "I couldn't show the requested result because the Azure/OpenAI content filter blocked this run.\nPlease revise the prompt and send a new request."
+                .to_string()
+        }
+        _ => r#"<html><body><p>I couldn't show the requested result because the Azure/OpenAI content filter blocked this run.</p><p>Please revise the prompt and send a new request.</p></body></html>"#.to_string(),
+    };
+    fs::write(&reply_path, reply_body)?;
+
+    Ok(Some(RunTaskOutput {
+        reply_html_path: reply_path,
+        reply_attachments_dir,
+        codex_output: cause.to_string(),
+        scheduled_tasks: Vec::new(),
+        scheduled_tasks_error: None,
+        scheduler_actions: Vec::new(),
+        scheduler_actions_error: None,
+        token_usage: None,
+        recovery_note: Some(
+            "Returned an explicit Azure/OpenAI content-filter explanation to the user instead of retrying hidden output."
+                .to_string(),
+        ),
+    }))
 }
 
 fn output_looks_like_content_filter_failure(output: &str) -> bool {

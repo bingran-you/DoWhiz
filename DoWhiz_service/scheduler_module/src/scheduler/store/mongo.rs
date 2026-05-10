@@ -17,6 +17,7 @@ use crate::mongo_store::{
     create_client_from_env, database_from_env, ensure_index_compatible, get_shared_client,
     retry_mongo_read, retry_mongo_write,
 };
+use crate::thread_state::{current_thread_epoch, default_thread_state_path};
 
 use super::super::task_view::{
     default_routine_name, derive_request_summary, deserialize_task_document,
@@ -33,6 +34,7 @@ static EXECUTION_SEQ: AtomicI64 = AtomicI64::new(0);
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
 const DEFAULT_ACI_REGISTRATION_GRACE_SECS: i64 = 15 * 60;
 const DEFAULT_ACI_TRACE_ACTIVITY_GRACE_SECS: i64 = 15 * 60;
+const DEFAULT_LOCAL_FALLBACK_TIMEOUT_SECS: i64 = 15 * 60;
 const CURRENT_TRACE_START_MATCH_TOLERANCE_MS: i64 = 10 * 60 * 1000;
 
 #[derive(Debug, Clone)]
@@ -54,6 +56,13 @@ struct RunTaskTraceMetadata {
     finished_at_unix_ms: Option<i64>,
     stage_updated_at_unix_ms: Option<i64>,
     success: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RunTaskReconciliationContext {
+    workspace_dir: Option<String>,
+    thread_epoch: Option<u64>,
+    thread_state_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -576,9 +585,9 @@ impl MongoSchedulerStore {
         Ok(())
     }
 
-    /// Get workspace_dir from a task's task_json field.
-    /// Returns None if task not found or workspace_dir cannot be parsed.
-    fn get_task_workspace_dir(&self, task_id: &str) -> Option<String> {
+    /// Get the run_task reconciliation context from a task's task_json field.
+    /// Returns None if task not found or task_json cannot be parsed.
+    fn get_task_run_task_context(&self, task_id: &str) -> Option<RunTaskReconciliationContext> {
         let filter = doc! {
             "owner_scope.kind": &self.owner_kind,
             "owner_scope.id": &self.owner_id,
@@ -591,11 +600,56 @@ impl MongoSchedulerStore {
 
         let task_json = doc.get_str("task_json").ok()?;
         let parsed: serde_json::Value = serde_json::from_str(task_json).ok()?;
-        parsed
-            .get("kind")?
-            .get("workspace_dir")?
-            .as_str()
-            .map(|s| s.to_string())
+        let kind = parsed.get("kind")?;
+        Some(RunTaskReconciliationContext {
+            workspace_dir: kind
+                .get("workspace_dir")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            thread_epoch: kind.get("thread_epoch").and_then(|value| value.as_u64()),
+            thread_state_path: kind
+                .get("thread_state_path")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+        })
+    }
+
+    fn find_task_ids_for_workspace(
+        &self,
+        workspace_dir: &str,
+    ) -> Result<Vec<String>, SchedulerError> {
+        let filter = doc! {
+            "owner_scope.kind": &self.owner_kind,
+            "owner_scope.id": &self.owner_id,
+        };
+        let cursor = retry_mongo_read("tasks.find_for_workspace_lookup", || {
+            self.tasks.find(filter.clone(), None)
+        })
+        .map_err(mongo_err)?;
+
+        let mut matching_task_ids = Vec::new();
+        for doc_result in cursor {
+            let doc = doc_result.map_err(mongo_err)?;
+            let Ok(task_json) = doc.get_str("task_json") else {
+                continue;
+            };
+            let Ok(parsed) = serde_json::from_str::<serde_json::Value>(task_json) else {
+                continue;
+            };
+            let Some(ws) = parsed
+                .get("kind")
+                .and_then(|k| k.get("workspace_dir"))
+                .and_then(|v| v.as_str())
+            else {
+                continue;
+            };
+            if ws == workspace_dir {
+                if let Ok(task_id) = doc.get_str("task_id") {
+                    matching_task_ids.push(task_id.to_string());
+                }
+            }
+        }
+        Ok(matching_task_ids)
     }
 
     pub(crate) fn reconcile_stale_running_executions(
@@ -650,14 +704,28 @@ impl MongoSchedulerStore {
         let stale_before = now - stale_after;
         let stale_timeout_secs = stale_after.num_seconds();
         let aci_resource_group = std::env::var("RUN_TASK_AZURE_ACI_RESOURCE_GROUP").ok();
-        let workspace_dir = self.get_task_workspace_dir(task_id);
+        let run_task_context = self.get_task_run_task_context(task_id);
+        let workspace_dir = run_task_context
+            .as_ref()
+            .and_then(|context| context.workspace_dir.clone());
         let workspace_path = workspace_dir.as_deref().map(Path::new);
+        let thread_supersede_reason = run_task_context
+            .as_ref()
+            .and_then(current_thread_supersede_reason);
+        let workspace_peer_rows = if let Some(workspace_dir) = workspace_dir.as_deref() {
+            let task_ids = self.find_task_ids_for_workspace(workspace_dir)?;
+            let task_refs: Vec<&str> = task_ids.iter().map(String::as_str).collect();
+            self.load_execution_rows_for_tasks(&task_refs)?
+        } else {
+            HashMap::new()
+        };
 
         let mut summary = ExecutionReconciliationSummary::default();
         for row in rows.iter().filter(|row| row.status == "running") {
             let unfinished_fallback_action = unfinished_fallback_reconciliation_action(
                 workspace_path,
                 row.started_at,
+                now,
                 stale_before,
             );
             let inflight_aci_result_handling = workspace_path
@@ -693,6 +761,25 @@ impl MongoSchedulerStore {
                         latest_started_at.expect("checked above").to_rfc3339()
                     ),
                 ))
+            } else if let Some(reason) = thread_supersede_reason.as_ref() {
+                self.auto_disable_terminal_action(
+                    task_id,
+                    "superseded",
+                    "auto-disabled: task was superseded by a newer follow-up",
+                    format!("reconciled stale running execution because {}", reason),
+                )
+            } else if let Some(reason) = workspace_peer_supersede_reason(
+                task_id,
+                &workspace_peer_rows,
+                workspace_path,
+                row.started_at,
+            ) {
+                self.auto_disable_terminal_action(
+                    task_id,
+                    "superseded",
+                    "auto-disabled: duplicate task was superseded by another run in the same thread workspace",
+                    format!("reconciled stale running execution because {}", reason),
+                )
             } else if let Some(ref rg) = aci_resource_group {
                 let container_record = workspace_dir
                     .as_ref()
@@ -856,6 +943,7 @@ impl MongoSchedulerStore {
                                     missing_aci_registry_reconciliation_reason(
                                         workspace_path,
                                         row.started_at,
+                                        now,
                                     );
                                 self.auto_disable_failed_action(
                                     task_id,
@@ -908,6 +996,16 @@ impl MongoSchedulerStore {
         disable_reason: &str,
         error_reason: String,
     ) -> Option<(&'static str, String)> {
+        self.auto_disable_terminal_action(task_id, "failed", disable_reason, error_reason)
+    }
+
+    fn auto_disable_terminal_action(
+        &self,
+        task_id: &str,
+        terminal_status: &'static str,
+        disable_reason: &str,
+        terminal_note: String,
+    ) -> Option<(&'static str, String)> {
         if let Err(err) = self.disable_task_by_id(task_id, disable_reason) {
             tracing::error!(
                 "failed to disable task {} during stale reconciliation: {}",
@@ -916,7 +1014,7 @@ impl MongoSchedulerStore {
             );
             None
         } else {
-            Some(("failed", error_reason))
+            Some((terminal_status, terminal_note))
         }
     }
 
@@ -1734,9 +1832,27 @@ fn resolve_aci_trace_activity_grace_period() -> ChronoDuration {
         .unwrap_or_else(|| ChronoDuration::seconds(DEFAULT_ACI_TRACE_ACTIVITY_GRACE_SECS))
 }
 
+fn resolve_local_fallback_timeout_grace_period() -> ChronoDuration {
+    let overall_timeout_secs = std::env::var("RUN_TASK_TIMEOUT_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0);
+    let fallback_timeout_secs = std::env::var("RUN_TASK_CODEX_FALLBACK_TIMEOUT_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_LOCAL_FALLBACK_TIMEOUT_SECS);
+    let effective_timeout_secs = overall_timeout_secs
+        .map(|overall| overall.min(fallback_timeout_secs))
+        .unwrap_or(fallback_timeout_secs)
+        .max(1);
+    ChronoDuration::seconds(effective_timeout_secs)
+}
+
 fn missing_aci_registry_reconciliation_reason(
     workspace_dir: Option<&Path>,
     started_at: chrono::DateTime<Utc>,
+    _now: chrono::DateTime<Utc>,
 ) -> (&'static str, String) {
     let Some(workspace_dir) = workspace_dir else {
         return (
@@ -1745,7 +1861,7 @@ fn missing_aci_registry_reconciliation_reason(
         );
     };
 
-    if workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
+    if workspace_records_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
         return (
             "auto-disabled: primary runner failed and fallback never reached a terminal state",
             "reconciled stale running execution after primary ACI run failed and fallback never reached a terminal state".to_string(),
@@ -1768,14 +1884,19 @@ fn missing_aci_registry_reconciliation_reason(
 fn unfinished_fallback_reconciliation_action(
     workspace_dir: Option<&Path>,
     started_at: chrono::DateTime<Utc>,
+    now: chrono::DateTime<Utc>,
     stale_before: chrono::DateTime<Utc>,
 ) -> Option<UnfinishedFallbackReconciliationAction> {
     let workspace_dir = workspace_dir?;
-    if !workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
+    if !workspace_records_unfinished_fallback_after_aci_run(workspace_dir, started_at) {
         return None;
     }
 
-    if started_at <= stale_before {
+    let fallback_started_before_watchdog =
+        fallback_activity_started_before_or_at(workspace_dir, started_at, stale_before);
+    let fallback_still_within_timeout =
+        workspace_suggests_unfinished_fallback_after_aci_run(workspace_dir, started_at, now);
+    if fallback_started_before_watchdog || !fallback_still_within_timeout {
         let (disable_reason, error_reason) = unfinished_fallback_reconciliation_reason();
         Some(UnfinishedFallbackReconciliationAction::Fail {
             disable_reason,
@@ -1852,18 +1973,138 @@ fn workspace_suggests_recent_inflight_aci_result_handling(
 fn workspace_suggests_unfinished_fallback_after_aci_run(
     workspace_dir: &Path,
     started_at: chrono::DateTime<Utc>,
+    now: chrono::DateTime<Utc>,
 ) -> bool {
-    if !workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
-        return false;
-    }
-    let Some(metadata) = load_run_task_trace_metadata(workspace_dir) else {
+    let Some(metadata) = unfinished_fallback_trace_metadata(workspace_dir, started_at) else {
         return false;
     };
+    let activity_at_ms = metadata
+        .stage_updated_at_unix_ms
+        .or(metadata.started_at_unix_ms)
+        .unwrap_or_else(|| started_at.timestamp_millis());
+    let activity_age_ms = now.timestamp_millis().saturating_sub(activity_at_ms);
+    activity_age_ms <= resolve_local_fallback_timeout_grace_period().num_milliseconds()
+}
 
-    metadata.backend == "claude_local"
+fn workspace_records_unfinished_fallback_after_aci_run(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+) -> bool {
+    unfinished_fallback_trace_metadata(workspace_dir, started_at).is_some()
+}
+
+fn unfinished_fallback_trace_metadata(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+) -> Option<RunTaskTraceMetadata> {
+    if !workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
+        return None;
+    }
+    let metadata = load_run_task_trace_metadata(workspace_dir)?;
+    if metadata.backend == "claude_local"
         && metadata.current_stage == "executing_claude_local"
         && metadata.finished_at_unix_ms.is_none()
         && metadata.success.is_none()
+    {
+        Some(metadata)
+    } else {
+        None
+    }
+}
+
+fn fallback_activity_started_before_or_at(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+    cutoff: chrono::DateTime<Utc>,
+) -> bool {
+    let Some(metadata) = load_run_task_trace_metadata(workspace_dir) else {
+        return started_at <= cutoff;
+    };
+    let activity_at_ms = metadata
+        .stage_updated_at_unix_ms
+        .or(metadata.started_at_unix_ms)
+        .unwrap_or_else(|| started_at.timestamp_millis());
+    chrono::DateTime::<Utc>::from_timestamp_millis(activity_at_ms)
+        .map(|activity_at| activity_at <= cutoff)
+        .unwrap_or(started_at <= cutoff)
+}
+
+fn current_thread_supersede_reason(context: &RunTaskReconciliationContext) -> Option<String> {
+    let expected_epoch = context.thread_epoch?;
+    let workspace_dir = context.workspace_dir.as_deref().map(Path::new)?;
+    let state_path = context
+        .thread_state_path
+        .as_deref()
+        .map(Path::new)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_thread_state_path(workspace_dir));
+    let current_epoch = current_thread_epoch(&state_path)?;
+    if current_epoch > expected_epoch {
+        Some(format!(
+            "thread superseded by a newer follow-up (expected epoch {}, current epoch {})",
+            expected_epoch, current_epoch
+        ))
+    } else {
+        None
+    }
+}
+
+fn workspace_peer_supersede_reason(
+    task_id: &str,
+    workspace_peer_rows: &HashMap<String, Vec<ExecutionRow>>,
+    workspace_dir: Option<&Path>,
+    started_at: chrono::DateTime<Utc>,
+) -> Option<String> {
+    let workspace_dir = workspace_dir?;
+    if workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
+        return None;
+    }
+
+    let tolerance = ChronoDuration::milliseconds(CURRENT_TRACE_START_MATCH_TOLERANCE_MS);
+    let window_start = started_at - tolerance;
+    let window_end = started_at + tolerance;
+    let mut peer_running_started_at: Option<chrono::DateTime<Utc>> = None;
+    let mut peer_terminal_finished_at: Option<chrono::DateTime<Utc>> = None;
+
+    for (peer_task_id, rows) in workspace_peer_rows {
+        if peer_task_id == task_id {
+            continue;
+        }
+        for row in rows {
+            match row.status.as_str() {
+                "running" if row.started_at >= window_start && row.started_at <= window_end => {
+                    peer_running_started_at = Some(match peer_running_started_at {
+                        Some(existing) => existing.min(row.started_at),
+                        None => row.started_at,
+                    });
+                }
+                _ => {
+                    if let Some(finished_at) = row.finished_at {
+                        if finished_at >= window_start {
+                            peer_terminal_finished_at = Some(match peer_terminal_finished_at {
+                                Some(existing) => existing.max(finished_at),
+                                None => finished_at,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(peer_started_at) = peer_running_started_at {
+        return Some(format!(
+            "another task for the same workspace was already running at {}",
+            peer_started_at.to_rfc3339()
+        ));
+    }
+
+    peer_terminal_finished_at.map(|finished_at| {
+        format!(
+            "another task for the same workspace already completed at {}",
+            finished_at.to_rfc3339()
+        )
+    })
 }
 
 fn load_run_task_trace_metadata(workspace_dir: &Path) -> Option<RunTaskTraceMetadata> {
@@ -2206,6 +2447,7 @@ fn mongo_config_err(err: crate::mongo_store::MongoStoreError) -> SchedulerError 
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -2215,7 +2457,8 @@ mod tests {
 
     use super::{
         apply_persisted_task_fields, build_task_status_summary,
-        missing_aci_registry_reconciliation_reason, resolve_owner_scope, ExecutionRow,
+        missing_aci_registry_reconciliation_reason, resolve_owner_scope,
+        workspace_peer_supersede_reason, ExecutionRow,
     };
     use crate::channel::Channel;
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
@@ -2419,8 +2662,9 @@ mod tests {
     fn missing_aci_reason_stays_never_created_when_no_trace_exists() {
         let workspace = temp_workspace("aci_not_created");
         let started_at = Utc::now();
+        let now = started_at + ChronoDuration::minutes(1);
         let (disable_reason, error_reason) =
-            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at);
+            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at, now);
         assert_eq!(
             disable_reason,
             "auto-disabled: execution started but ACI container was never created"
@@ -2436,6 +2680,7 @@ mod tests {
     fn missing_aci_reason_prefers_primary_failure_when_trace_shows_fallback_stuck() {
         let workspace = temp_workspace("aci_trace_exists");
         let started_at = Utc::now();
+        let now = started_at + ChronoDuration::minutes(20);
         let primary_aci_dir = workspace.join(".run_task_trace_codex_primary/aci");
         fs::create_dir_all(&primary_aci_dir).unwrap();
         fs::write(primary_aci_dir.join("container_show.json"), "{}").unwrap();
@@ -2453,7 +2698,7 @@ mod tests {
         .unwrap();
 
         let (disable_reason, error_reason) =
-            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at);
+            missing_aci_registry_reconciliation_reason(Some(workspace.as_path()), started_at, now);
         assert_eq!(
             disable_reason,
             "auto-disabled: primary runner failed and fallback never reached a terminal state"
@@ -2496,6 +2741,7 @@ mod tests {
         let (disable_reason, error_reason) = missing_aci_registry_reconciliation_reason(
             Some(workspace.as_path()),
             current_started_at,
+            current_started_at + ChronoDuration::minutes(5),
         );
         assert_eq!(
             disable_reason,
@@ -2505,6 +2751,35 @@ mod tests {
             error_reason,
             "reconciled stale running execution; ACI container not found"
         );
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn workspace_peer_supersede_reason_detects_running_sibling_without_aci_evidence() {
+        let workspace = temp_workspace("aci_workspace_peer_duplicate");
+        let started_at = Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 30).unwrap();
+        let peer_started_at = Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 0).unwrap();
+        let peer_rows = HashMap::from([(
+            "peer-task".to_string(),
+            vec![ExecutionRow {
+                doc_id: Bson::Null,
+                task_id: "peer-task".to_string(),
+                execution_id: 123,
+                started_at: peer_started_at,
+                finished_at: None,
+                status: "running".to_string(),
+                error_message: None,
+            }],
+        )]);
+
+        let reason = workspace_peer_supersede_reason(
+            "current-task",
+            &peer_rows,
+            Some(workspace.as_path()),
+            started_at,
+        )
+        .expect("peer workspace should supersede duplicate");
+        assert!(reason.contains("another task for the same workspace was already running"));
         let _ = fs::remove_dir_all(workspace);
     }
 }
