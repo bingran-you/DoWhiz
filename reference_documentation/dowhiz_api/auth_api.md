@@ -236,6 +236,39 @@ or
 
 ---
 
+### PUT /auth/organization/:name/discord
+Set the organization's Discord guild (server) ID for TPM bug scanning.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+
+**Request:**
+```json
+{
+  "guild_id": "1234567890123456789"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "organization_name": "deeptutor",
+  "discord_guild_id": "1234567890123456789"
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "You are not a member of this organization"
+}
+```
+
+---
+
 ### PUT /auth/account/organization
 Join an organization by name.
 

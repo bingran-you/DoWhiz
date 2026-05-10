@@ -2824,6 +2824,22 @@
                           <button id="set-org-leader-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Set Leader</button>
                         </div>
                         <span id="org-leader-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Community Bug Tracking</h4>
+                        <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
+                          Connect your Discord server to automatically scan for bug reports in community channels during TPM syncs.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                          <input
+                            type="text"
+                            id="discord-guild-id-input"
+                            class="auth-input"
+                            placeholder="Discord Server ID (right-click server → Copy Server ID)"
+                            style="min-width: 200px;"
+                          />
+                          <button id="set-discord-guild-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Connect Discord Server</button>
+                        </div>
+                        <span id="discord-guild-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
                       </div>
                     </div>
 
@@ -6261,6 +6277,10 @@
             if (leaderInput && currentOrg.leader_account_id) {
               leaderInput.value = currentOrg.leader_account_id;
             }
+            const discordInput = document.getElementById('discord-guild-id-input');
+            if (discordInput && currentOrg.discord_guild_id) {
+              discordInput.value = currentOrg.discord_guild_id;
+            }
           }
         } else {
           if (orgCurrentDisplay) {
@@ -6804,6 +6824,62 @@
               if (status) status.textContent = `Error: ${err.message}`;
             } finally {
               setLeaderBtn.disabled = false;
+            }
+          });
+        }
+
+        // Set Discord Guild button handler
+        const setDiscordGuildBtn = document.getElementById('set-discord-guild-btn');
+        if (setDiscordGuildBtn) {
+          setDiscordGuildBtn.addEventListener('click', async () => {
+            const input = document.getElementById('discord-guild-id-input');
+            const status = document.getElementById('discord-guild-status');
+            const guildId = input?.value?.trim();
+
+            if (!guildId) {
+              if (status) status.textContent = 'Please enter a Discord Server ID';
+              return;
+            }
+
+            // Basic Discord snowflake validation (17-19 digit number)
+            if (!/^\d{17,19}$/.test(guildId)) {
+              if (status) status.textContent = 'Invalid Server ID format (should be 17-19 digits)';
+              return;
+            }
+
+            if (!currentOrganizationName) {
+              if (status) status.textContent = 'No organization selected';
+              return;
+            }
+
+            try {
+              setDiscordGuildBtn.disabled = true;
+              if (status) status.textContent = 'Connecting...';
+
+              const { data: { session } } = await supabase.auth.getSession();
+              const accessToken = session?.access_token;
+
+              const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/discord`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ guild_id: guildId })
+              });
+
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `Failed: ${res.status}`);
+              }
+
+              if (status) status.textContent = 'Discord server connected successfully!';
+              if (input) input.value = '';
+            } catch (err) {
+              console.error('Failed to connect Discord server:', err);
+              if (status) status.textContent = `Error: ${err.message}`;
+            } finally {
+              setDiscordGuildBtn.disabled = false;
             }
           });
         }
