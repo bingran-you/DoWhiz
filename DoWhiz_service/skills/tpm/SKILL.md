@@ -53,6 +53,15 @@ tpm_cli list-users
 ```
 Returns Notion user IDs needed for task assignment. Always run this before creating/updating tasks.
 
+### Get Database Schema
+```bash
+tpm_cli get-schema --database-id DB_ID
+```
+Returns property names, types, and allowed values. Essential for:
+- Discovering date properties (ETA, Due Date, Deadline, etc.) for overdue checks
+- Finding custom property names in user databases
+- Mapping our concepts to their schema
+
 ### Task Operations
 ```bash
 # List all tasks
@@ -104,7 +113,68 @@ To remove a task from active view:
 tpm_cli update-task --page-id TASK_ID --status archived
 ```
 
+## Discord Community Bug Scanning
+
+When a Discord guild ID is configured for the organization, scan community channels for bugs during TPM syncs.
+
+### Workflow
+```bash
+# 1. List channels in the guild
+discord_cli list-channels --guild-id <GUILD_ID>
+
+# 2. Find bug-related channels (#bug-reports, #feedback, #support)
+
+# 3. Read recent messages
+discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50
+```
+
+### For Each Bug Report Found
+1. Document: channel name, reporter username, verbatim quote
+2. Deduplicate against existing Notion tasks
+3. Create task with:
+   - source: user_feedback
+   - Description includes verbatim snippet and reporter
+   - Priority based on severity keywords (crash, broken = P1)
+
+### Skip If
+- No Discord guild ID configured
+- No bug-related channels found
+
+## Overdue Task Follow-ups
+
+During scheduled syncs, check for overdue tasks and send follow-up emails.
+
+### Workflow
+1. Discover date property name via `tpm_cli get-schema`
+   - Common names: ETA, Due Date, Deadline, Target Date
+2. Query tasks and compare date against today
+3. For tasks 3+ days overdue (status != Done/Archived):
+   - Look up assignee's email from org members (match by notion_id)
+   - Schedule follow-up email
+
+### Scheduling Format
+```
+SCHEDULED_TASKS_JSON_BEGIN
+[{"type":"send_email","delay_minutes":0,"subject":"Task overdue: [Task Name]","html_path":"followup_[id].html","to":["assignee@email.com"]}]
+SCHEDULED_TASKS_JSON_END
+```
+
+Create the HTML file with:
+- Task name and Notion page link
+- Days overdue count
+- Request for status update or new ETA
+
 ## Assignment & Load Balancing
+
+### Three Sources for Assignees
+1. `tpm_cli list-users` - paid Notion users with Notion IDs
+2. **Known Org Members** - DoWhiz org members with email/name/notion_id
+3. **Discovered from tasks** - scan recent tasks (last 90 days) for assignees
+
+When assigning:
+- If org member has `notion_id`, use it directly
+- If no notion_id, match by email to Notion users
+- If no match, add "Assigned to: [name]" in description
 
 ### Keep the Board Active
 A healthy board has:
@@ -317,7 +387,17 @@ gh pr list --repo ORG/REPO --state open --limit 20
 ```
 Create tasks for untracked issues. Update tasks for merged PRs.
 
-### 4. Competitive & Strategic Research (EVERY SYNC)
+### 4. Archive Stale Tasks
+Tasks with no updates in 2+ weeks that are no longer relevant should be archived.
+
+### 5. Discord Bug Scanning (if guild ID configured)
+```bash
+discord_cli list-channels --guild-id <GUILD_ID>
+discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50
+```
+Look for #bug-reports, #feedback, #support channels. Create tasks for new bug reports.
+
+### 6. Competitive & Strategic Research (EVERY SYNC)
 **Do not skip this.** Even a quick 5-minute check keeps you informed.
 
 ```bash
@@ -338,14 +418,25 @@ Ask yourself:
 
 Create market_research tasks for notable findings. Propose ideas, not just react.
 
-### 5. Workload & Task Hygiene
+### 7. Add New Tasks
+From:
+- Open GitHub issues not yet tracked
+- Recent PRs that need follow-up
+- Blockers mentioned in PR comments
+- Competitive research findings
+- Your own ideas for product improvements
+
+### 8. Overdue Follow-ups
+Check tasks with overdue ETAs and schedule follow-up emails (see Overdue Task Follow-ups section).
+
+### 9. Workload & Task Hygiene
 - Count tasks per person (benchmark: ~10 active tasks each is healthy)
 - **Add more tasks** if the board looks empty or team is underutilized
 - **Archive stale tasks** — if a task hasn't moved in weeks or is no longer relevant, archive it
 - Backfill ALL missing assignees — no task should be unassigned
 - A healthy board has continuous flow: new tasks coming in, old tasks getting done or archived
 
-### 6. Compile Report
+### 10. Compile Report
 Structure:
 ```
 ## TPM Sync Report - [Date]

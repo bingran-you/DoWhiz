@@ -1125,14 +1125,19 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
    - Include the verbatim snippet in the Notion task description
    - See "Proactive Bug/Issue Scanning" section above for full workflow
    - Skip this step if no Discord guild ID is configured
-7. **Add new tasks** discovered from:
+7. **Competitive & strategic research** (do not skip):
+   - `web_search "{org_name} competitors"` - check for new competitor features
+   - `web_search "{org_name} alternatives"` - see what users are comparing to
+   - Ask: Did any competitor ship something new? Are users complaining about something we could fix?
+   - Create market_research tasks for notable findings
+8. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
    - Recent PRs that need follow-up
    - Blockers mentioned in PR comments
    - Competitive research findings
    - Your own ideas for product improvements
-8. **Assign all unassigned tasks** - aim for ~10 active tasks per person
-9. Compile summary report for {org_name}
+9. **Assign all unassigned tasks** - aim for ~10 active tasks per person
+10. Compile summary report for {org_name}
 
 **Proactive Task Creation:**
 You SHOULD add tasks when you discover:
