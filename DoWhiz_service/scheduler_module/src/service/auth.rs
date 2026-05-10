@@ -1697,6 +1697,7 @@ pub async fn list_organizations(
                         "notion_database_id": org.notion_database_id,
                         "notion_workspace_id": org.notion_workspace_id,
                         "leader_account_id": org.leader_account_id,
+                        "discord_guild_id": org.discord_guild_id,
                         "created_at": org.created_at,
                     })
                 })

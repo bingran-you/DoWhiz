@@ -6761,12 +6761,18 @@
               }
 
               const data = await res.json();
-              if (status) status.textContent = 'Database updated successfully!';
+              if (status) {
+                status.textContent = 'Database updated successfully!';
+                status.style.color = '#22c55e';
+              }
               if (input) input.value = '';
               if (workspaceInput) workspaceInput.value = '';
             } catch (err) {
               console.error('Failed to update database:', err);
-              if (status) status.textContent = `Error: ${err.message}`;
+              if (status) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = '#ef4444';
+              }
             } finally {
               setDatabaseBtn.disabled = false;
             }
@@ -6819,10 +6825,16 @@
                 throw new Error(err.error || `Failed: ${res.status}`);
               }
 
-              if (status) status.textContent = 'Leader updated successfully!';
+              if (status) {
+                status.textContent = 'Leader updated successfully!';
+                status.style.color = '#22c55e';
+              }
             } catch (err) {
               console.error('Failed to update leader:', err);
-              if (status) status.textContent = `Error: ${err.message}`;
+              if (status) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = '#ef4444';
+              }
             } finally {
               setLeaderBtn.disabled = false;
             }
@@ -6874,11 +6886,16 @@
                 throw new Error(err.error || `Failed: ${res.status}`);
               }
 
-              if (status) status.textContent = 'Discord server connected successfully!';
-              if (input) input.value = '';
+              if (status) {
+                status.textContent = 'Discord server connected successfully!';
+                status.style.color = '#22c55e';
+              }
             } catch (err) {
               console.error('Failed to connect Discord server:', err);
-              if (status) status.textContent = `Error: ${err.message}`;
+              if (status) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = '#ef4444';
+              }
             } finally {
               setDiscordGuildBtn.disabled = false;
             }
