@@ -59,6 +59,7 @@ use super::utils::{
 };
 
 const CLAUDE_ALLOWED_TOOLS: &str = "Read,Glob,Grep,Bash,Write,Edit,WebSearch,WebFetch,TodoWrite";
+const DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS: u64 = 900;
 pub(super) fn run_claude_task(
     request: RunTaskRequest<'_>,
     runner: &str,
@@ -255,8 +256,8 @@ fn claude_task_timeout(is_codex_fallback: bool) -> std::time::Duration {
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|value| *value > 0)
         .map(std::time::Duration::from_secs)
-        .map(|timeout| default_timeout.min(timeout))
-        .unwrap_or(default_timeout)
+        .unwrap_or_else(|| std::time::Duration::from_secs(DEFAULT_CLAUDE_FALLBACK_TIMEOUT_SECS))
+        .min(default_timeout)
 }
 
 fn prepare_claude_env(
@@ -656,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_fallback_timeout_defaults_to_run_task_timeout() {
+    fn claude_fallback_timeout_defaults_to_900s_cap() {
         let _lock = env_lock();
         let _guards = [
             EnvVarGuard::set("RUN_TASK_TIMEOUT_SECS", "1200"),
@@ -664,7 +665,7 @@ mod tests {
             EnvVarGuard::unset("TASK_TIMEOUT_SECS"),
         ];
 
-        assert_eq!(claude_task_timeout(true), Duration::from_secs(1200));
+        assert_eq!(claude_task_timeout(true), Duration::from_secs(900));
     }
 
     #[test]

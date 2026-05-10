@@ -1477,6 +1477,63 @@ fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry()
 
 #[test]
 #[cfg(unix)]
+fn run_task_generic_content_filter_returns_explanatory_reply_without_claude_fallback() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_generic_content_filter_notice").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let claude_counter_path = temp.path.join("claude_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+echo "I'm sorry, but I cannot assist with that request." >&2
+echo "stream disconnected before completion: Incomplete response returned, reason: content_filter" >&2
+exit 1
+"#,
+    );
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+set -e
+echo invoked >> "$CLAUDE_COUNTER_PATH"
+echo "simulated claude failure" >&2
+exit 7
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("CLAUDE_COUNTER_PATH", claude_counter_path.to_str().unwrap()),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).unwrap();
+    let reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(reply.contains("Azure/OpenAI content filter"));
+    assert!(reply.contains("send a new request"));
+    assert!(
+        !claude_counter_path.exists(),
+        "Claude fallback should not run after a generic Azure/OpenAI content-filter refusal"
+    );
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("content-filter explanation"));
+}
+
+#[test]
+#[cfg(unix)]
 fn run_task_recovers_generic_reply_after_timeout_without_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_timeout_preserve_primary_draft").unwrap();
