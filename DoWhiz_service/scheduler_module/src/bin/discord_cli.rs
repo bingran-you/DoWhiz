@@ -1,12 +1,14 @@
 //! Discord CLI for agent use.
 //!
-//! Provides commands for sending messages to Discord channels and users.
-//! Used by TPM agents for proactive follow-ups.
+//! Provides commands for sending messages to Discord channels and users,
+//! as well as reading channels and messages for bug scanning.
 //!
 //! Usage:
 //!   discord_cli send-dm --user-id <id> --message <text>
 //!   discord_cli send-channel --channel-id <id> --message <text>
 //!   discord_cli send --to <id> --message <text> [--reply-to <msg_id>]
+//!   discord_cli list-channels --guild-id <id>
+//!   discord_cli read-messages --channel-id <id> [--limit <n>]
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -30,6 +32,8 @@ fn main() -> ExitCode {
         "send-channel" => cmd_send_channel(&args[2..]),
         "list-guild-members" => cmd_list_guild_members(&args[2..]),
         "dm-all-guild" => cmd_dm_all_guild(&args[2..]),
+        "list-channels" => cmd_list_channels(&args[2..]),
+        "read-messages" => cmd_read_messages(&args[2..]),
         "help" | "--help" | "-h" => {
             print_usage();
             ExitCode::SUCCESS
@@ -73,6 +77,14 @@ Commands:
     --message <text>    Message content
     --no-bots           Exclude bot accounts (default: true)
     --dry-run           Preview without sending (optional)
+
+  list-channels  List channels in a guild/server
+    --guild-id <id>     Discord guild/server ID
+    --text-only         Only show text channels (optional)
+
+  read-messages  Read recent messages from a channel
+    --channel-id <id>   Discord channel ID
+    --limit <n>         Number of messages (default: 50, max: 100)
 
 Environment:
   DISCORD_BOT_TOKEN     Required. Bot token
@@ -174,6 +186,24 @@ struct DiscordUser {
     bot: bool,
     #[serde(default)]
     global_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DiscordChannel {
+    id: String,
+    name: Option<String>,
+    #[serde(rename = "type")]
+    channel_type: u8,
+    #[serde(default)]
+    parent_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DiscordMessage {
+    id: String,
+    content: String,
+    author: DiscordUser,
+    timestamp: String,
 }
 
 fn create_dm_channel(token: &str, user_id: &str) -> Result<String, String> {
@@ -728,4 +758,204 @@ fn cmd_dm_all_guild(args: &[String]) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+fn cmd_list_channels(args: &[String]) -> ExitCode {
+    let mut guild_id: Option<String> = None;
+    let mut text_only = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--guild-id" => {
+                i += 1;
+                guild_id = args.get(i).cloned();
+            }
+            "--text-only" => {
+                text_only = true;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(guild_id) = guild_id else {
+        eprintln!("Error: --guild-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let Some(token) = get_bot_token() else {
+        eprintln!("Error: DISCORD_BOT_TOKEN not configured");
+        return ExitCode::FAILURE;
+    };
+
+    let client = Client::new();
+    let url = format!(
+        "{}/guilds/{}/channels",
+        get_api_base().trim_end_matches('/'),
+        guild_id
+    );
+
+    let response = match client
+        .get(&url)
+        .header("Authorization", format!("Bot {}", token))
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: HTTP request failed: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .unwrap_or_else(|_| "unknown error".to_string());
+        eprintln!("Error: Failed to list channels ({}): {}", status, error_text);
+        return ExitCode::FAILURE;
+    }
+
+    let channels: Vec<DiscordChannel> = match response.json() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Failed to parse response: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Filter to text channels (type 0) if requested
+    let filtered: Vec<_> = channels
+        .into_iter()
+        .filter(|c| !text_only || c.channel_type == 0)
+        .collect();
+
+    let channel_list: Vec<serde_json::Value> = filtered
+        .iter()
+        .map(|c| {
+            json!({
+                "id": c.id,
+                "name": c.name,
+                "type": match c.channel_type {
+                    0 => "text",
+                    2 => "voice",
+                    4 => "category",
+                    5 => "announcement",
+                    10 | 11 | 12 => "thread",
+                    13 => "stage",
+                    15 => "forum",
+                    _ => "other"
+                },
+                "parent_id": c.parent_id
+            })
+        })
+        .collect();
+
+    let output = json!({
+        "success": true,
+        "guild_id": guild_id,
+        "channel_count": channel_list.len(),
+        "channels": channel_list
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
+}
+
+fn cmd_read_messages(args: &[String]) -> ExitCode {
+    let mut channel_id: Option<String> = None;
+    let mut limit: u32 = 50;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--channel-id" => {
+                i += 1;
+                channel_id = args.get(i).cloned();
+            }
+            "--limit" => {
+                i += 1;
+                if let Some(n) = args.get(i).and_then(|s| s.parse().ok()) {
+                    limit = std::cmp::min(n, 100); // Discord max is 100
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some(channel_id) = channel_id else {
+        eprintln!("Error: --channel-id is required");
+        return ExitCode::FAILURE;
+    };
+
+    let Some(token) = get_bot_token() else {
+        eprintln!("Error: DISCORD_BOT_TOKEN not configured");
+        return ExitCode::FAILURE;
+    };
+
+    let client = Client::new();
+    let url = format!(
+        "{}/channels/{}/messages?limit={}",
+        get_api_base().trim_end_matches('/'),
+        channel_id,
+        limit
+    );
+
+    let response = match client
+        .get(&url)
+        .header("Authorization", format!("Bot {}", token))
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error: HTTP request failed: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_text = response
+            .text()
+            .unwrap_or_else(|_| "unknown error".to_string());
+        eprintln!(
+            "Error: Failed to read messages ({}): {}",
+            status, error_text
+        );
+        return ExitCode::FAILURE;
+    }
+
+    let messages: Vec<DiscordMessage> = match response.json() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Error: Failed to parse response: {}", e);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let message_list: Vec<serde_json::Value> = messages
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "author": {
+                    "id": m.author.id,
+                    "username": m.author.username,
+                    "display_name": m.author.global_name.as_deref().unwrap_or(&m.author.username)
+                },
+                "content": m.content,
+                "timestamp": m.timestamp
+            })
+        })
+        .collect();
+
+    let output = json!({
+        "success": true,
+        "channel_id": channel_id,
+        "message_count": message_list.len(),
+        "messages": message_list
+    });
+    println!("{}", serde_json::to_string_pretty(&output).unwrap());
+    ExitCode::SUCCESS
 }
