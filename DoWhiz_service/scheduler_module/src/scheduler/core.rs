@@ -11,7 +11,10 @@ use crate::channel::Channel;
 use super::actions::{apply_scheduler_actions, ingest_follow_up_tasks, schedule_auto_reply};
 use super::debug_archive::PendingTaskDebugArchive;
 use super::executor::TaskExecutor;
-use super::outbound::execute_slack_send;
+use super::outbound::{
+    execute_discord_send, execute_email_send, execute_lark_send, execute_notion_send,
+    execute_slack_send, execute_telegram_send, execute_wechat_send, execute_whatsapp_send,
+};
 use super::reply::load_reply_context;
 use super::schedule::{next_run_after, validate_cron_expression};
 use super::snapshot::{snapshot_reply_draft, write_scheduler_snapshot};
@@ -782,9 +785,18 @@ fn notify_run_task_failure(
     std::fs::create_dir_all(&failure_dir)?;
     let failure_notice_marker = failure_notice_marker_path(task);
 
-    let is_slack = matches!(task.channel, Channel::Slack);
     let user_notice = failure_class.user_notice();
-    let (notice_path, notice_body) = if is_slack {
+    let is_text_channel = matches!(
+        task.channel,
+        Channel::Slack
+            | Channel::Discord
+            | Channel::Telegram
+            | Channel::WhatsApp
+            | Channel::WeChat
+            | Channel::Lark
+            | Channel::Notion
+    );
+    let (notice_path, notice_body) = if is_text_channel {
         (
             failure_dir.join(format!("task_failure_{}.txt", task_id)),
             user_notice.to_string(),
@@ -807,20 +819,20 @@ fn notify_run_task_failure(
                 task.workspace_dir.display(),
                 failure_notice_identity(task),
             );
-        } else if is_slack {
-            let slack_thread_ts = load_reply_context(&task.workspace_dir)
-                .in_reply_to
-                .or_else(|| slack_thread_ts_from_thread_key(task.thread_id.as_deref()));
+        } else {
+            let reply_context = load_reply_context(&task.workspace_dir);
             let send_task = SendReplyTask {
-                channel: Channel::Slack,
+                channel: task.channel.clone(),
                 subject: user_notice.to_string(),
                 html_path: notice_path.clone(),
                 attachments_dir: notice_attachments.clone(),
-                from: None,
+                from: task.reply_from.clone().or_else(notification_sender_email),
                 to: task.reply_to.clone(),
                 cc: vec![],
                 bcc: vec![],
-                in_reply_to: slack_thread_ts,
+                in_reply_to: reply_context
+                    .in_reply_to
+                    .or_else(|| slack_thread_ts_from_thread_key(task.thread_id.as_deref())),
                 references: None,
                 archive_root: None,
                 thread_epoch: None,
@@ -828,40 +840,27 @@ fn notify_run_task_failure(
                 employee_id: task.employee_id.clone(),
                 channel_metadata: task.normalized_channel_metadata(),
             };
-            execute_slack_send(&send_task)?;
-            std::fs::write(
-                &failure_notice_marker,
-                format!(
-                    "task_id={}\nchannel={}\nidentity={}\n",
-                    task_id,
-                    task.channel,
-                    failure_notice_identity(task)
-                ),
-            )?;
-        } else {
-            let from = task
-                .reply_from
-                .clone()
-                .or_else(notification_sender_email)
-                .ok_or_else(|| {
-                    SchedulerError::TaskFailed(
-                        "from address missing for failure notice".to_string(),
-                    )
-                })?;
-            let params = send_emails_module::SendEmailParams {
-                subject: user_notice.to_string(),
-                html_path: notice_path.clone(),
-                attachments_dir: notice_attachments.clone(),
-                from: Some(from),
-                to: task.reply_to.clone(),
-                cc: vec![],
-                bcc: vec![],
-                in_reply_to: None,
-                references: None,
-                reply_to: None,
-            };
-            send_emails_module::send_email(&params)
-                .map_err(|err| SchedulerError::TaskFailed(err.to_string()))?;
+
+            match task.channel {
+                Channel::Slack => execute_slack_send(&send_task)?,
+                Channel::Discord => execute_discord_send(&send_task)?,
+                Channel::Telegram => execute_telegram_send(&send_task)?,
+                Channel::WhatsApp => execute_whatsapp_send(&send_task)?,
+                Channel::WeChat => execute_wechat_send(&send_task)?,
+                Channel::Lark => execute_lark_send(&send_task)?,
+                Channel::Notion => execute_notion_send(&send_task)?,
+                Channel::Email
+                | Channel::GoogleDocs
+                | Channel::GoogleSheets
+                | Channel::GoogleSlides
+                | Channel::Sms
+                | Channel::BlueBubbles
+                | Channel::WeChatMp
+                | Channel::Zoom => {
+                    execute_email_send(&send_task)?;
+                }
+            }
+
             std::fs::write(
                 &failure_notice_marker,
                 format!(
