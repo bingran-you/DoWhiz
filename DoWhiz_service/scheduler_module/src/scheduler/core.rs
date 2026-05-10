@@ -463,7 +463,8 @@ impl<E: TaskExecutor> Scheduler<E> {
                         let task_id_str = task_id.to_string();
                         let retry_count = self.store.increment_retry_count(&task_id_str)?;
                         let failure_class = classify_run_task_failure(&message);
-                        if retry_count < RUN_TASK_FAILURE_LIMIT {
+                        if retry_count < RUN_TASK_FAILURE_LIMIT && !failure_class.should_not_retry()
+                        {
                             disable_task = false;
                             let delay = run_task_retry_delay(retry_count, failure_class);
                             if let Schedule::OneShot { run_at } = &mut self.tasks[index].schedule {
@@ -727,12 +728,16 @@ fn sync_task_status_to_user_storage(
 const RUN_TASK_TRANSIENT_FAILURE_NOTICE: &str =
     "We hit a temporary execution issue while working on your request. Please send your message again if you'd like us to retry.";
 
+const RUN_TASK_CONTENT_FILTER_NOTICE: &str =
+    "Your message was blocked by the agentic employee's content filter. This can happen with certain attachments or text patterns. Please try rephrasing your request or removing attachments that might trigger safety filters.";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RunTaskFailureClass {
     Generic,
     AciCapacity,
     CodexStreamDisconnected,
     CodexCapacity,
+    ContentFilter,
 }
 
 impl RunTaskFailureClass {
@@ -742,6 +747,7 @@ impl RunTaskFailureClass {
             Self::AciCapacity => "aci_capacity_quota",
             Self::CodexStreamDisconnected => "codex_stream_disconnected",
             Self::CodexCapacity => "codex_capacity_limited",
+            Self::ContentFilter => "content_filter",
         }
     }
 
@@ -752,18 +758,24 @@ impl RunTaskFailureClass {
         )
     }
 
+    fn should_not_retry(self) -> bool {
+        matches!(self, Self::ContentFilter)
+    }
+
     fn user_notice(self) -> &'static str {
-        if self.uses_extended_backoff() {
-            RUN_TASK_TRANSIENT_FAILURE_NOTICE
-        } else {
-            RUN_TASK_FAILURE_NOTICE
+        match self {
+            Self::ContentFilter => RUN_TASK_CONTENT_FILTER_NOTICE,
+            _ if self.uses_extended_backoff() => RUN_TASK_TRANSIENT_FAILURE_NOTICE,
+            _ => RUN_TASK_FAILURE_NOTICE,
         }
     }
 }
 
 fn classify_run_task_failure(error_message: &str) -> RunTaskFailureClass {
     let lowered = error_message.to_ascii_lowercase();
-    if is_aci_capacity_error_text(&lowered) {
+    if is_content_filter_error_text(&lowered) {
+        RunTaskFailureClass::ContentFilter
+    } else if is_aci_capacity_error_text(&lowered) {
         RunTaskFailureClass::AciCapacity
     } else if is_codex_stream_disconnect_error_text(&lowered) {
         RunTaskFailureClass::CodexStreamDisconnected
@@ -1115,6 +1127,10 @@ fn is_codex_capacity_error_text(lowered: &str) -> bool {
             "provisioned throughput",
         ],
     )
+}
+
+fn is_content_filter_error_text(lowered: &str) -> bool {
+    contains_any(lowered, &["content_filter"])
 }
 
 fn contains_any(haystack: &str, patterns: &[&str]) -> bool {
