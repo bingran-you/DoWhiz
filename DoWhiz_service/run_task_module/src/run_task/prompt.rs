@@ -922,9 +922,16 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         )
     };
 
+    // Discord guild ID for bug scanning
+    let discord_guild_section = identities
+        .discord_guild_id
+        .as_ref()
+        .map(|id| format!("\n**Discord Server (for bug scanning):** Guild ID `{}`\n", id))
+        .unwrap_or_default();
+
     format!(
         r#"
-=== TPM MODE ACTIVE for {org_name} ==={org_members_section}
+=== TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}
 
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
@@ -1102,14 +1109,26 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
    - If "No notion_database_id configured" error, create board first via setup-board
 4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
 5. **Archive stale tasks** - tasks with no updates in 2+ weeks that are no longer relevant
-6. **Add new tasks** discovered from:
+6. **IMPORTANT - Scan community channels for bugs/feedback** (if Discord Server guild ID is configured above):
+   - Use `discord_cli list-channels <GUILD_ID>` with the guild ID from the Discord Server section
+   - Look for #bug-reports, #feedback, #support channels
+   - Fetch recent messages and identify new bug reports or feature requests
+   - For each bug report found, document:
+     - Channel name where it was found (e.g., #bug-reports)
+     - Reporter's username
+     - Verbatim quote of the original message
+   - Create Notion tasks for each NEW item (deduplicate against existing tasks first)
+   - Include the verbatim snippet in the Notion task description
+   - See "Proactive Bug/Issue Scanning" section above for full workflow
+   - Skip this step if no Discord guild ID is configured
+7. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
    - Recent PRs that need follow-up
    - Blockers mentioned in PR comments
    - Competitive research findings
    - Your own ideas for product improvements
-7. **Assign all unassigned tasks** - aim for ~10 active tasks per person
-8. Compile summary report for {org_name}
+8. **Assign all unassigned tasks** - aim for ~10 active tasks per person
+9. Compile summary report for {org_name}
 
 **Proactive Task Creation:**
 You SHOULD add tasks when you discover:
