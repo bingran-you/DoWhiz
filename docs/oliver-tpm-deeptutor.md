@@ -280,6 +280,8 @@ pub fn extract_scheduled_tasks(output: &str) -> (Vec<ScheduledTaskRequest>, Opti
 ```
 
 Each entry in the array becomes a separate `SendReplyTask` that the scheduler executes independently.
+  * Note that in the executions table, this means that on TPM manual trigger can have multiple associated `SendReplyTasks`
+  * These `SendReplyTasks` are prefixed by `task overdue: ...`
 
 **Org Member → Email Resolution:**
 
@@ -292,6 +294,8 @@ Known Organization Members (from DoWhiz):
 
 Oliver matches the task's Notion assignee ID to the org member's `notion_id`, then uses their email for the follow-up.
 
+* For a given user, their organization and the information regarding the members of the organization (such as their notion id and email), are retrieved in `fetch_user_identites`, which returns the `UserIdentities` struct.
+
 **Schema Discovery:**
 
 The default task board schema includes an `ETA` date field (added 2026-05-08):
@@ -303,7 +307,73 @@ However, custom boards may use different names ("Due Date", "Deadline", "Target 
 1. Try `tpm_cli get-schema` first
 2. If that fails (e.g., page ID instead of database), fall back to `notion_api_cli get-database` or query tasks directly to inspect properties
 
-### 6. Developer Assignment & Notifications
+### 6. Discord Community Bug Scanning (Added 2026-05-10)
+
+Organizations can link a Discord server for Oliver to scan during TPM syncs.
+
+**Setup:**
+
+1. Admin sets Discord guild ID via dashboard (Organization Settings → Community Bug Tracking → Discord)
+2. Guild ID stored in `organizations.discord_guild_id` (Supabase)
+3. Passed to agent via `UserIdentities.discord_guild_id`
+
+**TPM Workflow (Step 6):**
+
+```
+1. discord_cli list-channels --guild-id <GUILD_ID>
+  - Calls GET https://discord.com/api/v10/guilds/{guild_id}/channel, gets vec of `DiscordChannel`, prints JSON to stdout
+
+#[derive(Debug, Deserialize)]
+struct DiscordChannel {
+    id: String,
+    name: Option<String>,
+    #[serde(rename = "type")]
+    channel_type: u8,        // 0=text, 2=voice, 4=category, etc.
+    #[serde(default)]
+    parent_id: Option<String>,
+}
+
+   → Find channels: #bug-reports, #feedback, #support
+
+2. discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50
+
+  - Calls GET https://discord.com/api/v10/channels/{channel_id}/messages?limit={n}, gets vec of `DiscordMessage`, prints JSON to stdout
+
+#[derive(Debug, Deserialize)]
+struct DiscordMessage {
+    id: String,
+    content: String,
+    author: DiscordUser,
+    timestamp: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct DiscordUser {
+    id: String,
+    username: String,
+    #[serde(default)]
+    bot: bool,
+    #[serde(default)]
+    global_name: Option<String>,
+}
+   → Fetch recent messages
+
+3. Identify bug reports (keywords: "bug", "broken", "crash", "issue")
+
+4. For each new bug:
+   - Document: channel name, reporter username, verbatim quote
+   - Create Notion task with bug details in description
+   - Deduplicate against existing tasks first
+```
+
+**API Endpoint:**
+
+```
+PUT /auth/organization/:name/discord
+Body: { "guild_id": "1234567890123456789" }
+```
+
+### 7. Developer Assignment & Notifications
 
 **Assignee Discovery (Three Sources - Added 2026-05-05):**
 
@@ -670,6 +740,23 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/10/26
+**Completed:**
+- ✅ **Organization Discord Guild Linking** — Organizations can now link a Discord server for community bug scanning
+  - `account_store.rs`: Added `discord_guild_id` field to `Organization` struct and SQL queries
+  - `auth.rs`: Added `PUT /auth/organization/:name/discord` endpoint to set guild ID
+  - `executor.rs`: Populates `UserIdentities.discord_guild_id` from org config
+  - `prompt.rs`: Displays "Discord Server: {guild_id}" in TPM prompt when configured
+  - Frontend: Added Discord server ID input in organization settings (Community Bug Tracking section)
+- ✅ **Discord CLI Bug Scanning Commands** — Added channel/message reading for bug scanning workflow
+  - `discord_cli list-channels --guild-id <id>` — List all channels in a Discord server
+  - `discord_cli read-messages --channel-id <id> --limit 50` — Read recent messages from a channel
+  - Updated `prompt.rs` with correct command syntax and TPM workflow step 6 instructions
+- ✅ **Multiple SendReplyTask Follow-ups** — Oliver can now emit multiple follow-up emails in a single run
+  - Each overdue task gets its own `send_email` entry in `SCHEDULED_TASKS_JSON`
+  - Scheduler parses and executes each as a separate `SendReplyTask`
+  - Enables per-assignee overdue notifications in a single TPM sync
+
 ### 5/8/26
 **Completed:**
 - ✅ **ETA Field for Deadlines** — Added `ETA` date property to task board schema (`tpm_cli.rs`)
