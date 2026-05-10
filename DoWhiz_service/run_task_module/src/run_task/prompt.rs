@@ -466,11 +466,14 @@ When writing content to Google Docs, use simple HTML format (NOT Markdown):
 Example: `google-docs append <doc_id> "<h1>Project Plan</h1><p>Overview of the project...</p>"`
 
 Discord Bot Tools (for Discord messages):
-- `discord_cli send-message <channel_id> <message>` - Send message to a channel
-- `discord_cli send-reply <channel_id> <message_id> <message>` - Reply to a specific message
-- `discord_cli send-dm <user_id> <message>` - Send DM to a user
-- `discord_cli list-guild-members <guild_id>` - List all members in a Discord server
-- `discord_cli dm-all-guild <guild_id> <message>` - DM all members in a Discord server
+- `discord_cli send-channel --channel-id <id> --message "<text>"` - Send message to a channel
+- `discord_cli send-channel --channel-id <id> --message "<text>" --reply-to <msg_id>` - Reply to a message
+- `discord_cli send-dm --user-id <id> --message "<text>"` - Send DM to a user
+- `discord_cli list-channels --guild-id <id>` - List all channels in a Discord server
+- `discord_cli list-channels --guild-id <id> --text-only` - List only text channels
+- `discord_cli read-messages --channel-id <id> --limit 50` - Read recent messages from a channel
+- `discord_cli list-guild-members --guild-id <id>` - List all members in a Discord server
+- `discord_cli dm-all-guild --guild-id <id> --message "<text>"` - DM all members in a server
 
 IMPORTANT: For Discord operations (DMs, channel messages), ALWAYS use `discord_cli`.
 Do NOT use browser automation for Discord - the bot token is already configured.
@@ -478,8 +481,8 @@ Do NOT use browser automation for Discord - the bot token is already configured.
 Proactive Bug/Issue Scanning (Discord & Slack):
 When asked to scan for bugs, issues, or feedback from community channels:
 1. Look for channels with names like #bug-reports, #bugs, #issues, #feedback, #support
-2. Use `discord_cli list-channels <guild_id>` or Slack API to find relevant channels
-3. Fetch recent messages from the channel and identify bug reports
+2. Use `discord_cli list-channels --guild-id <id>` to find relevant channels
+3. Use `discord_cli read-messages --channel-id <id> --limit 50` to fetch recent messages
 4. **Deduplication**: Before creating a task, search the Notion task board for existing tasks with similar content. Check title, description, and any message ID references. Skip if already exists.
 5. For each NEW bug report, create a Notion task:
    - Title: Brief summary of the bug
@@ -1110,9 +1113,10 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
 4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
 5. **Archive stale tasks** - tasks with no updates in 2+ weeks that are no longer relevant
 6. **IMPORTANT - Scan community channels for bugs/feedback** (if Discord Server guild ID is configured above):
-   - Use `discord_cli list-channels <GUILD_ID>` with the guild ID from the Discord Server section
+   - Use `discord_cli list-channels --guild-id <GUILD_ID>` with the guild ID from the Discord Server section
    - Look for #bug-reports, #feedback, #support channels
-   - Fetch recent messages and identify new bug reports or feature requests
+   - Use `discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50` to fetch recent messages
+   - Identify new bug reports or feature requests from the messages
    - For each bug report found, document:
      - Channel name where it was found (e.g., #bug-reports)
      - Reporter's username
