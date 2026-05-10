@@ -132,3 +132,13 @@ Use the open-source docs first. Treat `reference_documentation/`, `DoWhiz_servic
 Legacy maintainer helpers such as `env.example.least` and `test_google_e2e.py`
 remain in the repo for transparency, but they are not part of the supported first-time
 onboarding path.
+
+---
+
+<p align="center"><strong>Powered by</strong></p>
+
+<p align="center">
+  <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" /></a>
+  <a href="https://azure.microsoft.com"><img src="https://img.shields.io/badge/Microsoft_Azure-0078D4?style=for-the-badge&logo=microsoft-azure&logoColor=white" alt="Microsoft Azure" /></a>
+  <a href="https://www.mongodb.com"><img src="https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" /></a>
+</p>
