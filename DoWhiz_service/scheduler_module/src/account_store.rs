@@ -210,6 +210,8 @@ pub struct OrgMember {
     pub email: String,
     pub name: Option<String>,
     pub notion_user_id: Option<String>,
+    pub slack_user_id: Option<String>,
+    pub discord_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -2099,7 +2101,13 @@ impl AccountStore {
             "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name,
                     (SELECT ui.identifier FROM user_identities ui
                      WHERE ui.account_id = a.id AND ui.identifier_type = 'notion' AND ui.verified = true
-                     LIMIT 1) as notion_user_id
+                     LIMIT 1) as notion_user_id,
+                    (SELECT ui.identifier FROM user_identities ui
+                     WHERE ui.account_id = a.id AND ui.identifier_type = 'slack' AND ui.verified = true
+                     LIMIT 1) as slack_user_id,
+                    (SELECT ui.identifier FROM user_identities ui
+                     WHERE ui.account_id = a.id AND ui.identifier_type = 'discord' AND ui.verified = true
+                     LIMIT 1) as discord_user_id
              FROM accounts a
              JOIN auth.users u ON a.auth_user_id = u.id
              WHERE a.organization_id = $1",
@@ -2113,6 +2121,8 @@ impl AccountStore {
                 email: r.get::<_, Option<String>>(1).unwrap_or_default(),
                 name: r.get(2),
                 notion_user_id: r.get(3),
+                slack_user_id: r.get(4),
+                discord_user_id: r.get(5),
             })
             .collect())
     }

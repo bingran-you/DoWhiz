@@ -432,6 +432,8 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
                         email: m.email,
                         name: m.name,
                         notion_user_id: m.notion_user_id,
+                        slack_user_id: m.slack_user_id,
+                        discord_user_id: m.discord_user_id,
                     })
                     .collect();
             }

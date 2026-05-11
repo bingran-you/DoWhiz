@@ -2841,6 +2841,19 @@
                           <button id="set-discord-guild-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Connect</button>
                         </div>
                         <span id="discord-guild-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+
+                        <h5 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.95rem;">Slack</h5>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                          <input
+                            type="text"
+                            id="slack-team-id-input"
+                            class="auth-input"
+                            placeholder="Team ID (e.g., T0123456789)"
+                            style="min-width: 200px;"
+                          />
+                          <button id="set-slack-team-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Connect</button>
+                        </div>
+                        <span id="slack-team-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
                       </div>
                     </div>
 
@@ -6282,6 +6295,10 @@
             if (discordInput && currentOrg.discord_guild_id) {
               discordInput.value = currentOrg.discord_guild_id;
             }
+            const slackInput = document.getElementById('slack-team-id-input');
+            if (slackInput && currentOrg.slack_team_id) {
+              slackInput.value = currentOrg.slack_team_id;
+            }
           }
         } else {
           if (orgCurrentDisplay) {
@@ -6898,6 +6915,67 @@
               }
             } finally {
               setDiscordGuildBtn.disabled = false;
+            }
+          });
+        }
+
+        // Set Slack Team button handler
+        const setSlackTeamBtn = document.getElementById('set-slack-team-btn');
+        if (setSlackTeamBtn) {
+          setSlackTeamBtn.addEventListener('click', async () => {
+            const input = document.getElementById('slack-team-id-input');
+            const status = document.getElementById('slack-team-status');
+            const teamId = input?.value?.trim();
+
+            if (!teamId) {
+              if (status) status.textContent = 'Please enter a Slack Team ID';
+              return;
+            }
+
+            // Basic Slack team ID validation (starts with T, alphanumeric)
+            if (!/^T[A-Z0-9]+$/.test(teamId)) {
+              if (status) status.textContent = 'Invalid Team ID format (should start with T)';
+              return;
+            }
+
+            if (!currentOrganizationName) {
+              if (status) status.textContent = 'No organization selected';
+              return;
+            }
+
+            try {
+              setSlackTeamBtn.disabled = true;
+              if (status) status.textContent = 'Connecting...';
+
+              const { data: { session } } = await supabase.auth.getSession();
+              const accessToken = session?.access_token;
+
+              const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/slack`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ team_id: teamId })
+              });
+
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `Failed: ${res.status}`);
+              }
+
+              if (status) {
+                status.textContent = 'Slack workspace connected successfully!';
+                status.style.color = '#22c55e';
+              }
+            } catch (err) {
+              console.error('Failed to connect Slack workspace:', err);
+              if (status) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = '#ef4444';
+              }
+            } finally {
+              setSlackTeamBtn.disabled = false;
             }
           });
         }
