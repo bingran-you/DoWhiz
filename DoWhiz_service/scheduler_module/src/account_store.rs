@@ -2091,7 +2091,7 @@ impl AccountStore {
     }
 
     /// List all org members with their name/email from auth.users.
-    /// Joins accounts with auth.users to get user info, and user_identities for notion_user_id.
+    /// Joins accounts with auth.users to get user info, and account_identifiers for channel IDs.
     pub fn list_org_members_with_info(
         &self,
         organization_id: Uuid,
@@ -2099,14 +2099,14 @@ impl AccountStore {
         let mut conn = self.conn()?;
         let rows = conn.query(
             "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name,
-                    (SELECT ui.identifier FROM user_identities ui
-                     WHERE ui.account_id = a.id AND ui.identifier_type = 'notion' AND ui.verified = true
+                    (SELECT ai.identifier FROM account_identifiers ai
+                     WHERE ai.account_id = a.id AND ai.identifier_type = 'notion' AND ai.verified = true
                      LIMIT 1) as notion_user_id,
-                    (SELECT ui.identifier FROM user_identities ui
-                     WHERE ui.account_id = a.id AND ui.identifier_type = 'slack' AND ui.verified = true
+                    (SELECT ai.identifier FROM account_identifiers ai
+                     WHERE ai.account_id = a.id AND ai.identifier_type = 'slack' AND ai.verified = true
                      LIMIT 1) as slack_user_id,
-                    (SELECT ui.identifier FROM user_identities ui
-                     WHERE ui.account_id = a.id AND ui.identifier_type = 'discord' AND ui.verified = true
+                    (SELECT ai.identifier FROM account_identifiers ai
+                     WHERE ai.account_id = a.id AND ai.identifier_type = 'discord' AND ai.verified = true
                      LIMIT 1) as discord_user_id
              FROM accounts a
              JOIN auth.users u ON a.auth_user_id = u.id

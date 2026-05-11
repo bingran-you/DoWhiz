@@ -424,18 +424,28 @@ fn fetch_user_identities(account_id: Option<Uuid>) -> UserIdentities {
                 result.slack_team_id = org.slack_team_id;
             }
             // Fetch org members for task assignment
-            if let Ok(members) = store.list_org_members_with_info(org_id) {
-                result.organization_members = members
-                    .into_iter()
-                    .map(|m| run_task_module::OrgMember {
-                        account_id: m.account_id.to_string(),
-                        email: m.email,
-                        name: m.name,
-                        notion_user_id: m.notion_user_id,
-                        slack_user_id: m.slack_user_id,
-                        discord_user_id: m.discord_user_id,
-                    })
-                    .collect();
+            match store.list_org_members_with_info(org_id) {
+                Ok(members) => {
+                    info!(
+                        "fetched {} org members for org_id={}",
+                        members.len(),
+                        org_id
+                    );
+                    result.organization_members = members
+                        .into_iter()
+                        .map(|m| run_task_module::OrgMember {
+                            account_id: m.account_id.to_string(),
+                            email: m.email,
+                            name: m.name,
+                            notion_user_id: m.notion_user_id,
+                            slack_user_id: m.slack_user_id,
+                            discord_user_id: m.discord_user_id,
+                        })
+                        .collect();
+                }
+                Err(e) => {
+                    warn!("failed to fetch org members for org_id={}: {}", org_id, e);
+                }
             }
         }
     }

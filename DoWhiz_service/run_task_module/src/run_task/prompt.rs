@@ -370,7 +370,8 @@ Memory management and maintain policy:
 - Update memory files at the end if new durable info is learned; otherwise leave unchanged.
 
 Scheduling:
-- For any scheduling (email or task), you MUST use the skill "scheduler_maintain".
+- To schedule follow-up messages, output SCHEDULED_TASKS_JSON (see TPM section for format).
+- Supported types: send_email, send_slack, send_discord.
 
 {cross_channel_capabilities}
 {chat_history_capabilities_section}
