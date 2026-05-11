@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tracing::{info, warn};
@@ -9,7 +10,7 @@ use uuid::Uuid;
 use crate::account_store::{
     get_global_account_store, lookup_account_by_channel, lookup_account_by_identifier,
 };
-use crate::channel::Channel;
+use crate::channel::{Channel, ChannelMetadata};
 use crate::employee_config;
 use crate::service;
 use crate::thread_state::{current_thread_epoch, default_thread_state_path};
@@ -817,6 +818,28 @@ pub(crate) fn ingest_follow_up_tasks<E: TaskExecutor>(
                     ),
                 }
             }
+            run_task_module::ScheduledTaskRequest::SendSlack(request) => {
+                match schedule_send_slack(scheduler, task, request) {
+                    Ok(true) => scheduled += 1,
+                    Ok(false) => {}
+                    Err(err) => warn!(
+                        "failed to schedule follow-up slack from {}: {}",
+                        task.workspace_dir.display(),
+                        err
+                    ),
+                }
+            }
+            run_task_module::ScheduledTaskRequest::SendDiscord(request) => {
+                match schedule_send_discord(scheduler, task, request) {
+                    Ok(true) => scheduled += 1,
+                    Ok(false) => {}
+                    Err(err) => warn!(
+                        "failed to schedule follow-up discord from {}: {}",
+                        task.workspace_dir.display(),
+                        err
+                    ),
+                }
+            }
         }
     }
 
@@ -1241,6 +1264,214 @@ pub(crate) fn schedule_send_email<E: TaskExecutor>(
     )?;
     info!(
         "scheduled follow-up send_email task {} from {} delay_seconds={}",
+        task_id,
+        task.workspace_dir.display(),
+        delay_seconds
+    );
+    Ok(true)
+}
+
+pub(crate) fn schedule_send_slack<E: TaskExecutor>(
+    scheduler: &mut Scheduler<E>,
+    task: &RunTaskTask,
+    request: &run_task_module::ScheduledSendSlackTask,
+) -> Result<bool, SchedulerError> {
+    if request.message.trim().is_empty() {
+        warn!(
+            "scheduled send_slack missing message in workspace {}",
+            task.workspace_dir.display()
+        );
+        return Ok(false);
+    }
+    if request.user_id.trim().is_empty() {
+        warn!(
+            "scheduled send_slack missing user_id in workspace {}",
+            task.workspace_dir.display()
+        );
+        return Ok(false);
+    }
+
+    let msg_path = task.workspace_dir.join("scheduled_slack_message.txt");
+    if let Err(err) = fs::write(&msg_path, &request.message) {
+        warn!(
+            "failed to write scheduled slack message to {}: {}",
+            msg_path.display(),
+            err
+        );
+        return Ok(false);
+    }
+
+    let send_task = SendReplyTask {
+        channel: Channel::Slack,
+        subject: String::new(),
+        html_path: msg_path,
+        attachments_dir: task.workspace_dir.join("scheduled_slack_attachments"),
+        from: task.reply_from.clone(),
+        to: vec![request.user_id.clone()],
+        cc: vec![],
+        bcc: vec![],
+        in_reply_to: None,
+        references: None,
+        archive_root: task.archive_root.clone(),
+        thread_epoch: task.thread_epoch,
+        thread_state_path: task.thread_state_path.clone(),
+        employee_id: task.employee_id.clone(),
+        // Slack accepts user_id as channel for DMs (chat.postMessage auto-opens DM)
+        channel_metadata: ChannelMetadata {
+            slack_team_id: Some(request.team_id.clone()),
+            slack_channel_id: Some(request.user_id.clone()),
+            ..Default::default()
+        },
+    };
+
+    if let Some(run_at_raw) = request.run_at.as_deref() {
+        match parse_datetime(run_at_raw) {
+            Ok(run_at) => {
+                let task_id = scheduler.add_one_shot_at(run_at, TaskKind::SendReply(send_task))?;
+                info!(
+                    "scheduled follow-up send_slack task {} from {} run_at={}",
+                    task_id,
+                    task.workspace_dir.display(),
+                    run_at.to_rfc3339(),
+                );
+                return Ok(true);
+            }
+            Err(err) => {
+                warn!(
+                    "scheduled send_slack has invalid run_at '{}' in workspace {}: {}",
+                    run_at_raw,
+                    task.workspace_dir.display(),
+                    err
+                );
+                return Ok(false);
+            }
+        }
+    }
+
+    let delay_seconds = request.delay_seconds.or_else(|| {
+        request
+            .delay_minutes
+            .map(|value: i64| value.saturating_mul(60))
+    });
+    let delay_seconds: u64 = match delay_seconds {
+        Some(value) => value.max(0) as u64,
+        None => {
+            warn!(
+                "scheduled send_slack missing delay for workspace {}",
+                task.workspace_dir.display()
+            );
+            return Ok(false);
+        }
+    };
+
+    let task_id = scheduler.add_one_shot_in(
+        Duration::from_secs(delay_seconds),
+        TaskKind::SendReply(send_task),
+    )?;
+    info!(
+        "scheduled follow-up send_slack task {} from {} delay_seconds={}",
+        task_id,
+        task.workspace_dir.display(),
+        delay_seconds
+    );
+    Ok(true)
+}
+
+pub(crate) fn schedule_send_discord<E: TaskExecutor>(
+    scheduler: &mut Scheduler<E>,
+    task: &RunTaskTask,
+    request: &run_task_module::ScheduledSendDiscordTask,
+) -> Result<bool, SchedulerError> {
+    if request.message.trim().is_empty() {
+        warn!(
+            "scheduled send_discord missing message in workspace {}",
+            task.workspace_dir.display()
+        );
+        return Ok(false);
+    }
+    if request.user_id.trim().is_empty() {
+        warn!(
+            "scheduled send_discord missing user_id in workspace {}",
+            task.workspace_dir.display()
+        );
+        return Ok(false);
+    }
+
+    let msg_path = task.workspace_dir.join("scheduled_discord_message.txt");
+    if let Err(err) = fs::write(&msg_path, &request.message) {
+        warn!(
+            "failed to write scheduled discord message to {}: {}",
+            msg_path.display(),
+            err
+        );
+        return Ok(false);
+    }
+
+    let send_task = SendReplyTask {
+        channel: Channel::Discord,
+        subject: String::new(),
+        html_path: msg_path,
+        attachments_dir: task.workspace_dir.join("scheduled_discord_attachments"),
+        from: task.reply_from.clone(),
+        to: vec![request.user_id.clone()],
+        cc: vec![],
+        bcc: vec![],
+        in_reply_to: None,
+        references: None,
+        archive_root: task.archive_root.clone(),
+        thread_epoch: task.thread_epoch,
+        thread_state_path: task.thread_state_path.clone(),
+        employee_id: task.employee_id.clone(),
+        // Discord requires create_dm_channel(user_id) first; adapter handles this via to[0]
+        channel_metadata: ChannelMetadata::default(),
+    };
+
+    if let Some(run_at_raw) = request.run_at.as_deref() {
+        match parse_datetime(run_at_raw) {
+            Ok(run_at) => {
+                let task_id = scheduler.add_one_shot_at(run_at, TaskKind::SendReply(send_task))?;
+                info!(
+                    "scheduled follow-up send_discord task {} from {} run_at={}",
+                    task_id,
+                    task.workspace_dir.display(),
+                    run_at.to_rfc3339(),
+                );
+                return Ok(true);
+            }
+            Err(err) => {
+                warn!(
+                    "scheduled send_discord has invalid run_at '{}' in workspace {}: {}",
+                    run_at_raw,
+                    task.workspace_dir.display(),
+                    err
+                );
+                return Ok(false);
+            }
+        }
+    }
+
+    let delay_seconds = request.delay_seconds.or_else(|| {
+        request
+            .delay_minutes
+            .map(|value: i64| value.saturating_mul(60))
+    });
+    let delay_seconds: u64 = match delay_seconds {
+        Some(value) => value.max(0) as u64,
+        None => {
+            warn!(
+                "scheduled send_discord missing delay for workspace {}",
+                task.workspace_dir.display()
+            );
+            return Ok(false);
+        }
+    };
+
+    let task_id = scheduler.add_one_shot_in(
+        Duration::from_secs(delay_seconds),
+        TaskKind::SendReply(send_task),
+    )?;
+    info!(
+        "scheduled follow-up send_discord task {} from {} delay_seconds={}",
         task_id,
         task.workspace_dir.display(),
         delay_seconds

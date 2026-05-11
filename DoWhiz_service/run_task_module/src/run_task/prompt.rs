@@ -1014,26 +1014,38 @@ Before running TPM commands, gather context about {org_name}:
 11. Report in your summary which assignees came from each source (Notion users / org members / discovered)
 
 **Overdue Task Follow-ups (during scheduled syncs):**
-During TPM syncs, check for tasks with overdue deadlines and schedule follow-up emails:
+During TPM syncs, check for tasks with overdue deadlines and schedule follow-up notifications:
 
 1. Discover the date property name (could be "ETA", "Due Date", "Deadline", "Target Date", etc.):
    - Try `tpm_cli get-schema` first
    - If that fails (e.g., page ID instead of database), use `notion_api_cli get-database` or query tasks directly
 2. Query tasks and check the date property against today's date
 3. For tasks where the date is 3+ days past AND status is not "Done" or "Archived":
-   - Look up the assignee's email from Known Organization Members (match by notion_id or name)
-   - Schedule a follow-up email using SCHEDULED_TASKS_JSON
-4. Format for scheduling follow-up emails:
+   - Look up the assignee from Known Organization Members (match by notion_id or name)
+   - Choose notification channel (priority: Slack > Discord > Email):
+     a. If assignee has slack_user_id AND Slack Workspace is configured → use send_slack
+     b. Else if assignee has discord_user_id → use send_discord
+     c. Else fall back to send_email
+4. Format for scheduling follow-ups (use the appropriate type):
+   ```
+   SCHEDULED_TASKS_JSON_BEGIN
+   [{{"type":"send_slack","delay_minutes":0,"team_id":"<slack_team_id>","user_id":"<slack_user_id>","message":"Task overdue: [Task Name]\\n\\nThis task is X days past its deadline. Could you provide a status update or new ETA?\\n\\nNotion link: https://notion.so/..."}}]
+   SCHEDULED_TASKS_JSON_END
+   ```
+   Or for Discord:
+   ```
+   SCHEDULED_TASKS_JSON_BEGIN
+   [{{"type":"send_discord","delay_minutes":0,"user_id":"<discord_user_id>","message":"Task overdue: [Task Name]\\n\\nThis task is X days past its deadline. Could you provide a status update or new ETA?\\n\\nNotion link: https://notion.so/..."}}]
+   SCHEDULED_TASKS_JSON_END
+   ```
+   Or for Email (fallback):
    ```
    SCHEDULED_TASKS_JSON_BEGIN
    [{{"type":"send_email","delay_minutes":0,"subject":"Task overdue: [Task Name]","html_path":"followup_[task_id].html","to":["assignee@email.com"]}}]
    SCHEDULED_TASKS_JSON_END
    ```
-5. Create the HTML file (e.g., `followup_abc123.html`) with a brief, friendly reminder:
-   - Task name and link to Notion page
-   - How many days overdue
-   - Ask for a status update or new ETA
-6. In your summary, list which overdue tasks triggered follow-ups
+5. For email only: Create the HTML file (e.g., `followup_abc123.html`) with the reminder content
+6. In your summary, list which overdue tasks triggered follow-ups and via which channel
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
