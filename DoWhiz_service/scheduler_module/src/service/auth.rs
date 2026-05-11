@@ -2069,14 +2069,13 @@ pub async fn update_organization_discord(
 
     let store = state.account_store.clone();
     let guild_id = payload.guild_id.clone();
-    let update_result = task::spawn_blocking(move || {
-        store.update_organization_discord_guild(&org_name, &guild_id)
-    })
-    .await
-    .map_err(|e| {
-        error!("spawn_blocking panicked: {}", e);
-        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
-    });
+    let update_result =
+        task::spawn_blocking(move || store.update_organization_discord_guild(&org_name, &guild_id))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
 
     match update_result {
         Ok(Ok(updated_org)) => (
@@ -2151,14 +2150,13 @@ pub async fn update_organization_slack(
 
     let store = state.account_store.clone();
     let team_id = payload.team_id.clone();
-    let update_result = task::spawn_blocking(move || {
-        store.update_organization_slack_team(&org_name, &team_id)
-    })
-    .await
-    .map_err(|e| {
-        error!("spawn_blocking panicked: {}", e);
-        json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
-    });
+    let update_result =
+        task::spawn_blocking(move || store.update_organization_slack_team(&org_name, &team_id))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
 
     match update_result {
         Ok(Ok(updated_org)) => (

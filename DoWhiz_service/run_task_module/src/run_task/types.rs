@@ -136,6 +136,8 @@ pub(super) struct RunTaskRequest<'a> {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ScheduledTaskRequest {
     SendEmail(ScheduledSendEmailTask),
+    SendSlack(ScheduledSendSlackTask),
+    SendDiscord(ScheduledSendDiscordTask),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -179,6 +181,25 @@ pub struct ScheduledSendEmailTask {
     pub cc: Vec<String>,
     #[serde(default)]
     pub bcc: Vec<String>,
+    pub delay_minutes: Option<i64>,
+    pub delay_seconds: Option<i64>,
+    pub run_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduledSendSlackTask {
+    pub team_id: String,
+    pub user_id: String,
+    pub message: String,
+    pub delay_minutes: Option<i64>,
+    pub delay_seconds: Option<i64>,
+    pub run_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduledSendDiscordTask {
+    pub user_id: String,
+    pub message: String,
     pub delay_minutes: Option<i64>,
     pub delay_seconds: Option<i64>,
     pub run_at: Option<String>,

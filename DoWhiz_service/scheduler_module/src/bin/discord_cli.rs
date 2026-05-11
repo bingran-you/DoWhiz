@@ -813,7 +813,10 @@ fn cmd_list_channels(args: &[String]) -> ExitCode {
         let error_text = response
             .text()
             .unwrap_or_else(|_| "unknown error".to_string());
-        eprintln!("Error: Failed to list channels ({}): {}", status, error_text);
+        eprintln!(
+            "Error: Failed to list channels ({}): {}",
+            status, error_text
+        );
         return ExitCode::FAILURE;
     }
 
