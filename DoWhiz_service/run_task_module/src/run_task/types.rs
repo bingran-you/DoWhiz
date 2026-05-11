@@ -19,6 +19,10 @@ pub struct OrgMember {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notion_user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slack_user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discord_user_id: Option<String>,
 }
 
 /// User's linked channel identifiers for cross-channel routing

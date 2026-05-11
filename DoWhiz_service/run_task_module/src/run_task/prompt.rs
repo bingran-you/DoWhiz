@@ -914,9 +914,19 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
                 let notion_part = m
                     .notion_user_id
                     .as_ref()
-                    .map(|id| format!(" | notion_id: {}", id))
+                    .map(|id| format!(" | notion: {}", id))
                     .unwrap_or_default();
-                format!("- {} ({}){}", name_part, m.email, notion_part)
+                let slack_part = m
+                    .slack_user_id
+                    .as_ref()
+                    .map(|id| format!(" | slack: {}", id))
+                    .unwrap_or_default();
+                let discord_part = m
+                    .discord_user_id
+                    .as_ref()
+                    .map(|id| format!(" | discord: {}", id))
+                    .unwrap_or_default();
+                format!("- {} ({}){}{}{}", name_part, m.email, notion_part, slack_part, discord_part)
             })
             .collect();
         format!(
