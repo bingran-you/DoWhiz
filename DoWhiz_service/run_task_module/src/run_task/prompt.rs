@@ -932,9 +932,16 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         .map(|id| format!("\n**Discord Server (for bug scanning):** Guild ID `{}`\n", id))
         .unwrap_or_default();
 
+    // Slack team ID for notifications
+    let slack_team_section = identities
+        .slack_team_id
+        .as_ref()
+        .map(|id| format!("\n**Slack Workspace (for notifications):** Team ID `{}`\n", id))
+        .unwrap_or_default();
+
     format!(
         r#"
-=== TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}
+=== TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}{slack_team_section}
 
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
