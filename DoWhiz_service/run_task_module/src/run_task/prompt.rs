@@ -926,7 +926,10 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
                     .as_ref()
                     .map(|id| format!(" | discord: {}", id))
                     .unwrap_or_default();
-                format!("- {} ({}){}{}{}", name_part, m.email, notion_part, slack_part, discord_part)
+                format!(
+                    "- {} ({}){}{}{}",
+                    name_part, m.email, notion_part, slack_part, discord_part
+                )
             })
             .collect();
         format!(
@@ -939,14 +942,24 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
     let discord_guild_section = identities
         .discord_guild_id
         .as_ref()
-        .map(|id| format!("\n**Discord Server (for bug scanning):** Guild ID `{}`\n", id))
+        .map(|id| {
+            format!(
+                "\n**Discord Server (for bug scanning):** Guild ID `{}`\n",
+                id
+            )
+        })
         .unwrap_or_default();
 
     // Slack team ID for notifications
     let slack_team_section = identities
         .slack_team_id
         .as_ref()
-        .map(|id| format!("\n**Slack Workspace (for notifications):** Team ID `{}`\n", id))
+        .map(|id| {
+            format!(
+                "\n**Slack Workspace (for notifications):** Team ID `{}`\n",
+                id
+            )
+        })
         .unwrap_or_default();
 
     format!(
