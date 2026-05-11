@@ -75,6 +75,9 @@ pub struct UserIdentities {
     /// Discord guild (server) ID for TPM bug scanning
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discord_guild_id: Option<String>,
+    /// Slack team (workspace) ID for TPM notifications
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slack_team_id: Option<String>,
     /// Organization members for task assignment (name + email from auth.users)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organization_members: Vec<OrgMember>,
