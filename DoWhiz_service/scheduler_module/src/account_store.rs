@@ -2101,13 +2101,13 @@ impl AccountStore {
             "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name,
                     (SELECT ai.identifier FROM account_identifiers ai
                      WHERE ai.account_id = a.id AND ai.identifier_type = 'notion' AND ai.verified = true
-                     LIMIT 1) as notion_user_id,
+                     ORDER BY ai.created_at DESC LIMIT 1) as notion_user_id,
                     (SELECT ai.identifier FROM account_identifiers ai
                      WHERE ai.account_id = a.id AND ai.identifier_type = 'slack' AND ai.verified = true
-                     LIMIT 1) as slack_user_id,
+                     ORDER BY ai.created_at DESC LIMIT 1) as slack_user_id,
                     (SELECT ai.identifier FROM account_identifiers ai
                      WHERE ai.account_id = a.id AND ai.identifier_type = 'discord' AND ai.verified = true
-                     LIMIT 1) as discord_user_id
+                     ORDER BY ai.created_at DESC LIMIT 1) as discord_user_id
              FROM accounts a
              JOIN auth.users u ON a.auth_user_id = u.id
              WHERE a.organization_id = $1",
