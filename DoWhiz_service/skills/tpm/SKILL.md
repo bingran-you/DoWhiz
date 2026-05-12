@@ -183,10 +183,7 @@ For email, create the HTML file with:
 - Days overdue count
 - Request for status update or new ETA
 
-### Important Notes
-- Slack user IDs are workspace-specific. If a user linked Slack from a different workspace, their ID won't work.
-- Always use the `team_id` from the organization's Slack Workspace configuration.
-- In your summary, list which overdue tasks triggered follow-ups and via which channel.
+In your summary, list which overdue tasks triggered follow-ups and via which channel.
 
 ## Assignment & Load Balancing
 
