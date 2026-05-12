@@ -151,10 +151,18 @@ During scheduled syncs, check for overdue tasks and send follow-up notifications
 3. For tasks 3+ days overdue (status != Done/Archived):
    - Look up assignee from Known Organization Members (match by notion_id or name)
    - Choose notification channel (priority: Slack > Discord > Email):
-     a. If assignee has slack_user_id AND Slack Workspace is configured → use send_slack
+     a. If assignee has slack_user_id AND Slack Workspace is configured → verify user first, then use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else if assignee has email → use send_email
    - **If 5+ days overdue**: Also reassign the task to yourself ("Assigned to: Oliver") to investigate and follow up directly
+
+### Verify Slack Users Before Sending
+Before scheduling a Slack notification, verify the user exists in the workspace:
+```bash
+SLACK_TOKEN=$(jq -r '.bot_token' .slack_context.json)
+curl -s -H "Authorization: Bearer $SLACK_TOKEN" "https://slack.com/api/users.info?user=<USER_ID>" | jq '.ok'
+```
+If the result is `false` or contains `user_not_found`, skip Slack and fall back to Discord or Email.
 
 ### Scheduling Formats
 
