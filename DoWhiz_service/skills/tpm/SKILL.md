@@ -154,6 +154,7 @@ During scheduled syncs, check for overdue tasks and send follow-up notifications
      a. If assignee has slack_user_id AND Slack Workspace is configured → use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else if assignee has email → use send_email
+   - **If 5+ days overdue**: Also reassign the task to yourself ("Assigned to: Oliver") to investigate and follow up directly
 
 ### Scheduling Formats
 
@@ -196,6 +197,14 @@ When assigning:
 - If org member has `notion_id`, use it directly
 - If no notion_id, match by email to Notion users
 - If no match, add "Assigned to: [name]" in description
+
+### Self-Assignment
+You can assign tasks to yourself by adding "Assigned to: Oliver" in the description. Use this for:
+- Research tasks you'll handle in a future sync
+- Follow-ups that require investigation
+- Work that doesn't fit any team member's expertise
+
+**You must always have at least one task assigned to yourself.** If you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation).
 
 ### Keep the Board Active
 A healthy board has:
@@ -457,7 +466,10 @@ Check tasks with overdue ETAs and schedule follow-up emails (see Overdue Task Fo
 - Backfill ALL missing assignees — no task should be unassigned
 - A healthy board has continuous flow: new tasks coming in, old tasks getting done or archived
 
-### 10. Compile Report
+### 10. Work on Your Own Tasks
+Check for tasks assigned to "Oliver" and complete 1-2 of the highest priority ones during this sync. Mark them done when finished.
+
+### 11. Compile Report
 Structure:
 ```
 ## TPM Sync Report - [Date]
@@ -487,6 +499,9 @@ Structure:
 - [Competitor] launched [feature] - created task #X
 - Opportunity identified: [idea] - created task #Y
 - Market trend: [trend] - implications for roadmap
+
+### Oliver's Tasks Completed
+- [Task title] - [brief summary of what was done]
 ```
 
 ## What NOT To Do
