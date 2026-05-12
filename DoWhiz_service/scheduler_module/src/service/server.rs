@@ -405,6 +405,7 @@ async fn slack_install(State(state): State<AppState>) -> impl IntoResponse {
         "groups:read",
         "im:history",
         "im:read",
+        "im:write",
         "mpim:history",
         "mpim:read",
         "users:read",
