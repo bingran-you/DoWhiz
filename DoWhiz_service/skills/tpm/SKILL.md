@@ -142,27 +142,48 @@ discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50
 
 ## Overdue Task Follow-ups
 
-During scheduled syncs, check for overdue tasks and send follow-up emails.
+During scheduled syncs, check for overdue tasks and send follow-up notifications.
 
 ### Workflow
 1. Discover date property name via `tpm_cli get-schema`
    - Common names: ETA, Due Date, Deadline, Target Date
 2. Query tasks and compare date against today
 3. For tasks 3+ days overdue (status != Done/Archived):
-   - Look up assignee's email from org members (match by notion_id)
-   - Schedule follow-up email
+   - Look up assignee from Known Organization Members (match by notion_id or name)
+   - Choose notification channel (priority: Slack > Discord > Email):
+     a. If assignee has slack_user_id AND Slack Workspace is configured → use send_slack
+     b. Else if assignee has discord_user_id → use send_discord
+     c. Else if assignee has email → use send_email
 
-### Scheduling Format
+### Scheduling Formats
+
+**Slack (preferred):**
+```
+SCHEDULED_TASKS_JSON_BEGIN
+[{"type":"send_slack","delay_minutes":0,"team_id":"<slack_team_id>","user_id":"<slack_user_id>","message":"Task overdue: [Task Name]\n\nThis task is X days past its deadline. Could you provide a status update or new ETA?\n\nNotion link: https://notion.so/..."}]
+SCHEDULED_TASKS_JSON_END
+```
+
+**Discord (fallback):**
+```
+SCHEDULED_TASKS_JSON_BEGIN
+[{"type":"send_discord","delay_minutes":0,"user_id":"<discord_user_id>","message":"Task overdue: [Task Name]\n\nThis task is X days past its deadline. Could you provide a status update or new ETA?\n\nNotion link: https://notion.so/..."}]
+SCHEDULED_TASKS_JSON_END
+```
+
+**Email (last resort):**
 ```
 SCHEDULED_TASKS_JSON_BEGIN
 [{"type":"send_email","delay_minutes":0,"subject":"Task overdue: [Task Name]","html_path":"followup_[id].html","to":["assignee@email.com"]}]
 SCHEDULED_TASKS_JSON_END
 ```
 
-Create the HTML file with:
+For email, create the HTML file with:
 - Task name and Notion page link
 - Days overdue count
 - Request for status update or new ETA
+
+In your summary, list which overdue tasks triggered follow-ups and via which channel.
 
 ## Assignment & Load Balancing
 
