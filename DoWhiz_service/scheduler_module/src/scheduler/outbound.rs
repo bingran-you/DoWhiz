@@ -131,6 +131,11 @@ pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerEr
                 message.metadata.slack_channel_id.as_deref(),
             );
         }
+        if result.error.as_deref() == Some("user_not_found") {
+            return Err(SchedulerError::TaskFailed(
+                "Slack user not found in this workspace. The recipient may have linked their Slack account from a different workspace. Please ask them to re-link Slack from the correct workspace in their DoWhiz settings.".to_string()
+            ));
+        }
         return Err(SchedulerError::TaskFailed(format!(
             "Slack API error: {}",
             result.error.unwrap_or_default()
