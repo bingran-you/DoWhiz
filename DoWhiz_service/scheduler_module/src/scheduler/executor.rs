@@ -1500,6 +1500,12 @@ impl TaskExecutor for ModuleExecutor {
                 let google_access_token = load_google_access_token_from_service_env();
                 info!("[executor] checkpoint: load_notion_access_token");
                 let notion_access_token = load_notion_access_token_for_account(account_id);
+                info!("[executor] checkpoint: write_slack_context");
+                write_slack_context_to_workspace(
+                    &task.workspace_dir,
+                    task.slack_team_id.as_deref(),
+                    task.employee_id.as_deref(),
+                );
                 info!("[executor] checkpoint: build_run_task_params");
                 let params = run_task_module::RunTaskParams {
                     workspace_dir: task.workspace_dir.clone(),
@@ -1772,6 +1778,47 @@ impl TaskExecutor for ModuleExecutor {
                 })
             }
             TaskKind::Noop => Ok(TaskExecution::empty()),
+        }
+    }
+}
+
+/// Write `.slack_context.json` to workspace with the bot token.
+/// This allows the agent to verify Slack user IDs before scheduling notifications.
+fn write_slack_context_to_workspace(
+    workspace_dir: &Path,
+    slack_team_id: Option<&str>,
+    employee_id: Option<&str>,
+) {
+    let Some(team_id) = slack_team_id else {
+        return;
+    };
+    let Some(bot_token) = resolve_slack_bot_token_for_runtime(Some(team_id), employee_id) else {
+        warn!(
+            "no slack bot token found for team_id={}, skipping slack context",
+            team_id
+        );
+        return;
+    };
+
+    let context_path = workspace_dir.join(".slack_context.json");
+    let payload = serde_json::json!({
+        "team_id": team_id,
+        "bot_token": bot_token,
+    });
+    match serde_json::to_string_pretty(&payload) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&context_path, format!("{}\n", json)) {
+                warn!(
+                    "failed to write slack context to {}: {}",
+                    context_path.display(),
+                    e
+                );
+            } else {
+                info!("wrote slack context to {}", context_path.display());
+            }
+        }
+        Err(e) => {
+            warn!("failed to serialize slack context: {}", e);
         }
     }
 }

@@ -1038,11 +1038,17 @@ During TPM syncs, check for tasks with overdue deadlines and schedule follow-up 
 3. For tasks where the date is 3+ days past AND status is not "Done" or "Archived":
    - Look up the assignee from Known Organization Members (match by notion_id or name)
    - Choose notification channel (priority: Slack > Discord > Email):
-     a. If assignee has slack_user_id AND Slack Workspace is configured → use send_slack
+     a. If assignee has slack_user_id AND Slack Workspace is configured → verify user first, then use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else fall back to send_email
    - **If 5+ days overdue**: Also reassign the task to yourself (add "Assigned to: Oliver" in description) so you can investigate and follow up directly in the next sync
-4. Format for scheduling follow-ups (use the appropriate type):
+4. **Before sending Slack notifications**, verify the user exists in the workspace:
+   ```bash
+   SLACK_TOKEN=$(jq -r '.bot_token' .slack_context.json)
+   curl -s -H "Authorization: Bearer $SLACK_TOKEN" "https://slack.com/api/users.info?user=<USER_ID>" | jq '.ok'
+   ```
+   If the result is `false` or contains `user_not_found`, skip Slack and fall back to Discord or Email.
+5. Format for scheduling follow-ups (use the appropriate type):
    ```
    SCHEDULED_TASKS_JSON_BEGIN
    [{{"type":"send_slack","delay_minutes":0,"team_id":"<slack_team_id>","user_id":"<slack_user_id>","message":"Task overdue: [Task Name]\\n\\nThis task is X days past its deadline. Could you provide a status update or new ETA?\\n\\nNotion link: https://notion.so/..."}}]
@@ -1060,8 +1066,8 @@ During TPM syncs, check for tasks with overdue deadlines and schedule follow-up 
    [{{"type":"send_email","delay_minutes":0,"subject":"Task overdue: [Task Name]","html_path":"followup_[task_id].html","to":["assignee@email.com"]}}]
    SCHEDULED_TASKS_JSON_END
    ```
-5. For email only: Create the HTML file (e.g., `followup_abc123.html`) with the reminder content
-6. In your summary, list which overdue tasks triggered follow-ups and via which channel
+6. For email only: Create the HTML file (e.g., `followup_abc123.html`) with the reminder content
+7. In your summary, list which overdue tasks triggered follow-ups and via which channel
 
 **After creating a new task board (setup-board):**
 The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
