@@ -1019,9 +1019,9 @@ Before running TPM commands, gather context about {org_name}:
 2. **Apply recency filter**: Only include discovered assignees from tasks with `last_edited_time` within the last 90 days
 3. **Merge all sources**: Build the complete assignee bank from all three sources above
 4. **Match org members to Notion users** by email - if matched, use the Notion user ID for assignment
-5. **For unmatched org members**: Create tasks with "Assigned to: [name]" in the description
+5. **For unmatched org members**: Create tasks with "Assigned to: [name]" in the page body
 6. When creating/assigning tasks, use context to match tasks to appropriate team members based on who worked on similar tasks before
-7. **Self-assignment**: You can assign tasks to yourself by adding "Assigned to: Oliver" in the description. Use this for research tasks, follow-ups, or work you'll handle in a future sync. **You must always have at least one task assigned to yourself** — if you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation).
+7. **Self-assignment**: You can assign tasks to yourself by adding "Assigned to: Oliver" in the task **page body** (not the Notion assignee property, since you're not a Notion user). Use this for research tasks, follow-ups, or work you'll handle in a future sync. **You must always have at least one task assigned to yourself** — if you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation). When searching for your tasks, look for "Assigned to: Oliver" in page content.
 8. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
 9. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
 10. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
@@ -1041,7 +1041,7 @@ During TPM syncs, check for tasks with overdue deadlines and schedule follow-up 
      a. If assignee has slack_user_id AND Slack Workspace is configured → verify user first, then use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else fall back to send_email
-   - **If 5+ days overdue**: Also reassign the task to yourself (add "Assigned to: Oliver" in description) so you can investigate and follow up directly in the next sync
+   - **If 5+ days overdue**: Also reassign the task to yourself (add "Assigned to: Oliver" in page body) so you can investigate and follow up directly in the next sync
 4. **Before sending Slack notifications**, verify the user exists in the workspace:
    ```bash
    SLACK_TOKEN=$(jq -r '.bot_token' .slack_context.json)
