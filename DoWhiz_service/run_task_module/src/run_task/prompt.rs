@@ -1021,7 +1021,12 @@ Before running TPM commands, gather context about {org_name}:
 4. **Match org members to Notion users** by email - if matched, use the Notion user ID for assignment
 5. **For unmatched org members**: Create tasks with "Assigned to: [name]" in the page body
 6. When creating/assigning tasks, use context to match tasks to appropriate team members based on who worked on similar tasks before
-7. **Self-assignment**: You can assign tasks to yourself by adding "Assigned to: Oliver" in the task **page body** (not the Notion assignee property, since you're not a Notion user). Use this for research tasks, follow-ups, or work you'll handle in a future sync. **You must always have at least one task assigned to yourself** — if you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation). When searching for your tasks, look for "Assigned to: Oliver" in page content.
+7. **Self-assignment**: Assign tasks to yourself by adding the tag "oliver" to the task's Tags property. Find your tasks with:
+   ```
+   notion_api_cli query-database --database-id <DB_ID> --filter '{{"property":"Tags","multi_select":{{"contains":"oliver"}}}}'
+   ```
+   Use this for research tasks, follow-ups, or work you'll handle in a future sync. **You must always have at least one task assigned to yourself** — if you complete all your tasks, create a new one.
+   **Also assign unassigned tasks to yourself** — if a task has no assignee and no one is a good fit, add the "oliver" tag so it doesn't sit idle.
 8. **Keep assigning** - aim for ~10 active tasks per person; don't stop at an even split of 2-3 tasks
 9. If existing tasks are missing assignee, status, or priority, use `update-task` to backfill them
 10. **Archive stale tasks** - if a task hasn't moved in 2+ weeks or is no longer relevant, archive it
@@ -1041,7 +1046,7 @@ During TPM syncs, check for tasks with overdue deadlines and schedule follow-up 
      a. If assignee has slack_user_id AND Slack Workspace is configured → verify user first, then use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else fall back to send_email
-   - **If 5+ days overdue**: Also reassign the task to yourself (add "Assigned to: Oliver" in page body) so you can investigate and follow up directly in the next sync
+   - **If 5+ days overdue**: Also reassign the task to yourself (add tag "oliver") so you can investigate and follow up directly in the next sync
 4. **Before sending Slack notifications**, verify the user exists in the workspace:
    ```bash
    SLACK_TOKEN=$(jq -r '.bot_token' .slack_context.json)
@@ -1188,7 +1193,7 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
    - Competitive research findings
    - Your own ideas for product improvements
 9. **Assign all unassigned tasks** - aim for ~10 active tasks per person
-10. **Work on your own tasks**: Check for tasks assigned to "Oliver" and complete 1-2 of the highest priority ones. Mark them done when finished.
+10. **Work on your own tasks**: Query for tasks with tag "oliver" using `notion_api_cli query-database --filter '{{"property":"Tags","multi_select":{{"contains":"oliver"}}}}'` and complete 1-2 of the highest priority ones. Mark them done when finished.
 11. Compile summary report for {org_name}
 
 **Proactive Task Creation:**

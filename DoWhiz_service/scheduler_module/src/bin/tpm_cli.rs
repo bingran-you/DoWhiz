@@ -99,6 +99,8 @@ Task Board Commands:
     --organization <org>     Organization name (required)
     --database-id <id>       Notion database ID (required)
     --status <status>        Filter by status (optional)
+    --assignee <text>        Filter by assignee text (optional)
+    --tag <tag>              Filter by tag (optional, e.g. "oliver" for self-assigned)
 
   list-users        List users in the Notion workspace
     (No arguments - reads workspace from .notion_context.json)
@@ -793,6 +795,7 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
     let mut status_str: Option<String> = None;
     let mut assignee: Option<String> = None;
     let mut database_id_arg: Option<String> = None;
+    let mut tag: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -812,6 +815,10 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
             "--database-id" => {
                 i += 1;
                 database_id_arg = args.get(i).cloned();
+            }
+            "--tag" => {
+                i += 1;
+                tag = args.get(i).cloned();
             }
             _ => {}
         }
@@ -850,23 +857,21 @@ fn cmd_list_tasks(args: &[String]) -> ExitCode {
         }
     };
 
-    // Build filter based on status/assignee
-    let filter = match (status_str.as_deref(), assignee.as_deref()) {
-        (Some(status), Some(assignee)) => Some(json!({
-            "and": [
-                {"property": "Status", "select": {"equals": normalize_status(status)}},
-                {"property": "Assignee", "rich_text": {"contains": assignee}}
-            ]
-        })),
-        (Some(status), None) => Some(json!({
-            "property": "Status",
-            "select": {"equals": normalize_status(status)}
-        })),
-        (None, Some(assignee)) => Some(json!({
-            "property": "Assignee",
-            "rich_text": {"contains": assignee}
-        })),
-        (None, None) => None,
+    // Build filter based on status/assignee/tag
+    let mut filters: Vec<Value> = Vec::new();
+    if let Some(status) = status_str.as_deref() {
+        filters.push(json!({"property": "Status", "select": {"equals": normalize_status(status)}}));
+    }
+    if let Some(assignee) = assignee.as_deref() {
+        filters.push(json!({"property": "Assignee", "rich_text": {"contains": assignee}}));
+    }
+    if let Some(tag) = tag.as_deref() {
+        filters.push(json!({"property": "Tags", "multi_select": {"contains": tag}}));
+    }
+    let filter = match filters.len() {
+        0 => None,
+        1 => Some(filters.remove(0)),
+        _ => Some(json!({"and": filters})),
     };
 
     let pages = match client.query_database(&workspace_id, &database_id, filter, None, Some(500)) {

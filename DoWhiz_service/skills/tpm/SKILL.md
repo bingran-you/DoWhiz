@@ -154,7 +154,7 @@ During scheduled syncs, check for overdue tasks and send follow-up notifications
      a. If assignee has slack_user_id AND Slack Workspace is configured → verify user first, then use send_slack
      b. Else if assignee has discord_user_id → use send_discord
      c. Else if assignee has email → use send_email
-   - **If 5+ days overdue**: Also reassign the task to yourself ("Assigned to: Oliver") to investigate and follow up directly
+   - **If 5+ days overdue**: Also reassign the task to yourself (add tag "oliver") to investigate and follow up directly
 
 ### Verify Slack Users Before Sending
 Before scheduling a Slack notification, verify the user exists in the workspace:
@@ -207,12 +207,19 @@ When assigning:
 - If no match, add "Assigned to: [name]" in page body
 
 ### Self-Assignment
-You can assign tasks to yourself by adding "Assigned to: Oliver" in the task **page body** (not the Notion assignee property, since you're not a Notion user). Use this for:
+Assign tasks to yourself by adding the tag "oliver" to the task's Tags property. Use this for:
 - Research tasks you'll handle in a future sync
 - Follow-ups that require investigation
 - Work that doesn't fit any team member's expertise
 
-**You must always have at least one task assigned to yourself.** If you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation). When searching for your tasks, look for "Assigned to: Oliver" in page content.
+Find your tasks with:
+```bash
+notion_api_cli query-database --database-id <DB_ID> --filter '{"property":"Tags","multi_select":{"contains":"oliver"}}'
+```
+
+**You must always have at least one task assigned to yourself.** If you complete all your tasks, create a new one (e.g., competitive research, process improvement, documentation).
+
+**Also assign unassigned tasks to yourself** — if a task has no assignee and no one is a good fit, add the "oliver" tag so it doesn't sit idle.
 
 ### Keep the Board Active
 A healthy board has:
@@ -475,7 +482,11 @@ Check tasks with overdue ETAs and schedule follow-up emails (see Overdue Task Fo
 - A healthy board has continuous flow: new tasks coming in, old tasks getting done or archived
 
 ### 10. Work on Your Own Tasks
-Check for tasks assigned to "Oliver" and complete 1-2 of the highest priority ones during this sync. Mark them done when finished.
+Query for tasks with tag "oliver":
+```bash
+notion_api_cli query-database --database-id <DB_ID> --filter '{"property":"Tags","multi_select":{"contains":"oliver"}}'
+```
+Complete 1-2 of the highest priority ones during this sync. Mark them done when finished.
 
 ### 11. Compile Report
 Structure:
