@@ -104,6 +104,15 @@ pub enum TpmCronError {
 
     #[error("No reply-from address configured for employee")]
     NoReplyFromAddress,
+
+    #[error("Notion not connected. Please connect Notion in your DoWhiz settings first.")]
+    NotionNotConnected,
+
+    #[error("Failed to connect to Notion store: {0}")]
+    NotionStoreConnection(String),
+
+    #[error("Failed to look up Notion credentials: {0}")]
+    NotionCredentialsLookup(String),
 }
 
 /// Set up a TPM cron job for a user in an organization.
@@ -236,56 +245,61 @@ pub fn setup_tpm_cron(
     // Write Notion context files for tpm_cli
     // Use leader's credentials if set, otherwise fall back to triggering user
     let credential_account_id = org.leader_account_id.unwrap_or(user_id);
-    if let Ok(notion_store) = NotionStore::new() {
-        if let Ok(credentials) = notion_store.get_credentials_for_account(credential_account_id) {
-            // Find credential matching org's workspace_id, or fall back to first
-            let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
-                credentials
-                    .iter()
-                    .find(|c| &c.workspace_id == org_ws_id)
-                    .or_else(|| {
-                        tracing::warn!(
-                            "No credential found for org workspace_id={}, falling back to first",
-                            org_ws_id
-                        );
-                        credentials.first()
-                    })
-            } else {
+    let notion_store =
+        NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
+    let credentials = notion_store
+        .get_credentials_for_account(credential_account_id)
+        .map_err(|e| TpmCronError::NotionCredentialsLookup(e.to_string()))?;
+
+    if credentials.is_empty() {
+        return Err(TpmCronError::NotionNotConnected);
+    }
+
+    // Find credential matching org's workspace_id, or fall back to first
+    let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
+        credentials
+            .iter()
+            .find(|c| &c.workspace_id == org_ws_id)
+            .or_else(|| {
+                tracing::warn!(
+                    "No credential found for org workspace_id={}, falling back to first",
+                    org_ws_id
+                );
                 credentials.first()
-            };
+            })
+    } else {
+        credentials.first()
+    }
+    .ok_or(TpmCronError::NotionNotConnected)?;
 
-            if let Some(cred) = cred {
-                // Write .notion_context.json with workspace_id
-                let notion_context = json!({
-                    "workspace_id": cred.workspace_id,
-                    "workspace_name": cred.workspace_name,
-                    "account_id": credential_account_id.to_string(),
-                });
-                let context_path = workspace_dir.join(".notion_context.json");
-                if let Err(e) = std::fs::write(
-                    &context_path,
-                    serde_json::to_string_pretty(&notion_context).unwrap_or_default(),
-                ) {
-                    tracing::warn!("Failed to write .notion_context.json: {}", e);
-                } else {
-                    info!(
-                        "Wrote .notion_context.json for TPM cron workspace (workspace_id={})",
-                        cred.workspace_id
-                    );
-                }
+    // Write .notion_context.json with workspace_id
+    let notion_context = json!({
+        "workspace_id": cred.workspace_id,
+        "workspace_name": cred.workspace_name,
+        "account_id": credential_account_id.to_string(),
+    });
+    let context_path = workspace_dir.join(".notion_context.json");
+    if let Err(e) = std::fs::write(
+        &context_path,
+        serde_json::to_string_pretty(&notion_context).unwrap_or_default(),
+    ) {
+        tracing::warn!("Failed to write .notion_context.json: {}", e);
+    } else {
+        info!(
+            "Wrote .notion_context.json for TPM cron workspace (workspace_id={})",
+            cred.workspace_id
+        );
+    }
 
-                // Write .notion_env with access token
-                let env_path = workspace_dir.join(".notion_env");
-                if let Err(e) = std::fs::write(
-                    &env_path,
-                    format!("NOTION_API_TOKEN={}\n", cred.access_token),
-                ) {
-                    tracing::warn!("Failed to write .notion_env: {}", e);
-                } else {
-                    info!("Wrote .notion_env for TPM cron workspace");
-                }
-            }
-        }
+    // Write .notion_env with access token
+    let env_path = workspace_dir.join(".notion_env");
+    if let Err(e) = std::fs::write(
+        &env_path,
+        format!("NOTION_API_TOKEN={}\n", cred.access_token),
+    ) {
+        tracing::warn!("Failed to write .notion_env: {}", e);
+    } else {
+        info!("Wrote .notion_env for TPM cron workspace");
     }
 
     // Load employee config to get reply_from address
@@ -500,56 +514,61 @@ pub fn trigger_tpm_sync(
     // Write Notion context files for tpm_cli
     // Use leader's credentials if set, otherwise fall back to triggering user
     let credential_account_id = org.leader_account_id.unwrap_or(user_id);
-    if let Ok(notion_store) = NotionStore::new() {
-        if let Ok(credentials) = notion_store.get_credentials_for_account(credential_account_id) {
-            // Find credential matching org's workspace_id, or fall back to first
-            let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
-                credentials
-                    .iter()
-                    .find(|c| &c.workspace_id == org_ws_id)
-                    .or_else(|| {
-                        tracing::warn!(
-                            "No credential found for org workspace_id={}, falling back to first",
-                            org_ws_id
-                        );
-                        credentials.first()
-                    })
-            } else {
+    let notion_store =
+        NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
+    let credentials = notion_store
+        .get_credentials_for_account(credential_account_id)
+        .map_err(|e| TpmCronError::NotionCredentialsLookup(e.to_string()))?;
+
+    if credentials.is_empty() {
+        return Err(TpmCronError::NotionNotConnected);
+    }
+
+    // Find credential matching org's workspace_id, or fall back to first
+    let cred = if let Some(ref org_ws_id) = org.notion_workspace_id {
+        credentials
+            .iter()
+            .find(|c| &c.workspace_id == org_ws_id)
+            .or_else(|| {
+                tracing::warn!(
+                    "No credential found for org workspace_id={}, falling back to first",
+                    org_ws_id
+                );
                 credentials.first()
-            };
+            })
+    } else {
+        credentials.first()
+    }
+    .ok_or(TpmCronError::NotionNotConnected)?;
 
-            if let Some(cred) = cred {
-                // Write .notion_context.json with workspace_id
-                let notion_context = json!({
-                    "workspace_id": cred.workspace_id,
-                    "workspace_name": cred.workspace_name,
-                    "account_id": credential_account_id.to_string(),
-                });
-                let context_path = workspace_dir.join(".notion_context.json");
-                if let Err(e) = std::fs::write(
-                    &context_path,
-                    serde_json::to_string_pretty(&notion_context).unwrap_or_default(),
-                ) {
-                    tracing::warn!("Failed to write .notion_context.json: {}", e);
-                } else {
-                    info!(
-                        "Wrote .notion_context.json for TPM workspace (workspace_id={})",
-                        cred.workspace_id
-                    );
-                }
+    // Write .notion_context.json with workspace_id
+    let notion_context = json!({
+        "workspace_id": cred.workspace_id,
+        "workspace_name": cred.workspace_name,
+        "account_id": credential_account_id.to_string(),
+    });
+    let context_path = workspace_dir.join(".notion_context.json");
+    if let Err(e) = std::fs::write(
+        &context_path,
+        serde_json::to_string_pretty(&notion_context).unwrap_or_default(),
+    ) {
+        tracing::warn!("Failed to write .notion_context.json: {}", e);
+    } else {
+        info!(
+            "Wrote .notion_context.json for TPM workspace (workspace_id={})",
+            cred.workspace_id
+        );
+    }
 
-                // Write .notion_env with access token
-                let env_path = workspace_dir.join(".notion_env");
-                if let Err(e) = std::fs::write(
-                    &env_path,
-                    format!("NOTION_API_TOKEN={}\n", cred.access_token),
-                ) {
-                    tracing::warn!("Failed to write .notion_env: {}", e);
-                } else {
-                    info!("Wrote .notion_env for TPM workspace");
-                }
-            }
-        }
+    // Write .notion_env with access token
+    let env_path = workspace_dir.join(".notion_env");
+    if let Err(e) = std::fs::write(
+        &env_path,
+        format!("NOTION_API_TOKEN={}\n", cred.access_token),
+    ) {
+        tracing::warn!("Failed to write .notion_env: {}", e);
+    } else {
+        info!("Wrote .notion_env for TPM workspace");
     }
 
     // Load employee config to get reply_from address
