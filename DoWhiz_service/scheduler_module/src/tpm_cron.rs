@@ -245,7 +245,8 @@ pub fn setup_tpm_cron(
     // Write Notion context files for tpm_cli
     // Use leader's credentials if set, otherwise fall back to triggering user
     let credential_account_id = org.leader_account_id.unwrap_or(user_id);
-    let notion_store = NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
+    let notion_store =
+        NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
     let credentials = notion_store
         .get_credentials_for_account(credential_account_id)
         .map_err(|e| TpmCronError::NotionCredentialsLookup(e.to_string()))?;
@@ -513,7 +514,8 @@ pub fn trigger_tpm_sync(
     // Write Notion context files for tpm_cli
     // Use leader's credentials if set, otherwise fall back to triggering user
     let credential_account_id = org.leader_account_id.unwrap_or(user_id);
-    let notion_store = NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
+    let notion_store =
+        NotionStore::new().map_err(|e| TpmCronError::NotionStoreConnection(e.to_string()))?;
     let credentials = notion_store
         .get_credentials_for_account(credential_account_id)
         .map_err(|e| TpmCronError::NotionCredentialsLookup(e.to_string()))?;
