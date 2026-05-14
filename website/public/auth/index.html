@@ -6541,7 +6541,7 @@
               'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ organization_name: orgName })
+            body: JSON.stringify({ name: orgName })
           });
 
           if (!res.ok) {
