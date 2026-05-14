@@ -33,7 +33,7 @@
           <div class="eyebrow">Organizations</div>
           <h1>Organizations Onboarding Guide</h1>
           <p class="lead">
-            Setting up an organization in DoWhiz, configuring team roles, and enabling TPM (Task/Project Management) features.
+            This guide walks through setting up an organization in DoWhiz, configuring team roles, and enabling TPM (Task/Project Management) features.
           </p>
           <div class="updated">Last updated: May 14, 2026</div>
         </section>
@@ -53,7 +53,7 @@
           <h2>Prerequisites</h2>
           <p>Before creating or joining an organization:</p>
           <ol>
-            <li>Sign up for a DoWhiz account</li>
+            <li>Sign up for a DoWhiz account at <a href="https://dowhiz.com/auth">dowhiz.com/auth</a></li>
             <li>Connect your Notion workspace (Settings &gt; Connections &gt; Notion)</li>
             <li>Note your <strong>Account ID</strong> (displayed in the dashboard sidebar)</li>
           </ol>
@@ -67,10 +67,10 @@
             <li>Enter your organization name</li>
             <li>Click <strong>Create</strong></li>
           </ol>
-          <p>
-            You are automatically the acting leader of organizations you create.
-            If you would like to manually configure a leader, see the <strong>Setting the Organization Leader</strong> section below.
-          </p>
+          <ul>
+            <li>You are automatically the acting leader of organizations you create.</li>
+            <li>If you would like to manually configure a leader of the organization, see <strong>Setting the Organization Leader</strong> section</li>
+          </ul>
         </section>
 
         <section class="legal-card">
@@ -112,7 +112,7 @@
         </section>
 
         <section class="legal-card">
-          <h2>Configuring TPM</h2>
+          <h2>Configuring TPM (Task/Project Management)</h2>
           <h3>Step 1: Connect Notion</h3>
           <p>The organization leader must have Notion connected:</p>
           <ol>
@@ -139,7 +139,12 @@
           <p>Automated syncs run on a schedule to keep the task board updated:</p>
           <ol>
             <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced</strong></li>
-            <li>In the TPM Cron section, configure frequency and sync type</li>
+            <li>In the TPM Cron section, configure:
+              <ul>
+                <li><strong>Frequency</strong>: How often to sync (e.g., every 6 hours)</li>
+                <li><strong>Sync type</strong>: Full sync or incremental</li>
+              </ul>
+            </li>
             <li>Click <strong>Enable Cron</strong></li>
           </ol>
           <p>Only the organization leader can see and configure cron settings.</p>
@@ -162,7 +167,11 @@
           <h3>Slack Setup</h3>
           <ol>
             <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced &gt; Community Bug Tracking</strong></li>
-            <li>Enter your Slack <strong>Workspace ID</strong></li>
+            <li>Enter your Slack <strong>Workspace ID</strong>
+              <ul>
+                <li>Found in your Slack workspace URL or admin settings</li>
+              </ul>
+            </li>
             <li>Click <strong>Set Slack Workspace</strong></li>
           </ol>
         </section>
@@ -209,26 +218,14 @@
           <h3>Manual Sync Fails</h3>
           <ol>
             <li>Check that Notion is connected (Settings &gt; Connections)</li>
-            <li>Verify the database ID is set correctly</li>
-            <li>Ensure the database has the required properties (Status, Priority, Tags)</li>
+            <li>Verify the Notion database ID is set correctly</li>
+            <li>Check advanced settings: verify Discord Server, Slack Workspace IDs are correct</li>
+            <li>Verify the leader's DoWhiz account ID matches</li>
           </ol>
         </section>
 
         <section class="legal-card">
-          <h2>CLI Reference</h2>
-          <p>For programmatic access:</p>
-          <pre><code># List tasks with tag filter
-tpm_cli list-tasks --database-id &lt;DB_ID&gt; --tag oliver
-
-# Trigger sync manually
-tpm_cli sync --database-id &lt;DB_ID&gt;
-
-# Create a new task board
-tpm_cli create-board --name "Sprint Tasks"</code></pre>
-        </section>
-
-        <section class="legal-card">
-          <h2>Related resources</h2>
+          <h2>Related Documentation</h2>
           <p class="related-intro">Explore more DoWhiz documentation.</p>
           <div class="related-grid">
             <a class="related-item" href="/help-center/">
@@ -238,10 +235,6 @@ tpm_cli create-board --name "Sprint Tasks"</code></pre>
             <a class="related-item" href="/user-guide/">
               <span class="related-item-title">User Guide</span>
               <span class="related-item-desc">Templates for requesting work in each channel.</span>
-            </a>
-            <a class="related-item" href="/integrations/">
-              <span class="related-item-title">Integrations</span>
-              <span class="related-item-desc">Trigger surfaces and output expectations.</span>
             </a>
             <a class="related-item" href="/auth/">
               <span class="related-item-title">Dashboard</span>
