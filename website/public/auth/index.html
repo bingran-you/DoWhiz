@@ -2494,6 +2494,10 @@
                   <a class="sidebar-link" href="#section-settings">Settings</a>
                 </nav>
                 <div class="sidebar-note">
+                  <div class="sidebar-note-title">Account ID</div>
+                  <span id="sidebar-account-id" style="font-size: 0.75rem; word-break: break-all;">--</span>
+                </div>
+                <div class="sidebar-note">
                   <div class="sidebar-note-title">Support</div>
                   <a class="auth-link" href="mailto:admin@dowhiz.com">admin@dowhiz.com</a>
                 </div>
@@ -6124,6 +6128,10 @@
         }
         if (userEmailElement) {
           userEmailElement.textContent = session.user.email;
+        }
+        const sidebarAccountId = document.getElementById('sidebar-account-id');
+        if (sidebarAccountId) {
+          sidebarAccountId.textContent = accountData.account_id;
         }
         initOrganizationUI(accountData);
         setupOrganizationListeners();
