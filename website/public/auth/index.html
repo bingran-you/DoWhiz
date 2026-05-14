@@ -2771,19 +2771,21 @@
 
                       <a href="#" id="org-advanced-toggle" style="display: block; margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted, #888);">Advanced</a>
                       <div id="org-advanced-section" class="hidden" style="display: block; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #333); width: 100%;">
-                        <h4 style="margin-bottom: 0.5rem;">TPM Cron Schedule</h4>
-                        <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
-                          Set a recurring schedule for automatic TPM syncs.
-                        </p>
-                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-                            <input type="time" id="tpm-cron-time" class="auth-input" value="09:00" style="width: auto;" />
-                            <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                              <input type="checkbox" id="tpm-cron-weekdays" checked />
-                              Weekdays only
-                            </label>
+                        <div id="tpm-cron-section">
+                          <h4 style="margin-bottom: 0.5rem;">TPM Cron Schedule</h4>
+                          <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
+                            Set a recurring schedule for automatic TPM syncs.
+                          </p>
+                          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                              <input type="time" id="tpm-cron-time" class="auth-input" value="09:00" style="width: auto;" />
+                              <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                                <input type="checkbox" id="tpm-cron-weekdays" checked />
+                                Weekdays only
+                              </label>
+                            </div>
+                            <button id="setup-tpm-cron-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Setup Cron</button>
                           </div>
-                          <button id="setup-tpm-cron-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Setup Cron</button>
                         </div>
 
                         <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Change Notion task board</h4>
@@ -6259,8 +6261,10 @@
       // Organization state
       let selectedOrganization = null;
       let currentOrganizationName = null;
+      let currentAccountId = null;
 
       async function initOrganizationUI(accountData) {
+        currentAccountId = accountData.account_id || null;
         const orgCurrentDisplay = document.getElementById('org-current-display');
         const orgCurrentName = document.getElementById('org-current-name');
         const orgJoinContainer = document.getElementById('org-join-container');
@@ -6298,6 +6302,13 @@
             const slackInput = document.getElementById('slack-team-id-input');
             if (slackInput && currentOrg.slack_team_id) {
               slackInput.value = currentOrg.slack_team_id;
+            }
+
+            // Hide TPM cron section for non-leaders
+            const isLeader = currentAccountId && currentOrg.leader_account_id && currentAccountId === currentOrg.leader_account_id;
+            const cronSection = document.getElementById('tpm-cron-section');
+            if (cronSection) {
+              cronSection.style.display = isLeader ? 'block' : 'none';
             }
           }
         } else {
