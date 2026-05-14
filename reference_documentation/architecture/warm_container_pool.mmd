@@ -21,7 +21,9 @@ flowchart TB
     subgraph Azure["Azure Cloud"]
         subgraph Queues["Azure Storage Queues"]
             TaskQueue[(dowhiz-tasks<br/>Task Queue)]
+            TaskMsg["Task Message JSON:<br/>• task_id<br/>• share_url (ephemeral share)<br/>• sas_token (share access)<br/>• agent_command"]
             CompQueue[(dowhiz-completions<br/>Completion Queue)]
+            CompMsg["Completion Message JSON:<br/>• task_id<br/>• exit_code"]
         end
 
         subgraph FileShare["Azure File Share"]
@@ -39,7 +41,7 @@ flowchart TB
     subgraph Container["Inside Warm Container"]
         Poll[Poll Task Queue<br/>az storage message get]
         Dequeue[True Dequeue<br/>Delete message immediately]
-        ParseTask[Parse Task JSON<br/>Extract SAS token, share_url]
+        ParseTask[Parse Task JSON<br/>WORKSPACE_SHARE_URL<br/>WORKSPACE_SAS_TOKEN<br/>agent_command]
         Download[workspace_sync.sh download<br/>azcopy from share]
         RunAgent[Run Agent<br/>eval agent_command]
         Upload[workspace_sync.sh upload<br/>azcopy to share]
@@ -57,20 +59,23 @@ flowchart TB
     UploadWs --> EphShare
     UploadWs --> GenSAS
     GenSAS --> PushTask
-    PushTask --> TaskQueue
+    PushTask --> TaskMsg
+    TaskMsg --> TaskQueue
 
     %% Container polling and execution
     Container1 & Container2 & Container3 & ContainerN -->|Poll| TaskQueue
     TaskQueue -->|"One container wins"| Poll
     Poll --> Dequeue
     Dequeue --> ParseTask
+    TaskMsg -.->|"Message content"| ParseTask
     ParseTask -->|"SAS token + share_url"| Download
     EphShare -->|azcopy| Download
     Download --> RunAgent
     RunAgent --> Upload
     Upload -->|azcopy| EphShare
     Upload --> SignalDone
-    SignalDone --> CompQueue
+    SignalDone --> CompMsg
+    CompMsg --> CompQueue
     SignalDone --> Exit
 
     %% Completion flow
