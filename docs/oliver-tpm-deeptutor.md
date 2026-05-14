@@ -740,6 +740,14 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/13/26
+**Completed:**
+- **Notion Credential Validation** — TPM sync endpoints now return clear error if Notion not connected
+- **Oliver Self-Assignment via Tags** — Oliver assigns tasks to himself using "oliver" tag in Tags property (avoids N+1 API queries)
+- **`--tag` Filter for `tpm_cli list-tasks`** — Filter tasks by tag (e.g., `--tag oliver`)
+- **Updated Frontend** — Organization settings improvements (leader gating, field clearing, account ID display)
+- **Organizations Onboarding Doc** — Created `docs/organizations_onboarding.md`
+
 ### 5/10/26
 **Completed:**
 - **Organization Discord Guild Linking** — Organizations can now link a Discord server for community bug scanning
