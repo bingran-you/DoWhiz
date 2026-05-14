@@ -6282,34 +6282,24 @@
           // Pre-populate database ID, workspace ID, and leader fields
           const orgs = await searchOrganizations(currentOrganizationName);
           const currentOrg = orgs.find(o => o.name === currentOrganizationName);
-          if (currentOrg) {
-            const dbInput = document.getElementById('notion-database-id-input');
-            const wsInput = document.getElementById('notion-workspace-id-input');
-            const leaderInput = document.getElementById('org-leader-account-id-input');
-            if (dbInput && currentOrg.notion_database_id) {
-              dbInput.value = currentOrg.notion_database_id;
-            }
-            if (wsInput && currentOrg.notion_workspace_id) {
-              wsInput.value = currentOrg.notion_workspace_id;
-            }
-            if (leaderInput && currentOrg.leader_account_id) {
-              leaderInput.value = currentOrg.leader_account_id;
-            }
-            const discordInput = document.getElementById('discord-guild-id-input');
-            if (discordInput && currentOrg.discord_guild_id) {
-              discordInput.value = currentOrg.discord_guild_id;
-            }
-            const slackInput = document.getElementById('slack-team-id-input');
-            if (slackInput && currentOrg.slack_team_id) {
-              slackInput.value = currentOrg.slack_team_id;
-            }
+          const dbInput = document.getElementById('notion-database-id-input');
+          const wsInput = document.getElementById('notion-workspace-id-input');
+          const leaderInput = document.getElementById('org-leader-account-id-input');
+          const discordInput = document.getElementById('discord-guild-id-input');
+          const slackInput = document.getElementById('slack-team-id-input');
 
-            // Hide TPM cron section for non-leaders
-            const isLeader = currentAccountId && currentOrg.leader_account_id && currentAccountId === currentOrg.leader_account_id;
-            const cronSection = document.getElementById('tpm-cron-section');
-            if (cronSection) {
-              cronSection.style.display = isLeader ? 'block' : 'none';
-            }
+          if (dbInput) dbInput.value = currentOrg?.notion_database_id || '';
+          if (wsInput) wsInput.value = currentOrg?.notion_workspace_id || '';
+          if (leaderInput) leaderInput.value = currentOrg?.leader_account_id || '';
+          if (discordInput) discordInput.value = currentOrg?.discord_guild_id || '';
+          if (slackInput) slackInput.value = currentOrg?.slack_team_id || '';
+
+          // Show TPM cron section if no leader set, or if current user is the leader
+          const cronSection = document.getElementById('tpm-cron-section');
+          if (cronSection && currentOrg) {
+            const noLeaderSet = !currentOrg.leader_account_id;
+            const isLeader = currentAccountId && currentOrg.leader_account_id === currentAccountId;
+            cronSection.style.display = (noLeaderSet || isLeader) ? 'block' : 'none';
           }
         } else {
           if (orgCurrentDisplay) {
