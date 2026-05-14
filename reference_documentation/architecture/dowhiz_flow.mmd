@@ -1,0 +1,93 @@
+flowchart TB
+    subgraph Channels["1. Inbound Channels"]
+        Email[Email]
+        Slack[Slack]
+        Discord[Discord]
+        Lark[Lark]
+        Telegram[Telegram]
+        WeChat[WeChat]
+    end
+
+    subgraph Gateway["2. Inbound Gateway"]
+        Webhook[Webhook Handler<br/>+ Signature Verification]
+    end
+
+    subgraph Service["3. Service Layer"]
+        Process[process_*_event]
+        QuickCheck{Quick Response?}
+        GPT[GPT-5.4 Reply]
+    end
+
+    subgraph Storage["4. MongoDB Storage"]
+        TasksLegacy[(tasks<br/>legacy_user_id)]
+        TasksAccount[(tasks<br/>account_id)]
+        TaskIndex[(task_index<br/>global)]
+    end
+
+    subgraph Worker["5. Global Worker Loop"]
+        Poll[Poll task_index]
+        Spawn[Spawn Worker Thread]
+
+        subgraph Prepare["Workspace Preparation"]
+            FetchCtx[Fetch User Context<br/>linked accounts, org, identities]
+            SyncSecrets[Sync Secrets<br/>.notion_env, .slack_context.json<br/>.google_creds.json, .browserbase_*]
+            SyncSkills[Sync Skills<br/>SKILL.md files from blob]
+            SyncMemory[Sync Memory<br/>user memory files]
+            CreateShare[Create Ephemeral<br/>Azure File Share]
+            UploadWs[Upload Workspace<br/>to ephemeral share]
+        end
+    end
+
+    subgraph Execution["6. Task Execution"]
+        ACI[Azure ACI<br/>Codex/Claude]
+        Workspace[Workspace<br/>incoming_email/<br/>memory/<br/>skills/]
+        IsolatedMount[Isolated Mount<br/>ephemeral share only]
+    end
+
+    subgraph Output["7. Output Files"]
+        ReplyMsg[reply_message.txt]
+        RoutingCheck{reply_routing.json?}
+    end
+
+    subgraph Reply["8. Reply"]
+        OutboundDirect[Outbound Adapter<br/>Same Channel]
+        OutboundCross[Outbound Adapter<br/>Different Channel]
+        Send[Send to Channel]
+    end
+
+    Email & Slack & Discord & Lark & Telegram & WeChat --> Webhook
+    Webhook --> Process
+    Process --> QuickCheck
+    QuickCheck -->|Simple| GPT
+    GPT -->|Direct Reply| Send
+    QuickCheck -->|Complex| TasksLegacy
+    Process -->|Dual Write| TasksAccount
+    TasksLegacy --> TaskIndex
+    TaskIndex --> Poll
+    Poll --> Spawn
+    Spawn --> FetchCtx
+    FetchCtx --> SyncSecrets
+    SyncSecrets --> SyncSkills
+    SyncSkills --> SyncMemory
+    SyncMemory --> CreateShare
+    CreateShare --> UploadWs
+    UploadWs --> IsolatedMount
+    IsolatedMount --> ACI
+    ACI <--> Workspace
+    ACI --> ReplyMsg
+    ReplyMsg --> RoutingCheck
+    RoutingCheck -->|No| OutboundDirect
+    RoutingCheck -->|Yes| OutboundCross
+    OutboundDirect --> Send
+    OutboundCross --> Send
+    Send --> Channels
+
+    style Channels fill:#dbeafe,stroke:#2563eb
+    style Gateway fill:#dcfce7,stroke:#16a34a
+    style Service fill:#ffedd5,stroke:#ea580c
+    style Storage fill:#f3e8ff,stroke:#9333ea
+    style Worker fill:#dbeafe,stroke:#2563eb
+    style Prepare fill:#e0f2fe,stroke:#0284c7
+    style Execution fill:#dcfce7,stroke:#16a34a
+    style Output fill:#fef3c7,stroke:#d97706
+    style Reply fill:#ffedd5,stroke:#ea580c
