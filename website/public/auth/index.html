@@ -6446,20 +6446,14 @@
             }
           }
 
-          currentOrganizationName = selectedOrganization;
+          const joinedOrgName = selectedOrganization;
           selectedOrganization = null;
           document.getElementById('org-join-search-input').value = '';
 
-          const orgCurrentDisplay = document.getElementById('org-current-display');
-          const orgCurrentName = document.getElementById('org-current-name');
-          const orgJoinContainer = document.getElementById('org-join-container');
-          if (orgCurrentDisplay && orgCurrentName) {
-            orgCurrentName.textContent = currentOrganizationName;
-            orgCurrentDisplay.classList.remove('hidden');
-          }
-          if (orgJoinContainer) {
-            orgJoinContainer.classList.add('hidden');
-          }
+          await initOrganizationUI({
+            account_id: currentAccountId,
+            organization_name: joinedOrgName
+          });
 
         } catch (err) {
           orgStatus.textContent = normalizeApiFetchError(err);
