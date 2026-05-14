@@ -1,0 +1,96 @@
+flowchart TB
+    subgraph Scheduler["Scheduler Host"]
+        PoolMgr[pool_manager.rs<br/>Maintains N warm containers]
+        Codex[codex.rs<br/>run_codex_warm_pool]
+
+        subgraph TaskSubmit["Task Submission"]
+            CreateShare[Create Ephemeral<br/>Azure File Share]
+            UploadWs[Upload Workspace<br/>to Share]
+            GenSAS[Generate SAS Token]
+            PushTask[Push Task to<br/>Azure Task Queue]
+        end
+
+        subgraph Completion["Completion Handling"]
+            PollComplete[Poll Completion Queue]
+            DownloadResults[Download Results<br/>from Share]
+            CleanupShare[Delete Ephemeral Share]
+            Replenish[Replenish Pool<br/>Provision New Container]
+        end
+    end
+
+    subgraph Azure["Azure Cloud"]
+        subgraph Queues["Azure Storage Queues"]
+            TaskQueue[(dowhiz-tasks<br/>Task Queue)]
+            TaskMsg["Task Message JSON:<br/>• task_id<br/>• share_url (ephemeral share)<br/>• sas_token (share access)<br/>• agent_command"]
+            CompQueue[(dowhiz-completions<br/>Completion Queue)]
+            CompMsg["Completion Message JSON:<br/>• task_id<br/>• exit_code"]
+        end
+
+        subgraph FileShare["Azure File Share"]
+            EphShare[Ephemeral Share<br/>task-uuid-xxx]
+        end
+
+        subgraph ACIPool["ACI Warm Container Pool"]
+            Container1[Container 1<br/>warm_worker.sh polling]
+            Container2[Container 2<br/>warm_worker.sh polling]
+            Container3[Container 3<br/>warm_worker.sh polling]
+            ContainerN[Container N<br/>warm_worker.sh polling]
+        end
+    end
+
+    subgraph Container["Inside Warm Container"]
+        Poll[Poll Task Queue<br/>az storage message get]
+        Dequeue[True Dequeue<br/>Delete message immediately]
+        ParseTask[Parse Task JSON<br/>WORKSPACE_SHARE_URL<br/>WORKSPACE_SAS_TOKEN<br/>agent_command]
+        Download[workspace_sync.sh download<br/>azcopy from share]
+        RunAgent[Run Agent<br/>eval agent_command]
+        Upload[workspace_sync.sh upload<br/>azcopy to share]
+        SignalDone[Push to Completion Queue<br/>task_id + exit_code]
+        Exit[Exit Container]
+    end
+
+    %% Initialization flow
+    PoolMgr -->|"Provision N containers<br/>(passes queue env vars)"| ACIPool
+
+    %% Task submission flow
+    Codex --> CreateShare
+    CreateShare --> EphShare
+    CreateShare --> UploadWs
+    UploadWs --> EphShare
+    UploadWs --> GenSAS
+    GenSAS --> PushTask
+    PushTask --> TaskMsg
+    TaskMsg --> TaskQueue
+
+    %% Container polling and execution
+    Container1 & Container2 & Container3 & ContainerN -->|Poll| TaskQueue
+    TaskQueue -->|"One container wins"| Poll
+    Poll --> Dequeue
+    Dequeue --> ParseTask
+    TaskMsg -.->|"Message content"| ParseTask
+    ParseTask -->|"SAS token + share_url"| Download
+    EphShare -->|azcopy| Download
+    Download --> RunAgent
+    RunAgent --> Upload
+    Upload -->|azcopy| EphShare
+    Upload --> SignalDone
+    SignalDone --> CompMsg
+    CompMsg --> CompQueue
+    SignalDone --> Exit
+
+    %% Completion flow
+    CompQueue --> PollComplete
+    PollComplete --> DownloadResults
+    EphShare --> DownloadResults
+    DownloadResults --> CleanupShare
+    CleanupShare --> Replenish
+    Replenish -->|"Provision replacement"| ACIPool
+
+    style Scheduler fill:#dbeafe,stroke:#2563eb
+    style Azure fill:#f3e8ff,stroke:#9333ea
+    style Container fill:#dcfce7,stroke:#16a34a
+    style Queues fill:#fef3c7,stroke:#d97706
+    style FileShare fill:#ffedd5,stroke:#ea580c
+    style ACIPool fill:#e0f2fe,stroke:#0284c7
+    style TaskSubmit fill:#e0f2fe,stroke:#0284c7
+    style Completion fill:#fce7f3,stroke:#db2777
