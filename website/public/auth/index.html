@@ -6793,8 +6793,8 @@
                 status.textContent = 'Database updated successfully!';
                 status.style.color = '#22c55e';
               }
-              if (input) input.value = '';
-              if (workspaceInput) workspaceInput.value = '';
+              if (input && data.notion_database_id) input.value = data.notion_database_id;
+              if (workspaceInput && data.notion_workspace_id) workspaceInput.value = data.notion_workspace_id;
             } catch (err) {
               console.error('Failed to update database:', err);
               if (status) {
