@@ -1075,11 +1075,9 @@ During TPM syncs, check for tasks with overdue deadlines and schedule follow-up 
 7. In your summary, list which overdue tasks triggered follow-ups and via which channel
 
 **After creating a new task board (setup-board):**
-The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved to Supabase.
-Remind the user to share the database:
-- Share with team members (Can Edit) so they can update tasks
-- Share with oliver@dowhiz.com (Can Edit) so I can run scheduled syncs
-Include the database URL in your reply and these sharing instructions.
+The database is created in the USER's Notion workspace (they own it). The database_id is automatically saved.
+Remind the user to share the database with team members (Can Edit) so they can update tasks.
+Include the database URL in your reply.
 
 **Notion CLI Commands (notion_api_cli):**
 - `notion_api_cli query-database --database-id <DB_ID>` - Query tasks from Notion board
