@@ -1198,6 +1198,8 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
    - `web_search "{org_name} competitors"` - check for new competitor features
    - `web_search "{org_name} alternatives"` - see what users are comparing to
    - Ask: Did any competitor ship something new? Are users complaining about something we could fix?
+   - **IMPORTANT:** Avoid search terms that sound like bypassing safety systems (e.g., "guardrails bypass", "validator exploit", "jailbreak"). These trigger content filters.
+   - If a search fails repeatedly, rephrase with neutral terms and continue
    - Create market_research tasks for notable findings
 8. **Add new tasks** discovered from:
    - Open GitHub issues not yet tracked
