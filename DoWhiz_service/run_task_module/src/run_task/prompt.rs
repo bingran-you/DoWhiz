@@ -1165,7 +1165,20 @@ When `read-page` succeeds on the configured ID, it means the `--database-id` val
 1. **Context gathering** (Step 0 above) - check GitHub access first
 2. **Get team members**: `tpm_cli list-users` - get user IDs for task assignment
 3. Check task board: `tpm_cli list-tasks --organization {org_name}{db_flag}`
-   - If "No notion_database_id configured" error, create board first via setup-board
+   - If "No notion_database_id configured" error, create a new board:
+     a. Run `notion_api_cli list-pages --limit 10` to find accessible pages
+     b. Pick a suitable parent page (workspace root, team hub, or any top-level page)
+     c. If no pages are accessible, create one: `notion_api_cli create-page --title "{org_name} TPM"`
+     d. Run `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID>`
+     e. After setup-board succeeds, emit SCHEDULER_ACTIONS_JSON to save the database config:
+        ```
+        SCHEDULER_ACTIONS_JSON_BEGIN
+        [{{"action":"set_tpm_database","organization":"{org_name}","database_id":"<DATABASE_ID_FROM_OUTPUT>","workspace_id":"<WORKSPACE_ID_FROM_OUTPUT>"}}]
+        SCHEDULER_ACTIONS_JSON_END
+        ```
+        **IMPORTANT:** All stdout is captured via `az container logs` after task completion.
+        The scheduler parses these markers to execute actions outside the container.
+     f. Continue with the sync using the new database
 4. Find blocked tasks: `tpm_cli list-tasks --organization {org_name}{db_flag} --status blocked`
 5. **Archive stale tasks** - tasks with no updates in 2+ weeks that are no longer relevant
 6. **IMPORTANT - Scan community channels for bugs/feedback** (if Discord Server guild ID is configured above):

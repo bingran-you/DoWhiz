@@ -1595,6 +1595,36 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                     }
                 }
             }
+            run_task_module::SchedulerActionRequest::SetTpmDatabase {
+                organization,
+                database_id,
+                workspace_id,
+            } => {
+                let Some(store) = get_global_account_store() else {
+                    warn!("set_tpm_database: account store not available");
+                    skipped += 1;
+                    continue;
+                };
+                match store.update_organization_notion_config(
+                    organization,
+                    database_id,
+                    workspace_id.as_deref(),
+                ) {
+                    Ok(org) => {
+                        info!(
+                            "set_tpm_database: updated organization {} with database_id={}",
+                            org.name, database_id
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            "set_tpm_database: failed to update organization {}: {}",
+                            organization, e
+                        );
+                        skipped += 1;
+                    }
+                }
+            }
         }
     }
 
