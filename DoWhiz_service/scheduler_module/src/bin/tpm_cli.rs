@@ -114,9 +114,11 @@ Task Board Commands:
 
 
 Environment:
-  SUPABASE_DB_URL        Required for setup-board (to save database ID)
   ACCOUNT_ID             Account UUID (from .notion_context.json or env)
   EMPLOYEE_ID            Employee ID for Notion OAuth lookup
+
+Note: setup-board outputs database_id but does NOT save to Supabase directly.
+      Oliver must emit SCHEDULER_ACTIONS_JSON with set_tpm_database action.
 
 Context Files:
   .notion_context.json   Auto-loaded for account_id and workspace_id
@@ -455,34 +457,29 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
     let db_title = format!("{} Task Board", organization);
     match client.create_database(&workspace_id, &parent_page_id, &db_title, properties) {
         Ok(db) => {
-            // Update organizations.notion_database_id and notion_workspace_id in Supabase
-            let supabase_updated = match AccountStore::from_env() {
-                Ok(store) => {
-                    match store.update_organization_notion_config(
-                        &organization,
-                        &db.id,
-                        Some(&workspace_id),
-                    ) {
-                        Ok(org) => Some(org),
-                        Err(e) => {
-                            eprintln!("Warning: Failed to update organizations: {}", e);
-                            eprintln!(
-                                "You must manually update: UPDATE organizations SET notion_database_id = '{}', notion_workspace_id = '{}' WHERE name = '{}'",
-                                db.id, workspace_id, organization
-                            );
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: Could not connect to Supabase: {}", e);
-                    eprintln!(
-                        "You must manually update: UPDATE organizations SET notion_database_id = '{}', notion_workspace_id = '{}' WHERE name = '{}'",
-                        db.id, workspace_id, organization
-                    );
-                    None
-                }
-            };
+            // NOTE: Direct Supabase update disabled - container doesn't have SUPABASE_DB_URL.
+            // Instead, Oliver emits SCHEDULER_ACTIONS_JSON with set_tpm_database action,
+            // which the scheduler handles outside the container.
+            //
+            // let supabase_updated = match AccountStore::from_env() {
+            //     Ok(store) => {
+            //         match store.update_organization_notion_config(
+            //             &organization,
+            //             &db.id,
+            //             Some(&workspace_id),
+            //         ) {
+            //             Ok(org) => Some(org),
+            //             Err(e) => {
+            //                 eprintln!("Warning: Failed to update organizations: {}", e);
+            //                 None
+            //             }
+            //         }
+            //     }
+            //     Err(e) => {
+            //         eprintln!("Warning: Could not connect to Supabase: {}", e);
+            //         None
+            //     }
+            // };
 
             let output = json!({
                 "success": true,
@@ -491,12 +488,8 @@ fn cmd_setup_board(args: &[String]) -> ExitCode {
                 "workspace_id": workspace_id,
                 "database_url": db.url,
                 "database_title": db.title,
-                "supabase_updated": supabase_updated.is_some(),
-                "message": if supabase_updated.is_some() {
-                    "Notion database created and organization config updated"
-                } else {
-                    "Notion database created but organization config NOT updated (see stderr)"
-                }
+                "action_required": "emit_scheduler_action",
+                "message": "Notion database created. Emit SCHEDULER_ACTIONS_JSON with set_tpm_database action to save config."
             });
             println!("{}", serde_json::to_string_pretty(&output).unwrap());
             ExitCode::SUCCESS

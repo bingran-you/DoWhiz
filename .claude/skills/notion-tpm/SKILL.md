@@ -35,7 +35,15 @@ tpm_cli setup-board \
   --workspace-id <WORKSPACE_ID>
 ```
 
-Returns `database_id` to use in subsequent commands. Store this in `organizations.notion_database_id`.
+Returns `database_id` and `workspace_id` in the output. **After setup-board succeeds, emit a scheduler action to save the config:**
+
+```
+SCHEDULER_ACTIONS_JSON_BEGIN
+[{"action":"set_tpm_database","organization":"deeptutor","database_id":"<DATABASE_ID>","workspace_id":"<WORKSPACE_ID>"}]
+SCHEDULER_ACTIONS_JSON_END
+```
+
+**IMPORTANT:** All stdout is captured via `az container logs` after task completion. The scheduler parses these markers to persist the database config outside the container.
 
 ### Create a task (Oliver autonomously creates from feedback/notetaker/research)
 
@@ -299,4 +307,5 @@ slack_cli send-channel --channel-id C12345ABC --message "$report"
 | `MONGODB_DATABASE` | Database name for tasks |
 | `SLACK_BOT_TOKEN` | Slack messaging |
 | `DISCORD_BOT_TOKEN` | Discord messaging |
-| `SUPABASE_DB_URL` | Contact directory database |
+
+Note: `SUPABASE_DB_URL` is NOT passed to container. Use `SCHEDULER_ACTIONS_JSON` to persist config changes.

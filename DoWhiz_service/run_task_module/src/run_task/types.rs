@@ -159,6 +159,12 @@ pub enum SchedulerActionRequest {
         #[serde(default)]
         reply_to: Vec<String>,
     },
+    SetTpmDatabase {
+        organization: String,
+        database_id: String,
+        #[serde(default)]
+        workspace_id: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
