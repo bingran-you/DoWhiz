@@ -122,8 +122,27 @@
           </ol>
 
           <h3>Step 2: Set the Task Board Database</h3>
+          <p>You have two options:</p>
+
+          <h4>Option A: Let Oliver create a new task board</h4>
           <ol>
-            <li>Create a Notion database for your task board (or use an existing one)</li>
+            <li>Leave the database ID blank</li>
+            <li>Trigger a manual TPM sync</li>
+            <li>Oliver will search your Notion workspace and create a task board with the correct schema</li>
+            <li>The database ID is automatically saved</li>
+          </ol>
+
+          <h4>Option B: Use an existing Notion database</h4>
+          <ol>
+            <li>Open your existing database in Notion</li>
+            <li><strong>Important</strong>: Add Oliver as a connection to the database:
+              <ul>
+                <li>Click the <code>•••</code> menu in the top-right of the database page</li>
+                <li>Click <strong>Connections</strong></li>
+                <li>Search for and add <strong>Oliver</strong> (or <strong>DoWhiz</strong>)</li>
+                <li>Without this, Oliver cannot access the database even with a valid token</li>
+              </ul>
+            </li>
             <li>Copy the database ID from the Notion URL:
               <ul>
                 <li>URL format: <code>notion.so/{workspace}/{database_id}?v=...</code></li>
@@ -222,6 +241,16 @@
             <li>Check advanced settings: verify Discord Server, Slack Workspace IDs are correct</li>
             <li>Verify the leader's DoWhiz account ID matches</li>
           </ol>
+
+          <h3>"Object not found" or "Could not find database" Error</h3>
+          <p>Oliver doesn't have access to the Notion database:</p>
+          <ol>
+            <li>Open the database in Notion</li>
+            <li>Click the <code>•••</code> menu &gt; <strong>Connections</strong></li>
+            <li>Add <strong>Oliver</strong> (or <strong>DoWhiz</strong>) as a connection</li>
+            <li>Retry the sync</li>
+          </ol>
+          <p>This is required for existing databases. Databases created by Oliver via TPM sync already have the connection.</p>
         </section>
 
         <section class="legal-card">

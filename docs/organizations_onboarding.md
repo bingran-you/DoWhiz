@@ -69,13 +69,27 @@ The organization leader must have Notion connected:
 
 ### Step 2: Set the Task Board Database
 
-1. Create a Notion database for your task board (or use an existing one)
-2. Copy the database ID from the Notion URL:
+You have two options:
+
+**Option A: Let Oliver create a new task board**
+1. Leave the database ID blank
+2. Trigger a manual TPM sync
+3. Oliver will search your Notion workspace and create a task board with the correct schema
+4. The database ID is automatically saved
+
+**Option B: Use an existing Notion database**
+1. Open your existing database in Notion
+2. **Important**: Add Oliver as a connection to the database:
+   - Click the `•••` menu in the top-right of the database page
+   - Click **Connections**
+   - Search for and add **Oliver** (or **DoWhiz**)
+   - Without this, Oliver cannot access the database even with a valid token
+3. Copy the database ID from the Notion URL:
    - URL format: `notion.so/{workspace}/{database_id}?v=...`
    - The database ID is the 32-character string before the `?`
-3. Navigate to **Settings > Organization > Advanced**
-4. Paste the database ID in "Notion Task Board Database ID"
-5. Click **Set Database**
+4. Navigate to **Settings > Organization > Advanced**
+5. Paste the database ID in "Notion Task Board Database ID"
+6. Click **Set Database**
 
 
 ### Step 3: Enable Cron Sync (Leader Only)
@@ -147,6 +161,16 @@ Only the organization leader can see cron settings:
 2. Verify the Notion database ID is set correctly
 3. Check advanced settings: verify Discord Server, Slack Workspace IDs are correct
 4. Verify the leader's DoWhiz account ID matches
+
+### "Object not found" or "Could not find database" Error
+
+Oliver doesn't have access to the Notion database:
+1. Open the database in Notion
+2. Click the `•••` menu > **Connections**
+3. Add **Oliver** (or **DoWhiz**) as a connection
+4. Retry the sync
+
+This is required for existing databases. Databases created by Oliver via TPM sync already have the connection.
 
 ## Related Documentation
 
