@@ -740,6 +740,27 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/15/26
+**Completed:**
+- **Scheduler Action Pattern for Database ID Persistence** — `setup-board` now saves `notion_database_id` via stdout parsing instead of direct Supabase calls from container
+
+  **Problem:** After `setup-board` creates a Notion database, we need to save the `database_id` to Supabase. However, Oliver runs inside an ACI container, and passing `SUPABASE_DB_URL` (giving Oliver direct Postgres access) is a security risk.
+
+  **Solution:** Oliver prints the database_id to stdout using `SCHEDULER_ACTIONS_JSON` markers:
+  ```
+  SCHEDULER_ACTIONS_JSON_BEGIN
+  [{"action":"set_tpm_database","organization":"acme","database_id":"xyz789","workspace_id":"abc123"}]
+  SCHEDULER_ACTIONS_JSON_END
+  ```
+
+  **Flow:**
+  1. Container execution — Codex/Claude runs inside ACI, all stdout/stderr goes to Azure's container logs
+  2. After completion — `fetch_aci_logs()` runs `az container logs --name <container>` to retrieve all output
+  3. Storage — Logs stored in `execution.container_logs` field
+  4. Combining — `combined_output` built by concatenating output files + container logs
+  5. Parsing — `parse_scheduling_from_outputs()` calls `extract_scheduler_actions()` on combined output
+  6. Execution — `apply_scheduler_actions()` in `actions.rs` handles `SetTpmDatabase` by calling `AccountStore::update_organization_notion_config()`, which updates `notion_database_id` and `notion_workspace_id`
+
 ### 5/13/26
 **Completed:**
 - **Notion Credential Validation** — TPM sync endpoints now return clear error if Notion not connected
