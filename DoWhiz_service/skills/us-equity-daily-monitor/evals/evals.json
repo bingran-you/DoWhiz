@@ -38,6 +38,7 @@
       "require_change_view": true,
       "min_clickable_links": 2,
       "require_compliance_sentence": true,
+      "expect_peer_context": false,
       "must_contain_any": [
         "does not yet prove a durable thesis change",
         "no verified guidance revision"
@@ -60,6 +61,7 @@
       "require_change_view": true,
       "min_clickable_links": 2,
       "require_compliance_sentence": true,
+      "expect_peer_context": false,
       "must_contain_any": [
         "no new filing, guidance reset, or disclosed demand break",
         "specific `No Material Change` call"
@@ -106,6 +108,7 @@
       "require_change_view": true,
       "min_clickable_links": 2,
       "require_compliance_sentence": true,
+      "expect_peer_context": false,
       "must_contain_any": [
         "no verified issuer disclosure",
         "missing evidence is the issue"
@@ -142,6 +145,156 @@
       "artifact_file": "fixtures/polished_waffle_rejected.html",
       "contract": "short",
       "expected_failure": true
+    },
+    {
+      "id": 8,
+      "name": "high-level-nvda-peer-context",
+      "kind": "fixture",
+      "artifact_file": "fixtures/high_level_nvda_peer_context.html",
+      "contract": "full",
+      "expected_status": "Review Now",
+      "expected_signal_direction": "Positive",
+      "expected_thesis_impact": "Positive",
+      "expected_signal_quality": "Strong",
+      "expected_urgency": "High",
+      "expected_confidence": "Medium",
+      "require_why_now": true,
+      "require_main_risk": true,
+      "require_change_view": true,
+      "require_citations": true,
+      "min_clickable_links": 3,
+      "require_scan_first": true,
+      "require_compliance_sentence": true,
+      "expect_peer_context": true,
+      "peer_section_must_contain_all": [
+        "relevant peers/substitutes",
+        "where the target looks stronger",
+        "where peers create pressure",
+        "investment implication",
+        "amd"
+      ],
+      "peer_section_must_contain_any": [
+        "broadcom",
+        "custom asic",
+        "hyperscaler"
+      ],
+      "peer_section_max_words": 120
+    },
+    {
+      "id": 9,
+      "name": "weak-peer-set-brkb-stays-honest",
+      "kind": "fixture",
+      "artifact_file": "fixtures/weak_peer_set_brkb.html",
+      "contract": "full",
+      "expected_status": "No Material Change",
+      "expected_signal_direction": "Neutral",
+      "expected_thesis_impact": "Neutral",
+      "expected_signal_quality": "Mixed",
+      "expected_urgency": "Low",
+      "expected_confidence": "Medium",
+      "require_why_now": true,
+      "require_main_risk": true,
+      "require_change_view": true,
+      "require_citations": true,
+      "min_clickable_links": 3,
+      "require_scan_first": true,
+      "require_compliance_sentence": true,
+      "expect_peer_context": true,
+      "peer_section_must_contain_any": [
+        "peer set is imperfect",
+        "direct peers are imperfect",
+        "diversified insurers",
+        "asset managers",
+        "broad-market alternative"
+      ],
+      "peer_section_max_words": 120
+    },
+    {
+      "id": 10,
+      "name": "tesla-peer-context-stays-specific",
+      "kind": "fixture",
+      "artifact_file": "fixtures/tesla_peer_context.html",
+      "contract": "full",
+      "expected_status": "Watch Closely",
+      "expected_signal_direction": "Neutral",
+      "expected_thesis_impact": "Neutral",
+      "expected_signal_quality": "Mixed",
+      "expected_urgency": "High",
+      "expected_confidence": "Medium",
+      "require_why_now": true,
+      "require_main_risk": true,
+      "require_change_view": true,
+      "require_citations": true,
+      "min_clickable_links": 3,
+      "require_scan_first": true,
+      "require_compliance_sentence": true,
+      "expect_peer_context": true,
+      "peer_section_must_contain_any": [
+        "byd",
+        "legacy oem",
+        "autonomy"
+      ],
+      "peer_section_max_words": 120
+    },
+    {
+      "id": 11,
+      "name": "shopify-peer-context-stays-platform-specific",
+      "kind": "fixture",
+      "artifact_file": "fixtures/shopify_peer_context.html",
+      "contract": "full",
+      "expected_status": "Watch Closely",
+      "expected_signal_direction": "Positive",
+      "expected_thesis_impact": "Positive",
+      "expected_signal_quality": "Mixed",
+      "expected_urgency": "Medium",
+      "expected_confidence": "Medium",
+      "require_why_now": true,
+      "require_main_risk": true,
+      "require_change_view": true,
+      "require_citations": true,
+      "min_clickable_links": 3,
+      "require_scan_first": true,
+      "require_compliance_sentence": true,
+      "expect_peer_context": true,
+      "peer_section_must_contain_any": [
+        "amazon",
+        "adobe commerce",
+        "bigcommerce",
+        "wix",
+        "squarespace"
+      ],
+      "peer_section_max_words": 120
+    },
+    {
+      "id": 12,
+      "name": "nvda-amd-direct-compare-stays-focused",
+      "kind": "fixture",
+      "artifact_file": "fixtures/nvda_amd_direct_compare.html",
+      "contract": "full",
+      "expected_status": "Watch Closely",
+      "expected_signal_direction": "Neutral",
+      "expected_thesis_impact": "Neutral",
+      "expected_signal_quality": "Strong",
+      "expected_urgency": "Medium",
+      "expected_confidence": "Medium",
+      "require_why_now": true,
+      "require_main_risk": true,
+      "require_change_view": true,
+      "require_citations": true,
+      "min_clickable_links": 3,
+      "require_scan_first": true,
+      "require_compliance_sentence": true,
+      "expect_peer_context": true,
+      "peer_section_must_contain_all": [
+        "amd",
+        "extra peers are not needed"
+      ],
+      "peer_section_must_not_contain_any": [
+        "broadcom",
+        "custom asic",
+        "hyperscaler"
+      ],
+      "peer_section_max_words": 120
     }
   ]
 }

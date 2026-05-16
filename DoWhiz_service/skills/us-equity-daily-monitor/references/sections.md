@@ -7,12 +7,13 @@ The monitor is a single document with the sections below, in order. The structur
 | 1 | `## Decision Card` | Front-loads the badge plus the supporting signal fields. This is the headline judgment. |
 | 2 | `## Why Now` | Explains why the signal matters now, or why there is no material signal now. |
 | 3 | `## Dual-Horizon Framing` | Full monitors only. Separates near-term timing from long-term ownership. |
-| 4 | `## Verified Facts` | Full monitors only. Bullet list of sourced factual claims. |
-| 5 | `## Derived Metrics` | Full monitors only. Computed values with formulas and inputs. |
-| 6 | `## Scenarios` | Full monitors only. Bull/base/bear framing with explicit conditions. |
-| 7 | `## What Would Change The View` | The explicit thresholds or events that move the signal. |
-| 8 | `## Judgment` | Full monitors only. One short paragraph of labelled inference. |
-| 9 | `## Evidence Chips` | Concise monitors only. Short sourced fact list in place of the full evidence stack. |
+| 4 | `## Competitive / Peer Context` | Optional. Adds a concise comparison lens when peers or substitutes materially sharpen the thesis. |
+| 5 | `## Verified Facts` | Full monitors only. Bullet list of sourced factual claims. |
+| 6 | `## Derived Metrics` | Full monitors only. Computed values with formulas and inputs. |
+| 7 | `## Scenarios` | Full monitors only. Bull/base/bear framing with explicit conditions. |
+| 8 | `## What Would Change The View` | The explicit thresholds or events that move the signal. |
+| 9 | `## Judgment` | Full monitors only. One short paragraph of labelled inference. |
+| 10 | `## Evidence Chips` | Concise monitors only. Short sourced fact list in place of the full evidence stack. |
 
 ## Required Decision Card fields
 
@@ -53,6 +54,12 @@ Those action rows are secondary translations. They do not replace the monitor ba
 ### Near-Term Timing View (next 1-2 quarters)
 ### Long-Term Ownership View (multi-year)
 
+## Competitive / Peer Context      (optional)
+- **Relevant peers/substitutes:** ...
+- **Where the target looks stronger:** ...
+- **Where peers create pressure:** ...
+- **Investment implication:** ...
+
 ## Verified Facts                   (full monitor only)
 - ... ([Source name](URL))
 
@@ -75,10 +82,13 @@ Those action rows are secondary translations. They do not replace the monitor ba
 - ... ([Source name](URL))
 ```
 
+If the monitor is concise and peer context is actually needed, place `## Competitive / Peer Context` between `## Why Now` and `## What Would Change The View`.
+
 ## Header conventions
 
 - Use ATX headers (`#`, `##`, `###`).
 - Keep `Why Now`, `What Would Change The View`, and `Evidence Chips` as exact strings in concise monitors.
+- Keep `Competitive / Peer Context` as the exact string when that optional section is used.
 - Keep `Bull Case`, `Base Case`, and `Bear Case` as exact strings in full monitors.
 - Prefer short bold labels inside paragraphs over long prose preambles.
 
@@ -87,3 +97,4 @@ Those action rows are secondary translations. They do not replace the monitor ba
 - Full monitors should stay roughly one page. If the answer is drifting into a long essay, cut repetition before cutting the signal fields.
 - Concise monitors should still feel decision-useful. Short means compressed, not vague.
 - Bullets and tables beat generic paragraphs for evidence, scenarios, and thresholds.
+- `Competitive / Peer Context` should usually stay to four short bullets or a very small table. Omit it entirely when it does not change the judgment.

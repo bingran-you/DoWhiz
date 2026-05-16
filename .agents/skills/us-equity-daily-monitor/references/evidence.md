@@ -39,6 +39,7 @@ When you have multiple corroborating sources for one claim, chain them: `... ([R
 - Reported financials, guidance, capex/spend figures.
 - Margin trajectory, customer concentration, regulatory exposure.
 - Industry data points (hyperscaler capex, export-control rules, demand trends).
+- Current peer or competitor claims, sector-relative valuation comparisons, market-share shifts, substitute threats, or pricing moves.
 - Any numeric claim that is **not** derived in the **Derived Metrics** table.
 
 ## What does not need a chip
@@ -46,6 +47,15 @@ When you have multiple corroborating sources for one claim, chain them: `... ([R
 - Values inside the **Derived Metrics** table — the formula column is the citation.
 - The **Judgment** section — explicitly labelled inference.
 - Scenario price targets, provided the scenario row shows the math (e.g. forward EPS × multiple).
+
+## Peer-context discipline
+
+The optional `Competitive / Peer Context` section can stay compact without becoming loose.
+
+- If you say a peer is gaining share, cutting prices, guiding differently, or trading at a specific multiple, source that claim.
+- Do not use the target company's materials as the only support for claims about a competitor or substitute. Pair them with the competitor's own disclosures or independent reporting.
+- Structural comparisons such as "custom ASICs can cap share of wallet" can stay inference-driven, but label them as judgment rather than fact when the claim is not directly measured.
+- If the peer set is weak or the comparison is apples-to-oranges, say that explicitly instead of forcing a fake precision claim.
 
 ## URL hygiene
 

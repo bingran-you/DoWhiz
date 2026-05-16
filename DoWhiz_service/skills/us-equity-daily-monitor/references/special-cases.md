@@ -45,6 +45,15 @@ Pro-forma history matters more than reported history. In the monitor:
 - The **Peer median** row should use the fundamental peers of the new standalone entity, not the parent's old peer set.
 - The **Bear Case** invalidation should include a TSA-renewal or dis-synergy-overrun condition where applicable.
 
+## Weak or imperfect peer sets
+
+Some names do not have a clean direct-comp set. Berkshire Hathaway is the obvious example, but the same problem shows up in exchanges, rating agencies, and dominant platforms.
+
+- Say directly that the peer set is imperfect when that is true.
+- Use the nearest decision-useful comparison set rather than pretending there is a perfect one: diversified insurers, asset managers, conglomerates, broad-market alternatives, or other substitutes that reflect how investors actually compare the name.
+- Keep the peer section shorter than usual. Focus on the one or two dimensions that matter most, such as underwriting quality, capital allocation, fee-like earnings quality, look-through valuation, or balance-sheet optionality.
+- If the substitutes are too heterogeneous to support a clean relative-valuation call, say so and lean back on company-specific thesis evidence.
+
 ## When in doubt
 
 If the name does not cleanly fit any of these buckets (e.g. a profitable mid-cap with a recent transformative acquisition, or a foreign issuer dual-listed in the U.S.), keep the default structure but add a one-bullet "structural caveat" inside the **Judgment** section explaining which standard assumption is broken. Do not silently bend the template — readers rely on the section contracts being stable.

@@ -34,6 +34,17 @@
 ### Long-Term Ownership View (multi-year)
 {2-4 sentences. Structural drivers, competitive position, or capital structure. Keep this separate from the near-term signal.}
 
+## Competitive / Peer Context (optional)
+
+{Only include this section when the user wants a high-level / deep research / investment-view answer, asks for a thesis review, asks for sector-relative valuation context, or when peer/substitute dynamics materially shape the current signal. Otherwise omit it.}
+
+- **Relevant peers/substitutes:** {2-5 names}, because {why this comparison set actually matters. If direct peers are imperfect, say that briefly.}
+- **Where the target looks stronger:** {1-2 concise points on the thesis-relevant dimensions only.}
+- **Where peers create pressure:** {1-2 concise points on the main competitive or substitute risk.}
+- **Investment implication:** {How this peer read-through changes or calibrates the badge, thesis impact, or confidence.}
+
+> Keep this section short. Use a small table only when it clarifies more than bullets would.
+
 ## Verified Facts
 
 - {Reported figure with units} ([{Source name}]({URL}))
@@ -85,4 +96,6 @@
 - [ ] `What Would Change The View` contains explicit thresholds or concrete events.
 - [ ] I avoided generic `wait/hold/be careful/it depends` filler.
 - [ ] I kept any action rows secondary rather than as the headline answer.
+- [ ] If I included `Competitive / Peer Context`, it stayed concise, used real peers/substitutes, and only covered the thesis-relevant dimensions.
+- [ ] If I made current peer claims, I sourced them.
 - [ ] The compliance sentence appears once and stays concise.
