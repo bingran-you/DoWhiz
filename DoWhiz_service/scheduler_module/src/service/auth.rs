@@ -1699,6 +1699,7 @@ pub async fn list_organizations(
                         "leader_account_id": org.leader_account_id,
                         "discord_guild_id": org.discord_guild_id,
                         "slack_team_id": org.slack_team_id,
+                        "github_org_name": org.github_org_name,
                         "created_at": org.created_at,
                     })
                 })
