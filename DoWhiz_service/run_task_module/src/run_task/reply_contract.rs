@@ -540,14 +540,13 @@ fn is_investment_request(raw: &str) -> bool {
         .iter()
         .any(|keyword| normalized.contains(keyword));
     let has_probable_ticker = contains_probable_ticker(raw);
+    let has_supported_intent =
+        has_investment_intent || has_investment_research || has_monitor_intent;
     let has_explicit_monitor_contract = normalized.contains("investment monitor");
     let has_synthetic_monitor_contract =
         is_synthetic_investment_request(raw) && has_explicit_monitor_contract;
 
-    (has_instrument_context
-        && (has_investment_intent || has_investment_research || has_monitor_intent))
-        || (has_probable_ticker
-            && (has_investment_intent || has_investment_research || has_monitor_intent))
+    ((has_instrument_context || has_probable_ticker) && has_supported_intent)
         || has_synthetic_monitor_contract
 }
 
