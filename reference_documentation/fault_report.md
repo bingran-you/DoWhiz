@@ -4,6 +4,155 @@
 **Investigated by:** Dylan Tang  
 **Status:** Root cause identified, partial fix deployed
 
+---
+
+# Fault Report: Ephemeral Share Download Overwrites Global Share Trace Metadata
+
+**Date:** 2026-05-15  
+**Investigated by:** Dylan Tang  
+**Status:** Root cause identified, fix deployed
+
+## Executive Summary
+
+Task `bd84c6ef-ea3a-a3cc-3528-59bb978cb27a` was incorrectly marked as failed with error "reconciled stale running execution after an ACI-backed runner executed but no live registry record remained", even though the ACI container completed successfully and produced a valid reply.
+
+Root cause: When downloading results from the ephemeral Azure file share, the `.run_task_trace/metadata.json` file was overwritten with a stale version from upload time, causing reconciliation to see 40+ minute old activity timestamps instead of recent ones.
+
+How does reconciliation logic use `.run_task_trace`?
+
+**Workspace check for `.run_task_trace` - codex.rs (731-739)**
+```
+let inflight_aci_result_handling = workspace_path
+    .map(|workspace| {
+        workspace_suggests_recent_inflight_aci_result_handling(
+            workspace,
+            row.started_at,
+            now,
+        )
+    })
+    .unwrap_or(false);
+
+```
+
+**bool if `.run_task_trace/metadata.json` has been updated in last 15 min - codex.rs (1938-1971)**
+```
+fn workspace_suggests_recent_inflight_aci_result_handling(...) -> bool {
+    // Must have ACI execution evidence
+    if !workspace_has_current_aci_execution_evidence(workspace_dir, started_at) {
+        return false;
+    }
+    // Load metadata from .run_task_trace/metadata.json
+    let Some(metadata) = load_run_task_trace_metadata(workspace_dir) else {
+        return false;
+    };
+    // Check stage_updated_at is recent (within 15 min grace)
+    let activity_age_ms = now.timestamp_millis().saturating_sub(activity_at_ms);
+    activity_age_ms <= grace.num_milliseconds()  // failed for this task (41 min > 15 min)
+}
+```
+
+**Decision logic based on bool (926-952)**
+```
+None if inflight_aci_result_handling => {
+    // Keep running - result handling still active
+    None
+}
+None if execution_age > aci_grace_period => {
+    // FAIL - no registry, no recent activity, past grace period
+    missing_aci_registry_reconciliation_reason(...)  // reconciliation logic activated, task failed
+}
+```
+## Timeline
+
+| Time | Event |
+|------|-------|
+| 15:29:49 | Task starts, `set_stage("creating_ephemeral_share")` |
+| 15:30:01 | Workspace uploaded from global share to ephemeral share (including `.run_task_trace/metadata.json`) |
+| 15:30:01 | `set_stage("starting_aci_container")` updates global share metadata |
+| 15:30:01 | ACI container created and starts running |
+| 16:02:11 | Container finishes, deregistered from MongoDB |
+| 16:02:11 | `download_back()` starts - copies from ephemeral share to global share |
+| 16:03:xx | Download completes, **overwrites global share `.run_task_trace/` with stale version from ephemeral** |
+| 16:11:30 | Reconciliation runs, sees `stage_updated_at` from 15:30:01 (41 min old) |
+| 16:11:30 | Task marked failed: "execution lost terminal reconciliation after an ACI-backed runner failure" |
+
+* **Note:** There are two copies of `.run_task_trace/metadata.json` - one on global, one on ephemeral.
+
+## Why Global Share Trace is the True file
+
+The `.run_task_trace/metadata.json` on the global share tracks execution stages as the VM code progresses:
+
+```
+set_stage("creating_ephemeral_share")  → before upload to ephemeral
+set_stage("starting_aci_container")    → before az container create  
+set_stage("executing_codex")           → polling loop starts
+set_stage("downloading_results")       → after container done, before download
+```
+
+Reconciliation uses `stage_updated_at_unix_ms` to detect if the `run_task()` function is stuck. The `inflight_aci_result_handling` check grants a 15-minute grace period for recent activity.
+
+## The Bug
+
+```
+Upload:   global → ephemeral (stage="creating_ephemeral_share", time=15:30:01)
+Global:   metadata.json updated (stage="starting_aci_container", time=15:30:01)
+Global:   metadata.json updated (stage="downloading_results", time=16:02:11)
+Download: ephemeral → global (OVERWRITES with stage="creating_ephemeral_share", time=15:30:01)
+```
+
+The download overwrote the global share trace with the stale version from ephemeral. Reconciliation then saw activity from 41 minutes ago, exceeding the 15-minute grace period.
+
+## Why This Wasn't Seen Before
+
+1. **Downloads usually complete quickly** - `run_task()` typically finishes before the reconciliation timeout is hit
+2. `az copy` **latency spike** - This particular download was slower than usual (Azure API latency)
+3. **Timestamp regression** - The overwritten metadata showed upload time (40+ min old), not download time (recent)
+
+If download completes in seconds, `run_task()` returns before the next reconciliation interval. In this case, slow AzCopy combined with the timestamp regression made reconciliation think the task was abandoned.
+
+## Fix
+
+**File:** `run_task_module/src/run_task/codex.rs`
+
+Added `.run_task_trace` to the skip list for ephemeral share downloads:
+
+```rust
+const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
+    ".agents",
+    ".codex",
+    ".codex_remote_prompt.txt",
+    ".config",
+    ".discord_context.json",
+    ".env",
+    ".google_access_token",
+    ".run_task_trace",  // ← ADDED: preserve global share trace metadata
+    ".secrets",
+    "incoming_attachments",
+    "incoming_email",
+    "references",
+];
+```
+
+The container doesn't need the trace metadata - it's only used by the VM scheduler code for tracking progress. By skipping it during download, global share stage updates are preserved.
+
+## Debugging Commands Used
+
+```bash
+# Check task execution history
+ssh dowhizprod1 'source ~/.nvm/nvm.sh && source /home/azureuser/server/DoWhiz/DoWhiz_service/.env && mongosh "$MONGODB_URI" --quiet --eval "db.getSiblingDB(\"dowhiz_production_little_bear\").task_executions.find({task_id: \"bd84c6ef-ea3a-a3cc-3528-59bb978cb27a\"}).sort({started_at: 1}).toArray()"'
+
+# Check trace metadata
+ssh dowhizprod1 'cat /home/azureuser/server/.dowhiz/DoWhiz/run_task/little_bear/users/c262a975-ded5-47c6-afc2-024fba1f62fd/workspaces/thread_f3b86c0532ffb4ae3f7ab62cbcb4a6e3/.run_task_trace/metadata.json'
+
+# Check workspace file timestamps
+ssh dowhizprod1 'ls -la /home/azureuser/server/.dowhiz/DoWhiz/run_task/little_bear/users/c262a975-ded5-47c6-afc2-024fba1f62fd/workspaces/thread_f3b86c0532ffb4ae3f7ab62cbcb4a6e3/.run_task_trace/'
+
+# Search PM2 logs for deregistration
+ssh dowhizprod1 'grep "deregistered ACI container" ~/.pm2/logs/dw-worker-out__2026-05-16_00-00-00.log | grep "dwz-codex-1778859001358"'
+```
+
+---
+
 ## Executive Summary
 
 Multiple tasks were stuck in an indefinite defer loop, showing "Creating share" on the dashboard for hours. Investigation revealed that a worker restart (SIGKILL) at `2026-04-26T15:11:45` killed in-flight tasks after `record_execution_start()` but before ACI container creation, leaving orphaned "running" execution records in MongoDB.

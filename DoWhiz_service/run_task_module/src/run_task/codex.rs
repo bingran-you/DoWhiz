@@ -132,6 +132,7 @@ const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
     ".discord_context.json",
     ".env",
     ".google_access_token",
+    ".run_task_trace",
     ".secrets",
     "incoming_attachments",
     "incoming_email",
