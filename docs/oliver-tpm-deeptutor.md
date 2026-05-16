@@ -373,7 +373,71 @@ PUT /auth/organization/:name/discord
 Body: { "guild_id": "1234567890123456789" }
 ```
 
-### 7. Developer Assignment & Notifications
+### 7. GitHub Organization Scoping (Added 2026-05-16)
+
+Organizations can link a GitHub organization name to scope Oliver's repo searches during TPM syncs. This prevents Oliver from searching repos that don't pertain to the organization, avoiding cross-user data leakage.
+
+**Why it's needed:**
+- Oliver has a GitHub token (`OLIVER_GITHUB_PERSONAL_ACCESS_TOKEN`) that may have access to multiple GitHub organizations
+- Without scoping, Oliver could search repos from unrelated organizations when gathering context
+- Explicit org configuration ensures Oliver only accesses repos the organization has shared
+
+**Setup:**
+
+1. DoWhiz org member sets GitHub org name via dashboard (Organization Settings → GitHub Organization Name)
+2. **Validation on save**: The PUT endpoint runs `gh api orgs/{org_name}` with Oliver's token to verify access
+3. If Oliver doesn't have access, the request fails with a helpful error:
+   - "GitHub org 'X' not accessible. Either: (1) the org hasn't been shared with Oliver yet, or (2) the name is typed incorrectly (case-sensitive)."
+4. Org name stored in `organizations.github_org_name` (Supabase)
+5. Passed to agent via `UserIdentities.github_org_name`
+
+**TPM Workflow (STEP 0 - Context Gathering):**
+
+When `github_org_name` is configured:
+```
+1. gh repo list {github_org_name} --limit 20
+2. gh pr list --repo {github_org_name}/<repo> --state all --limit 10
+3. gh issue list --repo {github_org_name}/<repo> --limit 10
+4. Read README.md or docs/ to understand project structure
+5. Look for open issues not yet tracked as tasks
+6. Use this context to identify potential new tasks
+```
+
+When `github_org_name` is NOT configured:
+- Oliver displays a warning: "GitHub organization is NOT configured"
+- Oliver may list org memberships to find a matching org, but will not deeply dive into unrelated repos
+- Falls back to Notion task board only
+
+**API Endpoint:**
+
+```
+PUT /auth/organization/:name/github
+Body: { "org_name": "KnoWhiz" }
+```
+
+**Schema Change:**
+
+```sql
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS github_org_name TEXT NULL;
+```
+
+**Code Flow:**
+
+```
+1. Frontend: User enters GitHub org name → PUT /auth/organization/:name/github
+                    ↓
+2. auth.rs: Runs `gh api orgs/{org_name}` with OLIVER_GITHUB_PERSONAL_ACCESS_TOKEN
+                    ↓
+3. If validation passes: AccountStore.update_organization_github() saves to Supabase
+                    ↓
+4. executor.rs: fetch_user_identities() populates UserIdentities.github_org_name from org
+                    ↓
+5. prompt.rs: build_tpm_capabilities_section() injects GitHub org into STEP 0 instructions
+                    ↓
+6. Oliver uses configured org directly (pre-validated, no guessing needed)
+```
+
+### 8. Developer Assignment & Notifications
 
 **Assignee Discovery (Three Sources - Added 2026-05-05):**
 
@@ -740,6 +804,17 @@ Sets up a recurring cron job that triggers Oliver in TPM mode for a user. This d
 ---
 
 ## Progress Log
+### 5/16/26
+**Completed:**
+- **GitHub Organization Scoping** — Organizations can now link a GitHub org name to scope Oliver's repo searches
+  - `account_store.rs`: Added `github_org_name` field to `Organization` struct and SQL queries
+  - `auth.rs`: Added `PUT /auth/organization/:name/github` endpoint with validation
+  - **Validation on save**: Runs `gh api orgs/{org_name}` with `OLIVER_GITHUB_PERSONAL_ACCESS_TOKEN` to verify Oliver has access before saving
+  - `executor.rs`: Populates `UserIdentities.github_org_name` from org config
+  - `prompt.rs`: STEP 0 uses configured org directly (pre-validated) or warns if not configured
+  - Frontend: Added GitHub Organization Name input in organization settings (case-sensitive)
+  - **Why needed**: Prevents Oliver from searching repos in unrelated organizations, avoiding cross-user data leakage
+
 ### 5/15/26
 **Completed:**
 - **Scheduler Action Pattern for Database ID Persistence** — `setup-board` now saves `notion_database_id` via stdout parsing instead of direct Supabase calls from container
