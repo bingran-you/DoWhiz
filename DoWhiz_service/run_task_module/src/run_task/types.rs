@@ -82,6 +82,9 @@ pub struct UserIdentities {
     /// Slack team (workspace) ID for TPM notifications
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slack_team_id: Option<String>,
+    /// GitHub organization name for scoping repo searches (prevents cross-user leakage)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_org_name: Option<String>,
     /// Organization members for task assignment (name + email from auth.users)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organization_members: Vec<OrgMember>,

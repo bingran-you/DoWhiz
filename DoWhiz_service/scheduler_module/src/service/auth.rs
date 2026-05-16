@@ -2014,6 +2014,11 @@ pub struct UpdateOrganizationSlackRequest {
     pub team_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrganizationGitHubRequest {
+    pub org_name: String,
+}
+
 /// PUT /auth/organization/:name/discord - Set the organization's Discord guild ID
 ///
 /// Used for TPM bug scanning in Discord channels during scheduled syncs.
@@ -2170,6 +2175,87 @@ pub async fn update_organization_slack(
             .into_response(),
         Ok(Err(e)) => {
             error!("Failed to update organization Slack config: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// PUT /auth/organization/:name/github - Set the organization's GitHub org name
+///
+/// Used to scope GitHub repo searches and prevent cross-user leakage.
+/// The user must be a member of the organization to update its GitHub config.
+pub async fn update_organization_github(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+    Json(payload): Json<UpdateOrganizationGitHubRequest>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let Some(account_org_id) = account.organization_id else {
+        return json_error_response(
+            StatusCode::BAD_REQUEST,
+            "You must be a member of an organization to update its GitHub config",
+        );
+    };
+
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    if account_org_id != org.id {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "You are not a member of this organization",
+        );
+    }
+
+    let store = state.account_store.clone();
+    let github_org = payload.org_name.clone();
+    let update_result =
+        task::spawn_blocking(move || store.update_organization_github(&org_name, &github_org))
+            .await
+            .map_err(|e| {
+                error!("spawn_blocking panicked: {}", e);
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+            });
+
+    match update_result {
+        Ok(Ok(updated_org)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "organization_name": updated_org.name,
+                "github_org_name": updated_org.github_org_name,
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to update organization GitHub config: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
         }
         Err(response) => response,
@@ -7734,6 +7820,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/auth/organization/:name/slack",
             put(update_organization_slack),
+        )
+        .route(
+            "/auth/organization/:name/github",
+            put(update_organization_github),
         )
         .route("/api/tpm/setup-cron", post(setup_tpm_cron))
         .route("/api/tpm/trigger-sync", post(trigger_tpm_sync_endpoint))

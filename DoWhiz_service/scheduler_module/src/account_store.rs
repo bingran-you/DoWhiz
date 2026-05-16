@@ -200,6 +200,8 @@ pub struct Organization {
     pub discord_guild_id: Option<String>,
     /// Slack team (workspace) ID for TPM notifications
     pub slack_team_id: Option<String>,
+    /// GitHub organization name for scoping repo searches (prevents cross-user leakage)
+    pub github_org_name: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -454,6 +456,7 @@ impl AccountStore {
                 notion_database_id TEXT NULL,
                 notion_workspace_id TEXT NULL,
                 leader_account_id UUID NULL,
+                github_org_name TEXT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
@@ -1704,7 +1707,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at
              FROM organizations
              WHERE name = $1",
             &[&name],
@@ -1718,7 +1721,8 @@ impl AccountStore {
             leader_account_id: r.get(4),
             discord_guild_id: r.get(5),
             slack_team_id: r.get(6),
-            created_at: r.get(7),
+            github_org_name: r.get(7),
+            created_at: r.get(8),
         }))
     }
 
@@ -1729,7 +1733,7 @@ impl AccountStore {
     ) -> Result<Option<Organization>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at
+            "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at
              FROM organizations
              WHERE id = $1",
             &[&org_id],
@@ -1743,7 +1747,8 @@ impl AccountStore {
             leader_account_id: r.get(4),
             discord_guild_id: r.get(5),
             slack_team_id: r.get(6),
-            created_at: r.get(7),
+            github_org_name: r.get(7),
+            created_at: r.get(8),
         }))
     }
 
@@ -1774,14 +1779,14 @@ impl AccountStore {
                 "UPDATE organizations
                  SET notion_database_id = $1, notion_workspace_id = $2
                  WHERE name = $3
-                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
                 &[&notion_database_id, &ws_id, &organization_name],
             )?,
             None => conn.query_opt(
                 "UPDATE organizations
                  SET notion_database_id = $1
                  WHERE name = $2
-                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+                 RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
                 &[&notion_database_id, &organization_name],
             )?,
         };
@@ -1795,7 +1800,8 @@ impl AccountStore {
                 leader_account_id: r.get(4),
                 discord_guild_id: r.get(5),
                 slack_team_id: r.get(6),
-                created_at: r.get(7),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1815,7 +1821,7 @@ impl AccountStore {
             "UPDATE organizations
              SET leader_account_id = $1
              WHERE name = $2
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
             &[&leader_account_id, &organization_name],
         )?;
 
@@ -1828,7 +1834,8 @@ impl AccountStore {
                 leader_account_id: r.get(4),
                 discord_guild_id: r.get(5),
                 slack_team_id: r.get(6),
-                created_at: r.get(7),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1847,7 +1854,7 @@ impl AccountStore {
             "UPDATE organizations
              SET discord_guild_id = $1
              WHERE name = $2
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
             &[&discord_guild_id, &organization_name],
         )?;
 
@@ -1860,7 +1867,8 @@ impl AccountStore {
                 leader_account_id: r.get(4),
                 discord_guild_id: r.get(5),
                 slack_team_id: r.get(6),
-                created_at: r.get(7),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1879,7 +1887,7 @@ impl AccountStore {
             "UPDATE organizations
              SET slack_team_id = $1
              WHERE name = $2
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
             &[&slack_team_id, &organization_name],
         )?;
 
@@ -1892,7 +1900,41 @@ impl AccountStore {
                 leader_account_id: r.get(4),
                 discord_guild_id: r.get(5),
                 slack_team_id: r.get(6),
-                created_at: r.get(7),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    /// Set the GitHub organization name for an organization.
+    ///
+    /// Used to scope GitHub repo searches and prevent cross-user leakage.
+    pub fn update_organization_github(
+        &self,
+        organization_name: &str,
+        github_org_name: &str,
+    ) -> Result<Organization, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE organizations
+             SET github_org_name = $1
+             WHERE name = $2
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
+            &[&github_org_name, &organization_name],
+        )?;
+
+        match row {
+            Some(r) => Ok(Organization {
+                id: r.get(0),
+                name: r.get(1),
+                notion_database_id: r.get(2),
+                notion_workspace_id: r.get(3),
+                leader_account_id: r.get(4),
+                discord_guild_id: r.get(5),
+                slack_team_id: r.get(6),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -1916,7 +1958,7 @@ impl AccountStore {
 
         let row = conn.query_one(
             "INSERT INTO organizations (name) VALUES ($1)
-             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at",
+             RETURNING id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at",
             &[&name],
         )?;
 
@@ -1928,7 +1970,8 @@ impl AccountStore {
             leader_account_id: row.get(4),
             discord_guild_id: row.get(5),
             slack_team_id: row.get(6),
-            created_at: row.get(7),
+            github_org_name: row.get(7),
+            created_at: row.get(8),
         })
     }
 
@@ -1945,7 +1988,7 @@ impl AccountStore {
             Some(term) => {
                 let pattern = format!("%{}%", term.to_lowercase());
                 conn.query(
-                    "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at
+                    "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at
                      FROM organizations
                      WHERE LOWER(name) LIKE $1
                      ORDER BY name
@@ -1954,7 +1997,7 @@ impl AccountStore {
                 )?
             }
             None => conn.query(
-                "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, created_at
+                "SELECT id, name, notion_database_id, notion_workspace_id, leader_account_id, discord_guild_id, slack_team_id, github_org_name, created_at
                  FROM organizations
                  ORDER BY name
                  LIMIT 50",
@@ -1972,7 +2015,8 @@ impl AccountStore {
                 leader_account_id: r.get(4),
                 discord_guild_id: r.get(5),
                 slack_team_id: r.get(6),
-                created_at: r.get(7),
+                github_org_name: r.get(7),
+                created_at: r.get(8),
             })
             .collect())
     }
