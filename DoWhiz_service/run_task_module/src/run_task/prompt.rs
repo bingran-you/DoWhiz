@@ -974,21 +974,14 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
     let github_context_section = if let Some(gh_org) = &identities.github_org_name {
         format!(
             r#"**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
-Before running TPM commands, gather context about {org_name}:
+Before running TPM commands, gather context about {org_name} from GitHub org `{gh_org}`:
 
-1. Verify GitHub access to the configured org `{gh_org}`:
-   - List your org memberships: `gh api user/memberships/orgs --jq '.[].organization.login'`
-   - Look for `{gh_org}` or a close match (handle typos in configuration)
-   - If exact match found: use that org
-   - If close match found (e.g., different casing or minor typo): use that org
-   - If NO match found: fall back to Notion task board only, do NOT dive into unrelated orgs
-2. If GitHub org access confirmed:
-   - List repos: `gh repo list <MATCHED_ORG> --limit 20`
-   - Check recent PRs: `gh pr list --repo <org>/<repo> --state all --limit 10`
-   - Check open issues: `gh issue list --repo <org>/<repo> --limit 10`
-   - Read README.md or docs/ to understand project structure
-   - Look for open issues not yet tracked as tasks
-   - Use this context to identify potential new tasks"#,
+1. List repos: `gh repo list {gh_org} --limit 20`
+2. Check recent PRs: `gh pr list --repo {gh_org}/<repo> --state all --limit 10`
+3. Check open issues: `gh issue list --repo {gh_org}/<repo> --limit 10`
+4. Read README.md or docs/ to understand project structure
+5. Look for open issues not yet tracked as tasks
+6. Use this context to identify potential new tasks"#,
             org_name = org_name,
             gh_org = gh_org
         )
