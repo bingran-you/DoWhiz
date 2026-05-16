@@ -2863,6 +2863,19 @@
                           <button id="set-slack-team-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Connect</button>
                         </div>
                         <span id="slack-team-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+
+                        <h5 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.95rem;">GitHub Organization Name</h5>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                          <input
+                            type="text"
+                            id="github-org-name-input"
+                            class="auth-input"
+                            placeholder="e.g., KnoWhiz"
+                            style="min-width: 200px;"
+                          />
+                          <button id="set-github-org-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Connect</button>
+                        </div>
+                        <span id="github-org-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
                       </div>
                     </div>
 
@@ -6298,12 +6311,14 @@
           const leaderInput = document.getElementById('org-leader-account-id-input');
           const discordInput = document.getElementById('discord-guild-id-input');
           const slackInput = document.getElementById('slack-team-id-input');
+          const githubInput = document.getElementById('github-org-name-input');
 
           if (dbInput) dbInput.value = currentOrg?.notion_database_id || '';
           if (wsInput) wsInput.value = currentOrg?.notion_workspace_id || '';
           if (leaderInput) leaderInput.value = currentOrg?.leader_account_id || '';
           if (discordInput) discordInput.value = currentOrg?.discord_guild_id || '';
           if (slackInput) slackInput.value = currentOrg?.slack_team_id || '';
+          if (githubInput) githubInput.value = currentOrg?.github_org_name || '';
 
           // Show TPM cron section if no leader set, or if current user is the leader
           const cronSection = document.getElementById('tpm-cron-section');
@@ -6982,6 +6997,61 @@
               }
             } finally {
               setSlackTeamBtn.disabled = false;
+            }
+          });
+        }
+
+        // Set GitHub Organization button handler
+        const setGithubOrgBtn = document.getElementById('set-github-org-btn');
+        if (setGithubOrgBtn) {
+          setGithubOrgBtn.addEventListener('click', async () => {
+            const input = document.getElementById('github-org-name-input');
+            const status = document.getElementById('github-org-status');
+            const orgName = input?.value?.trim();
+
+            if (!orgName) {
+              if (status) status.textContent = 'Please enter a GitHub organization name';
+              return;
+            }
+
+            if (!currentOrganizationName) {
+              if (status) status.textContent = 'No organization selected';
+              return;
+            }
+
+            try {
+              setGithubOrgBtn.disabled = true;
+              if (status) status.textContent = 'Connecting...';
+
+              const { data: { session } } = await supabase.auth.getSession();
+              const accessToken = session?.access_token;
+
+              const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/github`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ org_name: orgName })
+              });
+
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `Failed: ${res.status}`);
+              }
+
+              if (status) {
+                status.textContent = 'GitHub organization connected successfully!';
+                status.style.color = '#22c55e';
+              }
+            } catch (err) {
+              console.error('Failed to connect GitHub organization:', err);
+              if (status) {
+                status.textContent = `Error: ${err.message}`;
+                status.style.color = '#ef4444';
+              }
+            } finally {
+              setGithubOrgBtn.disabled = false;
             }
           });
         }
