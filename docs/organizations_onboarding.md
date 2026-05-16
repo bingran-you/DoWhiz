@@ -123,6 +123,20 @@ Connect community channels to automatically scan for bug reports during TPM sync
    - Found in your Slack workspace URL or admin settings
 3. Click **Set Slack Workspace**
 
+## GitHub Integration
+
+Link your GitHub organization so Oliver can search repos, issues, and PRs during TPM syncs.
+
+### GitHub Organization Setup
+
+1. Navigate to **Settings > Organization > Advanced**
+2. Enter the **Organization Name** of your GitHub organization(case-sensitive)
+3. Click **Connect**
+
+**Note**: Oliver must have access to the GitHub organization. If you see an error:
+- Verify the organization name is spelled correctly (case-sensitive)
+- Ensure Oliver has been invited to the organization on GitHub
+
 ## Oliver's Self-Assignment
 
 Oliver can be assigned tasks by adding the "oliver" tag to a task's Tags property. Oliver automatically queries for tasks with this tag during TPM operations.
