@@ -963,32 +963,60 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         })
         .unwrap_or_default();
 
+    // GitHub organization name for scoping repo searches
+    let github_org_section = identities
+        .github_org_name
+        .as_ref()
+        .map(|name| format!("\n**GitHub Organization:** `{}`\n", name))
+        .unwrap_or_default();
+
+    // GitHub context gathering instructions - conditional on github_org_name
+    let github_context_section = if let Some(gh_org) = &identities.github_org_name {
+        format!(
+            r#"**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
+Before running TPM commands, gather context about {org_name}:
+
+1. Verify GitHub access to the configured org `{gh_org}`:
+   - List your org memberships: `gh api user/memberships/orgs --jq '.[].organization.login'`
+   - Look for `{gh_org}` or a close match (handle typos in configuration)
+   - If exact match found: use that org
+   - If close match found (e.g., different casing or minor typo): use that org
+   - If NO match found: fall back to Notion task board only, do NOT dive into unrelated orgs
+2. If GitHub org access confirmed:
+   - List repos: `gh repo list <MATCHED_ORG> --limit 20`
+   - Check recent PRs: `gh pr list --repo <org>/<repo> --state all --limit 10`
+   - Check open issues: `gh issue list --repo <org>/<repo> --limit 10`
+   - Read README.md or docs/ to understand project structure
+   - Look for open issues not yet tracked as tasks
+   - Use this context to identify potential new tasks"#,
+            org_name = org_name,
+            gh_org = gh_org
+        )
+    } else {
+        format!(
+            r#"**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
+Before running TPM commands, gather context about {org_name}:
+
+**NOTE: GitHub organization is NOT configured for {org_name}.**
+- You may list your org memberships to find a matching org: `gh api user/memberships/orgs --jq '.[].organization.login'`
+- If you find an org that matches or relates to {org_name}, you may explore its repos
+- However, do NOT deeply dive into repos from unrelated organizations - this could leak data across users
+- If no GitHub org is found, fall back to the Notion task board only
+- Recommend the organization admin set their GitHub organization name in settings for better scoping"#,
+            org_name = org_name
+        )
+    };
+
     format!(
         r#"
-=== TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}{slack_team_section}
+=== TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}{slack_team_section}{github_org_section}
 
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
 
 See `.agents/skills/tpm/SKILL.md` for detailed workflows on task management, load balancing, competitive research, and daily syncs.
 
-**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
-Before running TPM commands, gather context about {org_name}:
-
-1. Check GitHub access:
-   - List your org memberships: `gh api user/memberships/orgs --jq '.[].organization.login'`
-   - If you find an org that matches or relates to {org_name}, explore its repos:
-     `gh repo list <ORG_NAME> --limit 20`
-   - Check recent PRs: `gh pr list --repo <org>/<repo> --state all --limit 10`
-   - Check open issues: `gh issue list --repo <org>/<repo> --limit 10`
-
-2. If you have GitHub access to relevant repos:
-   - Read README.md or docs/ to understand project structure
-   - Look for open issues not yet tracked as tasks
-   - Check for stale PRs needing review
-   - Use this context to identify potential new tasks
-
-3. If NO GitHub access to {org_name}'s repos: Fall back to the Notion task board only
+{github_context_section}
 
 **IMPORTANT: When TPM mode is active, you MUST:**
 1. Use tpm_cli for ANY request involving bugs, features, tasks, tickets, or development work
@@ -1232,7 +1260,8 @@ When creating tasks, include context: link to GitHub issue/PR if available.
 "#,
         org_name = org_name,
         account_id = account_id,
-        db_flag = db_flag
+        db_flag = db_flag,
+        github_context_section = github_context_section
     )
 }
 
