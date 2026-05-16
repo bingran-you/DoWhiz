@@ -142,7 +142,18 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "avoid for now",
 ];
 
-const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &["deep research"];
+const INVESTMENT_RESEARCH_KEYWORDS: &[&str] = &[
+    "deep research",
+    "investment analysis",
+    "high-level investment analysis",
+    "high level investment analysis",
+    "investment view",
+    "as an investment",
+    "thesis review",
+    "compare the thesis",
+    "should i care about this stock",
+    "overvalued relative to its sector",
+];
 const INVESTMENT_MONITOR_KEYWORDS: &[&str] = &[
     "material changed",
     "material change",
@@ -529,13 +540,13 @@ fn is_investment_request(raw: &str) -> bool {
         .iter()
         .any(|keyword| normalized.contains(keyword));
     let has_probable_ticker = contains_probable_ticker(raw);
+    let has_supported_intent =
+        has_investment_intent || has_investment_research || has_monitor_intent;
     let has_explicit_monitor_contract = normalized.contains("investment monitor");
     let has_synthetic_monitor_contract =
         is_synthetic_investment_request(raw) && has_explicit_monitor_contract;
 
-    (has_instrument_context
-        && (has_investment_intent || has_investment_research || has_monitor_intent))
-        || (has_probable_ticker && (has_investment_intent || has_monitor_intent))
+    ((has_instrument_context || has_probable_ticker) && has_supported_intent)
         || has_synthetic_monitor_contract
 }
 
@@ -819,16 +830,30 @@ mod tests {
             "Give me deep research on NVDA and tell me whether now is a good time to buy."
         ));
         assert!(is_investment_request(
+            "Give me a high-level investment analysis of NVDA."
+        ));
+        assert!(is_investment_request(
             "Is NVDA a buy this week for a 3-month position?"
         ));
         assert!(is_investment_request(
             "Please analyze Tesla stock and tell me if it is worth buying now."
         ));
+        assert!(is_investment_request("Give me an investment view on AMD."));
+        assert!(is_investment_request("Compare the thesis for AMD."));
         assert!(!is_investment_request(
             "Please buy an NVDA GPU and compare keyboard options."
         ));
         assert!(!is_investment_request(
             "Analyze PR comments on our API design and summarize the tradeoffs."
+        ));
+        assert!(!is_investment_request(
+            "What was Apple's revenue last quarter?"
+        ));
+        assert!(!is_investment_request(
+            "Why did Microsoft stock move today?"
+        ));
+        assert!(!is_investment_request(
+            "Summarize the latest news about AMD."
         ));
         assert!(is_investment_request(
             "Assume company Z reported revenue slightly above expectations, but lowered next-quarter margin guidance because of temporary supply-chain costs. Demand commentary improved, but free cash flow remained negative. Write the investment monitor output."

@@ -39,6 +39,13 @@ The next print is the dominant catalyst because it can confirm whether the raise
 ### Long-Term Ownership View (multi-year)
 The multi-year AI infrastructure thesis still looks intact because hyperscaler spending, inference demand, and ecosystem lock-in remain supportive. Long-term ownership depends less on one quarter and more on whether NVIDIA can sustain pricing power and platform breadth as customers optimize their capex.
 
+## Competitive / Peer Context
+
+- **Relevant peers/substitutes:** AMD and Broadcom matter because they offer alternative merchant accelerator paths, while hyperscaler custom ASIC efforts matter because they can cap NVIDIA's share of wallet even if AI spending stays strong.
+- **Where NVIDIA looks stronger:** CUDA and the surrounding software stack still support better monetization and switching costs than most merchant alternatives.
+- **Where peers create pressure:** Custom silicon and credible merchant alternatives can narrow pricing power at the largest cloud accounts and make today's margin assumptions harder to sustain indefinitely.
+- **Investment implication:** The bull case still leads, but peer pressure is why gross-margin guardrails and customer-concentration risk matter more than a pure demand-growth narrative.
+
 ## Verified Facts
 
 - NVIDIA reported FY2026 revenue of $215.9B in its latest annual disclosures. ([NVIDIA IR](https://investor.nvidia.com/))

@@ -84,6 +84,7 @@ FULL_ORDER = [
     "decision card",
     "why now",
     "dual-horizon framing",
+    "competitive / peer context",
     "verified facts",
     "derived metrics",
     "scenarios",
@@ -92,6 +93,25 @@ FULL_ORDER = [
 ]
 
 SHORT_ORDER = [
+    "decision card",
+    "why now",
+    "competitive / peer context",
+    "what would change the view",
+    "evidence chips",
+]
+
+FULL_REQUIRED_ORDER = [
+    "decision card",
+    "why now",
+    "dual-horizon framing",
+    "verified facts",
+    "derived metrics",
+    "scenarios",
+    "what would change the view",
+    "judgment",
+]
+
+SHORT_REQUIRED_ORDER = [
     "decision card",
     "why now",
     "what would change the view",
@@ -339,9 +359,12 @@ def audit_artifact(case: dict[str, Any], artifact_html: str) -> dict[str, Any]:
     text = normalize_text(artifact_html)
     html_lower = artifact_html.lower()
     labels = FULL_REQUIRED_LABELS if contract == "full" else SHORT_REQUIRED_LABELS
-    order = FULL_ORDER if contract == "full" else SHORT_ORDER
+    order = FULL_REQUIRED_ORDER if contract == "full" else SHORT_REQUIRED_ORDER
+    section_order = FULL_ORDER if contract == "full" else SHORT_ORDER
     evidence_heading = "verified facts" if contract == "full" else "evidence chips"
     change_view_passed, change_view_detail = change_view_ok(html_lower, contract)
+    peer_section = extract_section(html_lower, "competitive / peer context", section_order) or ""
+    peer_section_text = normalize_text(peer_section)
 
     return {
         "contract": contract,
@@ -352,7 +375,7 @@ def audit_artifact(case: dict[str, Any], artifact_html: str) -> dict[str, Any]:
         "decision_card_near_top": text.find("decision card") != -1 and text.find("decision card") < 500,
         "decision_card_order_ok": decision_card_core_precedes_actions(text),
         "clickable_link_count": count_clickable_links(html_lower),
-        "evidence_section_has_link": section_contains_link(html_lower, evidence_heading, order),
+        "evidence_section_has_link": section_contains_link(html_lower, evidence_heading, section_order),
         "derived_metrics_ok": derived_metrics_has_formula(html_lower) if contract == "full" else True,
         "why_now_specific": why_now_specific(html_lower, contract),
         "main_risk_present": main_risk_present(text),
@@ -360,6 +383,9 @@ def audit_artifact(case: dict[str, Any], artifact_html: str) -> dict[str, Any]:
         "change_view_detail": change_view_detail,
         "compliance_sentence_once": compliance_sentence_once(text),
         "banned_phrases": banned_phrases_found(text, case.get("banned_phrases")),
+        "peer_context_present": bool(peer_section_text),
+        "peer_section_text": peer_section_text,
+        "peer_section_word_count": len(peer_section_text.split()),
     }
 
 
@@ -516,6 +542,90 @@ def grade_case(case: dict[str, Any], run_result: dict[str, Any]) -> dict[str, An
                 "required_specific_phrase_present",
                 passed,
                 "ok" if passed else f"missing any of {case['must_contain_any']}",
+            )
+        )
+
+    if case.get("must_contain_all"):
+        lower_html = run_result["artifact_html"].lower()
+        missing = [needle for needle in case["must_contain_all"] if needle.lower() not in lower_html]
+        checks.append(
+            make_check(
+                "required_specific_phrases_present",
+                not missing,
+                "ok" if not missing else f"missing {missing}",
+            )
+        )
+
+    if case.get("must_not_contain_any"):
+        lower_html = run_result["artifact_html"].lower()
+        found = [needle for needle in case["must_not_contain_any"] if needle.lower() in lower_html]
+        checks.append(
+            make_check(
+                "forbidden_specific_phrases_absent",
+                not found,
+                "ok" if not found else f"found {found}",
+            )
+        )
+
+    if "expect_peer_context" in case:
+        checks.append(
+            make_check(
+                "peer_context_presence_matches",
+                audit["peer_context_present"] == case["expect_peer_context"],
+                (
+                    f"peer_context_present={audit['peer_context_present']}"
+                    if audit["peer_context_present"] == case["expect_peer_context"]
+                    else f"expected peer_context_present={case['expect_peer_context']}, got {audit['peer_context_present']}"
+                ),
+            )
+        )
+
+    if case.get("peer_section_must_contain_any"):
+        found = any(
+            needle.lower() in audit["peer_section_text"] for needle in case["peer_section_must_contain_any"]
+        )
+        checks.append(
+            make_check(
+                "peer_section_contains_required_marker",
+                found,
+                "ok" if found else f"missing any of {case['peer_section_must_contain_any']}",
+            )
+        )
+
+    if case.get("peer_section_must_contain_all"):
+        missing = [
+            needle
+            for needle in case["peer_section_must_contain_all"]
+            if needle.lower() not in audit["peer_section_text"]
+        ]
+        checks.append(
+            make_check(
+                "peer_section_contains_all_required_markers",
+                not missing,
+                "ok" if not missing else f"missing {missing}",
+            )
+        )
+
+    if case.get("peer_section_must_not_contain_any"):
+        found = [
+            needle
+            for needle in case["peer_section_must_not_contain_any"]
+            if needle.lower() in audit["peer_section_text"]
+        ]
+        checks.append(
+            make_check(
+                "peer_section_forbidden_markers_absent",
+                not found,
+                "ok" if not found else f"found {found}",
+            )
+        )
+
+    if case.get("peer_section_max_words") is not None:
+        checks.append(
+            make_check(
+                "peer_section_stays_concise",
+                audit["peer_section_word_count"] <= case["peer_section_max_words"],
+                f"peer_section_word_count={audit['peer_section_word_count']}",
             )
         )
 
