@@ -2235,8 +2235,47 @@ pub async fn update_organization_github(
         );
     }
 
-    let store = state.account_store.clone();
+    // Validate GitHub org access by running `gh api orgs/{org_name}`
     let github_org = payload.org_name.clone();
+    let gh_check = task::spawn_blocking({
+        let github_org = github_org.clone();
+        move || {
+            let Ok(token) = std::env::var("OLIVER_GITHUB_PERSONAL_ACCESS_TOKEN") else {
+                return Err("GitHub token not configured on server".to_string());
+            };
+
+            let output = std::process::Command::new("gh")
+                .env("GH_TOKEN", &token)
+                .args(["api", &format!("orgs/{}", github_org)])
+                .output();
+            match output {
+                Ok(out) if out.status.success() => Ok(()),
+                Ok(out) => {
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    Err(format!(
+                        "GitHub org '{}' not accessible. Either the org hasn't been shared with Oliver yet, or the name is typed incorrectly (org names are case-sensitive). Details: {}",
+                        github_org,
+                        stderr.trim()
+                    ))
+                }
+                Err(e) => Err(format!("Failed to run gh CLI: {}", e)),
+            }
+        }
+    })
+    .await;
+
+    match gh_check {
+        Ok(Err(err_msg)) => {
+            return json_error_response(StatusCode::BAD_REQUEST, &err_msg);
+        }
+        Err(e) => {
+            error!("spawn_blocking panicked during gh check: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error");
+        }
+        Ok(Ok(())) => {} // Validation passed
+    }
+
+    let store = state.account_store.clone();
     let update_result =
         task::spawn_blocking(move || store.update_organization_github(&org_name, &github_org))
             .await
