@@ -6,7 +6,7 @@
 
 ---
 
-# Fault Report: Ephemeral Share Download Overwrites Local Trace Metadata
+# Fault Report: Ephemeral Share Download Overwrites Global Share Trace Metadata
 
 **Date:** 2026-05-15  
 **Investigated by:** Dylan Tang  
@@ -67,56 +67,40 @@ None if execution_age > aci_grace_period => {
 | Time | Event |
 |------|-------|
 | 15:29:49 | Task starts, `set_stage("creating_ephemeral_share")` |
-| 15:30:01 | Workspace uploaded to Azure file share (including `.run_task_trace/metadata.json`) |
-| 15:30:01 | `set_stage("starting_aci_container")` updates LOCAL metadata |
+| 15:30:01 | Workspace uploaded from global share to ephemeral share (including `.run_task_trace/metadata.json`) |
+| 15:30:01 | `set_stage("starting_aci_container")` updates global share metadata |
 | 15:30:01 | ACI container created and starts running |
 | 16:02:11 | Container finishes, deregistered from MongoDB |
-| 16:02:11 | `download_back()` starts - copies from Azure share to local |
-| 16:03:xx | Download completes, **overwrites local `.run_task_trace/` with old version from upload** |
+| 16:02:11 | `download_back()` starts - copies from ephemeral share to global share |
+| 16:03:xx | Download completes, **overwrites global share `.run_task_trace/` with stale version from ephemeral** |
 | 16:11:30 | Reconciliation runs, sees `stage_updated_at` from 15:30:01 (41 min old) |
 | 16:11:30 | Task marked failed: "execution lost terminal reconciliation after an ACI-backed runner failure" |
 
-## Why Two Copies Exist
+* **Note:** There are two copies of `.run_task_trace/metadata.json` - one on global, one on ephemeral.
 
-The ACI container runs in a completely separate Azure environment - it cannot access the local VM disk. The ephemeral share architecture:
+## Why Global Share Trace is the True file
 
-```
-Local VM (dowhizprod1)                    Azure Container Instance (ACI)
-─────────────────────────                 ─────────────────────────────
-workspace/                                Cannot access VM disk!
-├── incoming_email/                       
-├── memory/                               Uses mounted Azure Files share:
-├── .run_task_trace/  ← LOCAL TRACE       └── workspace copy (uploaded)
-└── ...                                       └── .run_task_trace/ (stale)
-```
-
-1. **Upload:** Workspace uploaded to Azure file share before container starts
-2. **Run:** Container writes output to the share
-3. **Download:** Results copied back to local VM
-
-## Why Local Trace is Needed
-
-The `.run_task_trace/metadata.json` file tracks execution stages on the LOCAL VM:
+The `.run_task_trace/metadata.json` on the global share tracks execution stages as the VM code progresses:
 
 ```
-set_stage("creating_ephemeral_share")  → before upload
+set_stage("creating_ephemeral_share")  → before upload to ephemeral
 set_stage("starting_aci_container")    → before az container create  
 set_stage("executing_codex")           → polling loop starts
-set_stage("downloading_results")       → after container done
+set_stage("downloading_results")       → after container done, before download
 ```
 
-Reconciliation uses `stage_updated_at_unix_ms` to detect if the local `run_task()` function is stuck. The `inflight_aci_result_handling` check grants a 15-minute grace period for recent activity.
+Reconciliation uses `stage_updated_at_unix_ms` to detect if the `run_task()` function is stuck. The `inflight_aci_result_handling` check grants a 15-minute grace period for recent activity.
 
 ## The Bug
 
 ```
-Upload:   metadata.json → Azure share (stage="creating_ephemeral_share", time=15:30:01)
-Local:    metadata.json updated (stage="starting_aci_container", time=15:30:01)
-Local:    metadata.json updated (stage="downloading_results", time=16:02:11)
-Download: Azure share → local (OVERWRITES with stage="creating_ephemeral_share", time=15:30:01)
+Upload:   global → ephemeral (stage="creating_ephemeral_share", time=15:30:01)
+Global:   metadata.json updated (stage="starting_aci_container", time=15:30:01)
+Global:   metadata.json updated (stage="downloading_results", time=16:02:11)
+Download: ephemeral → global (OVERWRITES with stage="creating_ephemeral_share", time=15:30:01)
 ```
 
-The download clobbered the local trace with the old uploaded version. Reconciliation then saw activity from 41 minutes ago, exceeding the 15-minute grace period.
+The download overwrote the global share trace with the stale version from ephemeral. Reconciliation then saw activity from 41 minutes ago, exceeding the 15-minute grace period.
 
 ## Why This Wasn't Seen Before
 
@@ -141,7 +125,7 @@ const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
     ".discord_context.json",
     ".env",
     ".google_access_token",
-    ".run_task_trace",  // ← ADDED: preserve local trace metadata
+    ".run_task_trace",  // ← ADDED: preserve global share trace metadata
     ".secrets",
     "incoming_attachments",
     "incoming_email",
@@ -149,7 +133,7 @@ const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
 ];
 ```
 
-The container doesn't need the trace metadata - it's only used by the local scheduler for tracking progress. By skipping it during download, local stage updates are preserved.
+The container doesn't need the trace metadata - it's only used by the VM scheduler code for tracking progress. By skipping it during download, global share stage updates are preserved.
 
 ## Debugging Commands Used
 
