@@ -878,6 +878,15 @@
         line-height: 1.45;
         word-break: break-word;
       }
+      .task-timeline-note {
+        margin-top: 0.7rem;
+        padding-top: 0.7rem;
+        border-top: 1px solid rgba(59, 130, 246, 0.16);
+        color: #dbeafe;
+        font-size: 0.88rem;
+        line-height: 1.45;
+        word-break: break-word;
+      }
 
       #refresh-tasks-btn {
         padding: 0.5rem 1rem;
@@ -8067,6 +8076,17 @@
         }
       }
 
+      function taskMessagePresentation(task) {
+        const status = taskStatusKey(task);
+        const isInformational = status === 'success' || status === 'superseded';
+        return {
+          label: isInformational ? 'Note' : 'Error',
+          value: parseErrorMessage(task?.error_message),
+          tone: isInformational ? 'muted' : 'danger',
+          className: isInformational ? 'task-timeline-note' : 'task-timeline-error'
+        };
+      }
+
       function taskUpdatedAt(task) {
         return task.status_changed_at || task.last_run || task.execution_started_at || task.created_at;
       }
@@ -8129,10 +8149,11 @@
         }
 
         if (task.error_message) {
+          const message = taskMessagePresentation(task);
           metaItems.push({
-            label: 'Error',
-            value: parseErrorMessage(task.error_message),
-            tone: 'danger'
+            label: message.label,
+            value: message.value,
+            tone: message.tone
           });
         }
 
@@ -8240,8 +8261,9 @@
           <div class="task-timeline">
             ${executions.map((execution) => {
               const status = taskStatusPresentation({ status: execution.status });
-              const errorHtml = execution.error_message
-                ? `<div class="task-timeline-error">${escapeHtml(parseErrorMessage(execution.error_message))}</div>`
+              const message = execution.error_message ? taskMessagePresentation(execution) : null;
+              const errorHtml = message
+                ? `<div class="${message.className}"><span class="task-timeline-meta-label">${escapeHtml(message.label)}</span><div>${escapeHtml(message.value)}</div></div>`
                 : '';
               return `
                 <div class="task-timeline-item">
