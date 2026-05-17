@@ -327,6 +327,10 @@ fn ensure_tasks_indexes(db: &Database) -> Result<(), mongodb::error::Error> {
     let collection = db.collection::<Document>("tasks");
     ensure_index_compatible(
         &collection,
+        IndexModel::builder().keys(doc! { "task_id": 1 }).build(),
+    )?;
+    ensure_index_compatible(
+        &collection,
         IndexModel::builder()
             .keys(doc! { "owner_scope.kind": 1, "owner_scope.id": 1, "task_id": 1 })
             .build(),

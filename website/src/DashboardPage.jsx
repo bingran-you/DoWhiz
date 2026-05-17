@@ -3,11 +3,17 @@ import { getDoWhizApiBaseUrl } from './analytics';
 import { supabase } from './app/supabaseClient';
 import './dashboard.css';
 
-const RANGE_OPTIONS = [
+const BUSINESS_RANGE_OPTIONS = [
   { label: 'Last 7 days', value: '7d' },
   { label: 'Last 30 days', value: '30d' },
   { label: 'Last 90 days', value: '90d' },
   { label: 'Last 180 days', value: '180d' }
+];
+
+const TASK_OPS_RANGE_OPTIONS = [
+  { label: 'Last 1 day', value: '1d' },
+  { label: 'Last 3 days', value: '3d' },
+  { label: 'Last 7 days', value: '7d' }
 ];
 
 const clampPercent = (value) => {
@@ -714,7 +720,8 @@ function TaskOpsView({
 
 function DashboardPage() {
   const [activeView, setActiveView] = useState('business');
-  const [range, setRange] = useState('30d');
+  const [businessRange, setBusinessRange] = useState('30d');
+  const [taskOpsRange, setTaskOpsRange] = useState('3d');
   const [refreshTick, setRefreshTick] = useState(0);
   const [session, setSession] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -729,6 +736,8 @@ function DashboardPage() {
   const [taskOpsPage, setTaskOpsPage] = useState(1);
   const [selectedTaskRun, setSelectedTaskRun] = useState(null);
   const deferredTaskOpsSearch = useDeferredValue(taskOpsSearchDraft.trim());
+  const activeRange = activeView === 'task_ops' ? taskOpsRange : businessRange;
+  const activeRangeOptions = activeView === 'task_ops' ? TASK_OPS_RANGE_OPTIONS : BUSINESS_RANGE_OPTIONS;
 
   useEffect(() => {
     document.title = 'DoWhiz Internal Dashboard';
@@ -776,7 +785,7 @@ function DashboardPage() {
       }
 
       try {
-        const res = await fetch(`${getDoWhizApiBaseUrl()}/analytics/dashboard?range=${encodeURIComponent(range)}`, {
+        const res = await fetch(`${getDoWhizApiBaseUrl()}/analytics/dashboard?range=${encodeURIComponent(businessRange)}`, {
           headers: {
             Authorization: `Bearer ${currentSession.access_token}`
           }
@@ -813,7 +822,7 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeView, range, refreshTick]);
+  }, [activeView, businessRange, refreshTick]);
 
   useEffect(() => {
     if (activeView !== 'task_ops') {
@@ -840,7 +849,7 @@ function DashboardPage() {
       }
 
       try {
-        const params = new URLSearchParams({ range, page: String(taskOpsPage) });
+        const params = new URLSearchParams({ range: taskOpsRange, page: String(taskOpsPage) });
         if (taskOpsStatusFilter) params.set('status', taskOpsStatusFilter);
         if (taskOpsChannelFilter) params.set('channel', taskOpsChannelFilter);
         if (deferredTaskOpsSearch) params.set('q', deferredTaskOpsSearch);
@@ -885,10 +894,10 @@ function DashboardPage() {
   }, [
     activeView,
     deferredTaskOpsSearch,
-    range,
     refreshTick,
     taskOpsChannelFilter,
     taskOpsPage,
+    taskOpsRange,
     taskOpsStatusFilter
   ]);
 
@@ -909,7 +918,7 @@ function DashboardPage() {
 
   useEffect(() => {
     setTaskOpsPage(1);
-  }, [range]);
+  }, [taskOpsRange]);
 
   if (!activeLoading && !session) {
     return (
@@ -939,8 +948,16 @@ function DashboardPage() {
           </div>
           <div className="dash-header-controls">
             <label htmlFor="range-select">Date range</label>
-            <select id="range-select" value={range} onChange={(event) => setRange(event.target.value)}>
-              {RANGE_OPTIONS.map((option) => (
+            <select
+              id="range-select"
+              value={activeRange}
+              onChange={(event) =>
+                activeView === 'task_ops'
+                  ? setTaskOpsRange(event.target.value)
+                  : setBusinessRange(event.target.value)
+              }
+            >
+              {activeRangeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

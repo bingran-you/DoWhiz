@@ -25,7 +25,9 @@ use super::analytics::{require_admin_email, resolve_window, AnalyticsState, Date
 const DEFAULT_PAGE_SIZE: usize = 50;
 const MAX_PAGE_SIZE: usize = 100;
 const LONG_RUNNING_WARNING_SECS: i64 = 3600;
-const TASK_BATCH_SIZE: usize = 500;
+const TASK_LOOKUP_BATCH_SIZE: usize = 100;
+const TASK_OPS_DEFAULT_RANGE: &str = "3d";
+const TASK_OPS_MAX_RANGE_DAYS: i64 = 7;
 const TRACE_MATCH_TOLERANCE_MS: i64 = 10 * 60 * 1000;
 const MAX_EXECUTION_SCAN_DOCS: usize = 5000;
 
@@ -153,7 +155,7 @@ pub async fn get_task_ops(
         Err(response) => return response,
     };
 
-    let (start, end) = match resolve_window(
+    let (start, end) = match resolve_task_ops_window(
         query.start.as_deref(),
         query.end.as_deref(),
         query.range.as_deref(),
@@ -266,6 +268,27 @@ fn load_task_ops_snapshot(
     })
 }
 
+fn resolve_task_ops_window(
+    start_raw: Option<&str>,
+    end_raw: Option<&str>,
+    range_raw: Option<&str>,
+) -> Result<(DateTime<Utc>, DateTime<Utc>), String> {
+    let effective_range = if start_raw.is_none() && end_raw.is_none() && range_raw.is_none() {
+        Some(TASK_OPS_DEFAULT_RANGE)
+    } else {
+        range_raw
+    };
+
+    let (start, end) = resolve_window(start_raw, end_raw, effective_range)?;
+    if end.signed_duration_since(start) > chrono::Duration::days(TASK_OPS_MAX_RANGE_DAYS) {
+        return Err(format!(
+            "Task Ops range cannot exceed {} days; use 1d, 3d, or 7d.",
+            TASK_OPS_MAX_RANGE_DAYS
+        ));
+    }
+    Ok((start, end))
+}
+
 /// Fetch all execution docs in the date range with a single query.
 fn load_all_execution_docs(
     collection: &Collection<Document>,
@@ -279,6 +302,15 @@ fn load_all_execution_docs(
         }
     };
     let options = FindOptions::builder()
+        .projection(doc! {
+            "task_id": 1,
+            "execution_id": 1,
+            "started_at": 1,
+            "finished_at": 1,
+            "status": 1,
+            "error_message": 1,
+            "owner_scope": 1,
+        })
         .sort(doc! { "started_at": -1 })
         .limit(MAX_EXECUTION_SCAN_DOCS as i64)
         .build();
@@ -387,46 +419,53 @@ fn paginate_executions_in_memory(
     channel_filter: Option<&str>,
     search_query: Option<&str>,
 ) -> Result<TaskOpsPageSlice, String> {
-    // Step 1: Dedupe - keep latest execution per task_id
-    let mut latest_by_task_id: HashMap<String, ExecutionDoc> = HashMap::new();
-    for doc in all_executions {
-        // Apply status filter early
-        if let Some(filter) = status_filter {
-            if doc.status.to_ascii_lowercase() != filter {
-                continue;
-            }
+    let start_index = page.saturating_sub(1).saturating_mul(page_size);
+    let required_matches = start_index.saturating_add(page_size).saturating_add(1);
+    let deduped = dedupe_latest_task_executions(all_executions, status_filter);
+    let mut matched_rows = Vec::with_capacity(required_matches.min(page_size + 1));
+
+    for batch in deduped.chunks(TASK_LOOKUP_BATCH_SIZE) {
+        if matched_rows.len() >= required_matches {
+            break;
         }
 
-        match latest_by_task_id.get(&doc.task_id) {
-            Some(existing) => {
-                if doc.execution_id == existing.execution_id
-                    && doc.started_at == existing.started_at
-                    && prefer_execution_row(doc, existing)
-                {
-                    latest_by_task_id.insert(doc.task_id.clone(), doc.clone());
+        let task_ids: Vec<String> = batch
+            .iter()
+            .map(|execution| execution.task_id.clone())
+            .collect();
+        let task_records = load_task_records_for_ids(tasks_coll, &task_ids)?;
+
+        for execution in batch {
+            let Some(task_record) = task_records.get(&execution.task_id) else {
+                continue;
+            };
+            if !matches!(task_record.task.kind, TaskKind::RunTask(_)) {
+                continue;
+            }
+            if let Some(channel_filter) = channel_filter {
+                let channel = task_record
+                    .doc
+                    .get_str("channel")
+                    .unwrap_or("unknown")
+                    .to_ascii_lowercase();
+                if channel != channel_filter {
+                    continue;
                 }
             }
-            None => {
-                latest_by_task_id.insert(doc.task_id.clone(), doc.clone());
+
+            let row = build_task_ops_row(execution, task_record);
+            if !row_matches_filters(&row, None, None, search_query) {
+                continue;
+            }
+            matched_rows.push(row);
+            if matched_rows.len() >= required_matches {
+                break;
             }
         }
     }
 
-    // Sort by started_at descending
-    let mut deduped: Vec<ExecutionDoc> = latest_by_task_id.into_values().collect();
-    deduped.sort_by(|a, b| b.started_at.cmp(&a.started_at));
-
-    // Step 2: Load task records for all deduped task_ids
-    let task_ids: Vec<String> = deduped.iter().map(|d| d.task_id.clone()).collect();
-    let task_records = load_task_records_for_ids(tasks_coll, &task_ids)?;
-
-    // Step 3: Build and filter rows
-    let filtered_rows = build_filtered_rows(&deduped, &task_records, channel_filter, search_query);
-
-    // Step 4: Paginate
-    let start_index = page.saturating_sub(1).saturating_mul(page_size);
-    let has_next_page = filtered_rows.len() > start_index + page_size;
-    let rows = filtered_rows
+    let has_next_page = matched_rows.len() > start_index + page_size;
+    let rows = matched_rows
         .into_iter()
         .skip(start_index)
         .take(page_size)
@@ -489,30 +528,31 @@ fn prefer_execution_row(candidate: &ExecutionDoc, existing: &ExecutionDoc) -> bo
     existing_error && !candidate_error
 }
 
-#[cfg(test)]
-fn dedupe_latest_task_executions(mut rows: Vec<ExecutionDoc>) -> Vec<ExecutionDoc> {
-    rows.sort_by(|left, right| {
-        right
-            .started_at
-            .cmp(&left.started_at)
-            .then_with(|| right.execution_id.cmp(&left.execution_id))
-    });
-
+fn dedupe_latest_task_executions(
+    rows: &[ExecutionDoc],
+    status_filter: Option<&str>,
+) -> Vec<ExecutionDoc> {
     let mut deduped: Vec<ExecutionDoc> = Vec::new();
     let mut by_task_id: HashMap<String, usize> = HashMap::new();
     for row in rows {
+        if let Some(filter) = status_filter {
+            if row.status.to_ascii_lowercase() != filter {
+                continue;
+            }
+        }
+
         if let Some(existing_index) = by_task_id.get(&row.task_id).copied() {
             let existing = &deduped[existing_index];
             if row.execution_id == existing.execution_id
                 && row.started_at == existing.started_at
-                && prefer_execution_row(&row, existing)
+                && prefer_execution_row(row, existing)
             {
-                deduped[existing_index] = row;
+                deduped[existing_index] = row.clone();
             }
             continue;
         }
         by_task_id.insert(row.task_id.clone(), deduped.len());
-        deduped.push(row);
+        deduped.push(row.clone());
     }
     deduped
 }
@@ -530,12 +570,23 @@ fn load_task_records_for_ids(
     task_ids: &[String],
 ) -> Result<HashMap<String, TaskRecord>, String> {
     let mut by_task_id: HashMap<String, TaskRecord> = HashMap::new();
-    for chunk in task_ids.chunks(TASK_BATCH_SIZE) {
+    let options = FindOptions::builder()
+        .projection(doc! {
+            "task_id": 1,
+            "task_json": 1,
+            "channel": 1,
+            "kind": 1,
+            "enabled": 1,
+            "retry_count": 1,
+            "owner_scope": 1,
+        })
+        .build();
+    for chunk in task_ids.chunks(TASK_LOOKUP_BATCH_SIZE) {
         let filter = doc! {
             "task_id": { "$in": chunk.iter().cloned().collect::<Vec<_>>() }
         };
         let cursor = retry_mongo_read("task_ops.task_docs", || {
-            collection.find(filter.clone(), None)
+            collection.find(filter.clone(), options.clone())
         })
         .map_err(|err| format!("failed to query tasks: {err}"))?;
 
@@ -733,30 +784,6 @@ fn row_matches_filters(
     }
     true
 }
-
-fn build_filtered_rows(
-    executions: &[ExecutionDoc],
-    task_records: &HashMap<String, TaskRecord>,
-    channel_filter: Option<&str>,
-    search_query: Option<&str>,
-) -> Vec<TaskOpsRow> {
-    let mut rows = Vec::new();
-    for execution in executions {
-        let Some(task_record) = task_records.get(&execution.task_id) else {
-            continue;
-        };
-        if !matches!(task_record.task.kind, TaskKind::RunTask(_)) {
-            continue;
-        }
-
-        let row = build_task_ops_row(execution, task_record);
-        if !row_matches_filters(&row, None, channel_filter, search_query) {
-            continue;
-        }
-        rows.push(row);
-    }
-    rows
-}
 fn default_title(task: &ScheduledTask, channel: &str) -> String {
     match &task.kind {
         TaskKind::RunTask(_) => default_routine_name(channel),
@@ -837,9 +864,11 @@ fn normalize_filter(value: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use std::collections::HashMap;
 
-    use super::{build_filtered_rows, dedupe_latest_task_executions, ExecutionDoc, TaskOpsRow};
+    use super::{
+        dedupe_latest_task_executions, resolve_task_ops_window, ExecutionDoc,
+        TASK_OPS_DEFAULT_RANGE,
+    };
 
     fn sample_execution(
         task_id: &str,
@@ -863,100 +892,29 @@ mod tests {
     #[test]
     fn dedupe_latest_execution_prefers_account_scope() {
         let started_at = Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 0).unwrap();
-        let rows = vec![
+        let rows = [
             sample_execution("task-1", 100, "user", started_at, "success"),
             sample_execution("task-1", 100, "account", started_at, "success"),
         ];
-        let deduped = dedupe_latest_task_executions(rows);
+        let deduped = dedupe_latest_task_executions(&rows, None);
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].owner_scope_kind, "account");
     }
 
     #[test]
-    fn build_filtered_rows_is_empty_without_task_records() {
-        let rows = vec![
-            TaskOpsRow {
-                task_id: "a".to_string(),
-                execution_id: 1,
-                title: "A".to_string(),
-                request_summary: Some("A".to_string()),
-                kind: "run_task".to_string(),
-                channel: "email".to_string(),
-                sender: None,
-                sender_name: None,
-                status: "success".to_string(),
-                current_stage: None,
-                is_running_long: false,
-                started_at: "2026-04-24T12:00:00Z".to_string(),
-                finished_at: Some("2026-04-24T12:05:00Z".to_string()),
-                duration_seconds: Some(300),
-                created_at: "2026-04-24T11:59:00Z".to_string(),
-                last_run: None,
-                schedule_type: "one_shot".to_string(),
-                next_run: None,
-                run_at: None,
-                enabled: false,
-                retry_count: 0,
-                error_message: None,
-                owner_scope_kind: "account".to_string(),
-                owner_scope_id: "account-1".to_string(),
-                runner: Some("codex".to_string()),
-                model_name: Some("gpt-test".to_string()),
-                backend: None,
-                deploy_target: None,
-                trace_started_at: None,
-                trace_finished_at: None,
-                trace_stage_updated_at: None,
-                timing_ms: None,
-                token_usage: None,
-            },
-            TaskOpsRow {
-                task_id: "b".to_string(),
-                execution_id: 2,
-                title: "B".to_string(),
-                request_summary: Some("B".to_string()),
-                kind: "run_task".to_string(),
-                channel: "email".to_string(),
-                sender: None,
-                sender_name: None,
-                status: "failed".to_string(),
-                current_stage: None,
-                is_running_long: false,
-                started_at: "2026-04-24T13:00:00Z".to_string(),
-                finished_at: Some("2026-04-24T13:10:00Z".to_string()),
-                duration_seconds: Some(600),
-                created_at: "2026-04-24T12:59:00Z".to_string(),
-                last_run: None,
-                schedule_type: "one_shot".to_string(),
-                next_run: None,
-                run_at: None,
-                enabled: false,
-                retry_count: 0,
-                error_message: Some("boom".to_string()),
-                owner_scope_kind: "account".to_string(),
-                owner_scope_id: "account-1".to_string(),
-                runner: Some("codex".to_string()),
-                model_name: Some("gpt-test".to_string()),
-                backend: None,
-                deploy_target: None,
-                trace_started_at: None,
-                trace_finished_at: None,
-                trace_stage_updated_at: None,
-                timing_ms: None,
-                token_usage: None,
-            },
-        ];
-
-        let filtered = build_filtered_rows(&[], &HashMap::new(), None, None);
-        assert!(filtered.is_empty());
-        let durations: Vec<i64> = rows.iter().filter_map(|row| row.duration_seconds).collect();
-        assert_eq!(durations, vec![300, 600]);
+    fn task_ops_window_defaults_to_recent_three_days() {
+        let (start, end) = resolve_task_ops_window(None, None, None).expect("window");
+        assert_eq!(
+            end.signed_duration_since(start).num_days(),
+            3,
+            "{TASK_OPS_DEFAULT_RANGE}"
+        );
     }
 
     #[test]
     fn dedupe_latest_task_executions_prefers_account_scope_for_same_latest_execution() {
         let started_at = Utc.with_ymd_and_hms(2026, 4, 24, 12, 0, 0).unwrap();
-        let rows = vec![
+        let rows = [
             sample_execution("task-1", 100, "user", started_at, "success"),
             sample_execution("task-1", 100, "account", started_at, "success"),
             sample_execution(
@@ -968,9 +926,15 @@ mod tests {
             ),
         ];
 
-        let deduped = dedupe_latest_task_executions(rows);
+        let deduped = dedupe_latest_task_executions(&rows, None);
         assert_eq!(deduped.len(), 1);
         assert_eq!(deduped[0].owner_scope_kind, "account");
         assert_eq!(deduped[0].execution_id, 100);
+    }
+
+    #[test]
+    fn task_ops_window_rejects_ranges_larger_than_seven_days() {
+        let err = resolve_task_ops_window(None, None, Some("30d")).expect_err("range should fail");
+        assert!(err.contains("cannot exceed 7 days"));
     }
 }
