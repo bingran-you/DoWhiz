@@ -57,6 +57,12 @@ Anonymous-to-known stitching is inferred when events share `anonymous_id` and la
 7. Reliability section (task success, error rates, failure reasons, latency rows)
 8. Metric definition and taxonomy tables for trust/clarity
 
+Task Ops operational window:
+
+- The Task Ops view is intentionally limited to recent history only.
+- UI presets are `1d`, `3d`, and `7d`.
+- Backend requests wider than 7 days are rejected to avoid low-signal, high-cost Cosmos scans.
+
 ## Event Taxonomy
 
 ### A. Acquisition / Site
@@ -198,6 +204,7 @@ Implemented formulas:
 - DoWhiz monetization is currently one-time credit purchase; paid-state metrics map to payment + activated credits.
 - Reliability percentages rely on currently implemented error events; adding `api_error` and `latency_metric_logged` will improve precision.
 - Cohort and retention logic is identity/event-window based; no dedicated materialized cohort table yet.
+- Task Ops is optimized for recent operational triage, not long-range historical reporting.
 - Rust compile verification in this environment requires accepting local Xcode license before full `cargo check` can complete.
 
 ## Follow-up Recommendations
