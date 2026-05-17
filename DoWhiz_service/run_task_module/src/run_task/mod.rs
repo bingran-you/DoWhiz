@@ -20,8 +20,8 @@ mod utils;
 mod workspace;
 
 pub use aci_container_store::{
-    find_aci_container_by_workspace, read_aci_recovery_context, AciContainerRecord,
-    AciRecoveryContext,
+    deregister_aci_container_mongo_by_workspace, find_aci_container_by_workspace,
+    read_aci_recovery_context, AciContainerRecord, AciRecoveryContext,
 };
 pub use codex::{
     cleanup_all_aci_containers, delete_aci_container_by_name,

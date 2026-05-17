@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
+use run_task_module::deregister_aci_container_mongo_by_workspace;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -27,6 +28,17 @@ use super::types::{
     RUN_TASK_FAILURE_DIR, RUN_TASK_FAILURE_LIMIT, RUN_TASK_FAILURE_NOTICE,
     RUN_TASK_FAILURE_REPORT_DIR,
 };
+
+fn cleanup_run_task_aci_recovery_registration(task: &RunTaskTask) {
+    let deleted = deregister_aci_container_mongo_by_workspace(&task.workspace_dir);
+    if deleted > 0 {
+        info!(
+            "cleared {} stale ACI recovery registration(s) for workspace {} after terminal bookkeeping",
+            deleted,
+            task.workspace_dir.display()
+        );
+    }
+}
 
 pub struct Scheduler<E: TaskExecutor> {
     pub(super) tasks: Vec<ScheduledTask>,
@@ -310,6 +322,9 @@ impl<E: TaskExecutor> Scheduler<E> {
                     terminal_status,
                     terminal_note.as_deref(),
                 )?;
+                if let TaskKind::RunTask(task) = &task_kind {
+                    cleanup_run_task_aci_recovery_registration(task);
+                }
                 if terminal_status == "success" {
                     reset_reconciliation_failure_counter();
                 }
@@ -444,6 +459,9 @@ impl<E: TaskExecutor> Scheduler<E> {
                     "failed",
                     Some(&message),
                 )?;
+                if let TaskKind::RunTask(task) = &task_kind {
+                    cleanup_run_task_aci_recovery_registration(task);
+                }
                 // Sync failure status to user's account-level storage for Discord/Slack
                 if let TaskKind::RunTask(task) = &task_kind {
                     sync_task_status_to_user_storage(

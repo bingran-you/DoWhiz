@@ -14,9 +14,7 @@ use std_semaphore::Semaphore;
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::Deserialize;
 
-use super::aci_container_store::{
-    deregister_aci_container_mongo, register_aci_container_mongo, write_aci_recovery_context,
-};
+use super::aci_container_store::{register_aci_container_mongo, write_aci_recovery_context};
 use super::browserbase::{
     collect_browserbase_env_overrides, BrowserbaseSessionCleanupGuard,
     BROWSERBASE_ACTIVE_SESSION_PATH_ENV_KEY, BROWSERBASE_STATE_DIR_ENV_KEY,
@@ -2268,8 +2266,10 @@ fn run_codex_task_azure_aci(
                 container_name
             );
         }
+        // Keep the MongoDB registry record until the scheduler persists a terminal status.
+        // That gives stale reconciliation and startup recovery a chance to find the container
+        // if the worker dies after local cleanup but before terminal bookkeeping completes.
         deregister_aci_container(&container_name);
-        deregister_aci_container_mongo(&container_name);
     }
 
     if let Some(ref guard) = ephemeral_guard {

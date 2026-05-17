@@ -479,7 +479,10 @@ impl MongoSchedulerStore {
                             status,
                             error_message,
                         )?;
-                        if matches!(status, "success" | "superseded") {
+                        if should_clear_auto_disabled_reason_after_stale_replacement(
+                            status,
+                            error_message,
+                        ) {
                             self.clear_auto_disabled_reason(task_id)?;
                         }
                         tracing::info!(
@@ -2221,6 +2224,35 @@ fn should_replace_stale_reconciliation_terminal_row(
     }
 }
 
+fn should_clear_auto_disabled_reason_after_stale_replacement(
+    desired_status: &str,
+    desired_error_message: Option<&str>,
+) -> bool {
+    matches!(desired_status, "success" | "superseded")
+        || (desired_status == "failed"
+            && desired_error_message
+                .map(|message| !is_stale_reconciliation_error(Some(message)))
+                .unwrap_or(false))
+}
+
+fn clear_auto_disabled_reason_by_task_id(
+    tasks: &Collection<Document>,
+    task_id: &str,
+) -> Result<(), SchedulerError> {
+    let filter = doc! { "task_id": task_id };
+    let update = doc! {
+        "$unset": {
+            "auto_disabled_reason": "",
+            "auto_disabled_at": "",
+        }
+    };
+    retry_mongo_write("tasks.clear_auto_disabled_reason_by_task_id", || {
+        tasks.update_many(filter.clone(), update.clone(), None)
+    })
+    .map_err(mongo_err)?;
+    Ok(())
+}
+
 fn apply_persisted_task_fields(
     document: &Document,
     task: &mut ScheduledTask,
@@ -2411,50 +2443,88 @@ pub fn mark_execution_finished_by_workspace(
         return Ok(false);
     }
 
-    // Find running execution for ANY of the matching tasks
-    let exec_filter = doc! {
+    let running_exec_filter = doc! {
         "owner_scope.kind": &owner_kind,
         "owner_scope.id": &owner_id,
         "task_id": { "$in": &matching_task_ids },
         "status": "running",
     };
-
+    let running_exec_options = FindOneOptions::builder()
+        .sort(doc! { "started_at": -1_i32 })
+        .build();
     let running_exec = retry_mongo_read("task_executions.find_running_for_recovery", || {
-        executions.find_one(exec_filter.clone(), None)
+        executions.find_one(running_exec_filter.clone(), running_exec_options.clone())
     })
     .map_err(mongo_err)?;
 
-    let Some(exec_doc) = running_exec else {
+    let target_row = if let Some(exec_doc) = running_exec {
+        Some(parse_execution_row(exec_doc)?)
+    } else {
+        let stale_failed_filter = doc! {
+            "owner_scope.kind": &owner_kind,
+            "owner_scope.id": &owner_id,
+            "task_id": { "$in": &matching_task_ids },
+            "status": "failed",
+        };
+        let stale_failed_options = FindOptions::builder()
+            .sort(doc! { "started_at": -1_i32 })
+            .limit(Some(8))
+            .build();
+        let cursor = retry_mongo_read("task_executions.find_stale_failed_for_recovery", || {
+            executions.find(stale_failed_filter.clone(), stale_failed_options.clone())
+        })
+        .map_err(mongo_err)?;
+
+        let mut replaceable = None;
+        for doc_result in cursor {
+            let row = parse_execution_row(doc_result.map_err(mongo_err)?)?;
+            if should_replace_stale_reconciliation_terminal_row(&row, status, error_message) {
+                replaceable = Some(row);
+                break;
+            }
+        }
+        replaceable
+    };
+
+    let Some(target_row) = target_row else {
         tracing::debug!(
-            "no running execution found for tasks {:?} - may already be marked",
+            "no running or replaceable stale execution found for tasks {:?} - may already be marked",
             matching_task_ids
         );
         return Ok(false);
     };
 
-    let doc_id = exec_doc.get("_id").cloned().unwrap_or(Bson::Null);
-    let task_id = exec_doc.get_str("task_id").unwrap_or("unknown");
     let now = Utc::now();
 
-    // Mark as finished with the given status
     let update = doc! {
         "$set": {
             "status": status,
             "finished_at": BsonDateTime::from_chrono(now),
-            "error_message": error_message,
+            "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
         }
     };
 
     retry_mongo_write("task_executions.mark_finished_by_recovery", || {
-        executions.update_one(doc! { "_id": doc_id.clone() }, update.clone(), None)
+        executions.update_one(
+            doc! { "_id": target_row.doc_id.clone() },
+            update.clone(),
+            None,
+        )
     })
     .map_err(mongo_err)?;
 
+    if target_row.status != "running"
+        && should_clear_auto_disabled_reason_after_stale_replacement(status, error_message)
+    {
+        clear_auto_disabled_reason_by_task_id(&tasks, &target_row.task_id)?;
+    }
+
     tracing::info!(
-        "ACI recovery marked execution as {}: task_id={} workspace={}",
+        "ACI recovery marked execution as {}: task_id={} workspace={} previous_status={}",
         status,
-        task_id,
-        workspace_path.display()
+        target_row.task_id,
+        workspace_path.display(),
+        target_row.status
     );
 
     Ok(true)
@@ -2497,10 +2567,8 @@ mod tests {
     use super::{
         apply_persisted_task_fields, build_task_status_summary,
         missing_aci_registry_reconciliation_reason, resolve_owner_scope,
-        should_replace_stale_reconciliation_terminal_row,
-        workspace_peer_supersede_reason,
-        workspace_suggests_recent_inflight_aci_result_handling,
-        ExecutionRow,
+        should_replace_stale_reconciliation_terminal_row, workspace_peer_supersede_reason,
+        workspace_suggests_recent_inflight_aci_result_handling, ExecutionRow,
     };
     use crate::channel::Channel;
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};

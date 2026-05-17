@@ -190,6 +190,40 @@ pub fn deregister_aci_container_mongo(container_name: &str) {
     }
 }
 
+/// Deregister all ACI container records for a workspace path from MongoDB.
+/// Returns the number of deleted records.
+pub fn deregister_aci_container_mongo_by_workspace(workspace_path: &std::path::Path) -> usize {
+    let Some(coll) = collection() else {
+        return 0;
+    };
+
+    let filter = doc! {
+        "workspace_path": workspace_path.to_string_lossy().to_string(),
+    };
+
+    match coll.delete_many(filter, None) {
+        Ok(result) => {
+            let deleted = result.deleted_count as usize;
+            if deleted > 0 {
+                tracing::info!(
+                    "deregistered {} ACI container record(s) from MongoDB for workspace={}",
+                    deleted,
+                    workspace_path.display()
+                );
+            }
+            deleted
+        }
+        Err(err) => {
+            tracing::warn!(
+                "failed to deregister ACI container records by workspace: workspace={} error={}",
+                workspace_path.display(),
+                err
+            );
+            0
+        }
+    }
+}
+
 /// List all ACI container records from MongoDB.
 /// Returns all containers that were registered but not yet deregistered.
 /// Returns empty vec if MongoDB is not configured.
