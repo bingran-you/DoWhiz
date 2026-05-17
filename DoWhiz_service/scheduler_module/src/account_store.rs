@@ -2309,6 +2309,33 @@ pub fn get_global_account_store() -> Option<Arc<AccountStore>> {
         .clone()
 }
 
+/// Best-effort check for whether an owner id is a real unified account id.
+///
+/// Channel-scoped user ids are also UUIDs, so the only reliable distinction we
+/// have at runtime is whether the UUID resolves to an account in AccountStore.
+/// Fail open on lookup errors so task scheduling does not break when account
+/// storage is unavailable.
+pub fn is_global_account_id(owner_id: &str) -> bool {
+    let Ok(account_id) = Uuid::parse_str(owner_id) else {
+        return false;
+    };
+    let Some(store) = get_global_account_store() else {
+        return false;
+    };
+
+    match store.get_account(account_id) {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
+        Err(err) => {
+            warn!(
+                "failed to classify owner id {} against AccountStore: {}",
+                owner_id, err
+            );
+            false
+        }
+    }
+}
+
 /// Map a channel type to the identifier_type used in account_identifiers table
 pub fn channel_to_identifier_type(channel: &crate::channel::Channel) -> &'static str {
     use crate::channel::Channel;

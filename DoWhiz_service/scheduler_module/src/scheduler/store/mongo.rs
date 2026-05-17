@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
+use crate::account_store::is_global_account_id;
 use crate::mongo_store::{
     create_client_from_env, database_from_env, ensure_index_compatible, get_shared_client,
     retry_mongo_read, retry_mongo_write,
@@ -1348,6 +1349,7 @@ impl MongoSchedulerStore {
                 retry_count,
                 auto_disabled_reason,
                 auto_disabled_at,
+                self.owner_accepts_worker_pickup(),
                 now,
             ));
         }
@@ -1411,6 +1413,7 @@ impl MongoSchedulerStore {
             retry_count,
             auto_disabled_reason,
             auto_disabled_at,
+            self.owner_accepts_worker_pickup(),
             now,
         )))
     }
@@ -1536,6 +1539,10 @@ impl MongoSchedulerStore {
             "id": &self.owner_id,
         }
     }
+
+    fn owner_accepts_worker_pickup(&self) -> bool {
+        self.owner_kind == "user"
+    }
 }
 
 fn parse_execution_row(document: Document) -> Result<ExecutionRow, SchedulerError> {
@@ -1593,6 +1600,7 @@ fn build_task_status_summary(
     retry_count: u32,
     auto_disabled_reason: Option<String>,
     auto_disabled_at: Option<String>,
+    owner_accepts_worker_pickup: bool,
     now: chrono::DateTime<Utc>,
 ) -> TaskStatusSummary {
     let latest_execution = executions.first();
@@ -1601,6 +1609,7 @@ fn build_task_status_summary(
         latest_execution,
         retry_count,
         auto_disabled_reason.as_deref(),
+        owner_accepts_worker_pickup,
         now,
     );
 
@@ -1649,6 +1658,7 @@ fn derive_user_task_status(
     latest_execution: Option<&ExecutionRow>,
     retry_count: u32,
     auto_disabled_reason: Option<&str>,
+    owner_accepts_worker_pickup: bool,
     now: chrono::DateTime<Utc>,
 ) -> DerivedTaskStatus {
     let is_one_shot = matches!(&task.schedule, Schedule::OneShot { .. });
@@ -1659,7 +1669,7 @@ fn derive_user_task_status(
     let mut will_retry = false;
     let mut is_running_long = false;
     let (status, status_changed_at) = if let Some(row) = latest_execution {
-        let mut status = "scheduled";
+        let status;
         let status_changed_at = Some(row.finished_at.unwrap_or(row.started_at).to_rfc3339());
         match row.status.as_str() {
             "running" => {
@@ -1703,17 +1713,29 @@ fn derive_user_task_status(
                                 Some(format!("{retry_prefix} for {}", run_at.to_rfc3339()));
                         }
                         Schedule::OneShot { run_at } => {
-                            status = "queued";
                             retry_at = Some(run_at.to_rfc3339());
                             will_retry = true;
-                            status_reason = Some(if retry_count > 0 {
-                                format!(
-                                        "Automatic retry {retry_count} is due and waiting for a worker to pick it up."
+                            if owner_accepts_worker_pickup {
+                                status = "queued";
+                                status_reason = Some(if retry_count > 0 {
+                                    format!(
+                                        "Automatic retry {retry_count} is due and waiting for a worker to claim it."
                                     )
+                                } else {
+                                    "Automatic retry is due and waiting for a worker to claim it."
+                                        .to_string()
+                                });
                             } else {
-                                "Automatic retry is due and waiting for a worker to pick it up."
-                                    .to_string()
-                            });
+                                status = "retry_scheduled";
+                                status_reason = Some(if retry_count > 0 {
+                                    format!(
+                                        "Automatic retry {retry_count} is pending on the live channel task."
+                                    )
+                                } else {
+                                    "Automatic retry is pending on the live channel task."
+                                        .to_string()
+                                });
+                            }
                         }
                         Schedule::Cron { .. } => {
                             status = "failed";
@@ -1755,9 +1777,17 @@ fn derive_user_task_status(
             Schedule::OneShot { run_at } => {
                 if task.enabled {
                     if *run_at <= now {
-                        status = "queued";
-                        status_reason =
-                            Some("Waiting for a worker to pick up this task.".to_string());
+                        if owner_accepts_worker_pickup {
+                            status = "queued";
+                            status_reason =
+                                Some("Waiting for a worker to claim this task.".to_string());
+                        } else {
+                            status = "scheduled";
+                            status_reason = Some(
+                                "Mirrored task record. Worker pickup happens from the live channel task."
+                                    .to_string(),
+                            );
+                        }
                         status_changed_at = Some(run_at.to_rfc3339());
                     } else {
                         status = "scheduled";
@@ -2356,6 +2386,13 @@ fn routine_schedule_fields(schedule: &Schedule) -> (String, Option<String>, Opti
 }
 
 fn resolve_owner_scope(path: &Path) -> (String, String) {
+    resolve_owner_scope_with(path, is_global_account_id)
+}
+
+fn resolve_owner_scope_with<F>(path: &Path, is_account_owner_id: F) -> (String, String)
+where
+    F: Fn(&str) -> bool,
+{
     let mut components: Vec<String> = Vec::new();
     for component in path.components() {
         if let Some(value) = component.as_os_str().to_str() {
@@ -2366,7 +2403,10 @@ fn resolve_owner_scope(path: &Path) -> (String, String) {
     for (idx, value) in components.iter().enumerate() {
         if value == "users" {
             if let Some(owner_id) = components.get(idx + 1) {
-                return ("user".to_string(), owner_id.to_string());
+                return (
+                    owner_kind_for_id(owner_id, &is_account_owner_id).to_string(),
+                    owner_id.to_string(),
+                );
             }
         }
     }
@@ -2376,7 +2416,10 @@ fn resolve_owner_scope(path: &Path) -> (String, String) {
             if state_dir.file_name().and_then(|v| v.to_str()) == Some("state") {
                 if let Some(owner_dir) = state_dir.parent() {
                     if let Some(owner_id) = owner_dir.file_name().and_then(|v| v.to_str()) {
-                        return ("user".to_string(), owner_id.to_string());
+                        return (
+                            owner_kind_for_id(owner_id, &is_account_owner_id).to_string(),
+                            owner_id.to_string(),
+                        );
                     }
                 }
             }
@@ -2385,6 +2428,17 @@ fn resolve_owner_scope(path: &Path) -> (String, String) {
 
     let hashed = format!("{:x}", md5::compute(path.to_string_lossy().as_bytes()));
     ("path_scope".to_string(), hashed)
+}
+
+fn owner_kind_for_id<F>(owner_id: &str, is_account_owner_id: F) -> &'static str
+where
+    F: Fn(&str) -> bool,
+{
+    if is_account_owner_id(owner_id) {
+        "account"
+    } else {
+        "user"
+    }
 }
 
 /// Mark orphaned execution as finished by workspace path.
@@ -2566,7 +2620,7 @@ mod tests {
 
     use super::{
         apply_persisted_task_fields, build_task_status_summary,
-        missing_aci_registry_reconciliation_reason, resolve_owner_scope,
+        missing_aci_registry_reconciliation_reason, resolve_owner_scope_with,
         should_replace_stale_reconciliation_terminal_row, workspace_peer_supersede_reason,
         workspace_suggests_recent_inflight_aci_result_handling, ExecutionRow,
     };
@@ -2624,9 +2678,18 @@ mod tests {
     #[test]
     fn resolve_owner_scope_extracts_user_id() {
         let path = PathBuf::from("/tmp/runtime/users/user-123/state/tasks.db");
-        let scope = resolve_owner_scope(&path);
+        let scope = resolve_owner_scope_with(&path, |_| false);
         assert_eq!(scope.0, "user");
         assert_eq!(scope.1, "user-123");
+    }
+
+    #[test]
+    fn resolve_owner_scope_classifies_known_account_ids() {
+        let account_id = "2f5cdd1a-0d10-4bdf-bd48-3b993a09b0f9";
+        let path = PathBuf::from(format!("/tmp/runtime/users/{account_id}/state/tasks.db"));
+        let scope = resolve_owner_scope_with(&path, |candidate| candidate == account_id);
+        assert_eq!(scope.0, "account");
+        assert_eq!(scope.1, account_id);
     }
 
     #[test]
@@ -2647,6 +2710,7 @@ mod tests {
             0,
             None,
             None,
+            true,
             now,
         );
 
@@ -2711,6 +2775,7 @@ mod tests {
             0,
             None,
             None,
+            true,
             now,
         );
 
@@ -2752,6 +2817,7 @@ mod tests {
                 "auto-disabled: execution started but ACI container was never created".to_string(),
             ),
             Some((now - ChronoDuration::minutes(8)).to_rfc3339()),
+            true,
             now,
         );
 
@@ -2766,6 +2832,104 @@ mod tests {
         assert!(summary.can_resubmit);
         assert!(!summary.will_retry);
         assert!(summary.retry_at.is_none());
+    }
+
+    #[test]
+    fn task_status_summary_marks_due_one_shot_as_queued_for_live_user() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let task = sample_one_shot_task(now - ChronoDuration::minutes(5));
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((now - ChronoDuration::minutes(5)).to_rfc3339()),
+            &[],
+            0,
+            None,
+            None,
+            true,
+            now,
+        );
+
+        assert_eq!(summary.status, "queued");
+        assert_eq!(
+            summary.status_reason.as_deref(),
+            Some("Waiting for a worker to claim this task.")
+        );
+    }
+
+    #[test]
+    fn task_status_summary_marks_due_account_mirror_as_scheduled() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let task = sample_one_shot_task(now - ChronoDuration::minutes(5));
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((now - ChronoDuration::minutes(5)).to_rfc3339()),
+            &[],
+            0,
+            None,
+            None,
+            false,
+            now,
+        );
+
+        assert_eq!(summary.status, "scheduled");
+        assert_eq!(
+            summary.status_reason.as_deref(),
+            Some("Mirrored task record. Worker pickup happens from the live channel task.")
+        );
+    }
+
+    #[test]
+    fn task_status_summary_keeps_due_retry_off_account_mirror_queue() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 18, 12, 0, 0).unwrap();
+        let started_at = now - ChronoDuration::minutes(10);
+        let task = sample_one_shot_task(now - ChronoDuration::minutes(1));
+        let execution = ExecutionRow {
+            doc_id: Bson::Null,
+            task_id: task.id.to_string(),
+            execution_id: 7,
+            started_at,
+            finished_at: Some(now - ChronoDuration::minutes(9)),
+            status: "failed".to_string(),
+            error_message: Some("worker died".to_string()),
+        };
+
+        let summary = build_task_status_summary(
+            &task.id.to_string(),
+            "run_task",
+            "slack",
+            Some("Review launch checklist".to_string()),
+            &task,
+            "one_shot".to_string(),
+            None,
+            Some((now - ChronoDuration::minutes(1)).to_rfc3339()),
+            &[execution],
+            1,
+            None,
+            None,
+            false,
+            now,
+        );
+
+        assert_eq!(summary.status, "retry_scheduled");
+        assert_eq!(
+            summary.status_reason.as_deref(),
+            Some("Automatic retry 1 is pending on the live channel task.")
+        );
+        assert!(summary.will_retry);
     }
 
     #[test]
