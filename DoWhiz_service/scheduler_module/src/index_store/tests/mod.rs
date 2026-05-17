@@ -4,11 +4,26 @@ use chrono::{Duration, Utc};
 use tempfile::TempDir;
 use uuid::Uuid;
 
-#[test]
-fn sync_user_tasks_and_query_due_users() {
+fn maybe_index_store() -> Option<IndexStore> {
+    if std::env::var("MONGODB_URI")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .is_none()
+    {
+        eprintln!("skipping index_store test: MONGODB_URI is not set");
+        return None;
+    }
+
     let temp = TempDir::new().unwrap();
     let db_path = temp.path().join("task_index.db");
-    let store = IndexStore::new(db_path).unwrap();
+    Some(IndexStore::new(db_path).unwrap())
+}
+
+#[test]
+fn sync_user_tasks_and_query_due_users() {
+    let Some(store) = maybe_index_store() else {
+        return;
+    };
 
     let now = Utc::now();
     let past = now - Duration::minutes(5);
@@ -45,9 +60,9 @@ fn sync_user_tasks_and_query_due_users() {
 
 #[test]
 fn sync_user_tasks_dedupes_repeated_task_ids() {
-    let temp = TempDir::new().unwrap();
-    let db_path = temp.path().join("task_index.db");
-    let store = IndexStore::new(db_path).unwrap();
+    let Some(store) = maybe_index_store() else {
+        return;
+    };
 
     let now = Utc::now();
     let task_id = Uuid::new_v4();
@@ -97,4 +112,34 @@ fn sync_user_tasks_dedupes_repeated_task_ids() {
         .filter(|task_ref| task_ref.user_id == user_id)
         .collect();
     assert_eq!(matching.len(), 1);
+}
+
+#[test]
+fn upsert_user_task_publishes_single_due_task() {
+    let Some(store) = maybe_index_store() else {
+        return;
+    };
+
+    let now = Utc::now();
+    let due_task = ScheduledTask {
+        id: Uuid::new_v4(),
+        kind: TaskKind::Noop,
+        schedule: Schedule::OneShot {
+            run_at: now - Duration::minutes(1),
+        },
+        enabled: true,
+        created_at: now,
+        last_run: None,
+    };
+    let user_id = format!("user_a_{}", Uuid::new_v4());
+
+    store.upsert_user_task(&user_id, &due_task).unwrap();
+
+    let refs = store.due_task_refs(now, 10_000).unwrap();
+    let matching: Vec<_> = refs
+        .into_iter()
+        .filter(|task_ref| task_ref.user_id == user_id)
+        .collect();
+    assert_eq!(matching.len(), 1);
+    assert_eq!(matching[0].task_id, due_task.id.to_string());
 }

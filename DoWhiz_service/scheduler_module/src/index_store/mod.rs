@@ -9,9 +9,8 @@ use mongodb::IndexModel;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tracing::warn;
-use uuid::Uuid;
 
-use crate::account_store::get_global_account_store;
+use crate::account_store::is_global_account_id;
 use crate::mongo_store::{create_client_from_env, database_from_env, ensure_index_compatible};
 use crate::{Schedule, ScheduledTask};
 
@@ -54,6 +53,14 @@ impl IndexStore {
         tasks: &[ScheduledTask],
     ) -> Result<(), IndexStoreError> {
         self.mongo.sync_user_tasks(user_id, tasks)
+    }
+
+    pub fn upsert_user_task(
+        &self,
+        user_id: &str,
+        task: &ScheduledTask,
+    ) -> Result<(), IndexStoreError> {
+        self.mongo.upsert_user_task(user_id, task)
     }
 
     pub fn due_user_ids(
@@ -101,31 +108,8 @@ impl MongoIndexStore {
         user_id: &str,
         tasks: &[ScheduledTask],
     ) -> Result<(), IndexStoreError> {
-        // Gate: block if user_id is a Supabase account_id (not a channel_user_id).
-        // Account IDs come from auth and should never be used for task scheduling.
-        // Channel user IDs are created via get_or_create_user and are valid.
-        if let Ok(uuid) = Uuid::parse_str(user_id) {
-            if let Some(store) = get_global_account_store() {
-                match store.get_account(uuid) {
-                    Ok(Some(_account)) => {
-                        warn!(
-                            "sync_user_tasks blocked: user_id {} is a Supabase account_id, not a channel_user_id",
-                            user_id
-                        );
-                        return Ok(());
-                    }
-                    Ok(None) => {
-                        // Not an account_id, allow through (it's a channel_user_id)
-                    }
-                    Err(e) => {
-                        // If we can't check, allow through to avoid blocking legitimate users
-                        warn!(
-                            "sync_user_tasks: account_store check failed for {}: {}, allowing through",
-                            user_id, e
-                        );
-                    }
-                }
-            }
+        if !should_schedule_for_user_id(user_id, "sync_user_tasks") {
+            return Ok(());
         }
 
         let task_rows = enabled_task_next_runs(tasks);
@@ -164,6 +148,42 @@ impl MongoIndexStore {
                 },
                 options.clone(),
             )?;
+        }
+
+        Ok(())
+    }
+
+    fn upsert_user_task(&self, user_id: &str, task: &ScheduledTask) -> Result<(), IndexStoreError> {
+        if !should_schedule_for_user_id(user_id, "upsert_user_task") {
+            return Ok(());
+        }
+
+        let next_run = match (&task.enabled, &task.schedule) {
+            (true, Schedule::Cron { next_run, .. }) => Some(*next_run),
+            (true, Schedule::OneShot { run_at }) => Some(*run_at),
+            (false, _) => None,
+        };
+
+        let task_id = task.id.to_string();
+        if let Some(next_run) = next_run {
+            let options = UpdateOptions::builder().upsert(Some(true)).build();
+            self.task_index.update_one(
+                doc! { "task_id": &task_id, "user_id": user_id },
+                doc! {
+                    "$set": {
+                        "next_run": BsonDateTime::from_chrono(next_run),
+                        "enabled": true,
+                    },
+                    "$setOnInsert": {
+                        "task_id": &task_id,
+                        "user_id": user_id,
+                    },
+                },
+                options,
+            )?;
+        } else {
+            self.task_index
+                .delete_many(doc! { "task_id": &task_id, "user_id": user_id }, None)?;
         }
 
         Ok(())
@@ -264,6 +284,17 @@ fn enabled_task_next_runs(tasks: &[ScheduledTask]) -> Vec<(String, DateTime<Utc>
         deduped.insert(task.id.to_string(), next_run);
     }
     deduped.into_iter().collect()
+}
+
+fn should_schedule_for_user_id(user_id: &str, context: &str) -> bool {
+    if is_global_account_id(user_id) {
+        warn!(
+            "{} blocked: user_id {} is a Supabase account_id, not a channel_user_id",
+            context, user_id
+        );
+        return false;
+    }
+    true
 }
 
 fn is_order_by_index_excluded(err: &mongodb::error::Error) -> bool {

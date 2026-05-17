@@ -9,7 +9,7 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tokio::task;
@@ -7443,9 +7443,12 @@ fn mutate_unified_account_task_blocking(
                     "Only failed or expired workflow tasks can be resubmitted safely.",
                 ));
             }
-            let write_target_idx = primary_account_task_path
-                .and_then(|path| preferred_task_write_match_index(&matches, path))
-                .unwrap_or(selected_idx);
+            let write_target_idx = resolve_resubmit_write_match_index(
+                &matches,
+                primary_account_task_path,
+                selected_idx,
+            )
+            .map_err(|message| json_error_response(StatusCode::CONFLICT, &message))?;
             let write_target = matches[write_target_idx].clone();
             let resubmitted_task = build_resubmitted_task(&selected.task, Utc::now())
                 .map_err(|message| json_error_response(StatusCode::CONFLICT, &message))?;
@@ -7474,6 +7477,18 @@ fn mutate_unified_account_task_blocking(
                     })?;
                 }
             }
+            sync_resubmitted_task_index(&write_target.path, &resubmitted_task).map_err(|err| {
+                error!(
+                    "failed to publish resubmitted task {} from {} into task_index: {}",
+                    resubmitted_task.id,
+                    write_target.path.display(),
+                    err
+                );
+                json_error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to publish resubmitted task",
+                )
+            })?;
             Ok(Some(TaskMutationOutcome {
                 task_id: task_id.to_string(),
                 resubmitted_task_id: Some(resubmitted_task.id.to_string()),
@@ -7566,6 +7581,46 @@ fn preferred_task_write_match_index(
         }
     }
     best_idx
+}
+
+fn resolve_resubmit_write_match_index(
+    matches: &[TaskStorageMatch],
+    primary_account_task_path: Option<&FsPath>,
+    selected_idx: usize,
+) -> Result<usize, String> {
+    if let Some(account_path) = primary_account_task_path {
+        return preferred_task_write_match_index(matches, account_path).ok_or_else(|| {
+            "This task only exists in account-level history. Send a fresh message instead of resubmitting it."
+                .to_string()
+        });
+    }
+
+    Ok(selected_idx)
+}
+
+fn task_path_owner_id(task_path: &FsPath) -> Option<&str> {
+    let state_dir = task_path.parent()?;
+    if state_dir.file_name().and_then(|value| value.to_str()) != Some("state") {
+        return None;
+    }
+    state_dir.parent()?.file_name()?.to_str()
+}
+
+fn sync_resubmitted_task_index(
+    task_path: &FsPath,
+    task: &ScheduledTask,
+) -> Result<(), crate::index_store::IndexStoreError> {
+    let Some(user_id) = task_path_owner_id(task_path) else {
+        warn!(
+            "skipping task_index publish for resubmitted task {} because owner id could not be parsed from {}",
+            task.id,
+            task_path.display()
+        );
+        return Ok(());
+    };
+
+    let index_store = IndexStore::new(task_path.to_path_buf())?;
+    index_store.upsert_user_task(user_id, task)
 }
 
 fn request_running_task_cancellation(task: &crate::RunTaskTask) -> Result<(), String> {
@@ -8777,6 +8832,71 @@ mod tests {
             preferred_task_write_match_index(&matches, account_path.as_path()),
             Some(1)
         );
+    }
+
+    #[test]
+    fn resolve_resubmit_write_match_index_rejects_account_only_history() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at: now },
+            enabled: false,
+            created_at: now - ChronoDuration::minutes(5),
+            last_run: Some(now - ChronoDuration::minutes(1)),
+        };
+        let account_path = PathBuf::from("/tmp/users/account-123/state/tasks.db");
+        let matches = vec![TaskStorageMatch {
+            path: account_path.clone(),
+            task,
+            summary: sample_task_status_summary("task-1", "failed", now),
+            executions: Vec::new(),
+        }];
+
+        let err = resolve_resubmit_write_match_index(&matches, Some(account_path.as_path()), 0)
+            .expect_err("account-only resubmit should fail");
+        assert!(err.contains("account-level history"));
+    }
+
+    #[test]
+    fn resolve_resubmit_write_match_index_prefers_live_copy() {
+        let now = Utc.with_ymd_and_hms(2026, 4, 1, 12, 0, 0).unwrap();
+        let task = ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::RunTask(sample_run_task_task()),
+            schedule: Schedule::OneShot { run_at: now },
+            enabled: false,
+            created_at: now - ChronoDuration::minutes(5),
+            last_run: Some(now - ChronoDuration::minutes(1)),
+        };
+        let account_path = PathBuf::from("/tmp/users/account-123/state/tasks.db");
+        let live_path = PathBuf::from("/tmp/users/slack-user-1/state/tasks.db");
+        let matches = vec![
+            TaskStorageMatch {
+                path: account_path.clone(),
+                task: task.clone(),
+                summary: sample_task_status_summary(&task.id.to_string(), "failed", now),
+                executions: Vec::new(),
+            },
+            TaskStorageMatch {
+                path: live_path,
+                task,
+                summary: sample_task_status_summary("live-copy", "failed", now),
+                executions: Vec::new(),
+            },
+        ];
+
+        assert_eq!(
+            resolve_resubmit_write_match_index(&matches, Some(account_path.as_path()), 0)
+                .expect("live write target"),
+            1
+        );
+    }
+
+    #[test]
+    fn task_path_owner_id_extracts_parent_directory_name() {
+        let path = PathBuf::from("/tmp/users/live-user-123/state/tasks.db");
+        assert_eq!(task_path_owner_id(path.as_path()), Some("live-user-123"));
     }
 
     #[test]
