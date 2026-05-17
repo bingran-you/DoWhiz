@@ -1875,6 +1875,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
         let section = build_user_identities_section(&identities);
@@ -2211,6 +2212,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2259,6 +2261,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2316,6 +2319,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2365,6 +2369,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2509,6 +2514,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2566,6 +2572,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2627,6 +2634,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 
@@ -2676,6 +2684,7 @@ mod tests {
             notion_database_id: None,
             discord_guild_id: None,
             slack_team_id: None,
+            github_org_name: None,
             organization_members: vec![],
         };
 

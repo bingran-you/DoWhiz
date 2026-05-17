@@ -1416,6 +1416,194 @@ fn record_execution_finish_replaces_stale_reconciliation_failure_with_success() 
 }
 
 #[test]
+fn record_execution_finish_replaces_stale_reconciliation_failure_with_real_failure() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "late-real-failure-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let started_at = parse_utc("2026-04-01T00:00:00Z");
+    let stale_finished_at = parse_utc("2026-04-01T00:19:00Z");
+    let real_finished_at = parse_utc("2026-04-01T00:21:00Z");
+    let trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&trace_dir).expect("trace dir");
+    fs::write(
+        trace_dir.join("metadata.json"),
+        format!(
+            r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "failed",
+  "started_at_unix_ms": {},
+  "finished_at_unix_ms": {},
+  "success": false
+}}"#,
+            started_at.timestamp_millis(),
+            stale_finished_at.timestamp_millis()
+        ),
+    )
+    .expect("trace metadata");
+    fs::write(workspace.join(".aci_recovery_context.json"), "{}").expect("aci evidence");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let handle = store
+        .record_execution_start(task_id, started_at)
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-01T00:20:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+    assert_eq!(summary.failed_count, 1);
+
+    store
+        .record_execution_finish(
+            task_id,
+            handle,
+            real_finished_at,
+            "failed",
+            Some("task execution failed: Primary runner failed:"),
+        )
+        .expect("late real failure should overwrite stale failure");
+
+    let executions_after = load_execution_documents("late-real-failure-user", task_id);
+    assert_eq!(executions_after.len(), 1);
+    assert_eq!(
+        executions_after[0].get_str("status").expect("status after"),
+        "failed"
+    );
+    assert_eq!(
+        executions_after[0]
+            .get_str("error_message")
+            .expect("error after"),
+        "task execution failed: Primary runner failed:"
+    );
+
+    let tasks_after = load_task_documents("late-real-failure-user", task_id);
+    assert_eq!(tasks_after.len(), 1);
+    assert!(
+        !tasks_after[0].contains_key("auto_disabled_reason"),
+        "late real failure should clear stale auto-disabled state"
+    );
+}
+
+#[test]
+fn mark_execution_finished_by_workspace_replaces_stale_reconciliation_failure_with_success() {
+    use super::mark_execution_finished_by_workspace;
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("Skipping execution reconciliation test; MongoDB config not set.");
+        return;
+    }
+
+    let _lock = env_lock();
+    let _aci_rg = EnvGuard::set("RUN_TASK_AZURE_ACI_RESOURCE_GROUP", "test-rg");
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = user_scoped_tasks_db(&temp, "recovery-success-user");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+
+    let task_id = {
+        let mut scheduler = Scheduler::load(&tasks_db, NoopExecutor::default()).expect("load");
+        scheduler
+            .add_one_shot_in(
+                Duration::from_secs(0),
+                TaskKind::RunTask(base_run_task(&workspace, &mail_root)),
+            )
+            .expect("add task")
+    };
+
+    let started_at = parse_utc("2026-04-03T00:00:00Z");
+    let stale_finished_at = parse_utc("2026-04-03T00:19:00Z");
+    let trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&trace_dir).expect("trace dir");
+    fs::write(
+        trace_dir.join("metadata.json"),
+        format!(
+            r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "completed",
+  "started_at_unix_ms": {},
+  "finished_at_unix_ms": {},
+  "success": true
+}}"#,
+            started_at.timestamp_millis(),
+            stale_finished_at.timestamp_millis()
+        ),
+    )
+    .expect("trace metadata");
+    fs::write(workspace.join(".aci_recovery_context.json"), "{}").expect("aci evidence");
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    store
+        .record_execution_start(task_id, started_at)
+        .expect("record start");
+
+    let summary = store
+        .reconcile_stale_running_executions_for_task(
+            &task_id.to_string(),
+            parse_utc("2026-04-03T00:20:00Z"),
+            chrono::Duration::hours(24),
+        )
+        .expect("reconcile");
+    assert_eq!(summary.failed_count, 1);
+
+    assert!(
+        mark_execution_finished_by_workspace(&workspace, "success", None)
+            .expect("workspace recovery should overwrite stale failure"),
+        "workspace recovery should report that it updated a row"
+    );
+
+    let executions_after = load_execution_documents("recovery-success-user", task_id);
+    assert_eq!(executions_after.len(), 1);
+    assert_eq!(
+        executions_after[0].get_str("status").expect("status after"),
+        "success"
+    );
+    assert_eq!(
+        executions_after[0]
+            .get("error_message")
+            .expect("error field after"),
+        &Bson::Null
+    );
+
+    let tasks_after = load_task_documents("recovery-success-user", task_id);
+    assert_eq!(tasks_after.len(), 1);
+    assert!(
+        !tasks_after[0].contains_key("auto_disabled_reason"),
+        "workspace recovery success should clear stale auto-disabled state"
+    );
+}
+
+#[test]
 fn scheduler_load_ignores_zero_byte_placeholder_path() {
     let temp = TempDir::new().expect("tempdir");
     let tasks_db = temp.path().join("tasks.db");

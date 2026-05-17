@@ -471,14 +471,18 @@ impl MongoSchedulerStore {
             )?;
             return match existing {
                 Some(row) if row.status != "running" => {
-                    if should_replace_stale_reconciliation_terminal_row(&row, status) {
+                    if should_replace_stale_reconciliation_terminal_row(&row, status, error_message)
+                    {
                         self.overwrite_terminal_execution_row(
                             &row.doc_id,
                             finished_at,
                             status,
                             error_message,
                         )?;
-                        if matches!(status, "success" | "superseded") {
+                        if should_clear_auto_disabled_reason_after_stale_replacement(
+                            status,
+                            error_message,
+                        ) {
                             self.clear_auto_disabled_reason(task_id)?;
                         }
                         tracing::info!(
@@ -1957,10 +1961,15 @@ fn workspace_suggests_recent_inflight_aci_result_handling(
         return false;
     }
 
-    let activity_at_ms = metadata
-        .stage_updated_at_unix_ms
-        .or(metadata.started_at_unix_ms)
-        .unwrap_or_default();
+    let activity_at_ms = [
+        metadata.stage_updated_at_unix_ms,
+        metadata.started_at_unix_ms,
+        current_run_output_artifact_activity_ms(workspace_dir, started_at),
+    ]
+    .into_iter()
+    .flatten()
+    .max()
+    .unwrap_or_default();
     if activity_at_ms == 0 {
         return false;
     }
@@ -1968,6 +1977,32 @@ fn workspace_suggests_recent_inflight_aci_result_handling(
     let grace = resolve_aci_trace_activity_grace_period();
     let activity_age_ms = now.timestamp_millis().saturating_sub(activity_at_ms);
     activity_age_ms <= grace.num_milliseconds()
+}
+
+fn current_run_output_artifact_activity_ms(
+    workspace_dir: &Path,
+    started_at: chrono::DateTime<Utc>,
+) -> Option<i64> {
+    [
+        workspace_dir.join("reply_email_draft.html"),
+        workspace_dir.join("reply_message.txt"),
+        workspace_dir.join(".notion_api_replied"),
+        workspace_dir.join("reply_email_attachments"),
+    ]
+    .into_iter()
+    .filter_map(|path| current_run_path_activity_ms(&path, started_at))
+    .max()
+}
+
+fn current_run_path_activity_ms(path: &Path, started_at: chrono::DateTime<Utc>) -> Option<i64> {
+    let modified_at_ms = path_modified_at_unix_ms(path)?;
+    let earliest_current_run_ms = started_at
+        .timestamp_millis()
+        .saturating_sub(CURRENT_TRACE_START_MATCH_TOLERANCE_MS);
+    if modified_at_ms < earliest_current_run_ms {
+        return None;
+    }
+    Some(modified_at_ms)
 }
 
 fn workspace_suggests_unfinished_fallback_after_aci_run(
@@ -2145,22 +2180,20 @@ fn trace_started_at_matches_execution(
 }
 
 fn path_mtime_matches_execution(path: &Path, started_at: chrono::DateTime<Utc>) -> bool {
-    let Ok(metadata) = fs::metadata(path) else {
-        return false;
-    };
-    let Ok(modified_at) = metadata.modified() else {
-        return false;
-    };
-    let Ok(duration) = modified_at.duration_since(UNIX_EPOCH) else {
-        return false;
-    };
-    let Ok(modified_at_ms) = i64::try_from(duration.as_millis()) else {
+    let Some(modified_at_ms) = path_modified_at_unix_ms(path) else {
         return false;
     };
     modified_at_ms
         .saturating_sub(started_at.timestamp_millis())
         .abs()
         <= CURRENT_TRACE_START_MATCH_TOLERANCE_MS
+}
+
+fn path_modified_at_unix_ms(path: &Path) -> Option<i64> {
+    let metadata = fs::metadata(path).ok()?;
+    let modified_at = metadata.modified().ok()?;
+    let duration = modified_at.duration_since(UNIX_EPOCH).ok()?;
+    i64::try_from(duration.as_millis()).ok()
 }
 
 fn is_stale_reconciliation_error(reason: Option<&str>) -> bool {
@@ -2176,10 +2209,48 @@ fn is_stale_reconciliation_error(reason: Option<&str>) -> bool {
 fn should_replace_stale_reconciliation_terminal_row(
     row: &ExecutionRow,
     desired_status: &str,
+    desired_error_message: Option<&str>,
 ) -> bool {
-    row.status == "failed"
-        && matches!(desired_status, "success" | "superseded")
-        && is_stale_reconciliation_error(row.error_message.as_deref())
+    if row.status != "failed" || !is_stale_reconciliation_error(row.error_message.as_deref()) {
+        return false;
+    }
+
+    match desired_status {
+        "success" | "superseded" => true,
+        "failed" => desired_error_message
+            .map(|message| !is_stale_reconciliation_error(Some(message)))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn should_clear_auto_disabled_reason_after_stale_replacement(
+    desired_status: &str,
+    desired_error_message: Option<&str>,
+) -> bool {
+    matches!(desired_status, "success" | "superseded")
+        || (desired_status == "failed"
+            && desired_error_message
+                .map(|message| !is_stale_reconciliation_error(Some(message)))
+                .unwrap_or(false))
+}
+
+fn clear_auto_disabled_reason_by_task_id(
+    tasks: &Collection<Document>,
+    task_id: &str,
+) -> Result<(), SchedulerError> {
+    let filter = doc! { "task_id": task_id };
+    let update = doc! {
+        "$unset": {
+            "auto_disabled_reason": "",
+            "auto_disabled_at": "",
+        }
+    };
+    retry_mongo_write("tasks.clear_auto_disabled_reason_by_task_id", || {
+        tasks.update_many(filter.clone(), update.clone(), None)
+    })
+    .map_err(mongo_err)?;
+    Ok(())
 }
 
 fn apply_persisted_task_fields(
@@ -2372,50 +2443,88 @@ pub fn mark_execution_finished_by_workspace(
         return Ok(false);
     }
 
-    // Find running execution for ANY of the matching tasks
-    let exec_filter = doc! {
+    let running_exec_filter = doc! {
         "owner_scope.kind": &owner_kind,
         "owner_scope.id": &owner_id,
         "task_id": { "$in": &matching_task_ids },
         "status": "running",
     };
-
+    let running_exec_options = FindOneOptions::builder()
+        .sort(doc! { "started_at": -1_i32 })
+        .build();
     let running_exec = retry_mongo_read("task_executions.find_running_for_recovery", || {
-        executions.find_one(exec_filter.clone(), None)
+        executions.find_one(running_exec_filter.clone(), running_exec_options.clone())
     })
     .map_err(mongo_err)?;
 
-    let Some(exec_doc) = running_exec else {
+    let target_row = if let Some(exec_doc) = running_exec {
+        Some(parse_execution_row(exec_doc)?)
+    } else {
+        let stale_failed_filter = doc! {
+            "owner_scope.kind": &owner_kind,
+            "owner_scope.id": &owner_id,
+            "task_id": { "$in": &matching_task_ids },
+            "status": "failed",
+        };
+        let stale_failed_options = FindOptions::builder()
+            .sort(doc! { "started_at": -1_i32 })
+            .limit(Some(8))
+            .build();
+        let cursor = retry_mongo_read("task_executions.find_stale_failed_for_recovery", || {
+            executions.find(stale_failed_filter.clone(), stale_failed_options.clone())
+        })
+        .map_err(mongo_err)?;
+
+        let mut replaceable = None;
+        for doc_result in cursor {
+            let row = parse_execution_row(doc_result.map_err(mongo_err)?)?;
+            if should_replace_stale_reconciliation_terminal_row(&row, status, error_message) {
+                replaceable = Some(row);
+                break;
+            }
+        }
+        replaceable
+    };
+
+    let Some(target_row) = target_row else {
         tracing::debug!(
-            "no running execution found for tasks {:?} - may already be marked",
+            "no running or replaceable stale execution found for tasks {:?} - may already be marked",
             matching_task_ids
         );
         return Ok(false);
     };
 
-    let doc_id = exec_doc.get("_id").cloned().unwrap_or(Bson::Null);
-    let task_id = exec_doc.get_str("task_id").unwrap_or("unknown");
     let now = Utc::now();
 
-    // Mark as finished with the given status
     let update = doc! {
         "$set": {
             "status": status,
             "finished_at": BsonDateTime::from_chrono(now),
-            "error_message": error_message,
+            "error_message": error_message.map(Bson::from).unwrap_or(Bson::Null),
         }
     };
 
     retry_mongo_write("task_executions.mark_finished_by_recovery", || {
-        executions.update_one(doc! { "_id": doc_id.clone() }, update.clone(), None)
+        executions.update_one(
+            doc! { "_id": target_row.doc_id.clone() },
+            update.clone(),
+            None,
+        )
     })
     .map_err(mongo_err)?;
 
+    if target_row.status != "running"
+        && should_clear_auto_disabled_reason_after_stale_replacement(status, error_message)
+    {
+        clear_auto_disabled_reason_by_task_id(&tasks, &target_row.task_id)?;
+    }
+
     tracing::info!(
-        "ACI recovery marked execution as {}: task_id={} workspace={}",
+        "ACI recovery marked execution as {}: task_id={} workspace={} previous_status={}",
         status,
-        task_id,
-        workspace_path.display()
+        target_row.task_id,
+        workspace_path.display(),
+        target_row.status
     );
 
     Ok(true)
@@ -2458,7 +2567,8 @@ mod tests {
     use super::{
         apply_persisted_task_fields, build_task_status_summary,
         missing_aci_registry_reconciliation_reason, resolve_owner_scope,
-        workspace_peer_supersede_reason, ExecutionRow,
+        should_replace_stale_reconciliation_terminal_row, workspace_peer_supersede_reason,
+        workspace_suggests_recent_inflight_aci_result_handling, ExecutionRow,
     };
     use crate::channel::Channel;
     use crate::{RunTaskTask, Schedule, ScheduledTask, TaskKind};
@@ -2752,6 +2862,74 @@ mod tests {
             "reconciled stale running execution; ACI container not found"
         );
         let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn inflight_aci_result_handling_accepts_recent_reply_artifact_activity() {
+        let workspace = temp_workspace("aci_recent_reply");
+        let started_at = Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 0).unwrap();
+        let now = started_at + ChronoDuration::minutes(40);
+        let trace_dir = workspace.join(".run_task_trace");
+        fs::create_dir_all(&trace_dir).unwrap();
+        fs::write(
+            trace_dir.join("metadata.json"),
+            format!(
+                r#"{{
+  "backend": "codex_azure_aci",
+  "current_stage": "creating_ephemeral_share",
+  "started_at_unix_ms": {},
+  "stage_updated_at_unix_ms": {},
+  "finished_at_unix_ms": null,
+  "success": null
+}}"#,
+                started_at.timestamp_millis(),
+                started_at.timestamp_millis()
+            ),
+        )
+        .unwrap();
+        fs::write(workspace.join(".aci_recovery_context.json"), "{}").unwrap();
+        fs::write(
+            workspace.join("reply_email_draft.html"),
+            "<html><body>fresh reply</body></html>",
+        )
+        .unwrap();
+
+        assert!(
+            workspace_suggests_recent_inflight_aci_result_handling(
+                workspace.as_path(),
+                started_at,
+                now
+            ),
+            "a fresh reply artifact from the current run should keep result handling open"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn stale_reconciliation_failure_can_be_replaced_by_real_failure_reason() {
+        let row = ExecutionRow {
+            doc_id: Bson::Null,
+            task_id: "task".to_string(),
+            execution_id: 1,
+            started_at: Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 0).unwrap(),
+            finished_at: Some(Utc.with_ymd_and_hms(2026, 4, 1, 0, 10, 0).unwrap()),
+            status: "failed".to_string(),
+            error_message: Some(
+                "reconciled stale running execution after an ACI-backed runner executed but no live registry record remained"
+                    .to_string(),
+            ),
+        };
+
+        assert!(should_replace_stale_reconciliation_terminal_row(
+            &row,
+            "failed",
+            Some("task execution failed: Primary runner failed:"),
+        ));
+        assert!(!should_replace_stale_reconciliation_terminal_row(
+            &row,
+            "failed",
+            Some("reconciled stale running execution; ACI container not found"),
+        ));
     }
 
     #[test]
