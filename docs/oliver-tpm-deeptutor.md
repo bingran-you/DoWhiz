@@ -393,6 +393,8 @@ Organizations can link a GitHub organization name to scope Oliver's repo searche
 
 **TPM Workflow (STEP 0 - Context Gathering):**
 
+In `prompt.rs`:
+
 When `github_org_name` is configured:
 ```
 1. gh repo list {github_org_name} --limit 20
