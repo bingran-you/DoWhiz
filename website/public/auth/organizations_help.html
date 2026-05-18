@@ -35,7 +35,22 @@
           <p class="lead">
             This guide walks through setting up an organization in DoWhiz, configuring team roles, and enabling TPM (Task/Project Management) features.
           </p>
-          <div class="updated">Last updated: May 16, 2026</div>
+          <div class="updated">Last updated: May 18, 2026</div>
+        </section>
+
+        <section class="legal-card">
+          <h2>Quick Start</h2>
+          <p>Integrate Oliver as a TPM in three easy steps:</p>
+          <ol>
+            <li><strong>Link Notion</strong> to your DoWhiz account (Settings &gt; Connections &gt; Notion)</li>
+            <li><strong>Create an organization</strong> in the Organizations section</li>
+            <li><strong>Trigger your first sync</strong> - Oliver will automatically create a task board in your Notion workspace</li>
+          </ol>
+          <p>You can also customize by:</p>
+          <ul>
+            <li>Using an existing Notion board (see <a href="#configuring-tpm">Configuring TPM</a> below)</li>
+            <li>Setting your GitHub organization and inviting <strong>Oliver-DoWhiz</strong> on GitHub (see <a href="#github-integration">GitHub Integration</a> below)</li>
+          </ul>
         </section>
 
         <section class="legal-card">
@@ -111,7 +126,7 @@
           <p>If no leader is set, any member can configure TPM settings (acting leader mode).</p>
         </section>
 
-        <section class="legal-card">
+        <section class="legal-card" id="configuring-tpm">
           <h2>Configuring TPM (Task/Project Management)</h2>
           <h3>Step 1: Connect Notion</h3>
           <p>The organization leader must have Notion connected:</p>
@@ -195,7 +210,7 @@
           </ol>
         </section>
 
-        <section class="legal-card">
+        <section class="legal-card" id="github-integration">
           <h2>GitHub Integration</h2>
           <p>Link your GitHub organization so Oliver can search repos, issues, and PRs during TPM syncs.</p>
           <h3>GitHub Organization Setup</h3>
