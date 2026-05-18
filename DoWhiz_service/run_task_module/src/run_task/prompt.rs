@@ -288,6 +288,7 @@ Do not pretend the job has been done without actually doing it."#
 - This run is a recovery path after the primary runner failed or a time-boxed drafting pass after the primary research budget was exhausted. These recovery instructions take precedence over conflicting planning or artifact-building advice elsewhere in this prompt.
 - Prioritize delivering a useful reply within the remaining budget over rebuilding the entire original project from scratch.
 - Before starting new research, inspect any existing artifacts from the earlier pass, especially `codex_fast_completion_context.md`, `reply_email_draft.html`, `.codex_remote_output.log`, and `.run_task_trace_codex_primary/` if present. Reuse facts, sources, filenames, and partial drafts instead of starting over.
+- If `.tool_failures.jsonl` exists, read it to understand which tools and queries failed in the previous attempt. Avoid repeating those exact queries - use alternative tools, rephrased queries, or skip that research step entirely.
 - For long research or writing tasks, begin updating the final reply artifact immediately and keep it current as sections become ready.
 - For investment monitoring in this mode, keep the answer concise and decision-first, but still do real analysis.
 - If the user asked for investment monitoring, `reply_email_draft.html` must exist within your next two tool actions.
