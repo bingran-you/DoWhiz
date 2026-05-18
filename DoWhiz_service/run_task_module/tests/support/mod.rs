@@ -535,6 +535,7 @@ pub enum FakeClaudeMode {
     EnsureModel,
     Fail,
     ReplyThenSleep,
+    ReplyWithoutAssistantText,
     Sleep,
 }
 
@@ -615,6 +616,14 @@ echo "<html><body>Claude timeout recovery reply</body></html>" > reply_email_dra
 mkdir -p reply_email_attachments
 echo "attachment" > reply_email_attachments/attachment.txt
 sleep "${SLEEP_SECS:-2}"
+"#
+        }
+        FakeClaudeMode::ReplyWithoutAssistantText => {
+            r#"#!/bin/sh
+set -e
+echo "<html><body>Claude artifact recovery reply</body></html>" > reply_email_draft.html
+mkdir -p reply_email_attachments
+echo "attachment" > reply_email_attachments/attachment.txt
 "#
         }
         FakeClaudeMode::Sleep => {

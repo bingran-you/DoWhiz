@@ -176,6 +176,8 @@ pub(super) fn run_claude_task(
     combined_output.push_str(&stderr);
     let _ = trace.record_outputs(&stdout, &stderr, &combined_output);
     let output_tail = tail_string(&combined_output, 2000);
+    let expected_reply_path =
+        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
 
     if !output.status.success() {
         let err = RunTaskError::ClaudeFailed {
@@ -192,6 +194,26 @@ pub(super) fn run_claude_task(
             status: output.status.code(),
             output: annotate_claude_failure_output(&output_tail),
         };
+        if let Some(recovery_note) = maybe_recover_from_ready_reply_artifact(
+            !request.reply_to.is_empty(),
+            request.workspace_dir,
+            &expected_reply_path,
+            &err,
+        ) {
+            let _ = trace.record_text("logs/recovery_note.txt", &recovery_note);
+            let _ = trace.finish(output.status.code(), true, None, None);
+            return Ok(RunTaskOutput {
+                reply_html_path: expected_reply_path,
+                reply_attachments_dir,
+                codex_output: recovery_note.clone(),
+                scheduled_tasks: Vec::new(),
+                scheduled_tasks_error: None,
+                scheduler_actions: Vec::new(),
+                scheduler_actions_error: None,
+                token_usage: None,
+                recovery_note: Some(recovery_note),
+            });
+        }
         let _ = trace.finish(output.status.code(), false, Some(&err.to_string()), None);
         return Err(err);
     }
@@ -202,8 +224,6 @@ pub(super) fn run_claude_task(
 
     // Only check for reply file if a reply was expected
     // Use cross-channel routing to determine actual expected path
-    let expected_reply_path =
-        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
     if !request.reply_to.is_empty() {
         let _ = trace.set_stage("validating_reply_artifact");
         let err = match ensure_expected_reply_artifact(
@@ -420,6 +440,12 @@ fn maybe_recover_from_ready_reply_artifact(
             "Recovered ready reply artifact after Claude timed out after {}s",
             timeout_secs
         ),
+        RunTaskError::ClaudeFailed {
+            status: Some(0), ..
+        } => {
+            "Recovered ready reply artifact after Claude exited successfully without assistant text"
+                .to_string()
+        }
         RunTaskError::ClaudeFailed {
             status: Some(code), ..
         } => format!(

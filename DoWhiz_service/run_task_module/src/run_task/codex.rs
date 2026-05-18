@@ -121,6 +121,8 @@ const REMOTE_EXIT_CODE_FILENAME: &str = ".codex_remote_exit_code";
 const HAG_MCP_CONFIG_START_MARKER: &str = "# BEGIN DOWHIZ HUMAN APPROVAL GATE MCP";
 const HAG_MCP_CONFIG_END_MARKER: &str = "# END DOWHIZ HUMAN APPROVAL GATE MCP";
 const EPHEMERAL_SHARE_PREFIX: &str = "task-";
+const MAX_AZURE_ACI_CREATE_TIMEOUT_SECS: u64 = 300;
+const MIN_AZURE_ACI_FAST_COMPLETION_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_AZCOPY_TIMEOUT_SECS: u64 = 900;
 const DOWNLOADED_WORKSPACE_SKIP_ROOT_ENTRIES: &[&str] = &[
     ".agents",
@@ -2145,6 +2147,19 @@ fn run_codex_task_azure_aci(
         }),
         &env_overrides,
     )?;
+    if options.prefer_fast_completion && should_skip_azure_aci_fast_completion_retry(timeout) {
+        let err = RunTaskError::CommandTimeout {
+            command: "az container create",
+            timeout_secs: timeout.as_secs(),
+            output: format!(
+                "skipped Azure ACI fast-completion retry because remaining budget {}s is below the minimum viable Azure ACI retry window of {}s",
+                timeout.as_secs(),
+                MIN_AZURE_ACI_FAST_COMPLETION_TIMEOUT_SECS,
+            ),
+        };
+        let _ = trace.finish(None, false, Some(&err.to_string()), None);
+        return Err(err);
+    }
     let _ = trace.set_stage("preparing_azure_aci");
     let _ = trace.record_text("aci/prompt_path.txt", &prompt_path.to_string_lossy());
     let env_override_keys: Vec<&str> = env_overrides.iter().map(|(key, _)| key.as_str()).collect();
@@ -3362,6 +3377,7 @@ exit \"$status\"\n",
         &create_command,
         env_overrides,
         file_share,
+        effective_aci_create_timeout(timeout),
     ) {
         Ok(()) => {}
         Err(err) if is_aci_quota_error(&err) => {
@@ -3389,6 +3405,7 @@ exit \"$status\"\n",
                 &create_command,
                 env_overrides,
                 file_share,
+                effective_aci_create_timeout(timeout),
             )?;
         }
         Err(err) => return Err(err),
@@ -3670,12 +3687,21 @@ fn confirm_aci_container_started_after_create_timeout(
     None
 }
 
+fn effective_aci_create_timeout(timeout: Duration) -> Duration {
+    timeout.min(Duration::from_secs(MAX_AZURE_ACI_CREATE_TIMEOUT_SECS))
+}
+
+fn should_skip_azure_aci_fast_completion_retry(timeout: Duration) -> bool {
+    timeout < Duration::from_secs(MIN_AZURE_ACI_FAST_COMPLETION_TIMEOUT_SECS)
+}
+
 fn create_aci_container(
     config: &AzureAciConfig,
     container_name: &str,
     create_command: &str,
     env_overrides: &[(String, String)],
     file_share: &str,
+    create_timeout: Duration,
 ) -> Result<(), RunTaskError> {
     let mut create_cmd =
         build_aci_create_command(config, container_name, create_command, file_share);
@@ -3689,7 +3715,7 @@ fn create_aci_container(
 
     let create_output = match run_command_with_timeout(
         create_cmd,
-        Duration::from_secs(300),
+        create_timeout,
         "az container create",
     ) {
         Ok(output) => output,
@@ -6230,6 +6256,28 @@ addresses = ["dowhiz@deep-tutor.com"]
     }
 
     #[test]
+    fn test_effective_aci_create_timeout_caps_to_remaining_budget() {
+        assert_eq!(
+            effective_aci_create_timeout(Duration::from_secs(30)),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            effective_aci_create_timeout(Duration::from_secs(900)),
+            Duration::from_secs(MAX_AZURE_ACI_CREATE_TIMEOUT_SECS)
+        );
+    }
+
+    #[test]
+    fn test_should_skip_azure_aci_fast_completion_retry_for_nonviable_budget() {
+        assert!(should_skip_azure_aci_fast_completion_retry(
+            Duration::from_secs(30)
+        ));
+        assert!(!should_skip_azure_aci_fast_completion_retry(
+            Duration::from_secs(MIN_AZURE_ACI_FAST_COMPLETION_TIMEOUT_SECS)
+        ));
+    }
+
+    #[test]
     fn test_codex_command_timeout_defaults_to_overall_budget_when_unset() {
         let _lock = env_lock();
         let _guards = [
@@ -6410,6 +6458,7 @@ printf '%s\n' "$@" > "$capture_file"
             "/bin/bash -lc 'echo ok'",
             &env_overrides,
             &config.file_share,
+            Duration::from_secs(300),
         )
         .expect("create container");
 
@@ -6485,6 +6534,7 @@ printf '%s\n' "$@" > "$capture_file"
             "/bin/bash -lc 'echo ok'",
             &env_overrides,
             &config.file_share,
+            Duration::from_secs(300),
         )
         .expect("create container");
 
