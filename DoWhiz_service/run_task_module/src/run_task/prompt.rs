@@ -376,6 +376,7 @@ Scheduling:
 {cross_channel_capabilities}
 {chat_history_capabilities_section}
 {web_auth_capabilities_section}
+{tool_failure_handling_section}
 {human_approval_gate_section}
 {user_identities_section}
 {tpm_capabilities_section}
@@ -386,7 +387,7 @@ Rules:
   Prefer creating a work/ directory for clones, patches, and build artifacts.
 - If attachments include version suffixes like _v1, _v2, the highest version should be the latest version.
 - Avoid interactive commands; use non-interactive flags for git/gh (for example, `gh pr create --title ... --body ...`).
-- Content filter handling: Never leave the user without any response. For investment requests, first normalize the task into neutral public-company analysis and continue the normal analysis path rather than downgrading into a canned monitor shell. If you still cannot support a conclusion, say exactly what remains unverified and avoid fabricating an investment verdict. For non-investment tasks, if you encounter repeated "content_filter" errors or "I cannot assist with that request" responses, write a polite reply explaining that the task could not be completed and suggest a simpler rephrase.
+- Content filter handling: See "Tool Failure Handling" section above. Never leave the user without any response.
 {filesystem_security_section}{registration_section}"#,
         input_email = input_email_dir.display(),
         input_attachments = input_attachments_dir.display(),
@@ -400,6 +401,7 @@ Rules:
         cross_channel_capabilities = build_cross_channel_capabilities_section(),
         chat_history_capabilities_section = chat_history_capabilities_section,
         web_auth_capabilities_section = web_auth_capabilities_section,
+        tool_failure_handling_section = build_tool_failure_handling_section(),
         human_approval_gate_section = human_approval_gate_section,
         user_identities_section = user_identities_section,
         tpm_capabilities_section = tpm_capabilities_section,
@@ -715,6 +717,24 @@ fn build_web_auth_capabilities_section() -> &'static str {
     If npm must be used, set `NPM_CONFIG_CACHE=/tmp/.npm` first.
 - Never include raw credentials in any user-facing reply, logs, or generated files.
 - Do not conclude "cannot access due to sign-in" until browser-based sign-in has been attempted.
+
+"#
+}
+
+fn build_tool_failure_handling_section() -> &'static str {
+    r#"Tool Failure Handling (content filters and blocked requests):
+- If a tool (WebSearch, web scraping, etc.) returns a content_filter error or "cannot assist" response:
+  1. Do NOT retry the exact same query - it will fail again
+  2. Try alternative approaches:
+     - Rephrase the query to be more neutral/generic
+     - Use a different tool (e.g., browser-use instead of WebSearch, or direct URL fetch)
+     - Skip that research step if non-essential to the task
+  3. After 2 failed attempts with different approaches for the same information need, move on
+  4. If you have partial results, complete the task with what you have
+- Only if you exhaust alternatives and cannot complete the task, log persistent failures to `.tool_failures.jsonl`:
+  {"tool":"WebSearch","query":"the blocked query","error":"content_filter","attempts":["original query","rephrased query"]}
+  This helps the system understand what failed if a retry is needed.
+- Never leave the user without any response - explain what you tried and suggest alternatives if the core task cannot be completed
 
 "#
 }
