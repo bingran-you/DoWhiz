@@ -103,13 +103,26 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                 && !investment_request
                 && !params.reply_to.is_empty()
                 && is_content_filter_failure(&fallback_primary_err)
+                && has_tool_failures_file(&workspace_dir)
             {
-                if let Some(output) = maybe_finalize_generic_content_filter_reply(
+                match run_tool_failure_content_filter_retry(
                     params,
                     &workspace_dir,
+                    &runner,
                     &fallback_primary_err,
-                )? {
-                    return Ok(output);
+                ) {
+                    Ok(output) => return Ok(output),
+                    Err(retry_err) => {
+                        // Retry also failed - send generic content filter reply
+                        if let Some(output) = maybe_finalize_generic_content_filter_reply(
+                            params,
+                            &workspace_dir,
+                            &retry_err,
+                        )? {
+                            return Ok(output);
+                        }
+                        fallback_primary_err = retry_err;
+                    }
                 }
             }
             if allow_fast_completion_retry {
@@ -218,6 +231,37 @@ fn output_looks_like_content_filter_failure(output: &str) -> bool {
         || normalized.contains("incomplete response returned")
         || normalized.contains("i'm sorry, but i cannot assist with that request")
         || normalized.contains("i cannot assist with that request")
+}
+
+fn has_tool_failures_file(workspace_dir: &Path) -> bool {
+    workspace_dir.join(".tool_failures.jsonl").exists()
+}
+
+fn run_tool_failure_content_filter_retry(
+    params: &RunTaskParams,
+    workspace_dir: &Path,
+    runner: &str,
+    primary_err: &RunTaskError,
+) -> Result<RunTaskOutput, RunTaskError> {
+    let retry_timeout = Duration::from_secs(60);
+    let request = build_request(workspace_dir, params, params.model_name.as_str());
+    let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
+    let mut output = run_codex_task_with_fast_completion(
+        build_request(workspace_dir, params, params.model_name.as_str()),
+        runner,
+        reply_html_path,
+        reply_attachments_dir,
+        Some(retry_timeout),
+    )?;
+    let retry_note = format!(
+        "Recovered via tool-failure-aware Codex retry after primary failure ({})",
+        primary_error_summary(primary_err)
+    );
+    output.recovery_note = Some(match output.recovery_note.take() {
+        Some(existing) => format!("{}\n{}", existing, retry_note),
+        None => retry_note,
+    });
+    Ok(output)
 }
 
 fn run_investment_content_filter_retry(
