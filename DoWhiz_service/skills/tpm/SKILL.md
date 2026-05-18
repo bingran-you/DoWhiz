@@ -531,6 +531,25 @@ Structure:
 - **Don't reassign without context** - note why in the task
 - **Don't create non-actionable tasks** - must be specific and completable
 - **Don't skip the search step** - duplicates waste everyone's time
+- **Don't track TPM operations as tasks** - the sync itself is not a task
+
+## What Counts as a Task (and What Doesn't)
+
+**IS a task** (track on board):
+- "Fix login bug on iOS"
+- "Implement dark mode"
+- "Write API docs"
+- "Create PR for feature X"
+- "Review competitor pricing page"
+
+**NOT a task** (do not create):
+- "Complete TPM sync"
+- "Send overdue follow-ups"
+- "Scan Discord for bugs"
+- "Check GitHub for new issues"
+- "Archive stale tasks"
+
+The TPM sync operation itself is infrastructure — the bugs/features/PRs you discover during the sync are the real tasks.
 
 ## Priority Guidelines
 
