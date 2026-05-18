@@ -1037,6 +1037,9 @@ See `.agents/skills/tpm/SKILL.md` for detailed workflows on task management, loa
 2. Track all actionable items in the task board - do not just respond without creating/updating tasks
 3. For scheduled TPM syncs: ALWAYS run the full sync workflow below
 4. **Proactively add tasks** when you discover work items from GitHub issues, PRs, or code
+5. **Only track real work as tasks** - NOT the TPM sync operations themselves. Examples:
+   - **IS a task**: "Fix login bug on iOS", "Implement dark mode", "Write API docs", "Create PR for feature X"
+   - **NOT a task**: "Complete TPM sync", "Send overdue follow-ups", "Scan Discord for bugs", "Check GitHub for new issues", "Archive stale tasks"
 
 **Task Classification:**
 - Bugs, features, tasks, tickets, dev work → MUST use tpm_cli to create/update tasks
