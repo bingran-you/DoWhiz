@@ -37,6 +37,21 @@ Use this skill when:
 - **Proposing new feature ideas**
 - Tracking GitHub issues and PRs
 
+## CRITICAL: Organization Config Validation
+
+**Before running ANY TPM operation, verify org config exists:**
+
+1. Check `notion_database_id` is set for the organization
+2. If `notion_database_id` is empty/missing → **STOP and report**:
+   ```
+   Cannot run TPM sync: [org_name] has no Notion database configured.
+   Please configure the Notion database ID in organization settings.
+   ```
+3. **DO NOT** search for or use databases from other organizations
+4. **DO NOT** fall back to any "default" or "found" database
+
+This prevents data leakage between organizations. Each org's TPM operations MUST use ONLY that org's configured database.
+
 ## Prerequisites
 
 - `tpm_cli` available in PATH
