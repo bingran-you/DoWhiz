@@ -924,6 +924,36 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
         .map(|id| format!(" --database-id {}", id))
         .unwrap_or_default();
 
+    // Warning section when no database ID is configured
+    let no_db_warning = if identities.notion_database_id.is_none() {
+        format!(
+            r#"
+**CRITICAL: No Notion database ID configured for {org_name}.**
+
+You MUST create a new task board before running any TPM operations:
+1. Run `notion_api_cli list-pages --limit 10` to find accessible pages
+2. Pick a suitable parent page OR create one: `notion_api_cli create-page --title "{org_name} TPM"`
+3. Run `tpm_cli setup-board --organization {org_name} --parent-page-id <PAGE_ID>`
+4. **IMMEDIATELY** emit SCHEDULER_ACTIONS_JSON to save the database ID:
+   ```
+   SCHEDULER_ACTIONS_JSON_BEGIN
+   [{{"action":"set_tpm_database","organization":"{org_name}","database_id":"<ID_FROM_OUTPUT>","workspace_id":"<WS_FROM_OUTPUT>"}}]
+   SCHEDULER_ACTIONS_JSON_END
+   ```
+
+**SECURITY GUARDRAIL - DO NOT:**
+- Search Notion for existing databases to use
+- Use databases you find via global token from other organizations
+- Fall back to any "default" or "found" database not created by setup-board
+
+Only use the database YOU create for {org_name}, or wait for one to be configured.
+"#,
+            org_name = org_name
+        )
+    } else {
+        String::new()
+    };
+
     // Build org members list for task assignment
     let org_members_section = if identities.organization_members.is_empty() {
         String::new()
@@ -1011,12 +1041,16 @@ Before running TPM commands, gather context about {org_name} from GitHub org `{g
             r#"**STEP 0 - CONTEXT GATHERING (Do this FIRST for scheduled syncs):**
 Before running TPM commands, gather context about {org_name}:
 
-**NOTE: GitHub organization is NOT configured for {org_name}.**
-- You may list your org memberships to find a matching org: `gh api user/memberships/orgs --jq '.[].organization.login'`
-- If you find an org that matches or relates to {org_name}, you may explore its repos
-- However, do NOT deeply dive into repos from unrelated organizations - this could leak data across users
-- If no GitHub org is found, fall back to the Notion task board only
-- Recommend the organization admin set their GitHub organization name in settings for better scoping"#,
+**GitHub organization is NOT configured for {org_name}.**
+
+**SECURITY GUARDRAIL - DO NOT:**
+- Search for or guess which GitHub org to use
+- List org memberships to "find a matching org" - this leaks data across users
+- Explore repos from any organization not explicitly configured
+
+**What to do:**
+- Skip GitHub-related steps entirely (PRs, issues, repo scanning)
+- Focus on Notion task board only for this organization"#,
             org_name = org_name
         )
     };
@@ -1024,7 +1058,7 @@ Before running TPM commands, gather context about {org_name}:
     format!(
         r#"
 === TPM MODE ACTIVE for {org_name} ==={org_members_section}{discord_guild_section}{slack_team_section}{github_org_section}
-
+{no_db_warning}
 You are operating as a Technical Program Manager (TPM) for the **{org_name}** organization.
 IMPORTANT: Focus ONLY on {org_name}'s projects and tasks. Do NOT report on unrelated organizations.
 
@@ -1278,7 +1312,8 @@ When creating tasks, include context: link to GitHub issue/PR if available.
         org_name = org_name,
         account_id = account_id,
         db_flag = db_flag,
-        github_context_section = github_context_section
+        github_context_section = github_context_section,
+        no_db_warning = no_db_warning
     )
 }
 
