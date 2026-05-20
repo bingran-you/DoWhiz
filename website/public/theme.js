@@ -187,6 +187,14 @@
   }
 
   function shouldMountSharedNav() {
+    if (
+      document.documentElement.dataset.dwDisableSharedNav === '1' ||
+      (document.body && document.body.dataset.dwDisableSharedNav === '1') ||
+      document.querySelector('meta[name="dw-disable-shared-nav"][content="true"]')
+    ) {
+      return false;
+    }
+
     const pathname = getContentPathname(window.location.pathname);
     return pathname !== '/' && pathname !== '/index.html' && pathname !== '/oliver' && pathname !== '/oliver/';
   }
