@@ -5,309 +5,305 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Guide for setting up organizations in DoWhiz, configuring team roles, and enabling TPM features."
+      content="Concise setup guide for DoWhiz organizations, leader ownership, Notion task board configuration, and optional TPM integrations."
     />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260311" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260311" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260311" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260311" />
     <link rel="manifest" href="/site.webmanifest?v=20260311" />
-    <link rel="stylesheet" href="/legal.css" />
+    <link rel="canonical" href="https://dowhiz.com/auth/organizations_help.html" />
+    <link rel="stylesheet" href="/auth/organizations-help.css" />
     <script src="/theme.js"></script>
-    <title>Organizations Guide | DoWhiz</title>
+    <title>Organization Guide | DoWhiz</title>
   </head>
-  <body>
-    <div class="page">
-      <header class="page-header">
-        <a class="brand" href="/">Do<span class="accent">Whiz</span></a>
-        <nav class="header-links">
-          <a href="/user-guide/">User Guide</a>
-          <a href="/integrations/">Integrations</a>
+  <body class="docs-page" data-dw-disable-shared-nav="1">
+    <div class="docs-shell">
+      <header class="docs-header">
+        <a class="brand" href="/" aria-label="Back to DoWhiz homepage">
+          <img src="/assets/DoWhiz.svg" alt="" class="brand-mark" aria-hidden="true" />
+          <span>Do<span class="accent">Whiz</span></span>
+        </a>
+
+        <nav class="docs-header-links" aria-label="Page actions">
           <a href="/help-center/">Help Center</a>
-          <a href="/auth/">Dashboard</a>
+          <a href="/auth/" class="header-link-primary">Open dashboard</a>
         </nav>
       </header>
 
-      <main>
-        <section class="legal-hero">
-          <div class="eyebrow">Organizations</div>
-          <h1>Organizations Onboarding Guide</h1>
-          <p class="lead">
-            This guide walks through setting up an organization in DoWhiz, configuring team roles, and enabling TPM (Task/Project Management) features.
-          </p>
-          <div class="updated">Last updated: May 18, 2026</div>
-        </section>
-
-        <section class="legal-card">
-          <h2>Quick Start</h2>
-          <p>Integrate Oliver as a TPM in three easy steps:</p>
-          <ol>
-            <li><strong>Link Notion</strong> to your DoWhiz account (Settings &gt; Connections &gt; Notion)</li>
-            <li><strong>Create an organization</strong> in the Organizations section</li>
-            <li><strong>Trigger your first sync</strong> - Oliver will automatically create a task board in your Notion workspace</li>
-          </ol>
-          <p>You can also customize by:</p>
-          <ul>
-            <li>Using an existing Notion board (see <a href="#configuring-tpm">Configuring TPM</a> below)</li>
-            <li>Setting your GitHub organization and inviting <strong>Oliver-DoWhiz</strong> on GitHub (see <a href="#github-integration">GitHub Integration</a> below)</li>
-          </ul>
-        </section>
-
-        <section class="legal-card">
-          <h2>Overview</h2>
-          <p>Organizations allow teams to:</p>
-          <ul>
-            <li>Share Oliver's TPM capabilities across team members</li>
-            <li>Centralize Notion task board management</li>
-            <li>Run automated syncs via cron jobs (leader-only)</li>
-            <li>Connect community channels (Discord/Slack) for bug tracking</li>
-          </ul>
-        </section>
-
-        <section class="legal-card">
-          <h2>Prerequisites</h2>
-          <p>Before creating or joining an organization:</p>
-          <ol>
-            <li>Sign up for a DoWhiz account at <a href="https://dowhiz.com/auth">dowhiz.com/auth</a></li>
-            <li>Connect your Notion workspace (Settings &gt; Connections &gt; Notion)</li>
-            <li>Note your <strong>Account ID</strong> (displayed in the dashboard sidebar)</li>
-          </ol>
-        </section>
-
-        <section class="legal-card">
-          <h2>Creating an Organization</h2>
-          <ol>
-            <li>Navigate to the <strong>Organizations section</strong> in the DoWhiz account panel</li>
-            <li>Click <strong>Create Organization</strong></li>
-            <li>Enter your organization name</li>
-            <li>Click <strong>Create</strong></li>
-          </ol>
-          <ul>
-            <li>You are automatically the acting leader of organizations you create.</li>
-            <li>If you would like to manually configure a leader of the organization, see <strong>Setting the Organization Leader</strong> section</li>
-          </ul>
-        </section>
-
-        <section class="legal-card">
-          <h2>Joining an Organization</h2>
-          <ol>
-            <li>Get the <strong>Organization ID</strong> from your team leader</li>
-            <li>Navigate to <strong>Settings &gt; Organization</strong></li>
-            <li>Enter the Organization ID in the "Join Organization" field</li>
-            <li>Click <strong>Join</strong></li>
-          </ol>
-        </section>
-
-        <section class="legal-card">
-          <h2>Organization Roles</h2>
-          <h3>Leader</h3>
-          <ul>
-            <li>Can configure TPM settings (Notion database ID, cron schedules)</li>
-            <li>Their Notion credentials are used for all TPM operations</li>
-            <li>Can set up community bug tracking channels</li>
-          </ul>
-          <h3>Member</h3>
-          <ul>
-            <li>Can trigger manual TPM syncs</li>
-            <li>Can view organization settings (read-only for TPM config)</li>
-            <li>Cannot modify cron schedules or leader settings</li>
-          </ul>
-        </section>
-
-        <section class="legal-card">
-          <h2>Setting the Organization Leader</h2>
-          <p>The leader's Notion account is used for all TPM API calls. To set a leader:</p>
-          <ol>
-            <li>Get the leader's <strong>DoWhiz Account ID</strong> (they can find this in their dashboard sidebar)</li>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced</strong></li>
-            <li>Enter the Account ID in "Leader's DoWhiz Account ID"</li>
-            <li>Click <strong>Set Leader</strong></li>
-          </ol>
-          <p>If no leader is set, any member can configure TPM settings (acting leader mode).</p>
-        </section>
-
-        <section class="legal-card" id="configuring-tpm">
-          <h2>Configuring TPM (Task/Project Management)</h2>
-          <h3>Step 1: Connect Notion</h3>
-          <p>The organization leader must have Notion connected:</p>
-          <ol>
-            <li>Go to <strong>Settings &gt; Connections</strong></li>
-            <li>Click <strong>Connect Notion</strong></li>
-            <li>Authorize DoWhiz to access your Notion workspace</li>
-          </ol>
-
-          <h3>Step 2: Set the Task Board Database</h3>
-          <p>You have two options:</p>
-
-          <h4>Option A: Let Oliver create a new task board</h4>
-          <ol>
-            <li>Leave the database ID blank</li>
-            <li>Trigger a manual TPM sync</li>
-            <li>Oliver will search your Notion workspace and create a task board with the correct schema</li>
-            <li>The database ID is automatically saved</li>
-          </ol>
-
-          <h4>Option B: Use an existing Notion database</h4>
-          <ol>
-            <li>Open your existing database in Notion</li>
-            <li><strong>Important</strong>: Add Oliver as a connection to the database:
-              <ul>
-                <li>Click the <code>•••</code> menu in the top-right of the database page</li>
-                <li>Click <strong>Connections</strong></li>
-                <li>Search for and add <strong>Oliver</strong> (or <strong>DoWhiz</strong>)</li>
-                <li>Without this, Oliver cannot access the database even with a valid token</li>
-              </ul>
-            </li>
-            <li>Copy the database ID from the Notion URL:
-              <ul>
-                <li>URL format: <code>notion.so/{workspace}/{database_id}?v=...</code></li>
-                <li>The database ID is the 32-character string before the <code>?</code></li>
-              </ul>
-            </li>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced</strong></li>
-            <li>Paste the database ID in "Notion Task Board Database ID"</li>
-            <li>Click <strong>Set Database</strong></li>
-          </ol>
-
-          <h3>Step 3: Enable Cron Sync (Leader Only)</h3>
-          <p>Automated syncs run on a schedule to keep the task board updated:</p>
-          <ol>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced</strong></li>
-            <li>In the TPM Cron section, configure:
-              <ul>
-                <li><strong>Frequency</strong>: How often to sync (e.g., every 6 hours)</li>
-                <li><strong>Sync type</strong>: Full sync or incremental</li>
-              </ul>
-            </li>
-            <li>Click <strong>Enable Cron</strong></li>
-          </ol>
-          <p>Only the organization leader can see and configure cron settings.</p>
-        </section>
-
-        <section class="legal-card">
-          <h2>Community Bug Tracking</h2>
-          <p>Connect community channels to automatically scan for bug reports during TPM syncs.</p>
-          <h3>Discord Setup</h3>
-          <ol>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced &gt; Community Bug Tracking</strong></li>
-            <li>Enter your Discord <strong>Server ID</strong>
-              <ul>
-                <li>Enable Developer Mode in Discord (Settings &gt; Advanced)</li>
-                <li>Right-click your server &gt; Copy Server ID</li>
-              </ul>
-            </li>
-            <li>Click <strong>Set Discord Server</strong></li>
-          </ol>
-          <h3>Slack Setup</h3>
-          <ol>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced &gt; Community Bug Tracking</strong></li>
-            <li>Enter your Slack <strong>Workspace ID</strong>
-              <ul>
-                <li>Found in your Slack workspace URL or admin settings</li>
-              </ul>
-            </li>
-            <li>Click <strong>Set Slack Workspace</strong></li>
-          </ol>
-        </section>
-
-        <section class="legal-card" id="github-integration">
-          <h2>GitHub Integration</h2>
-          <p>Link your GitHub organization so Oliver can search repos, issues, and PRs during TPM syncs.</p>
-          <h3>GitHub Organization Setup</h3>
-          <ol>
-            <li>Navigate to <strong>Settings &gt; Organization &gt; Advanced</strong></li>
-            <li>Enter the <strong>Organization Name</strong> of your GitHub organization (case-sensitive)</li>
-            <li>Click <strong>Connect</strong></li>
-          </ol>
-          <p><strong>Note</strong>: Oliver must have access to the GitHub organization. If you see an error:</p>
-          <ul>
-            <li>Verify the organization name is spelled correctly (case-sensitive)</li>
-            <li>Ensure Oliver has been invited to the organization on GitHub</li>
-          </ul>
-        </section>
-
-        <section class="legal-card">
-          <h2>Oliver's Self-Assignment</h2>
-          <p>
-            Oliver can be assigned tasks by adding the "oliver" tag to a task's Tags property.
-            Oliver automatically queries for tasks with this tag during TPM operations.
-          </p>
-          <p>To assign a task to Oliver:</p>
-          <ol>
-            <li>Open the task in Notion</li>
-            <li>Add "oliver" to the Tags multi-select property</li>
-            <li>Oliver will pick up the task on the next sync</li>
-          </ol>
-          <p>Tasks with no assignee are also considered Oliver's responsibility.</p>
-        </section>
-
-        <section class="legal-card">
-          <h2>Troubleshooting</h2>
-          <h3>"Notion not connected" Error</h3>
-          <p>The organization leader's Notion account is not connected:</p>
-          <ol>
-            <li>Have the leader log into DoWhiz</li>
-            <li>Navigate to <strong>Settings &gt; Connections &gt; Notion</strong></li>
-            <li>Re-authorize the connection</li>
-          </ol>
-
-          <h3>TPM Cron Section Not Visible</h3>
-          <p>Only the organization leader can see cron settings:</p>
-          <ol>
-            <li>Verify you are set as the leader (check "Leader's DoWhiz Account ID" matches your Account ID)</li>
-            <li>If no leader is set, any member should see the section</li>
-          </ol>
-
-          <h3>Database ID Not Saving</h3>
-          <ol>
-            <li>Ensure the database ID is a valid 32-character Notion ID</li>
-            <li>Verify the leader's Notion account has access to the database</li>
-            <li>Try disconnecting and reconnecting Notion</li>
-          </ol>
-
-          <h3>Manual Sync Fails</h3>
-          <ol>
-            <li>Check that Notion is connected (Settings &gt; Connections)</li>
-            <li>Verify the Notion database ID is set correctly</li>
-            <li>Check advanced settings: verify Discord Server, Slack Workspace IDs are correct</li>
-            <li>Verify the leader's DoWhiz account ID matches</li>
-          </ol>
-
-          <h3>"Object not found" or "Could not find database" Error</h3>
-          <p>Oliver doesn't have access to the Notion database:</p>
-          <ol>
-            <li>Open the database in Notion</li>
-            <li>Click the <code>•••</code> menu &gt; <strong>Connections</strong></li>
-            <li>Add <strong>Oliver</strong> (or <strong>DoWhiz</strong>) as a connection</li>
-            <li>Retry the sync</li>
-          </ol>
-          <p>This is required for existing databases. Databases created by Oliver via TPM sync already have the connection.</p>
-        </section>
-
-        <section class="legal-card">
-          <h2>Related Documentation</h2>
-          <p class="related-intro">Explore more DoWhiz documentation.</p>
-          <div class="related-grid">
-            <a class="related-item" href="/help-center/">
-              <span class="related-item-title">Help Center</span>
-              <span class="related-item-desc">Top 20 user questions about DoWhiz.</span>
-            </a>
-            <a class="related-item" href="/user-guide/">
-              <span class="related-item-title">User Guide</span>
-              <span class="related-item-desc">Templates for requesting work in each channel.</span>
-            </a>
-            <a class="related-item" href="/auth/">
-              <span class="related-item-title">Dashboard</span>
-              <span class="related-item-desc">Manage your DoWhiz account and settings.</span>
-            </a>
+      <main class="docs-layout">
+        <aside class="docs-sidebar" aria-label="On this page">
+          <div class="toc-card">
+            <p class="toc-label">On this page</p>
+            <nav class="toc-nav">
+              <a href="#overview">Overview</a>
+              <a href="#before-you-start">Before you start</a>
+              <a href="#connect-notion">1. Connect Notion</a>
+              <a href="#create-or-join">2. Create or join</a>
+              <a href="#configure-organization">3. Configure TPM</a>
+              <a href="#optional-integrations">4. Optional integrations</a>
+              <a href="#troubleshooting">Troubleshooting</a>
+            </nav>
           </div>
-        </section>
-      </main>
+        </aside>
 
-      <footer class="page-footer">
-        <a class="back-link" href="/auth/">Back to Dashboard</a>
-        <span>Need help? Contact admin@dowhiz.com.</span>
-      </footer>
+        <article class="docs-content">
+          <section class="docs-intro" id="overview">
+            <p class="eyebrow">Organizations Guide</p>
+            <h1>Set up your organization without over-configuring it.</h1>
+            <p class="lead">
+              This page matches the current <strong>Connections</strong> and
+              <strong>Organization</strong> panels in the DoWhiz dashboard. The
+              correct sequence is small: connect Notion, create or join the
+              organization, then configure leader, task board, and cron only when
+              you actually need them.
+            </p>
+            <div class="meta-row">
+              <span>Last updated: May 19, 2026</span>
+              <span>Applies to <code>/auth/</code></span>
+            </div>
+          </section>
+
+          <section class="callout critical">
+            <strong>Important</strong>
+            <p>
+              The organization leader&apos;s Notion connection is used for TPM
+              operations. If TPM is reading or writing in the wrong workspace, check
+              the leader first.
+            </p>
+          </section>
+
+          <section class="doc-section" id="before-you-start">
+            <h2>Before you start</h2>
+            <ul>
+              <li>Sign in at <a href="/auth/">the dashboard</a>.</li>
+              <li>Open the <strong>Connections</strong> section before touching organization settings.</li>
+              <li>Have the leader&apos;s DoWhiz <strong>Account ID</strong> ready if TPM should run through another member&apos;s account.</li>
+              <li>Do not set recurring cron until one manual TPM sync already works.</li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="connect-notion">
+            <h2>1. Connect Notion</h2>
+            <p>
+              Go to <strong>Connections</strong> and click <strong>Notion</strong>.
+              This should happen before organization TPM setup, because every later
+              step depends on a valid Notion connection.
+            </p>
+            <ol class="steps">
+              <li>Authorize the correct Notion workspace.</li>
+              <li>Return to the dashboard and confirm the connection completed.</li>
+              <li>Leave Discord, Slack, and GitHub for later unless you already need them.</li>
+            </ol>
+
+            <figure class="doc-figure">
+              <img
+                src="/auth/guide-images/connections.png"
+                alt="DoWhiz Connections section showing available app connections including Notion, GitHub, Slack, and Discord."
+                loading="lazy"
+              />
+              <figcaption>
+                Representative dashboard view: connect Notion first. The other
+                connections are optional for the basic organization flow.
+              </figcaption>
+            </figure>
+
+            <div class="callout">
+              <strong>Why first?</strong>
+              <p>
+                Organizations control shared TPM behavior, but the actual workspace
+                access still comes from a member&apos;s Notion authorization.
+              </p>
+            </div>
+          </section>
+
+          <section class="doc-section" id="create-or-join">
+            <h2>2. Create or join an organization</h2>
+            <p>
+              In the <strong>Organization</strong> section, join an existing
+              organization if it already exists. Create a new one only if your team
+              does not already have an organization record.
+            </p>
+
+            <figure class="doc-figure">
+              <img
+                src="/auth/guide-images/organization-join.png"
+                alt="DoWhiz Organization section showing search to join an existing organization and form to create a new organization."
+                loading="lazy"
+              />
+              <figcaption>
+                Representative dashboard view: the default state lets you either
+                search and join, or create a new organization.
+              </figcaption>
+            </figure>
+
+            <div class="split-notes">
+              <div class="note-card">
+                <h3>Join existing</h3>
+                <ol class="steps compact">
+                  <li>Search by organization name.</li>
+                  <li>Select the correct result.</li>
+                  <li>Click <strong>Join</strong>.</li>
+                </ol>
+              </div>
+
+              <div class="note-card">
+                <h3>Create new</h3>
+                <ol class="steps compact">
+                  <li>Enter the organization name in <code>Organization name</code>.</li>
+                  <li>Click <strong>Create</strong>.</li>
+                  <li>Use the advanced settings only after the organization exists.</li>
+                </ol>
+              </div>
+            </div>
+          </section>
+
+          <section class="doc-section" id="configure-organization">
+            <h2>3. Configure leader, task board, and cron</h2>
+            <p>
+              After you are inside an organization, open <strong>Advanced</strong>.
+              That panel contains the TPM controls that matter. Most teams only need
+              part of it.
+            </p>
+
+            <figure class="doc-figure">
+              <img
+                src="/auth/guide-images/organization-advanced.png"
+                alt="DoWhiz Organization advanced settings showing TPM cron, Notion task board, organization leader, and optional community integrations."
+                loading="lazy"
+              />
+              <figcaption>
+                Representative dashboard view: advanced settings for cron, Notion
+                task board, leader assignment, and optional integrations.
+              </figcaption>
+            </figure>
+
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Use it when</th>
+                  <th>What to enter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Organization Leader</strong></td>
+                  <td>TPM should run through a specific member&apos;s Notion connection.</td>
+                  <td>The leader&apos;s DoWhiz <strong>Account ID</strong>.</td>
+                </tr>
+                <tr>
+                  <td><strong>Change Notion task board</strong></td>
+                  <td>You already have an existing Notion database for TPM.</td>
+                  <td>A full Notion database URL or the raw database ID. <code>Workspace ID</code> is optional.</td>
+                </tr>
+                <tr>
+                  <td><strong>Setup Cron</strong></td>
+                  <td>Manual sync already works and you want recurring TPM sync.</td>
+                  <td>A local time and whether the schedule should be weekdays only.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="note-list">
+              <div class="callout">
+                <strong>Leader</strong>
+                <p>
+                  Use <strong>Set Leader</strong> only if TPM should run through a
+                  different member. If you pick the wrong person, TPM will use the
+                  wrong Notion credentials.
+                </p>
+              </div>
+
+              <div class="callout">
+                <strong>Task board</strong>
+                <p>
+                  The task board field accepts either a full Notion database URL or a
+                  raw database ID. Use it when switching to an existing database, not
+                  as a mandatory first step.
+                </p>
+              </div>
+
+              <div class="callout">
+                <strong>Cron</strong>
+                <p>
+                  Treat cron as the last step. First verify that
+                  <strong>Trigger TPM Sync</strong> works with the right workspace and
+                  task board.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="doc-section" id="optional-integrations">
+            <h2>4. Optional organization integrations</h2>
+            <p>
+              These fields are optional. They add more context for TPM, but they are
+              not required for the basic organization setup.
+            </p>
+            <ul>
+              <li><strong>Discord:</strong> enter the server&apos;s <code>Server ID</code>.</li>
+              <li><strong>Slack:</strong> enter the workspace&apos;s <code>Workspace ID</code>.</li>
+              <li><strong>GitHub:</strong> enter the <code>GitHub Organization Name</code>. It is case-sensitive.</li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="troubleshooting">
+            <h2>Troubleshooting</h2>
+
+            <div class="qa-block">
+              <h3>I cannot see the cron controls.</h3>
+              <p>
+                <strong>Setup Cron</strong> only appears when no leader is set, or
+                when your current account is the organization leader. If someone else
+                is leader, they need to configure cron.
+              </p>
+            </div>
+
+            <div class="qa-block">
+              <h3>The Notion board field rejects my link.</h3>
+              <p>
+                Paste an actual Notion database URL or the raw 32-character database
+                ID. The field is not for a page URL that does not point to a database.
+              </p>
+            </div>
+
+            <div class="qa-block">
+              <h3>TPM is using the wrong Notion workspace.</h3>
+              <p>
+                Check the current organization leader first. TPM follows the leader&apos;s
+                Notion connection, not necessarily the member who clicked the button.
+              </p>
+            </div>
+
+            <div class="qa-block">
+              <h3>My team already has an organization.</h3>
+              <p>
+                Do not create a duplicate. Use <strong>Join organization</strong>,
+                search by name, and join the existing record.
+              </p>
+            </div>
+          </section>
+
+          <section class="doc-section related-section" id="related">
+            <h2>Related pages</h2>
+            <div class="related-grid">
+              <a class="related-link" href="/auth/">
+                <span class="related-title">Dashboard</span>
+                <span class="related-copy">Open the actual settings panel and apply the steps.</span>
+              </a>
+              <a class="related-link" href="/help-center/">
+                <span class="related-title">Help Center</span>
+                <span class="related-copy">General setup and support questions.</span>
+              </a>
+              <a class="related-link" href="/user-guide/">
+                <span class="related-title">User Guide</span>
+                <span class="related-copy">Broader DoWhiz usage across channels and surfaces.</span>
+              </a>
+            </div>
+          </section>
+        </article>
+      </main>
     </div>
   </body>
 </html>
