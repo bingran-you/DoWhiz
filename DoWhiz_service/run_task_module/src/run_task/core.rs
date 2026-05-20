@@ -125,6 +125,19 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                     }
                 }
             }
+            if runner.eq_ignore_ascii_case("codex")
+                && !investment_request
+                && !params.reply_to.is_empty()
+                && is_content_filter_failure(&fallback_primary_err)
+            {
+                if let Some(output) = maybe_finalize_generic_content_filter_reply(
+                    params,
+                    &workspace_dir,
+                    &fallback_primary_err,
+                )? {
+                    return Ok(output);
+                }
+            }
             if allow_fast_completion_retry {
                 if let Some((_, fast_completion_timeout)) = codex_budget_split {
                     match maybe_run_codex_fast_completion_retry(
