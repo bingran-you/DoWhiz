@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::claude::run_claude_task;
 use super::codex::{
@@ -13,6 +13,7 @@ use super::errors::RunTaskError;
 use super::investment_fail_soft::maybe_write_investment_operational_failure_artifact;
 use super::reply_contract::{
     investment_monitor_request_for_workspace, investment_request_for_workspace,
+    reply_artifact_ready_for_workspace,
 };
 use super::trace::RUN_TASK_TRACE_DIRNAME;
 use super::types::{RunTaskOutput, RunTaskParams, RunTaskRequest};
@@ -496,13 +497,14 @@ pub fn run_claude_fallback_after_codex_failure(
     let (reply_html_path, reply_attachments_dir) = prepare_workspace(&request)?;
     let fallback_model = resolve_claude_fallback_model(params.model_name.as_str());
     archive_primary_codex_trace(&workspace_dir)?;
-    let archived_primary_reply = archive_primary_reply_artifact(&workspace_dir, &reply_html_path)?;
+    let archived_primary_artifacts =
+        archive_primary_artifacts(&workspace_dir, &reply_html_path, &reply_attachments_dir)?;
     reset_reply_artifacts(&reply_html_path, &reply_attachments_dir)?;
     let fallback_result = run_claude_task(
         build_request(&workspace_dir, params, fallback_model.as_str()),
         "claude",
-        reply_html_path,
-        reply_attachments_dir,
+        reply_html_path.clone(),
+        reply_attachments_dir.clone(),
         true,
     );
 
@@ -515,7 +517,7 @@ pub fn run_claude_fallback_after_codex_failure(
                 fallback_model.as_str(),
                 &primary_err,
                 None,
-                archived_primary_reply.as_deref(),
+                archived_primary_artifacts.reply_path.as_deref(),
             )?;
             output.recovery_note = Some(match output.recovery_note.take() {
                 Some(existing) => format!("{}\n{}", existing, note),
@@ -530,12 +532,31 @@ pub fn run_claude_fallback_after_codex_failure(
                 fallback_model.as_str(),
                 &primary_err,
                 Some(&fallback_err),
-                archived_primary_reply.as_deref(),
+                archived_primary_artifacts.reply_path.as_deref(),
             )?;
+            if let Some(recovery_note) = maybe_restore_archived_primary_artifacts(
+                &workspace_dir,
+                &reply_html_path,
+                &reply_attachments_dir,
+                &archived_primary_artifacts,
+            )? {
+                return Ok(RunTaskOutput {
+                    reply_html_path,
+                    reply_attachments_dir,
+                    codex_output: fallback_err.to_string(),
+                    scheduled_tasks: Vec::new(),
+                    scheduled_tasks_error: None,
+                    scheduler_actions: Vec::new(),
+                    scheduler_actions_error: None,
+                    token_usage: None,
+                    recovery_note: Some(recovery_note),
+                    terminal_error_message: None,
+                });
+            }
             Err(RunTaskError::FallbackFailed {
                 primary: primary_error_with_archived_reply(
                     &primary_err,
-                    archived_primary_reply.as_deref(),
+                    archived_primary_artifacts.reply_path.as_deref(),
                 ),
                 fallback: fallback_err.to_string(),
             })
@@ -753,28 +774,131 @@ fn archive_primary_codex_trace(workspace_dir: &Path) -> Result<(), RunTaskError>
     Ok(())
 }
 
-fn archive_primary_reply_artifact(
+#[derive(Debug, Default)]
+struct ArchivedPrimaryArtifacts {
+    reply_path: Option<PathBuf>,
+    attachments_dir: Option<PathBuf>,
+    reply_fresh_for_primary_trace: bool,
+}
+
+fn archive_primary_artifacts(
     workspace_dir: &Path,
     reply_path: &Path,
-) -> Result<Option<PathBuf>, RunTaskError> {
-    if !reply_path.exists() {
-        return Ok(None);
-    }
+    reply_attachments_dir: &Path,
+) -> Result<ArchivedPrimaryArtifacts, RunTaskError> {
+    let mut archived = ArchivedPrimaryArtifacts::default();
 
     let archive_dir = workspace_dir.join(".run_task_trace_codex_primary");
     if !archive_dir.exists() {
-        return Ok(None);
+        return Ok(archived);
     }
 
     let preserved_dir = archive_dir.join("preserved_artifacts");
     fs::create_dir_all(&preserved_dir)?;
-    let file_name = reply_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("reply_email_draft.html");
-    let preserved_path = preserved_dir.join(file_name);
-    fs::copy(reply_path, &preserved_path)?;
-    Ok(Some(preserved_path))
+    if reply_path.exists() {
+        archived.reply_fresh_for_primary_trace =
+            reply_artifact_fresh_for_archived_primary_trace(workspace_dir, reply_path);
+        let file_name = reply_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("reply_email_draft.html");
+        let preserved_path = preserved_dir.join(file_name);
+        fs::copy(reply_path, &preserved_path)?;
+        archived.reply_path = Some(preserved_path);
+    }
+
+    if reply_attachments_dir.exists() {
+        let dir_name = reply_attachments_dir
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("reply_attachments");
+        let preserved_attachments_dir = preserved_dir.join(dir_name);
+        remove_path_if_exists(&preserved_attachments_dir)?;
+        copy_dir_recursive(reply_attachments_dir, &preserved_attachments_dir)?;
+        archived.attachments_dir = Some(preserved_attachments_dir);
+    }
+
+    Ok(archived)
+}
+
+fn maybe_restore_archived_primary_artifacts(
+    workspace_dir: &Path,
+    reply_path: &Path,
+    reply_attachments_dir: &Path,
+    archived: &ArchivedPrimaryArtifacts,
+) -> Result<Option<String>, RunTaskError> {
+    if !archived.reply_fresh_for_primary_trace {
+        return Ok(None);
+    }
+    let Some(archived_reply_path) = archived.reply_path.as_deref() else {
+        return Ok(None);
+    };
+    if !reply_artifact_ready_for_workspace(workspace_dir, archived_reply_path) {
+        return Ok(None);
+    }
+
+    remove_path_if_exists(reply_path)?;
+    if let Some(parent) = reply_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(archived_reply_path, reply_path)?;
+
+    remove_path_if_exists(reply_attachments_dir)?;
+    if let Some(archived_attachments_dir) = archived.attachments_dir.as_deref() {
+        copy_dir_recursive(archived_attachments_dir, reply_attachments_dir)?;
+    } else {
+        fs::create_dir_all(reply_attachments_dir)?;
+    }
+
+    if !reply_artifact_ready_for_workspace(workspace_dir, reply_path) {
+        return Ok(None);
+    }
+
+    Ok(Some(
+        "Recovered valid primary Codex reply artifact after Claude fallback failed; the fallback failure did not overwrite the completed deliverable."
+            .to_string(),
+    ))
+}
+
+fn reply_artifact_fresh_for_archived_primary_trace(
+    workspace_dir: &Path,
+    reply_path: &Path,
+) -> bool {
+    let Some(started_at) = archived_primary_trace_started_at(workspace_dir) else {
+        return false;
+    };
+    let freshness_floor = started_at
+        .checked_sub(Duration::from_secs(2))
+        .unwrap_or(UNIX_EPOCH);
+    fs::metadata(reply_path)
+        .and_then(|metadata| metadata.modified())
+        .is_ok_and(|modified| modified >= freshness_floor)
+}
+
+fn archived_primary_trace_started_at(workspace_dir: &Path) -> Option<SystemTime> {
+    let metadata_path = workspace_dir
+        .join(".run_task_trace_codex_primary")
+        .join("metadata.json");
+    let raw = fs::read_to_string(metadata_path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let started_at_ms = value.get("started_at_unix_ms")?.as_u64()?;
+    UNIX_EPOCH.checked_add(Duration::from_millis(started_at_ms))
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), RunTaskError> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        let metadata = fs::symlink_metadata(&src_path)?;
+        if metadata.is_dir() {
+            copy_dir_recursive(&src_path, &dest_path)?;
+        } else if metadata.is_file() {
+            fs::copy(&src_path, &dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 fn reset_reply_artifacts(

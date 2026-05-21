@@ -857,7 +857,10 @@ fn reply_artifact_changed_since(path: &Path, baseline: Option<&ReplyArtifactSnap
 }
 
 fn timeout_reply_recovery_supported_command(command: &str) -> bool {
-    matches!(command, "codex" | "docker run" | "az container create")
+    matches!(
+        command,
+        "codex" | "docker run" | "az container create" | "az container show"
+    )
 }
 
 fn maybe_recover_from_recent_ready_reply_artifact(
@@ -3554,7 +3557,23 @@ fn poll_aci_state(
             .arg("--output")
             .arg("tsv")
             .arg("--only-show-errors");
-        let output = run_command_with_timeout(show_cmd, show_timeout, "az container show")?;
+        let output = match run_command_with_timeout(show_cmd, show_timeout, "az container show") {
+            Ok(output) => output,
+            Err(RunTaskError::CommandTimeout { output, .. }) => {
+                if let Some(state) = parse_terminal_aci_state_from_output(&output) {
+                    return Ok(AciPollState {
+                        container_state: state,
+                        remote_artifact_completion: false,
+                    });
+                }
+                return Err(RunTaskError::CommandTimeout {
+                    command: "az container show",
+                    timeout_secs: show_timeout.as_secs(),
+                    output,
+                });
+            }
+            Err(err) => return Err(err),
+        };
         if !output.status.success() {
             let mut combined = String::new();
             combined.push_str(&String::from_utf8_lossy(&output.stdout));
@@ -3598,6 +3617,21 @@ fn poll_aci_state(
 
 fn remote_aci_result_ready(remote_exit_code_path: &Path) -> bool {
     remote_exit_code_path.is_file()
+}
+
+fn parse_terminal_aci_state_from_output(output: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let state = line.trim().trim_matches('"');
+        if state.eq_ignore_ascii_case("Succeeded")
+            || state.eq_ignore_ascii_case("Failed")
+            || state.eq_ignore_ascii_case("Terminated")
+            || state.eq_ignore_ascii_case("Stopped")
+        {
+            Some(state.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 fn azure_aci_execution_succeeded(
@@ -7009,6 +7043,48 @@ exit 3
 
         assert!(note.contains("Recovered ready reply artifact written during this run"));
         assert!(note.contains("ACI container provisioning timed out"));
+    }
+
+    #[test]
+    fn test_maybe_accept_timeout_with_ready_reply_artifact_recovers_aci_show_timeout() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let reply = temp.path().join("reply_email_draft.html");
+        let baseline = snapshot_reply_artifact(&reply);
+        let run_started_at = SystemTime::now();
+        fs::write(&reply, "<html><body>ready after show timeout</body></html>")
+            .expect("write reply");
+
+        let err = RunTaskError::CommandTimeout {
+            command: "az container show",
+            timeout_secs: 60,
+            output: "Succeeded".to_string(),
+        };
+
+        let note = maybe_accept_timeout_with_ready_reply_artifact(
+            run_started_at,
+            true,
+            temp.path(),
+            &reply,
+            &err,
+            Some(&baseline),
+        )
+        .expect("expected timeout recovery");
+
+        assert!(note.contains("Recovered ready reply artifact written during this run"));
+        assert!(note.contains("ACI container polling timed out"));
+    }
+
+    #[test]
+    fn test_parse_terminal_aci_state_from_timed_out_show_output() {
+        assert_eq!(
+            parse_terminal_aci_state_from_output("warning\nSucceeded\n"),
+            Some("Succeeded".to_string())
+        );
+        assert_eq!(
+            parse_terminal_aci_state_from_output("\"Failed\"\n"),
+            Some("Failed".to_string())
+        );
+        assert_eq!(parse_terminal_aci_state_from_output("Running\n"), None);
     }
 
     #[test]
