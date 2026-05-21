@@ -491,10 +491,11 @@ When asked to scan for bugs, issues, or feedback from community channels:
 5. For each NEW bug report, create a Notion task:
    - Title: Brief summary of the bug
    - Description: Original message content, reporter, timestamp, link to message
-   - Priority: Mark as "High" or "Urgent" if keywords like "critical", "blocking", "crash", "broken", "urgent" are present
+   - Priority: Based on severity and impact described
    - Status: New/Triage
-6. Track processed message IDs in your memory to avoid re-processing
-7. In your reply, list which users submitted new bugs (e.g., "@alice reported login crash, @bob reported slow loading")
+6. **Resolution Detection**: Also scan for messages or replies indicating a bug was resolved (user confirms fix, says it's working, retracts the report, etc.). If found, update the corresponding Notion task to Done/Closed. Resolutions may appear across any org medium (Discord, Slack, Notion comments, etc.).
+7. Track processed message IDs in your memory to avoid re-processing
+8. In your reply, list new bugs submitted and any bugs marked resolved
 
 GitHub CLI (`gh`) - for GitHub repository operations:
 - `gh repo create <name> --public/--private` - Create new repository

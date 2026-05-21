@@ -149,7 +149,12 @@ discord_cli read-messages --channel-id <CHANNEL_ID> --limit 50
 3. Create task with:
    - source: user_feedback
    - Description includes verbatim snippet and reporter
-   - Priority based on severity keywords (crash, broken = P1)
+   - Priority based on severity and impact described
+
+### Resolution Detection
+Also scan for messages or replies indicating a bug was resolved (user confirms fix, says it's working, retracts the report, etc.). If found, update the corresponding Notion task to Done/Closed.
+
+Resolutions may appear across any org medium (Discord, Slack, Notion comments, etc.) - not just where the bug was originally reported.
 
 ### Skip If
 - No Discord guild ID configured
