@@ -1588,6 +1588,148 @@ exit 7
 
 #[test]
 #[cfg(unix)]
+fn run_task_notion_auth_failure_does_not_run_claude_fallback() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_notion_auth_failure").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let claude_counter_path = temp.path.join("claude_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+echo "API Error: API request failed: Status 401 Unauthorized: {\"code\":\"unauthorized\",\"message\":\"API token is invalid.\"}" >&2
+exit 1
+"#,
+    );
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+set -e
+echo invoked >> "$CLAUDE_COUNTER_PATH"
+touch .notion_api_replied
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("CLAUDE_COUNTER_PATH", claude_counter_path.to_str().unwrap()),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let mut params = build_params(&workspace);
+    params.channel = "notion".to_string();
+    let err = run_task(&params).unwrap_err();
+    assert!(err.to_string().contains("API token is invalid"));
+    assert!(
+        !workspace.join(".notion_api_replied").exists(),
+        "Notion auth failures must not be converted into a local marker without a posted Notion comment"
+    );
+    assert!(
+        !claude_counter_path.exists(),
+        "Claude fallback cannot repair invalid Notion auth and should not run"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_notion_content_filter_posts_explanation_via_notion_cli() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_notion_content_filter_notice").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let posted_path = temp.path.join("posted_notion_comment.txt");
+    let claude_counter_path = temp.path.join("claude_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    fs::write(
+        workspace.join(".notion_context.json"),
+        r#"{"page_id":"35d37bc1-a421-81cb-887c-c2510bbb37b9"}"#,
+    )
+    .unwrap();
+    fs::write(
+        workspace.join(".notion_env"),
+        "NOTION_API_TOKEN=valid-token\n",
+    )
+    .unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+echo "I'm sorry, but I cannot assist with that request." >&2
+echo "stream disconnected before completion: Incomplete response returned, reason: content_filter" >&2
+exit 1
+"#,
+    );
+    write_shell_script(
+        &bin_dir,
+        "notion_api_cli",
+        r#"#!/bin/sh
+set -e
+if [ "$1" != "create-comment" ]; then
+  echo "unexpected command $1" >&2
+  exit 2
+fi
+printf '%s\n' "$@" > "$POSTED_NOTION_COMMENT_PATH"
+"#,
+    );
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+set -e
+echo invoked >> "$CLAUDE_COUNTER_PATH"
+exit 7
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("POSTED_NOTION_COMMENT_PATH", posted_path.to_str().unwrap()),
+        ("CLAUDE_COUNTER_PATH", claude_counter_path.to_str().unwrap()),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let mut params = build_params(&workspace);
+    params.channel = "notion".to_string();
+    let result = run_task(&params).unwrap();
+    assert!(workspace.join(".notion_api_replied").exists());
+    let posted = fs::read_to_string(posted_path).unwrap();
+    assert!(posted.contains("create-comment"));
+    assert!(posted.contains("35d37bc1-a421-81cb-887c-c2510bbb37b9"));
+    assert!(posted.contains("Azure/OpenAI content filter"));
+    assert!(!claude_counter_path.exists());
+    assert!(
+        result
+            .terminal_error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("content-filter explanation"),
+        "Notion content-filter explanation should be delivered but recorded as failed terminal status"
+    );
+}
+
+#[test]
+#[cfg(unix)]
 fn run_task_recovers_generic_reply_after_timeout_without_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_timeout_preserve_primary_draft").unwrap();
