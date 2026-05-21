@@ -7,7 +7,7 @@ use send_emails_module::normalize_email_html;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use support::{
     build_params, create_workspace, install_runtime_skills_and_employee_guidance,
     write_fake_claude, write_fake_codex, write_fake_gh, EnvGuard, EnvUnsetGuard, FakeClaudeMode,
@@ -773,6 +773,83 @@ fn azure_aci_timeout_error_falls_back_to_claude() {
             "Recovered via Claude fallback after primary Codex failure (Azure ACI Codex timed out) using Claude model claude-sonnet-4-5"
         )
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_restores_fresh_primary_artifact_when_claude_fallback_fails() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_restore_primary_after_fallback_failure").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
+
+    let trace_dir = workspace.join(".run_task_trace");
+    fs::create_dir_all(&trace_dir).unwrap();
+    let started_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        .saturating_sub(1000);
+    fs::write(
+        trace_dir.join("metadata.json"),
+        format!(r#"{{"started_at_unix_ms":{started_at_ms}}}"#),
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("reply_email_draft.html"),
+        "<html><body>Primary Codex reply was already complete</body></html>",
+    )
+    .unwrap();
+    let attachments_dir = workspace.join("reply_email_attachments");
+    fs::create_dir_all(&attachments_dir).unwrap();
+    fs::write(
+        attachments_dir.join("primary.csv"),
+        "ticker,view\nSMH,starter\n",
+    )
+    .unwrap();
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_claude_fallback_after_codex_failure(
+        &params,
+        RunTaskError::CommandTimeout {
+            command: "az container show",
+            timeout_secs: 60,
+            output: "Succeeded".to_string(),
+        },
+    )
+    .expect("fresh primary artifact should be restored when fallback fails");
+
+    let html = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(html.contains("Primary Codex reply was already complete"));
+    assert_eq!(
+        fs::read_to_string(result.reply_attachments_dir.join("primary.csv")).unwrap(),
+        "ticker,view\nSMH,starter\n"
+    );
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("Recovered valid primary Codex reply artifact"));
+    let fallback_note = fs::read_to_string(
+        workspace
+            .join(".run_task_trace")
+            .join("recovery")
+            .join("codex_to_claude_fallback.txt"),
+    )
+    .unwrap();
+    assert!(fallback_note.contains("status=failed"));
 }
 
 #[test]
