@@ -1765,8 +1765,14 @@ impl TaskExecutor for ModuleExecutor {
                         ))
                     })?;
                 }
-                if let Some(account_id) = account_id {
-                    track_task_success_markers(account_id, task, &task_dedupe_key);
+                let terminal_status = output
+                    .terminal_error_message
+                    .as_ref()
+                    .map(|_| "failed".to_string());
+                if terminal_status.as_deref() != Some("failed") {
+                    if let Some(account_id) = account_id {
+                        track_task_success_markers(account_id, task, &task_dedupe_key);
+                    }
                 }
                 Ok(TaskExecution {
                     follow_up_tasks: output.scheduled_tasks,
@@ -1776,6 +1782,8 @@ impl TaskExecutor for ModuleExecutor {
                     skip_auto_reply: false,
                     superseded: false,
                     terminal_note: output.recovery_note,
+                    terminal_status,
+                    terminal_error_message: output.terminal_error_message,
                 })
             }
             TaskKind::Noop => Ok(TaskExecution::empty()),
@@ -1897,6 +1905,7 @@ mod tests {
             scheduler_actions_error: None,
             token_usage: None,
             recovery_note: recovery_note.map(str::to_string),
+            terminal_error_message: None,
         }
     }
 

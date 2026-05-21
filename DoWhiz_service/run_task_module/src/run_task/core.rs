@@ -19,9 +19,7 @@ use super::utils::split_reply_completion_budget;
 use super::workspace::{prepare_workspace, remap_workspace_dir, write_placeholder_reply};
 
 const MAX_INVESTMENT_MONITOR_PRIMARY_TIMEOUT_SECS: u64 = 30;
-const MAX_INVESTMENT_MONITOR_FAST_COMPLETION_TIMEOUT_SECS: u64 = 20;
-const MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS: u64 = 90;
-const MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS: u64 = 30;
+const MAX_INVESTMENT_MONITOR_FAST_COMPLETION_TIMEOUT_SECS: u64 = 60;
 const MAX_INVESTMENT_CONTENT_FILTER_MONITOR_RETRY_TIMEOUT_SECS: u64 = 20;
 const MAX_INVESTMENT_CONTENT_FILTER_RESEARCH_RETRY_TIMEOUT_SECS: u64 = 45;
 
@@ -47,6 +45,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
             scheduler_actions_error: None,
             token_usage: None,
             recovery_note: None,
+            terminal_error_message: None,
         });
     }
 
@@ -220,6 +219,10 @@ fn maybe_finalize_generic_content_filter_reply(
     };
     fs::write(&reply_path, reply_body)?;
 
+    let recovery_note =
+        "Returned an explicit Azure/OpenAI content-filter explanation to the user instead of retrying hidden output."
+            .to_string();
+
     Ok(Some(RunTaskOutput {
         reply_html_path: reply_path,
         reply_attachments_dir,
@@ -229,10 +232,8 @@ fn maybe_finalize_generic_content_filter_reply(
         scheduler_actions: Vec::new(),
         scheduler_actions_error: None,
         token_usage: None,
-        recovery_note: Some(
-            "Returned an explicit Azure/OpenAI content-filter explanation to the user instead of retrying hidden output."
-                .to_string(),
-        ),
+        recovery_note: Some(recovery_note.clone()),
+        terminal_error_message: Some(recovery_note),
     }))
 }
 
@@ -365,7 +366,8 @@ fn maybe_finalize_investment_operational_failure_reply(
         scheduler_actions: Vec::new(),
         scheduler_actions_error: None,
         token_usage: None,
-        recovery_note: Some(recovery_note),
+        recovery_note: Some(recovery_note.clone()),
+        terminal_error_message: Some(recovery_note),
     }))
 }
 
@@ -490,20 +492,14 @@ fn codex_fast_completion_budget_split(
         }
     }
 
-    let desired_primary = Duration::from_secs(MAX_INVESTMENT_RESEARCH_PRIMARY_TIMEOUT_SECS);
-    let desired_reserve = Duration::from_secs(MAX_INVESTMENT_RESEARCH_FAST_COMPLETION_TIMEOUT_SECS);
-    if total_budget >= desired_primary + desired_reserve {
-        return Ok(Some((desired_primary, desired_reserve)));
+    if !investment_monitor_request_for_workspace(request.workspace_dir)? {
+        return Ok(None);
     }
 
     let Some((primary_timeout, reserve_timeout)) = split_reply_completion_budget(total_budget)
     else {
         return Ok(None);
     };
-
-    if investment_monitor_request_for_workspace(request.workspace_dir)? {
-        return Ok(Some((primary_timeout, reserve_timeout)));
-    }
 
     Ok(Some((primary_timeout, reserve_timeout)))
 }
@@ -843,7 +839,7 @@ mod tests {
             .expect("split")
             .expect("budget split");
         assert_eq!(split.0.as_secs(), 30);
-        assert_eq!(split.1.as_secs(), 20);
+        assert_eq!(split.1.as_secs(), 60);
 
         match prior_timeout {
             Some(value) => env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", value),
@@ -889,7 +885,53 @@ mod tests {
             .expect("split")
             .expect("budget split");
         assert_eq!(split.0.as_secs(), 30);
-        assert_eq!(split.1.as_secs(), 20);
+        assert_eq!(split.1.as_secs(), 60);
+
+        match prior_timeout {
+            Some(value) => env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", value),
+            None => env::remove_var("RUN_TASK_CODEX_TIMEOUT_SECS"),
+        }
+    }
+
+    #[test]
+    fn codex_fast_completion_budget_split_skips_deep_research_requests() {
+        let _lock = acquire_env_test_lock();
+        let temp = TempDir::new().expect("tempdir");
+        let incoming = temp.path().join("incoming_email");
+        fs::create_dir_all(&incoming).expect("incoming dir");
+        fs::write(
+            incoming.join("thread_request.md"),
+            "Help deep research SMH ETF holdings, top 20 portfolio companies, and whether this is a good entry point.\n",
+        )
+        .expect("thread request");
+
+        let prior_timeout = env::var_os("RUN_TASK_CODEX_TIMEOUT_SECS");
+        env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", "480");
+
+        let replies = vec!["user@example.com".to_string()];
+        let identities = UserIdentities::default();
+        let request = RunTaskRequest {
+            workspace_dir: temp.path(),
+            input_email_dir: Path::new("incoming_email"),
+            input_attachments_dir: Path::new("incoming_attachments"),
+            memory_dir: Path::new("memory"),
+            reference_dir: Path::new("references"),
+            model_name: "gpt-5.4",
+            reply_to: &replies,
+            channel: "email",
+            google_access_token: None,
+            notion_access_token: None,
+            has_unified_account: true,
+            user_identities: &identities,
+            thread_epoch: None,
+            thread_state_path: None,
+        };
+
+        let split = codex_fast_completion_budget_split("codex", &request).expect("split");
+        assert!(
+            split.is_none(),
+            "deep research investment requests must not be forced through the short monitor budget split"
+        );
 
         match prior_timeout {
             Some(value) => env::set_var("RUN_TASK_CODEX_TIMEOUT_SECS", value),

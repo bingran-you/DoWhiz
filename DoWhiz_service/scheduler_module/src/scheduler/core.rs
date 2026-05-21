@@ -24,7 +24,7 @@ use super::store::{
     SchedulerStore,
 };
 use super::types::{
-    RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskKind,
+    RunTaskTask, Schedule, ScheduledTask, SchedulerError, SendReplyTask, TaskExecution, TaskKind,
     RUN_TASK_FAILURE_DIR, RUN_TASK_FAILURE_LIMIT, RUN_TASK_FAILURE_NOTICE,
     RUN_TASK_FAILURE_REPORT_DIR,
 };
@@ -303,18 +303,17 @@ impl<E: TaskExecutor> Scheduler<E> {
 
         match result {
             Ok(execution) => {
-                if let Err(err) = self.store.reset_retry_count(&task_id.to_string()) {
-                    warn!(
-                        "failed to reset retry count for task {} after success: {}",
-                        task_id, err
-                    );
+                let terminal_outcome = execution_terminal_outcome(&execution);
+                let terminal_status = terminal_outcome.status.as_str();
+                let terminal_note = terminal_outcome.note;
+                if terminal_status != "failed" {
+                    if let Err(err) = self.store.reset_retry_count(&task_id.to_string()) {
+                        warn!(
+                            "failed to reset retry count for task {} after terminal status {}: {}",
+                            task_id, terminal_status, err
+                        );
+                    }
                 }
-                let terminal_status = if execution.superseded {
-                    "superseded"
-                } else {
-                    "success"
-                };
-                let terminal_note = execution.terminal_note.clone();
                 self.store.record_execution_finish(
                     task_id,
                     execution_handle,
@@ -415,14 +414,14 @@ impl<E: TaskExecutor> Scheduler<E> {
                             err
                         );
                     }
-                    // Sync success status to user's account-level storage for Discord/Slack
+                    // Sync terminal status to user's account-level storage for Discord/Slack.
                     sync_task_status_to_user_storage(
                         task_id,
                         task,
                         execution_handle,
                         executed_at,
-                        "success",
-                        None,
+                        terminal_status,
+                        terminal_note.as_deref(),
                     );
                 }
                 if let Some(session) = archive_session.take() {
@@ -430,8 +429,8 @@ impl<E: TaskExecutor> Scheduler<E> {
                         &task_before_snapshot,
                         &self.tasks[index],
                         executed_at,
-                        "success",
-                        None,
+                        terminal_status,
+                        terminal_note.as_deref(),
                     ) {
                         Ok(record) => {
                             if let Err(err) = self.store.record_task_debug_archive(&record) {
@@ -630,6 +629,27 @@ impl<E: TaskExecutor> Scheduler<E> {
         }
         // Update in database
         self.store.disable_task_by_id(task_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExecutionTerminalOutcome {
+    pub status: String,
+    pub note: Option<String>,
+}
+
+pub(crate) fn execution_terminal_outcome(execution: &TaskExecution) -> ExecutionTerminalOutcome {
+    let status = if execution.superseded {
+        "superseded"
+    } else {
+        execution.terminal_status.as_deref().unwrap_or("success")
+    };
+    ExecutionTerminalOutcome {
+        status: status.to_string(),
+        note: execution
+            .terminal_error_message
+            .clone()
+            .or_else(|| execution.terminal_note.clone()),
     }
 }
 

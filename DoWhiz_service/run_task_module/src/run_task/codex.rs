@@ -791,13 +791,16 @@ fn maybe_recover_from_ready_reply_artifact(
     expected_reply_path: &Path,
     exit_status: Option<i32>,
     failure_output: &str,
+    baseline: Option<&ReplyArtifactSnapshot>,
 ) -> Option<String> {
     if !reply_expected {
         return None;
     }
 
     let failure_description = late_codex_failure_description(exit_status, failure_output);
-    if reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+    if reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
+        && reply_artifact_changed_since(expected_reply_path, baseline)
+    {
         return Some(format!(
             "Recovered ready reply artifact after {}",
             failure_description
@@ -805,7 +808,9 @@ fn maybe_recover_from_ready_reply_artifact(
     }
     let session_path =
         maybe_recover_reply_artifact_from_recent_session(workspace_dir, expected_reply_path)?;
-    if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path) {
+    if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
+        || !reply_artifact_changed_since(expected_reply_path, baseline)
+    {
         return None;
     }
 
@@ -830,6 +835,27 @@ fn reply_artifact_modified_after(path: &Path, earliest_mtime: SystemTime) -> boo
         .is_ok_and(|modified| modified >= earliest_mtime)
 }
 
+#[derive(Debug, Clone)]
+struct ReplyArtifactSnapshot {
+    bytes: Option<Vec<u8>>,
+}
+
+fn snapshot_reply_artifact(path: &Path) -> ReplyArtifactSnapshot {
+    ReplyArtifactSnapshot {
+        bytes: fs::read(path).ok(),
+    }
+}
+
+fn reply_artifact_changed_since(path: &Path, baseline: Option<&ReplyArtifactSnapshot>) -> bool {
+    let Some(baseline) = baseline else {
+        return true;
+    };
+    let Ok(current) = fs::read(path) else {
+        return false;
+    };
+    baseline.bytes.as_deref() != Some(current.as_slice())
+}
+
 fn timeout_reply_recovery_supported_command(command: &str) -> bool {
     matches!(command, "codex" | "docker run" | "az container create")
 }
@@ -841,6 +867,7 @@ fn maybe_recover_from_recent_ready_reply_artifact(
     expected_reply_path: &Path,
     exit_status: Option<i32>,
     failure_output: &str,
+    baseline: Option<&ReplyArtifactSnapshot>,
 ) -> Option<String> {
     if !reply_expected {
         return None;
@@ -850,6 +877,7 @@ fn maybe_recover_from_recent_ready_reply_artifact(
     let freshness_floor = timeout_reply_artifact_freshness_floor(run_started_at);
     if reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
         && reply_artifact_modified_after(expected_reply_path, freshness_floor)
+        && reply_artifact_changed_since(expected_reply_path, baseline)
     {
         return Some(format!(
             "Recovered ready reply artifact written during this run after {}",
@@ -864,6 +892,7 @@ fn maybe_recover_from_recent_ready_reply_artifact(
     )?;
     if !reply_artifact_ready_for_workspace(workspace_dir, expected_reply_path)
         || !reply_artifact_modified_after(expected_reply_path, freshness_floor)
+        || !reply_artifact_changed_since(expected_reply_path, baseline)
     {
         return None;
     }
@@ -910,6 +939,7 @@ fn maybe_accept_timeout_with_ready_reply_artifact(
     workspace_dir: &Path,
     expected_reply_path: &Path,
     err: &RunTaskError,
+    baseline: Option<&ReplyArtifactSnapshot>,
 ) -> Option<String> {
     let RunTaskError::CommandTimeout { command, .. } = err else {
         return None;
@@ -925,6 +955,7 @@ fn maybe_accept_timeout_with_ready_reply_artifact(
         expected_reply_path,
         None,
         &err.to_string(),
+        baseline,
     )
 }
 
@@ -961,6 +992,7 @@ fn validate_warm_pool_codex_result(
             expected_reply_path,
             Some(exit_status),
             &err.to_string(),
+            None,
         ) {
             return Ok(Some(recovery_note));
         }
@@ -986,6 +1018,7 @@ fn validate_warm_pool_codex_result(
             expected_reply_path,
             status,
             &err.to_string(),
+            None,
         ) {
             return Ok(Some(recovery_note));
         }
@@ -1066,6 +1099,7 @@ fn run_codex_task_with_options(
     }
     let expected_reply_path =
         resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
+    let reply_artifact_baseline = snapshot_reply_artifact(&expected_reply_path);
     let investment_request = investment_request_for_workspace(request.workspace_dir)?;
     let _browserbase_cleanup = BrowserbaseSessionCleanupGuard::new(request.workspace_dir);
     let cancel_monitor = request
@@ -1468,6 +1502,7 @@ fn run_codex_task_with_options(
                     request.workspace_dir,
                     &expected_reply_path,
                     &err,
+                    Some(&reply_artifact_baseline),
                 ) {
                     let output_tail = tail_string(&err.to_string(), 2000);
                     record_codex_success(
@@ -1487,6 +1522,7 @@ fn run_codex_task_with_options(
                         scheduler_actions_error: None,
                         token_usage: None,
                         recovery_note: Some(recovery_note),
+                        terminal_error_message: None,
                     });
                 }
                 let _ = trace.finish(None, false, Some(&err.to_string()), None);
@@ -1617,6 +1653,7 @@ fn run_codex_task_with_options(
                     request.workspace_dir,
                     &expected_reply_path,
                     &err,
+                    Some(&reply_artifact_baseline),
                 ) {
                     let output_tail = tail_string(&err.to_string(), 2000);
                     record_codex_success(
@@ -1636,6 +1673,7 @@ fn run_codex_task_with_options(
                         scheduler_actions_error: None,
                         token_usage: None,
                         recovery_note: Some(recovery_note),
+                        terminal_error_message: None,
                     });
                 }
                 let _ = trace.finish(None, false, Some(&err.to_string()), None);
@@ -1678,6 +1716,7 @@ fn run_codex_task_with_options(
             scheduler_actions_error,
             token_usage,
             recovery_note: Some(note),
+            terminal_error_message: None,
         });
     }
     if !output.status.success() {
@@ -1705,6 +1744,7 @@ fn run_codex_task_with_options(
                 scheduler_actions_error,
                 token_usage,
                 recovery_note: Some(note),
+                terminal_error_message: None,
             });
         }
         let err = if use_docker {
@@ -1724,6 +1764,7 @@ fn run_codex_task_with_options(
             &expected_reply_path,
             output.status.code(),
             &err.to_string(),
+            Some(&reply_artifact_baseline),
         ) {
             record_codex_success(
                 &mut trace,
@@ -1742,6 +1783,7 @@ fn run_codex_task_with_options(
                 scheduler_actions_error,
                 token_usage,
                 recovery_note: Some(recovery_note),
+                terminal_error_message: None,
             });
         }
         let _ = trace.finish(
@@ -1781,6 +1823,7 @@ fn run_codex_task_with_options(
             &expected_reply_path,
             status,
             &err.to_string(),
+            Some(&reply_artifact_baseline),
         ) {
             record_codex_success(
                 &mut trace,
@@ -1799,6 +1842,7 @@ fn run_codex_task_with_options(
                 scheduler_actions_error,
                 token_usage,
                 recovery_note: Some(recovery_note),
+                terminal_error_message: None,
             });
         }
         let _ = trace.finish(status, false, Some(&err.to_string()), token_usage.as_ref());
@@ -1832,6 +1876,7 @@ fn run_codex_task_with_options(
                     scheduler_actions_error,
                     token_usage,
                     recovery_note: None,
+                    terminal_error_message: None,
                 });
             }
             Err(err) => err,
@@ -1862,6 +1907,7 @@ fn run_codex_task_with_options(
         scheduler_actions_error,
         token_usage,
         recovery_note: None,
+        terminal_error_message: None,
     })
 }
 
@@ -1929,6 +1975,9 @@ fn run_codex_task_azure_aci(
     let config = load_azure_aci_config()?;
     let mut timing = TaskTimingBuilder::new("pending");
     timing.start_stage();
+    let expected_reply_path =
+        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
+    let reply_artifact_baseline = snapshot_reply_artifact(&expected_reply_path);
 
     let host_workspace_dir = canonicalize_dir(request.workspace_dir)?;
     let host_share_root = canonicalize_dir(&config.host_share_root)?;
@@ -2307,8 +2356,6 @@ fn run_codex_task_azure_aci(
     if remote_exit_code_path.exists() {
         let _ = trace.copy_file(&remote_exit_code_path, "aci/remote_exit_code.txt");
     }
-    let expected_reply_path =
-        resolve_expected_reply_path(request.workspace_dir, reply_html_path.clone());
     let execution = match execution {
         Ok(execution) => execution,
         Err(err) => {
@@ -2320,6 +2367,7 @@ fn run_codex_task_azure_aci(
                 request.workspace_dir,
                 &expected_reply_path,
                 &err,
+                Some(&reply_artifact_baseline),
             ) {
                 let output_tail = if output_content.trim().is_empty() {
                     tail_string(&err.to_string(), 4000)
@@ -2357,6 +2405,7 @@ fn run_codex_task_azure_aci(
                     scheduler_actions_error,
                     token_usage,
                     recovery_note: Some(recovery_note),
+                    terminal_error_message: None,
                 });
             }
             let completed_timing = timing.finish();
@@ -2419,6 +2468,7 @@ fn run_codex_task_azure_aci(
             &expected_reply_path,
             exit_status,
             &err.to_string(),
+            Some(&reply_artifact_baseline),
         ) {
             let completed_timing = timing.finish();
             let _ = trace.record_timing(&completed_timing);
@@ -2440,6 +2490,7 @@ fn run_codex_task_azure_aci(
                 scheduler_actions_error,
                 token_usage,
                 recovery_note: Some(recovery_note),
+                terminal_error_message: None,
             });
         }
         let completed_timing = timing.finish();
@@ -2483,6 +2534,7 @@ fn run_codex_task_azure_aci(
                     scheduler_actions_error,
                     token_usage,
                     recovery_note: None,
+                    terminal_error_message: None,
                 });
             }
             Err(err) => err,
@@ -2520,6 +2572,7 @@ fn run_codex_task_azure_aci(
         scheduler_actions_error,
         token_usage,
         recovery_note: None,
+        terminal_error_message: None,
     })
 }
 
@@ -5208,6 +5261,7 @@ pub fn run_codex_warm_pool(
         scheduler_actions_error,
         token_usage,
         recovery_note,
+        terminal_error_message: None,
     })
 }
 
@@ -6922,6 +6976,7 @@ exit 3
             &reply,
             Some(23),
             "response.failed event received",
+            None,
         )
         .expect("expected recovery note");
 
@@ -6932,6 +6987,7 @@ exit 3
     fn test_maybe_accept_timeout_with_ready_reply_artifact_recovers_recent_non_investment_reply() {
         let temp = tempfile::tempdir().expect("tempdir");
         let reply = temp.path().join("reply_email_draft.html");
+        let baseline = snapshot_reply_artifact(&reply);
         let run_started_at = SystemTime::now();
         fs::write(&reply, "<html><body>ready</body></html>").expect("write reply");
 
@@ -6947,6 +7003,7 @@ exit 3
             temp.path(),
             &reply,
             &err,
+            Some(&baseline),
         )
         .expect("expected timeout recovery");
 
@@ -6975,11 +7032,43 @@ exit 3
             temp.path(),
             &reply,
             &err,
+            None,
         );
 
         assert!(
             note.is_none(),
             "stale reply artifact should not be accepted"
+        );
+    }
+
+    #[test]
+    fn test_maybe_accept_timeout_with_ready_reply_artifact_rejects_refreshed_unchanged_reply() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let reply = temp.path().join("reply_email_draft.html");
+        let stale_body = "<html><body>old but mechanically valid</body></html>";
+        fs::write(&reply, stale_body).expect("write stale reply");
+        let baseline = snapshot_reply_artifact(&reply);
+        let run_started_at = SystemTime::now();
+        fs::write(&reply, stale_body).expect("refresh stale reply mtime without changing content");
+
+        let err = RunTaskError::CommandTimeout {
+            command: "az container create",
+            timeout_secs: 300,
+            output: "container create timed out".to_string(),
+        };
+
+        let note = maybe_accept_timeout_with_ready_reply_artifact(
+            run_started_at,
+            true,
+            temp.path(),
+            &reply,
+            &err,
+            Some(&baseline),
+        );
+
+        assert!(
+            note.is_none(),
+            "timeout recovery must not accept an unchanged pre-existing artifact even if its mtime was refreshed"
         );
     }
 

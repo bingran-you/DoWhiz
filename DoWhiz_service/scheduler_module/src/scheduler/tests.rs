@@ -15,6 +15,7 @@ use super::{
     actions::{
         apply_scheduler_actions, resolve_schedule_request_with_context, schedule_send_email,
     },
+    core::execution_terminal_outcome,
     is_user_visible_routine_task, maybe_repair_legacy_weekday_cron_task, prepare_task_for_resume,
     snapshot::build_scheduler_snapshot,
     RunTaskTask, Schedule, ScheduledTask, Scheduler, SchedulerError, TaskExecution, TaskExecutor,
@@ -45,6 +46,21 @@ impl FailingExecutor {
 impl TaskExecutor for FailingExecutor {
     fn execute(&self, _task: &TaskKind) -> Result<TaskExecution, SchedulerError> {
         Err(SchedulerError::TaskFailed(self.message.clone()))
+    }
+}
+
+#[derive(Default)]
+struct TerminalFailureReplyExecutor;
+
+impl TaskExecutor for TerminalFailureReplyExecutor {
+    fn execute(&self, _task: &TaskKind) -> Result<TaskExecution, SchedulerError> {
+        Ok(TaskExecution {
+            terminal_status: Some("failed".to_string()),
+            terminal_error_message: Some(
+                "Investment analysis runners failed after all configured attempts".to_string(),
+            ),
+            ..TaskExecution::empty()
+        })
     }
 }
 
@@ -733,6 +749,80 @@ fn execution_status_can_be_recorded_for_task() {
         assert_eq!(tasks[0].id, specific_id.to_string());
         assert_eq!(tasks[0].execution_status, Some("success".to_string()));
     }
+}
+
+#[test]
+fn terminal_failure_reply_outcome_uses_failed_status_and_error_note() {
+    let execution = TaskExecution {
+        terminal_status: Some("failed".to_string()),
+        terminal_error_message: Some(
+            "Investment analysis runners failed after all configured attempts".to_string(),
+        ),
+        terminal_note: Some("generic recovery note".to_string()),
+        ..TaskExecution::empty()
+    };
+
+    let outcome = execution_terminal_outcome(&execution);
+    assert_eq!(outcome.status, "failed");
+    assert_eq!(
+        outcome.note.as_deref(),
+        Some("Investment analysis runners failed after all configured attempts")
+    );
+}
+
+#[test]
+fn terminal_failure_reply_is_sent_but_run_task_status_is_failed() {
+    use super::store::SchedulerStore;
+
+    if !mongo_execution_tests_enabled() {
+        eprintln!("skipping Mongo-backed scheduler integration test: MONGODB_URI/MONGODB_DATABASE not set");
+        return;
+    }
+
+    let temp = TempDir::new().expect("tempdir");
+    let tasks_db = temp.path().join("tasks.db");
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail");
+    fs::write(
+        workspace.join("reply_email_draft.html"),
+        "<html><body><p>Analysis could not be completed.</p></body></html>",
+    )
+    .expect("reply draft");
+
+    let run_task = base_run_task(&workspace, &mail_root);
+    let task_id = {
+        let mut scheduler =
+            Scheduler::load(&tasks_db, TerminalFailureReplyExecutor).expect("load scheduler");
+        let task_id = scheduler
+            .add_one_shot_in(Duration::from_secs(0), TaskKind::RunTask(run_task))
+            .expect("add run task");
+        scheduler.tick().expect("tick");
+        task_id
+    };
+
+    let store = SchedulerStore::new(tasks_db).expect("open store");
+    let tasks = store.list_tasks_with_status().expect("list tasks");
+    let run_task_summary = tasks
+        .iter()
+        .find(|task| task.id == task_id.to_string())
+        .expect("run task summary");
+    assert_eq!(run_task_summary.execution_status.as_deref(), Some("failed"));
+    assert!(
+        run_task_summary
+            .error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("Investment analysis runners failed"),
+        "terminal failure message should be visible on the failed run task"
+    );
+    assert!(
+        tasks
+            .iter()
+            .any(|task| task.kind == "send_email" && task.channel == "email"),
+        "terminal failure reply should still schedule an outbound email"
+    );
 }
 
 #[test]

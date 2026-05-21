@@ -33,6 +33,8 @@ impl TaskExecutor for FollowUpExecutor {
                     skip_auto_reply: false,
                     superseded: false,
                     terminal_note: None,
+                    terminal_status: None,
+                    terminal_error_message: None,
                 })
             }
             _ => Ok(TaskExecution::default()),
