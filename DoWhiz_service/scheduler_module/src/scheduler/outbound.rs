@@ -76,6 +76,34 @@ fn resolve_slack_bot_token_for_send(task: &SendReplyTask) -> Result<String, Sche
     })
 }
 
+fn parse_slack_compound_reply_target(value: &str) -> Option<(String, Option<String>)> {
+    let mut parts = value.splitn(4, ':');
+    if parts.next()? != "slack" {
+        return None;
+    }
+    let channel = parts.next()?.trim();
+    if channel.is_empty() {
+        return None;
+    }
+    let thread_ts = parts
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    Some((channel.to_string(), thread_ts.map(ToOwned::to_owned)))
+}
+
+fn slack_inactive_account_error(task: &SendReplyTask) -> SchedulerError {
+    let metadata = task.normalized_channel_metadata();
+    SchedulerError::TaskFailed(format!(
+        "Slack account is inactive for team {}. Reinstall or relink the Slack integration for employee {} before retrying this Slack-originated task.",
+        metadata
+            .slack_team_id
+            .as_deref()
+            .unwrap_or("unknown"),
+        task.employee_id.as_deref().unwrap_or("unknown")
+    ))
+}
+
 /// Execute a SendReplyTask via Slack.
 pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerError> {
     use crate::adapters::slack::SlackOutboundAdapter;
@@ -84,6 +112,10 @@ pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerEr
     dotenvy::dotenv().ok();
     let bot_token = resolve_slack_bot_token_for_send(task)?;
     let metadata = task.normalized_channel_metadata();
+    let compound_target = task
+        .to
+        .iter()
+        .find_map(|value| parse_slack_compound_reply_target(value));
 
     let adapter = SlackOutboundAdapter::new(bot_token);
 
@@ -105,12 +137,17 @@ pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerEr
         html_body: String::new(),
         html_path: Some(task.html_path.clone()),
         attachments_dir: Some(task.attachments_dir.clone()),
-        thread_id: task.in_reply_to.clone(), // Use in_reply_to as thread_ts for Slack
+        thread_id: task.in_reply_to.clone().or_else(|| {
+            compound_target
+                .as_ref()
+                .and_then(|(_, thread_ts)| thread_ts.clone())
+        }),
         metadata: ChannelMetadata {
             // For Slack, reply_to[0] = user_id, reply_to[1] = channel_id
             slack_channel_id: metadata
                 .slack_channel_id
                 .clone()
+                .or_else(|| compound_target.as_ref().map(|(channel, _)| channel.clone()))
                 .or_else(|| task.to.get(1).cloned())
                 .or_else(|| task.to.first().cloned()),
             slack_team_id: metadata.slack_team_id.clone(),
@@ -118,9 +155,14 @@ pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerEr
         },
     };
 
-    let result = adapter
-        .send(&message)
-        .map_err(|err| SchedulerError::TaskFailed(format!("Slack send failed: {}", err)))?;
+    let result = adapter.send(&message).map_err(|err| {
+        let err_text = err.to_string();
+        if err_text.contains("account_inactive") {
+            slack_inactive_account_error(task)
+        } else {
+            SchedulerError::TaskFailed(format!("Slack send failed: {}", err_text))
+        }
+    })?;
 
     if !result.success {
         if result.error.as_deref() == Some("channel_not_found") {
@@ -135,6 +177,9 @@ pub(crate) fn execute_slack_send(task: &SendReplyTask) -> Result<(), SchedulerEr
             return Err(SchedulerError::TaskFailed(
                 "Slack user not found in this workspace. The recipient may have linked their Slack account from a different workspace. Please ask them to re-link Slack from the correct workspace in their DoWhiz settings.".to_string()
             ));
+        }
+        if result.error.as_deref() == Some("account_inactive") {
+            return Err(slack_inactive_account_error(task));
         }
         return Err(SchedulerError::TaskFailed(format!(
             "Slack API error: {}",
@@ -1045,8 +1090,8 @@ pub(crate) fn execute_notion_send(task: &SendReplyTask) -> Result<(), SchedulerE
 #[cfg(test)]
 mod tests {
     use super::{
-        execute_email_send, is_discord_unknown_message_reference, split_discord_message_chunks,
-        DISCORD_MAX_CONTENT_CHARS,
+        execute_email_send, execute_slack_send, is_discord_unknown_message_reference,
+        parse_slack_compound_reply_target, split_discord_message_chunks, DISCORD_MAX_CONTENT_CHARS,
     };
     use crate::channel::Channel;
     use crate::scheduler::types::SendReplyTask;
@@ -1110,6 +1155,73 @@ mod tests {
         assert_eq!(chunks[0].chars().count(), DISCORD_MAX_CONTENT_CHARS);
         assert_eq!(chunks[1].chars().count(), 3);
         assert_eq!(chunks.concat(), text);
+    }
+
+    #[test]
+    fn parse_slack_compound_reply_target_extracts_channel_and_thread() {
+        assert_eq!(
+            parse_slack_compound_reply_target("slack:C123:1777269474.488829"),
+            Some(("C123".to_string(), Some("1777269474.488829".to_string())))
+        );
+        assert_eq!(
+            parse_slack_compound_reply_target("slack:D123"),
+            Some(("D123".to_string(), None))
+        );
+        assert_eq!(parse_slack_compound_reply_target("C123"), None);
+    }
+
+    #[test]
+    fn execute_slack_send_reports_inactive_account_with_relink_guidance(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut server = Server::new();
+        let slack_mock = server
+            .mock("POST", "/chat.postMessage")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ok":false,"error":"account_inactive"}"#)
+            .expect(1)
+            .create();
+
+        let _env = EnvGuard::set(&[
+            ("SLACK_BOT_TOKEN", "xoxb-inactive"),
+            ("SLACK_BOT_USER_ID", "UINACTIVE"),
+            ("SLACK_API_BASE_URL", server.url().as_str()),
+        ]);
+        let temp = TempDir::new()?;
+        let reply_path = temp.path().join("reply_message.txt");
+        fs::write(&reply_path, "hello")?;
+        let attachments_dir = temp.path().join("reply_attachments");
+        fs::create_dir_all(&attachments_dir)?;
+        let task = SendReplyTask {
+            channel: Channel::Slack,
+            subject: "Slack reply".to_string(),
+            html_path: reply_path,
+            attachments_dir,
+            from: None,
+            to: vec!["slack:C123:1777269474.488829".to_string()],
+            cc: vec![],
+            bcc: vec![],
+            in_reply_to: None,
+            references: None,
+            archive_root: None,
+            thread_epoch: None,
+            thread_state_path: None,
+            employee_id: Some("little_bear".to_string()),
+            channel_metadata: Default::default(),
+        };
+
+        let err = execute_slack_send(&task).expect_err("inactive Slack token should fail");
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("Slack account is inactive"),
+            "unexpected error: {rendered}"
+        );
+        assert!(
+            rendered.contains("Reinstall or relink"),
+            "unexpected error: {rendered}"
+        );
+        slack_mock.assert();
+        Ok(())
     }
 
     #[test]

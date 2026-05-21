@@ -1234,14 +1234,22 @@ sleep 20
     let html = fs::read_to_string(&result.reply_html_path).unwrap();
     assert!(html.contains("Investment analysis could not be completed"));
     assert!(html.contains("No investment recommendation is included"));
-    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "2");
-    assert!(workspace.join("codex_fast_completion_context.md").exists());
+    assert_eq!(fs::read_to_string(&counter_path).unwrap(), "1");
+    assert!(!workspace.join("codex_fast_completion_context.md").exists());
     assert!(!html.contains("Quick update on"));
     assert!(!html.contains("Unable to Verify"));
     assert!(!html.contains("No recommendation"));
     let note = result.recovery_note.as_deref().unwrap_or("");
     assert!(note.contains("operational failure reply"));
     assert!(!note.contains("Claude fallback"));
+    assert!(
+        result
+            .terminal_error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("operational failure reply"),
+        "operational failure reply should not be recorded as a successful task execution"
+    );
 }
 
 #[test]
@@ -1568,6 +1576,14 @@ exit 7
     );
     let note = result.recovery_note.unwrap_or_default();
     assert!(note.contains("content-filter explanation"));
+    assert!(
+        result
+            .terminal_error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("content-filter explanation"),
+        "content-filter explanation replies should be delivered but recorded as failed executions"
+    );
 }
 
 #[test]

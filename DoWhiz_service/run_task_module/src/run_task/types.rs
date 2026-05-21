@@ -225,4 +225,8 @@ pub struct RunTaskOutput {
     pub scheduler_actions_error: Option<String>,
     pub token_usage: Option<TokenUsage>,
     pub recovery_note: Option<String>,
+    /// Set when a user-facing failure artifact was intentionally written and
+    /// should be delivered, but the scheduler execution must still be marked
+    /// failed rather than completed.
+    pub terminal_error_message: Option<String>,
 }

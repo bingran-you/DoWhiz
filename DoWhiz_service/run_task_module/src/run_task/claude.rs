@@ -162,6 +162,7 @@ pub(super) fn run_claude_task(
                     scheduler_actions_error: None,
                     token_usage: None,
                     recovery_note: Some(recovery_note),
+                    terminal_error_message: None,
                 });
             }
             let _ = trace.finish(None, false, Some(&err.to_string()), None);
@@ -212,6 +213,7 @@ pub(super) fn run_claude_task(
                 scheduler_actions_error: None,
                 token_usage: None,
                 recovery_note: Some(recovery_note),
+                terminal_error_message: None,
             });
         }
         let _ = trace.finish(output.status.code(), false, Some(&err.to_string()), None);
@@ -244,6 +246,7 @@ pub(super) fn run_claude_task(
                     scheduler_actions_error,
                     token_usage: None, // TODO: Extract from Claude API response
                     recovery_note: None,
+                    terminal_error_message: None,
                 });
             }
             Err(err) => err,
@@ -263,6 +266,7 @@ pub(super) fn run_claude_task(
         scheduler_actions_error,
         token_usage: None, // TODO: Extract from Claude API response
         recovery_note: None,
+        terminal_error_message: None,
     })
 }
 

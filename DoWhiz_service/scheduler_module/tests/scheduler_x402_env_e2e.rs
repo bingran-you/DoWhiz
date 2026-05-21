@@ -99,6 +99,11 @@ impl TaskExecutor for RecordingExecutor {
                     skip_auto_reply: false,
                     superseded: false,
                     terminal_note: output.recovery_note,
+                    terminal_status: output
+                        .terminal_error_message
+                        .as_ref()
+                        .map(|_| "failed".to_string()),
+                    terminal_error_message: output.terminal_error_message,
                 })
             }
             TaskKind::SendReply(_) => Ok(TaskExecution::default()),

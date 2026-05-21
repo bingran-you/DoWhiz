@@ -272,6 +272,8 @@ pub struct TaskExecution {
     pub skip_auto_reply: bool,
     pub superseded: bool,
     pub terminal_note: Option<String>,
+    pub terminal_status: Option<String>,
+    pub terminal_error_message: Option<String>,
 }
 
 impl TaskExecution {

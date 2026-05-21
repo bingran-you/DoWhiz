@@ -95,6 +95,12 @@ const INCOMPLETE_FAIL_SOFT_MARKERS: &[&str] = &[
     "best-available timed artifact",
     "best-available timed reply",
     "incomplete monitor check",
+    "unable to verify",
+    "no recommendation",
+    "could not finish a reliable investment update",
+    "within the bounded runtime",
+    "bounded monitor reply",
+    "half-verified buy",
 ];
 #[allow(dead_code)]
 const INCOMPLETE_RESEARCH_MARKERS: &[&str] = &[
@@ -137,6 +143,8 @@ const INVESTMENT_INTENT_KEYWORDS: &[&str] = &[
     "buy before",
     "starter position",
     "buy now",
+    "buy, hold, or sell",
+    "buy / hold / sell",
     "add or trim",
     "trim or exit",
     "avoid for now",
@@ -294,8 +302,22 @@ fn investment_contract_violations(
     } else {
         reply_body.clone()
     };
+    let normalized_reply = normalize_search_text(&visible_text);
     if visible_text.trim().is_empty() {
         violations.push("reply artifact has no visible text".to_string());
+    }
+    if chat_reply_contains_html_shell(reply_path, &reply_body) {
+        violations
+            .push("chat reply artifact contains HTML markup instead of plain text".to_string());
+    }
+    if is_incomplete_fail_soft_artifact(&normalized_reply)
+        || is_incomplete_research_artifact(&normalized_reply)
+        || reply_looks_like_templated_incomplete_investment_output(&normalized_reply)
+    {
+        violations.push(
+            "investment reply is an incomplete/fail-soft runtime artifact, not a valid user-facing investment answer"
+                .to_string(),
+        );
     }
 
     if violations.is_empty() {
@@ -312,6 +334,16 @@ fn looks_like_html_reply(reply_path: &Path, body: &str) -> bool {
     ) || body.contains('<')
 }
 
+fn chat_reply_contains_html_shell(reply_path: &Path, body: &str) -> bool {
+    if reply_path.file_name().and_then(|value| value.to_str()) != Some("reply_message.txt") {
+        return false;
+    }
+    let lower = body.to_ascii_lowercase();
+    ["<html", "<body", "<p", "<section", "<table", "<h1", "<h2"]
+        .iter()
+        .any(|marker| lower.contains(marker))
+}
+
 #[allow(dead_code)]
 fn detect_contract_type(normalized_reply: &str) -> &'static str {
     if normalized_reply.contains("why now")
@@ -325,14 +357,12 @@ fn detect_contract_type(normalized_reply: &str) -> &'static str {
     }
 }
 
-#[allow(dead_code)]
 fn is_incomplete_fail_soft_artifact(normalized_reply: &str) -> bool {
     INCOMPLETE_FAIL_SOFT_MARKERS
         .iter()
         .any(|marker| normalized_reply.contains(marker))
 }
 
-#[allow(dead_code)]
 fn is_incomplete_research_artifact(normalized_reply: &str) -> bool {
     INCOMPLETE_RESEARCH_MARKERS
         .iter()
@@ -1096,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_research_pseudo_memo_passes_mechanical_validation() {
+    fn incomplete_research_pseudo_memo_fails_contract_validation() {
         let workspace = write_workspace(
             "Give me a deep research about the Nokia stock, and tell me whether it is a good time to buy.",
             r#"
@@ -1170,12 +1200,13 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect("runtime should not block based on semantic completeness");
+        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect_err("incomplete research artifact should not be user-facing success");
+        assert!(err.to_string().contains("incomplete/fail-soft"));
     }
 
     #[test]
-    fn incomplete_short_monitor_artifact_passes_mechanical_validation() {
+    fn incomplete_short_monitor_artifact_fails_contract_validation() {
         let workspace = write_workspace(
             "Check whether anything material changed for NVDA since your last note. Only tell me if I should act.",
             r#"
@@ -1217,7 +1248,35 @@ mod tests {
         );
         let reply_path = workspace.join("reply_email_draft.html");
 
-        ensure_expected_reply_artifact(&workspace, &reply_path, "")
-            .expect("runtime should not block based on semantic completeness");
+        let err = ensure_expected_reply_artifact(&workspace, &reply_path, "")
+            .expect_err("short monitor fail-soft should not be user-facing success");
+        assert!(err.to_string().contains("incomplete/fail-soft"));
+    }
+
+    #[test]
+    fn slack_html_fail_soft_investment_reply_fails_contract_validation() {
+        let workspace = write_workspace(
+            "You are a Wall Street Analyst. Watch out for the stock SOFI and HOOD. Let me know buy, hold, or sell.",
+            r#"
+            <html>
+              <body>
+                <h1>Quick update on SOFI (SOFI)</h1>
+                <p><strong>As of:</strong> 2026-05-08</p>
+                <p><strong>Status:</strong> Unable to Verify</p>
+                <p><strong>Action:</strong> No recommendation</p>
+                <p><strong>Why:</strong> I could not finish a reliable investment update within the bounded runtime, so I am not sending a half-verified buy / wait / avoid call.</p>
+              </body>
+            </html>
+            "#,
+        );
+        let email_reply = workspace.join("reply_email_draft.html");
+        let slack_reply = workspace.join("reply_message.txt");
+        fs::rename(email_reply, &slack_reply).expect("rename reply");
+
+        let err = ensure_expected_reply_artifact(&workspace, &slack_reply, "")
+            .expect_err("Slack investment reply must not accept stale HTML fail-soft");
+        let rendered = err.to_string();
+        assert!(rendered.contains("HTML markup instead of plain text"));
+        assert!(rendered.contains("incomplete/fail-soft"));
     }
 }
