@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use super::claude::run_claude_task;
@@ -15,7 +16,7 @@ use super::reply_contract::{
 };
 use super::trace::RUN_TASK_TRACE_DIRNAME;
 use super::types::{RunTaskOutput, RunTaskParams, RunTaskRequest};
-use super::utils::split_reply_completion_budget;
+use super::utils::{split_reply_completion_budget, tail_string};
 use super::workspace::{prepare_workspace, remap_workspace_dir, write_placeholder_reply};
 
 const MAX_INVESTMENT_MONITOR_PRIMARY_TIMEOUT_SECS: u64 = 30;
@@ -80,6 +81,9 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
         Err(primary_err) => {
             let mut fallback_primary_err = primary_err;
             let mut allow_fast_completion_retry = codex_budget_split.is_some();
+            if is_notion_unrecoverable_reply_failure(params, &fallback_primary_err) {
+                return Err(fallback_primary_err);
+            }
             if runner.eq_ignore_ascii_case("codex")
                 && investment_request
                 && !params.reply_to.is_empty()
@@ -136,6 +140,9 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                 )? {
                     return Ok(output);
                 }
+            }
+            if is_notion_unrecoverable_reply_failure(params, &fallback_primary_err) {
+                return Err(fallback_primary_err);
             }
             if allow_fast_completion_retry {
                 if let Some((_, fast_completion_timeout)) = codex_budget_split {
@@ -209,6 +216,7 @@ fn maybe_finalize_generic_content_filter_reply(
     let request = build_request(workspace_dir, params, params.model_name.as_str());
     let (reply_path, reply_attachments_dir) = prepare_workspace(&request)?;
     let lower_channel = params.channel.trim().to_ascii_lowercase();
+    let is_notion = lower_channel == "notion";
     let reply_body = match lower_channel.as_str() {
         "slack" | "discord" | "telegram" | "sms" | "whatsapp" | "bluebubbles" | "lark"
         | "wechat" | "wechat_mp" | "notion" => {
@@ -217,7 +225,12 @@ fn maybe_finalize_generic_content_filter_reply(
         }
         _ => r#"<html><body><p>I couldn't show the requested result because the Azure/OpenAI content filter blocked this run.</p><p>Please revise the prompt and send a new request.</p></body></html>"#.to_string(),
     };
-    fs::write(&reply_path, reply_body)?;
+    if is_notion {
+        post_notion_text_reply(workspace_dir, &reply_body)?;
+        fs::write(&reply_path, "content-filter explanation posted to Notion\n")?;
+    } else {
+        fs::write(&reply_path, reply_body)?;
+    }
 
     let recovery_note =
         "Returned an explicit Azure/OpenAI content-filter explanation to the user instead of retrying hidden output."
@@ -235,6 +248,104 @@ fn maybe_finalize_generic_content_filter_reply(
         recovery_note: Some(recovery_note.clone()),
         terminal_error_message: Some(recovery_note),
     }))
+}
+
+fn is_notion_unrecoverable_reply_failure(params: &RunTaskParams, err: &RunTaskError) -> bool {
+    if !params.channel.trim().eq_ignore_ascii_case("notion") {
+        return false;
+    }
+    output_looks_like_notion_auth_failure(&err.to_string())
+}
+
+fn output_looks_like_notion_auth_failure(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    normalized.contains("api token is invalid")
+        || normalized.contains("401 unauthorized")
+        || normalized.contains("no notion integration available")
+        || normalized.contains("notion auth")
+        || normalized.contains("relink or refresh the notion integration")
+        || normalized.contains("link your notion workspace")
+}
+
+fn post_notion_text_reply(workspace_dir: &Path, reply_body: &str) -> Result<(), RunTaskError> {
+    let page_id = read_notion_page_id(workspace_dir)?;
+    let token = read_notion_api_token(workspace_dir)?;
+    let output = Command::new("notion_api_cli")
+        .arg("create-comment")
+        .arg("--page-id")
+        .arg(&page_id)
+        .arg("--content")
+        .arg(reply_body)
+        .env("NOTION_API_TOKEN", token)
+        .current_dir(workspace_dir)
+        .output()?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let mut combined = String::new();
+    combined.push_str(&String::from_utf8_lossy(&output.stdout));
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    Err(RunTaskError::OutputMissing {
+        path: workspace_dir.join(".notion_api_replied"),
+        output: format!(
+            "Failed to post content-filter explanation to Notion page {page_id}. notion_api_cli exit status {:?}. Output tail:\n{}",
+            output.status.code(),
+            tail_string(&combined, 2000)
+        ),
+    })
+}
+
+fn read_notion_page_id(workspace_dir: &Path) -> Result<String, RunTaskError> {
+    for file_name in [".notion_context.json", ".notion_email_context.json"] {
+        let path = workspace_dir.join(file_name);
+        if !path.exists() {
+            continue;
+        }
+        let content = fs::read_to_string(&path)?;
+        let parsed: serde_json::Value = serde_json::from_str(&content).map_err(|err| {
+            RunTaskError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+        })?;
+        if let Some(page_id) = parsed.get("page_id").and_then(|value| value.as_str()) {
+            let trimmed = page_id.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+    }
+
+    Err(RunTaskError::OutputMissing {
+        path: workspace_dir.join(".notion_context.json"),
+        output: "Cannot post Notion reply because no page_id was found in Notion context files."
+            .to_string(),
+    })
+}
+
+fn read_notion_api_token(workspace_dir: &Path) -> Result<String, RunTaskError> {
+    let path = workspace_dir.join(".notion_env");
+    let content = fs::read_to_string(&path).map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => RunTaskError::OutputMissing {
+            path: path.clone(),
+            output: "Cannot post Notion reply because .notion_env is missing.".to_string(),
+        },
+        _ => RunTaskError::Io(err),
+    })?;
+    for line in content.lines() {
+        let Some(value) = line.trim().strip_prefix("NOTION_API_TOKEN=") else {
+            continue;
+        };
+        let token = value.trim().trim_matches('"').trim_matches('\'');
+        if !token.is_empty() {
+            return Ok(token.to_string());
+        }
+    }
+
+    Err(RunTaskError::OutputMissing {
+        path,
+        output: "Cannot post Notion reply because .notion_env does not contain NOTION_API_TOKEN."
+            .to_string(),
+    })
 }
 
 fn output_looks_like_content_filter_failure(output: &str) -> bool {

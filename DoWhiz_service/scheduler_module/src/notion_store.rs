@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
-use mongodb::options::{IndexOptions, UpdateOptions};
+use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
 use mongodb::sync::Collection;
 use mongodb::IndexModel;
 
@@ -161,39 +161,29 @@ impl NotionStore {
         &self,
         workspace_id: &str,
     ) -> Result<NotionCredential, NotionStoreError> {
-        // Normalize to canonical UUID format with dashes
-        let normalized_id = Self::normalize_workspace_id(workspace_id);
+        self.get_credentials_by_workspace_candidates(workspace_id)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| NotionStoreError::NotFound(workspace_id.to_string()))
+    }
 
-        // Try with normalized (dashed) format first
-        if let Some(doc) = self
-            .credentials
-            .find_one(doc! { "workspace_id": &normalized_id }, None)?
-        {
-            return Self::doc_to_credential(doc);
-        }
-
-        // Try with original format as fallback
-        if normalized_id != workspace_id {
-            if let Some(doc) = self
-                .credentials
-                .find_one(doc! { "workspace_id": workspace_id }, None)?
-            {
-                return Self::doc_to_credential(doc);
-            }
-        }
-
-        // Try without dashes as last resort
-        let no_dashes = workspace_id.replace('-', "");
-        if no_dashes != workspace_id && no_dashes != normalized_id {
-            if let Some(doc) = self
-                .credentials
-                .find_one(doc! { "workspace_id": &no_dashes }, None)?
-            {
-                return Self::doc_to_credential(doc);
-            }
-        }
-
-        Err(NotionStoreError::NotFound(workspace_id.to_string()))
+    /// Get all credentials matching a workspace_id, newest first.
+    ///
+    /// Multiple users can connect the same Notion workspace. Returning an arbitrary
+    /// matching document is unsafe: a stale revoked token can shadow a newer valid
+    /// token for the same workspace.
+    pub fn get_credentials_by_workspace_candidates(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<NotionCredential>, NotionStoreError> {
+        let options = FindOptions::builder()
+            .sort(doc! { "updated_at": -1, "created_at": -1 })
+            .build();
+        let cursor = self.credentials.find(
+            doc! { "workspace_id": { "$in": Self::workspace_id_variants(workspace_id) } },
+            options,
+        )?;
+        collect_credentials(cursor)
     }
 
     /// Normalize workspace_id to canonical UUID format with dashes.
@@ -216,6 +206,17 @@ impl NotionStore {
         }
     }
 
+    fn workspace_id_variants(workspace_id: &str) -> Vec<String> {
+        let mut variants = vec![
+            Self::normalize_workspace_id(workspace_id),
+            workspace_id.to_string(),
+            workspace_id.replace('-', ""),
+        ];
+        variants.sort();
+        variants.dedup();
+        variants
+    }
+
     /// Get credential by workspace_name with fuzzy matching.
     ///
     /// This is useful for matching email URL slugs (e.g., "myworkspace")
@@ -226,11 +227,28 @@ impl NotionStore {
         &self,
         name_or_slug: &str,
     ) -> Result<NotionCredential, NotionStoreError> {
+        self.get_credentials_by_workspace_name_fuzzy_candidates(name_or_slug)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                NotionStoreError::NotFound(format!("no workspace matching '{}'", name_or_slug))
+            })
+    }
+
+    /// Get all fuzzy workspace-name matches, newest first.
+    pub fn get_credentials_by_workspace_name_fuzzy_candidates(
+        &self,
+        name_or_slug: &str,
+    ) -> Result<Vec<NotionCredential>, NotionStoreError> {
         // Normalize the search term: lowercase, remove non-alphanumeric
         let normalized_search = Self::normalize_workspace_name(name_or_slug);
 
         // Get all credentials and find a match
-        let cursor = self.credentials.find(doc! {}, None)?;
+        let options = FindOptions::builder()
+            .sort(doc! { "updated_at": -1, "created_at": -1 })
+            .build();
+        let cursor = self.credentials.find(doc! {}, options)?;
+        let mut matches = Vec::new();
 
         for result in cursor {
             let doc = result?;
@@ -241,15 +259,19 @@ impl NotionStore {
                     || normalized_stored.contains(&normalized_search)
                     || normalized_search.contains(&normalized_stored)
                 {
-                    return Self::doc_to_credential(doc);
+                    matches.push(Self::doc_to_credential(doc)?);
                 }
             }
         }
 
-        Err(NotionStoreError::NotFound(format!(
-            "no workspace matching '{}'",
-            name_or_slug
-        )))
+        if matches.is_empty() {
+            Err(NotionStoreError::NotFound(format!(
+                "no workspace matching '{}'",
+                name_or_slug
+            )))
+        } else {
+            Ok(matches)
+        }
     }
 
     /// Get credential by bot_id (integration_id in webhook payloads).
@@ -271,16 +293,21 @@ impl NotionStore {
     /// Get any available credential (fallback when workspace_name is unknown).
     /// Returns the first credential found in the collection.
     pub fn get_any_credential(&self) -> Result<NotionCredential, NotionStoreError> {
-        let cursor = self.credentials.find(doc! {}, None)?;
+        self.get_all_credentials_newest_first()?
+            .into_iter()
+            .next()
+            .ok_or_else(|| NotionStoreError::NotFound("no credentials available".to_string()))
+    }
 
-        for result in cursor {
-            let doc = result?;
-            return Self::doc_to_credential(doc);
-        }
-
-        Err(NotionStoreError::NotFound(
-            "no credentials available".to_string(),
-        ))
+    /// Get every credential, newest first.
+    pub fn get_all_credentials_newest_first(
+        &self,
+    ) -> Result<Vec<NotionCredential>, NotionStoreError> {
+        let options = FindOptions::builder()
+            .sort(doc! { "updated_at": -1, "created_at": -1 })
+            .build();
+        let cursor = self.credentials.find(doc! {}, options)?;
+        collect_credentials(cursor)
     }
 
     /// Normalize a workspace name for comparison.
@@ -366,6 +393,16 @@ impl NotionStore {
             updated_at,
         })
     }
+}
+
+fn collect_credentials(
+    cursor: mongodb::sync::Cursor<Document>,
+) -> Result<Vec<NotionCredential>, NotionStoreError> {
+    let mut credentials = Vec::new();
+    for result in cursor {
+        credentials.push(NotionStore::doc_to_credential(result?)?);
+    }
+    Ok(credentials)
 }
 
 #[cfg(test)]

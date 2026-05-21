@@ -29,7 +29,7 @@ pub use codex::{
     query_aci_container_status, run_codex_warm_pool, AciContainerStatus,
 };
 pub use core::{run_claude_fallback_after_codex_failure, run_task};
-pub use errors::RunTaskError;
+pub use errors::{redact_sensitive_text_for_display, RunTaskError};
 pub use pool_manager::{PoolConfig, PoolManager};
 pub use timing::{
     clear_timing_log, get_timing_log_path, QueueLatencyCollector, StageStats, TaskTiming,

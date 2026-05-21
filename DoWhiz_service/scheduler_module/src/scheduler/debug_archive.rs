@@ -19,6 +19,7 @@ use zip::write::FileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use crate::env_alias::{bool_with_scale_oliver, var_with_scale_oliver};
+use run_task_module::redact_sensitive_text_for_display;
 
 use super::store::TaskDebugArchiveRecord;
 use super::types::{ScheduledTask, SchedulerError, TaskKind};
@@ -44,6 +45,7 @@ const HEAVY_SKIP_DIRS: &[&str] = &[
 ];
 const REDACTED_FILE_NAMES: &[&str] = &[
     ".google_access_token",
+    ".notion_env",
     "google_workspace_cli_credentials.json",
     "credentials.json",
 ];
@@ -298,6 +300,10 @@ impl PendingTaskDebugArchive {
                     .contains("/.run_task_trace/aci/container_logs.txt")
         });
 
+        let sanitized_error_summary = error_summary
+            .map(redact_sensitive_text_for_display)
+            .map(|value| truncate_string(&value, 4000));
+
         let manifest = ArchiveManifest {
             archive_type: ARCHIVE_TYPE.to_string(),
             archive_version: ARCHIVE_VERSION,
@@ -322,7 +328,7 @@ impl PendingTaskDebugArchive {
             has_workspace_after: true,
             has_run_task_trace,
             has_aci_logs,
-            error_summary: error_summary.map(|value| truncate_string(value, 4000)),
+            error_summary: sanitized_error_summary.clone(),
         };
         let execution_summary = ExecutionSummary {
             task_id: self.task_id.to_string(),
@@ -333,7 +339,7 @@ impl PendingTaskDebugArchive {
             duration_ms: finished_at
                 .signed_duration_since(self.started_at)
                 .num_milliseconds(),
-            error_summary: error_summary.map(|value| truncate_string(value, 4000)),
+            error_summary: sanitized_error_summary.clone(),
         };
 
         let zip_path = self.staging_dir.path().join("task_debug_bundle.zip");
@@ -403,7 +409,7 @@ impl PendingTaskDebugArchive {
             has_workspace_after: true,
             has_run_task_trace,
             has_aci_logs,
-            error_summary: error_summary.map(|value| truncate_string(value, 4000)),
+            error_summary: sanitized_error_summary,
             created_at: Utc::now(),
         })
     }
@@ -586,10 +592,10 @@ fn classify_snapshot_file(relative_path: &Path) -> SnapshotDecision {
     {
         return SnapshotDecision::Redact("credential_file_redacted");
     }
-    if relative_path
-        .components()
-        .any(|component| component.as_os_str() == ".secrets" || component.as_os_str() == ".auth")
-    {
+    if relative_path.components().any(|component| {
+        let value = component.as_os_str();
+        value == ".secrets" || value == ".auth" || value == ".config"
+    }) {
         return SnapshotDecision::Redact("secret_directory_redacted");
     }
     if let Some(extension) = relative_path.extension().and_then(|value| value.to_str()) {
@@ -709,10 +715,38 @@ fn add_snapshot_files(
 ) -> Result<(), SchedulerError> {
     for entry in &snapshot.included_files {
         let archive_path = format!("{}/{}", prefix, entry.relative_path);
-        let data = fs::read(&entry.source_path)?;
+        let mut data = fs::read(&entry.source_path)?;
+        if should_sanitize_included_file(&entry.relative_path) {
+            data = redact_sensitive_text_for_display(&String::from_utf8_lossy(&data)).into_bytes();
+        }
         write_bytes_entry(zip, &archive_path, &data)?;
     }
     Ok(())
+}
+
+fn should_sanitize_included_file(relative_path: &str) -> bool {
+    let path = Path::new(relative_path);
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if file_name.ends_with(".log")
+        || file_name.ends_with(".txt")
+        || file_name.ends_with(".json")
+        || file_name.ends_with(".jsonl")
+        || file_name.ends_with(".md")
+        || file_name.ends_with(".html")
+        || file_name.ends_with(".toml")
+        || file_name.ends_with(".yaml")
+        || file_name.ends_with(".yml")
+    {
+        return true;
+    }
+    matches!(
+        file_name.as_str(),
+        "stdout" | "stderr" | "combined" | "remote_output" | "container_logs"
+    )
 }
 
 fn write_json_entry<T: Serialize>(
@@ -1396,6 +1430,14 @@ mod tests {
             SnapshotDecision::Redact(_)
         ));
         assert!(matches!(
+            classify_snapshot_file(Path::new(".notion_env")),
+            SnapshotDecision::Redact(_)
+        ));
+        assert!(matches!(
+            classify_snapshot_file(Path::new(".config/gh/hosts.yml")),
+            SnapshotDecision::Redact(_)
+        ));
+        assert!(matches!(
             classify_snapshot_file(Path::new("incoming_email/body.txt")),
             SnapshotDecision::Include
         ));
@@ -1449,7 +1491,7 @@ mod tests {
                 .join(run_task_module::RUN_TASK_TRACE_DIRNAME)
                 .join("aci")
                 .join("container_logs.txt"),
-            "aci logs",
+            "oauth_token: ghp_should_not_leak\nclient_secret: GOCSPX-secret\nsig=leakedSig\n",
         )
         .expect("aci logs");
 
@@ -1496,6 +1538,15 @@ mod tests {
                 .is_ok(),
             "reply draft should be captured in after snapshot"
         );
+        let mut logs = String::new();
+        zip.by_name("workspace_after/.run_task_trace/aci/container_logs.txt")
+            .expect("aci logs entry")
+            .read_to_string(&mut logs)
+            .expect("read logs");
+        assert!(logs.contains("REDACTED"));
+        assert!(!logs.contains("ghp_should_not_leak"));
+        assert!(!logs.contains("GOCSPX-secret"));
+        assert!(!logs.contains("leakedSig"));
     }
 
     #[test]
