@@ -612,6 +612,23 @@ pub async fn ingest_notion_webhook(
         return (StatusCode::OK, Json(json!({"status": "no_route"})));
     };
 
+    // Check if comment @mentions the employee's Notion user account (person, not bot).
+    // This filters out comments that don't explicitly invoke the employee.
+    if let Some(employee) = state.employee_directory.employee_by_id.get(&route.employee_id) {
+        if let Some(notion_user_id) = &employee.notion_user_id {
+            if !payload.contains_bot_mention(notion_user_id) {
+                info!(
+                    "notion webhook ignoring: comment does not @mention employee notion_user_id={}",
+                    notion_user_id
+                );
+                return (
+                    StatusCode::OK,
+                    Json(json!({"status": "ignored", "reason": "employee_not_mentioned"})),
+                );
+            }
+        }
+    }
+
     // Extract message details
     let mut comment_text = payload.extract_comment_text();
     let page_id = payload

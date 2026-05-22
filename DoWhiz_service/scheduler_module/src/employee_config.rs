@@ -44,6 +44,9 @@ pub struct EmployeeConfigEntry {
     /// Whether this employee handles BlueBubbles/iMessage. Only one employee should have this enabled.
     #[serde(default)]
     pub bluebubbles_enabled: bool,
+    /// Notion user ID for this employee (person account, not bot). Used to filter @mentions.
+    #[serde(default)]
+    pub notion_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +68,8 @@ pub struct EmployeeProfile {
     pub slack_enabled: bool,
     /// Whether this employee handles BlueBubbles/iMessage.
     pub bluebubbles_enabled: bool,
+    /// Notion user ID for this employee (person account, not bot). Used to filter @mentions.
+    pub notion_user_id: Option<String>,
 }
 
 impl EmployeeProfile {
@@ -150,6 +155,7 @@ pub fn load_employee_directory(config_path: &Path) -> Result<EmployeeDirectory, 
             discord_enabled: entry.discord_enabled,
             slack_enabled: entry.slack_enabled,
             bluebubbles_enabled: entry.bluebubbles_enabled,
+            notion_user_id: entry.notion_user_id.clone(),
         };
 
         employee_by_id.insert(profile.id.clone(), profile.clone());
