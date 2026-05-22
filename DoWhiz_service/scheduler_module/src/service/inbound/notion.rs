@@ -8,7 +8,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::account_store::AccountStore;
+use crate::account_store::{Account, AccountStore, BalanceInfo};
 use crate::channel::Channel;
 use crate::index_store::IndexStore;
 use crate::notion_browser::models::NotionMention;
@@ -21,6 +21,71 @@ use super::super::config::ServiceConfig;
 use super::super::default_thread_state_path;
 use super::super::workspace::ensure_thread_workspace;
 use crate::service::BoxError;
+
+#[derive(Debug, Clone)]
+struct AuthorizedNotionRequester {
+    account: Account,
+    notion_identifier: String,
+    balance_hours: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum NotionAuthorAuthorizationFailure {
+    MissingWorkspaceId,
+    MissingAuthorId,
+    AccountLookupFailed {
+        notion_identifier: String,
+        error: String,
+    },
+    NotLinked {
+        notion_identifier: String,
+    },
+    BalanceLookupFailed {
+        account_id: Uuid,
+        error: String,
+    },
+    InsufficientBalance {
+        account_id: Uuid,
+        balance_hours: f64,
+    },
+}
+
+impl std::fmt::Display for NotionAuthorAuthorizationFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingWorkspaceId => write!(f, "missing workspace id"),
+            Self::MissingAuthorId => write!(f, "missing author id"),
+            Self::AccountLookupFailed {
+                notion_identifier,
+                error,
+            } => write!(
+                f,
+                "failed to look up Notion account identifier {}: {}",
+                notion_identifier, error
+            ),
+            Self::NotLinked { notion_identifier } => write!(
+                f,
+                "Notion author identifier {} is not linked to a DoWhiz account",
+                notion_identifier
+            ),
+            Self::BalanceLookupFailed { account_id, error } => {
+                write!(
+                    f,
+                    "failed to look up balance for account {}: {}",
+                    account_id, error
+                )
+            }
+            Self::InsufficientBalance {
+                account_id,
+                balance_hours,
+            } => write!(
+                f,
+                "account {} has no available hours (balance_hours={})",
+                account_id, balance_hours
+            ),
+        }
+    }
+}
 
 /// Process an incoming Notion mention/comment.
 pub(crate) fn process_notion_message(
@@ -52,81 +117,89 @@ pub(crate) fn process_notion_message(
         .as_deref()
         .unwrap_or("Untitled");
 
-    // Try to get the Notion credential for OAuth token (needed for API calls)
-    // Also try to get the linked account for email attribution (optional)
-    let (notion_credential, notion_linked_account) = if workspace_id != "unknown" {
-        match NotionStore::new() {
-            Ok(store) => match store.get_credential_by_workspace(workspace_id) {
-                Ok(cred) => {
-                    // Found credential - try to look up the linked account (optional)
-                    let linked_account = match account_store.get_account(cred.account_id) {
-                        Ok(Some(account)) => {
-                            // Get the account's email identifier to use as reply_to
-                            let account_email = account_store
-                                .list_identifiers(account.id)
-                                .ok()
-                                .and_then(|ids| {
-                                    ids.into_iter()
-                                        .find(|id| id.identifier_type == "email" && id.verified)
-                                        .map(|id| id.identifier)
-                                });
-                            info!(
-                                "Found linked DoWhiz account {} for Notion workspace {} (email: {:?})",
-                                account.id, workspace_id, account_email
-                            );
-                            Some((account, account_email))
-                        }
-                        Ok(None) => {
-                            warn!(
-                                "NotionCredential references account {} but account not found (will still use OAuth token)",
-                                cred.account_id
-                            );
-                            None
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to look up account {}: {} (will still use OAuth token)",
-                                cred.account_id, e
-                            );
-                            None
-                        }
-                    };
-                    (Some(cred), linked_account)
-                }
-                Err(crate::notion_store::NotionStoreError::NotFound(_)) => {
-                    info!(
-                        "No OAuth credential found for Notion workspace_id={}",
-                        workspace_id
-                    );
-                    (None, None)
-                }
-                Err(e) => {
-                    warn!("Failed to look up Notion credential: {}", e);
-                    (None, None)
-                }
-            },
-            Err(e) => {
-                warn!("Failed to connect to NotionStore: {}", e);
-                (None, None)
+    let authorized_requester =
+        match authorize_notion_requester(account_store, workspace_id, &message.sender) {
+            Ok(requester) => requester,
+            Err(reason) => {
+                warn!(
+                    workspace_id,
+                    author_id = %message.sender,
+                    message_id = ?message.message_id,
+                    reason = %reason,
+                    "skipping notion task before enqueue"
+                );
+                return Ok(());
             }
+        };
+
+    let requester_email = account_store
+        .list_identifiers(authorized_requester.account.id)
+        .map(|ids| {
+            ids.into_iter()
+                .find(|id| id.identifier_type == "email" && id.verified)
+                .map(|id| id.identifier)
+        })
+        .map_err(|err| {
+            warn!(
+                "failed to look up email identifier for authorized Notion account {}: {}",
+                authorized_requester.account.id, err
+            );
+            err
+        })
+        .ok()
+        .flatten();
+
+    info!(
+        "authorized Notion requester account={} notion_identifier={} balance_hours={}",
+        authorized_requester.account.id,
+        authorized_requester.notion_identifier,
+        authorized_requester.balance_hours
+    );
+
+    // The credential is workspace-scoped API capability. The requester account above
+    // is still the billing/authorization subject.
+    let notion_credential = match NotionStore::new() {
+        Ok(store) => match store.get_credential_by_workspace(workspace_id) {
+            Ok(cred) => {
+                info!(
+                    "found Notion OAuth credential for workspace {} credential_account={} requester_account={}",
+                    workspace_id,
+                    cred.account_id,
+                    authorized_requester.account.id
+                );
+                cred
+            }
+            Err(crate::notion_store::NotionStoreError::NotFound(_)) => {
+                warn!(
+                    "skipping notion task before enqueue: no OAuth credential for workspace_id={} requester_account={} message_id={:?}",
+                    workspace_id,
+                    authorized_requester.account.id,
+                    message.message_id
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Failed to look up Notion credential for workspace {}: {}",
+                    workspace_id, e
+                )
+                .into());
+            }
+        },
+        Err(e) => {
+            return Err(format!("Failed to connect to NotionStore: {}", e).into());
         }
-    } else {
-        (None, None)
     };
 
-    // Determine user email: prefer linked account's email, fall back to extracted/synthetic
-    let user_email = if let Some((_, Some(ref email))) = notion_linked_account {
-        email.clone()
-    } else {
-        let extracted_email = extract_emails(&message.sender).into_iter().next();
-        match extracted_email {
-            Some(email) if email != "unknown@unknown.com" => email,
-            _ => {
-                // Use sender name or ID as fallback
-                format!("notion_{}@local", message.sender.replace(' ', "_"))
-            }
-        }
-    };
+    // Determine user email: prefer the authorized account's verified email, fall back to
+    // a workspace-scoped synthetic address for local workspace storage.
+    let user_email = requester_email.unwrap_or_else(|| {
+        extract_emails(&message.sender)
+            .into_iter()
+            .next()
+            .filter(|email| email != "unknown@unknown.com")
+            .unwrap_or_else(|| synthetic_notion_email(&authorized_requester.notion_identifier))
+    });
 
     // Create or get user
     let user = user_store.get_or_create_user("notion", &user_email)?;
@@ -163,20 +236,18 @@ pub(crate) fn process_notion_message(
     // Write Notion context to workspace for agent
     write_notion_context_to_workspace(&workspace, &mention, page_id, page_title)?;
 
-    // Write OAuth token to .notion_env if we have a credential (even if account not found)
-    if let Some(ref cred) = notion_credential {
-        let env_path = workspace.join(".notion_env");
-        if let Err(e) = std::fs::write(
-            &env_path,
-            format!("NOTION_API_TOKEN={}\n", cred.access_token),
-        ) {
-            warn!("Failed to write .notion_env: {}", e);
-        } else {
-            info!(
-                "Wrote Notion OAuth token to workspace for workspace_id={}",
-                workspace_id
-            );
-        }
+    // Write OAuth token to .notion_env so the agent can read/reply through Notion API.
+    let env_path = workspace.join(".notion_env");
+    if let Err(e) = std::fs::write(
+        &env_path,
+        format!("NOTION_API_TOKEN={}\n", notion_credential.access_token),
+    ) {
+        warn!("Failed to write .notion_env: {}", e);
+    } else {
+        info!(
+            "Wrote Notion OAuth token to workspace for workspace_id={}",
+            workspace_id
+        );
     }
 
     // Determine model
@@ -194,11 +265,6 @@ pub(crate) fn process_notion_message(
             }
         }
     };
-
-    // Get account_id from linked account if available
-    let resolved_account_id = notion_linked_account
-        .as_ref()
-        .map(|(account, _)| account.id);
 
     // Create RunTask
     let run_task = RunTaskTask {
@@ -219,9 +285,9 @@ pub(crate) fn process_notion_message(
         channel: Channel::Notion,
         slack_team_id: None,
         employee_id: Some(config.employee_profile.id.clone()),
-        requester_identifier_type: Some("notion_user".to_string()),
-        requester_identifier: Some(user_email.clone()),
-        account_id: resolved_account_id,
+        requester_identifier_type: Some("notion".to_string()),
+        requester_identifier: Some(authorized_requester.notion_identifier.clone()),
+        account_id: Some(authorized_requester.account.id),
         channel_metadata: Default::default(),
     };
 
@@ -259,24 +325,8 @@ pub(crate) fn process_notion_message(
         thread_state.epoch
     );
 
-    // Check for linked account - prefer the one we already found from NotionCredential
-    let linked_account = if let Some((account, _)) = notion_linked_account {
-        Some(account)
-    } else {
-        // Fall back to email-based lookup
-        match account_store.get_account_by_identifier("email", &user_email) {
-            Ok(account) => account,
-            Err(err) => {
-                warn!(
-                    "Failed to look up account for Notion user '{}': {}",
-                    user_email, err
-                );
-                None
-            }
-        }
-    };
-
-    if let Some(account) = linked_account {
+    {
+        let account = authorized_requester.account;
         info!(
             "Found account {} for Notion user {}",
             account.id, user_email
@@ -324,14 +374,101 @@ pub(crate) fn process_notion_message(
                 }
             }
         }
-    } else {
-        info!(
-            "No account linked for Notion user '{}', skipping account-level task",
-            user_email
-        );
     }
 
     Ok(())
+}
+
+fn authorize_notion_requester(
+    account_store: &AccountStore,
+    workspace_id: &str,
+    author_id: &str,
+) -> Result<AuthorizedNotionRequester, NotionAuthorAuthorizationFailure> {
+    authorize_notion_requester_with(
+        workspace_id,
+        author_id,
+        |notion_identifier| account_store.get_account_by_identifier("notion", notion_identifier),
+        |account_id| account_store.get_balance(account_id),
+    )
+}
+
+fn authorize_notion_requester_with<GetAccount, GetBalance, StoreError>(
+    workspace_id: &str,
+    author_id: &str,
+    mut get_account_by_notion_identifier: GetAccount,
+    mut get_balance: GetBalance,
+) -> Result<AuthorizedNotionRequester, NotionAuthorAuthorizationFailure>
+where
+    GetAccount: FnMut(&str) -> Result<Option<Account>, StoreError>,
+    GetBalance: FnMut(Uuid) -> Result<BalanceInfo, StoreError>,
+    StoreError: std::fmt::Display,
+{
+    let notion_identifier = notion_author_identifier(workspace_id, author_id)?;
+    let account = get_account_by_notion_identifier(&notion_identifier)
+        .map_err(
+            |err| NotionAuthorAuthorizationFailure::AccountLookupFailed {
+                notion_identifier: notion_identifier.clone(),
+                error: err.to_string(),
+            },
+        )?
+        .ok_or_else(|| NotionAuthorAuthorizationFailure::NotLinked {
+            notion_identifier: notion_identifier.clone(),
+        })?;
+
+    let balance = get_balance(account.id).map_err(|err| {
+        NotionAuthorAuthorizationFailure::BalanceLookupFailed {
+            account_id: account.id,
+            error: err.to_string(),
+        }
+    })?;
+    if balance.balance_hours <= 0.0 {
+        return Err(NotionAuthorAuthorizationFailure::InsufficientBalance {
+            account_id: account.id,
+            balance_hours: balance.balance_hours,
+        });
+    }
+
+    Ok(AuthorizedNotionRequester {
+        account,
+        notion_identifier,
+        balance_hours: balance.balance_hours,
+    })
+}
+
+fn notion_author_identifier(
+    workspace_id: &str,
+    author_id: &str,
+) -> Result<String, NotionAuthorAuthorizationFailure> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() || workspace_id.eq_ignore_ascii_case("unknown") {
+        return Err(NotionAuthorAuthorizationFailure::MissingWorkspaceId);
+    }
+
+    let author_id = author_id.trim();
+    if author_id.is_empty() || author_id.eq_ignore_ascii_case("unknown") {
+        return Err(NotionAuthorAuthorizationFailure::MissingAuthorId);
+    }
+
+    Ok(format!("{workspace_id}:{author_id}"))
+}
+
+fn synthetic_notion_email(notion_identifier: &str) -> String {
+    let local_part: String = notion_identifier
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let local_part = local_part.trim_matches('_');
+    if local_part.is_empty() {
+        "notion_unknown@local".to_string()
+    } else {
+        format!("notion_{local_part}@local")
+    }
 }
 
 fn notion_message_task_id(message: &crate::channel::InboundMessage) -> Option<Uuid> {
@@ -484,6 +621,7 @@ fn append_workspace_notion_comment(
 mod tests {
     use super::*;
     use crate::channel::{Channel, ChannelMetadata, InboundMessage};
+    use chrono::Utc;
 
     fn build_message(message_id: &str) -> InboundMessage {
         InboundMessage {
@@ -508,6 +646,25 @@ mod tests {
         }
     }
 
+    fn test_account(account_id: Uuid) -> Account {
+        Account {
+            id: account_id,
+            auth_user_id: Uuid::new_v4(),
+            created_at: Utc::now(),
+            tokens_to_hours: Some(0.0),
+            purchased_hours: Some(1.0),
+            organization_id: None,
+        }
+    }
+
+    fn test_balance(balance_hours: f64) -> BalanceInfo {
+        BalanceInfo {
+            purchased_hours: balance_hours.max(0.0),
+            used_hours: 0.0,
+            balance_hours,
+        }
+    }
+
     #[test]
     fn notion_message_task_id_is_stable_for_duplicate_delivery() {
         let mut first = build_message("notion-comment-comment-1");
@@ -529,6 +686,117 @@ mod tests {
         assert_ne!(
             notion_message_task_id(&first),
             notion_message_task_id(&second)
+        );
+    }
+
+    #[test]
+    fn notion_author_identifier_matches_oauth_binding_shape() {
+        assert_eq!(
+            notion_author_identifier("workspace-1", "author-1").unwrap(),
+            "workspace-1:author-1"
+        );
+    }
+
+    #[test]
+    fn notion_author_identifier_rejects_unknown_workspace_or_author() {
+        assert_eq!(
+            notion_author_identifier("unknown", "author-1"),
+            Err(NotionAuthorAuthorizationFailure::MissingWorkspaceId)
+        );
+        assert_eq!(
+            notion_author_identifier("workspace-1", "unknown"),
+            Err(NotionAuthorAuthorizationFailure::MissingAuthorId)
+        );
+        assert_eq!(
+            notion_author_identifier(" ", "author-1"),
+            Err(NotionAuthorAuthorizationFailure::MissingWorkspaceId)
+        );
+        assert_eq!(
+            notion_author_identifier("workspace-1", " "),
+            Err(NotionAuthorAuthorizationFailure::MissingAuthorId)
+        );
+    }
+
+    #[test]
+    fn authorize_notion_requester_rejects_unlinked_author() {
+        let result = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |_identifier| Ok::<Option<Account>, &'static str>(None),
+            |_account_id| Ok::<BalanceInfo, &'static str>(test_balance(1.0)),
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            NotionAuthorAuthorizationFailure::NotLinked {
+                notion_identifier: "workspace-1:author-1".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn authorize_notion_requester_rejects_zero_or_negative_balance() {
+        let account_id = Uuid::new_v4();
+        let account = test_account(account_id);
+
+        let zero_result = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |_identifier| Ok::<Option<Account>, &'static str>(Some(account.clone())),
+            |_account_id| Ok::<BalanceInfo, &'static str>(test_balance(0.0)),
+        );
+        assert_eq!(
+            zero_result.unwrap_err(),
+            NotionAuthorAuthorizationFailure::InsufficientBalance {
+                account_id,
+                balance_hours: 0.0,
+            }
+        );
+
+        let negative_result = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |_identifier| Ok::<Option<Account>, &'static str>(Some(account.clone())),
+            |_account_id| Ok::<BalanceInfo, &'static str>(test_balance(-0.5)),
+        );
+        assert_eq!(
+            negative_result.unwrap_err(),
+            NotionAuthorAuthorizationFailure::InsufficientBalance {
+                account_id,
+                balance_hours: -0.5,
+            }
+        );
+    }
+
+    #[test]
+    fn authorize_notion_requester_allows_linked_author_with_positive_balance() {
+        let account_id = Uuid::new_v4();
+        let account = test_account(account_id);
+
+        let requester = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |identifier| {
+                assert_eq!(identifier, "workspace-1:author-1");
+                Ok::<Option<Account>, &'static str>(Some(account.clone()))
+            },
+            |id| {
+                assert_eq!(id, account_id);
+                Ok::<BalanceInfo, &'static str>(test_balance(0.25))
+            },
+        )
+        .unwrap();
+
+        assert_eq!(requester.account.id, account_id);
+        assert_eq!(requester.notion_identifier, "workspace-1:author-1");
+        assert_eq!(requester.balance_hours, 0.25);
+    }
+
+    #[test]
+    fn synthetic_notion_email_is_workspace_scoped_and_local_safe() {
+        assert_eq!(
+            synthetic_notion_email("workspace:author id"),
+            "notion_workspace_author_id@local"
         );
     }
 }
