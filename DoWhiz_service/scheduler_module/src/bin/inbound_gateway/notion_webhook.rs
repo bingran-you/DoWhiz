@@ -614,7 +614,11 @@ pub async fn ingest_notion_webhook(
 
     // Check if comment @mentions the employee's Notion user account (person, not bot).
     // This filters out comments that don't explicitly invoke the employee.
-    if let Some(employee) = state.employee_directory.employee_by_id.get(&route.employee_id) {
+    if let Some(employee) = state
+        .employee_directory
+        .employee_by_id
+        .get(&route.employee_id)
+    {
         if let Some(notion_user_id) = &employee.notion_user_id {
             if !payload.contains_bot_mention(notion_user_id) {
                 info!(
