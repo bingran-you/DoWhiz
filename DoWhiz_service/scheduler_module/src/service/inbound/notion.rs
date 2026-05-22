@@ -12,7 +12,7 @@ use crate::account_store::{Account, AccountStore, BalanceInfo};
 use crate::channel::Channel;
 use crate::index_store::IndexStore;
 use crate::notion_browser::models::NotionMention;
-use crate::notion_store::NotionStore;
+use crate::notion_store::{NotionCredential, NotionStore, NotionStoreError};
 use crate::user_store::{extract_emails, UserStore};
 use crate::{ModuleExecutor, RunTaskTask, Scheduler, TaskKind};
 
@@ -48,6 +48,30 @@ enum NotionAuthorAuthorizationFailure {
         account_id: Uuid,
         balance_hours: f64,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum NotionCredentialResolutionFailure {
+    NotFound { workspace_id: String },
+    LookupFailed { workspace_id: String, error: String },
+}
+
+impl std::fmt::Display for NotionCredentialResolutionFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound { workspace_id } => {
+                write!(f, "no OAuth credential for workspace {}", workspace_id)
+            }
+            Self::LookupFailed {
+                workspace_id,
+                error,
+            } => write!(
+                f,
+                "failed to look up Notion credential for workspace {}: {}",
+                workspace_id, error
+            ),
+        }
+    }
 }
 
 impl std::fmt::Display for NotionAuthorAuthorizationFailure {
@@ -158,37 +182,34 @@ pub(crate) fn process_notion_message(
 
     // The credential is workspace-scoped API capability. The requester account above
     // is still the billing/authorization subject.
-    let notion_credential = match NotionStore::new() {
-        Ok(store) => match store.get_credential_by_workspace(workspace_id) {
-            Ok(cred) => {
-                info!(
-                    "found Notion OAuth credential for workspace {} credential_account={} requester_account={}",
-                    workspace_id,
-                    cred.account_id,
-                    authorized_requester.account.id
-                );
-                cred
-            }
-            Err(crate::notion_store::NotionStoreError::NotFound(_)) => {
-                warn!(
+    let store =
+        NotionStore::new().map_err(|e| format!("Failed to connect to NotionStore: {}", e))?;
+    let notion_credential = match resolve_notion_workspace_credential_with(workspace_id, |id| {
+        match store.get_credential_by_workspace(id) {
+            Ok(cred) => Ok(Some(cred)),
+            Err(NotionStoreError::NotFound(_)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }) {
+        Ok(cred) => {
+            info!(
+                "found Notion OAuth credential for workspace {} credential_account={} requester_account={}",
+                workspace_id,
+                cred.account_id,
+                authorized_requester.account.id
+            );
+            cred
+        }
+        Err(NotionCredentialResolutionFailure::NotFound { .. }) => {
+            warn!(
                     "skipping notion task before enqueue: no OAuth credential for workspace_id={} requester_account={} message_id={:?}",
                     workspace_id,
                     authorized_requester.account.id,
                     message.message_id
                 );
-                return Ok(());
-            }
-            Err(e) => {
-                return Err(format!(
-                    "Failed to look up Notion credential for workspace {}: {}",
-                    workspace_id, e
-                )
-                .into());
-            }
-        },
-        Err(e) => {
-            return Err(format!("Failed to connect to NotionStore: {}", e).into());
+            return Ok(());
         }
+        Err(reason) => return Err(reason.to_string().into()),
     };
 
     // Determine user email: prefer the authorized account's verified email, fall back to
@@ -390,6 +411,31 @@ fn authorize_notion_requester(
         |notion_identifier| account_store.get_account_by_identifier("notion", notion_identifier),
         |account_id| account_store.get_balance(account_id),
     )
+}
+
+fn resolve_notion_workspace_credential_with<GetCredential, StoreError>(
+    workspace_id: &str,
+    mut get_credential_by_workspace: GetCredential,
+) -> Result<NotionCredential, NotionCredentialResolutionFailure>
+where
+    GetCredential: FnMut(&str) -> Result<Option<NotionCredential>, StoreError>,
+    StoreError: std::fmt::Display,
+{
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() || workspace_id.eq_ignore_ascii_case("unknown") {
+        return Err(NotionCredentialResolutionFailure::NotFound {
+            workspace_id: workspace_id.to_string(),
+        });
+    }
+
+    get_credential_by_workspace(workspace_id)
+        .map_err(|err| NotionCredentialResolutionFailure::LookupFailed {
+            workspace_id: workspace_id.to_string(),
+            error: err.to_string(),
+        })?
+        .ok_or_else(|| NotionCredentialResolutionFailure::NotFound {
+            workspace_id: workspace_id.to_string(),
+        })
 }
 
 fn authorize_notion_requester_with<GetAccount, GetBalance, StoreError>(
@@ -665,6 +711,19 @@ mod tests {
         }
     }
 
+    fn test_notion_credential(workspace_id: &str) -> NotionCredential {
+        NotionCredential {
+            account_id: Uuid::new_v4(),
+            workspace_id: workspace_id.to_string(),
+            workspace_name: Some("Workspace".to_string()),
+            access_token: "secret-token".to_string(),
+            bot_id: "bot-1".to_string(),
+            owner_user_id: Some("owner-1".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
     #[test]
     fn notion_message_task_id_is_stable_for_duplicate_delivery() {
         let mut first = build_message("notion-comment-comment-1");
@@ -693,6 +752,14 @@ mod tests {
     fn notion_author_identifier_matches_oauth_binding_shape() {
         assert_eq!(
             notion_author_identifier("workspace-1", "author-1").unwrap(),
+            "workspace-1:author-1"
+        );
+    }
+
+    #[test]
+    fn notion_author_identifier_trims_workspace_and_author() {
+        assert_eq!(
+            notion_author_identifier(" workspace-1 ", " author-1 ").unwrap(),
             "workspace-1:author-1"
         );
     }
@@ -730,6 +797,45 @@ mod tests {
             result.unwrap_err(),
             NotionAuthorAuthorizationFailure::NotLinked {
                 notion_identifier: "workspace-1:author-1".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn authorize_notion_requester_reports_account_lookup_errors() {
+        let result = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |_identifier| Err::<Option<Account>, _>("db down"),
+            |_account_id| Ok::<BalanceInfo, &'static str>(test_balance(1.0)),
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            NotionAuthorAuthorizationFailure::AccountLookupFailed {
+                notion_identifier: "workspace-1:author-1".to_string(),
+                error: "db down".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn authorize_notion_requester_reports_balance_lookup_errors() {
+        let account_id = Uuid::new_v4();
+        let account = test_account(account_id);
+
+        let result = authorize_notion_requester_with(
+            "workspace-1",
+            "author-1",
+            |_identifier| Ok::<Option<Account>, &'static str>(Some(account.clone())),
+            |_account_id| Err::<BalanceInfo, _>("balance db down"),
+        );
+
+        assert_eq!(
+            result.unwrap_err(),
+            NotionAuthorAuthorizationFailure::BalanceLookupFailed {
+                account_id,
+                error: "balance db down".to_string(),
             }
         );
     }
@@ -797,6 +903,81 @@ mod tests {
         assert_eq!(
             synthetic_notion_email("workspace:author id"),
             "notion_workspace_author_id@local"
+        );
+    }
+
+    #[test]
+    fn synthetic_notion_email_handles_empty_identifier() {
+        assert_eq!(synthetic_notion_email(":::"), "notion_unknown@local");
+    }
+
+    #[test]
+    fn resolve_notion_workspace_credential_allows_existing_credential() {
+        let credential = test_notion_credential("workspace-1");
+
+        let resolved = resolve_notion_workspace_credential_with(" workspace-1 ", |workspace_id| {
+            assert_eq!(workspace_id, "workspace-1");
+            Ok::<Option<NotionCredential>, &'static str>(Some(credential.clone()))
+        })
+        .unwrap();
+
+        assert_eq!(resolved.workspace_id, "workspace-1");
+        assert_eq!(resolved.access_token, "secret-token");
+    }
+
+    #[test]
+    fn resolve_notion_workspace_credential_rejects_missing_or_unknown_workspace() {
+        assert_eq!(
+            resolve_notion_workspace_credential_with(" ", |_workspace_id| {
+                Ok::<Option<NotionCredential>, &'static str>(Some(test_notion_credential(
+                    "workspace-1",
+                )))
+            })
+            .unwrap_err(),
+            NotionCredentialResolutionFailure::NotFound {
+                workspace_id: String::new(),
+            }
+        );
+
+        assert_eq!(
+            resolve_notion_workspace_credential_with("unknown", |_workspace_id| {
+                Ok::<Option<NotionCredential>, &'static str>(Some(test_notion_credential(
+                    "workspace-1",
+                )))
+            })
+            .unwrap_err(),
+            NotionCredentialResolutionFailure::NotFound {
+                workspace_id: "unknown".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_notion_workspace_credential_rejects_unconnected_workspace() {
+        let result = resolve_notion_workspace_credential_with("workspace-1", |_workspace_id| {
+            Ok::<Option<NotionCredential>, &'static str>(None)
+        });
+
+        assert_eq!(
+            result.unwrap_err(),
+            NotionCredentialResolutionFailure::NotFound {
+                workspace_id: "workspace-1".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_notion_workspace_credential_reports_lookup_errors() {
+        let result = resolve_notion_workspace_credential_with("workspace-1", |_workspace_id| {
+            Err::<Option<NotionCredential>, _>("mongo down")
+        });
+
+        assert_eq!(
+            result.unwrap_err(),
+            NotionCredentialResolutionFailure::LookupFailed {
+                workspace_id: "workspace-1".to_string(),
+                error: "mongo down".to_string(),
+            }
         );
     }
 }
