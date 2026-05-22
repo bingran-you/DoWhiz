@@ -19,7 +19,7 @@ use tracing::{debug, info, warn};
 
 use scheduler_module::channel::{Channel, ChannelMetadata, InboundMessage};
 use scheduler_module::notion_browser::models::NotionMention;
-use scheduler_module::notion_store::NotionStore;
+use scheduler_module::notion_store::{NotionStore, NotionStoreError};
 
 use super::handlers::{build_envelope, enqueue_envelope};
 use super::state::{GatewayState, RouteDecision};
@@ -476,16 +476,7 @@ pub async fn ingest_notion_webhook(
     // Look up credential by workspace_id
     let credential = match notion_store.get_credential_by_workspace(&payload.workspace_id) {
         Ok(cred) => cred,
-        Err(e) => {
-            warn!(
-                "notion webhook no credential found for workspace_id={}: {}",
-                payload.workspace_id, e
-            );
-            return (
-                StatusCode::OK,
-                Json(json!({"status": "ignored", "reason": "no_credential"})),
-            );
-        }
+        Err(e) => return notion_credential_lookup_failure_response(&payload.workspace_id, e),
     };
 
     // Check for self-trigger using the workspace-specific bot_id from credential
@@ -765,6 +756,34 @@ pub async fn ingest_notion_webhook(
     result
 }
 
+fn notion_credential_lookup_failure_response(
+    workspace_id: &str,
+    error: NotionStoreError,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match error {
+        NotionStoreError::NotFound(reason) => {
+            warn!(
+                "notion webhook no credential found for workspace_id={}: {}",
+                workspace_id, reason
+            );
+            (
+                StatusCode::OK,
+                Json(json!({"status": "ignored", "reason": "no_credential"})),
+            )
+        }
+        error => {
+            warn!(
+                "notion webhook credential lookup failed for workspace_id={}: {}",
+                workspace_id, error
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"status": "credential_lookup_error"})),
+            )
+        }
+    }
+}
+
 /// Resolve routing for Notion webhook based on workspace/integration mapping.
 fn resolve_notion_route(
     payload: &NotionWebhookPayload,
@@ -925,6 +944,30 @@ mod tests {
     fn test_author_name() {
         let payload = make_test_payload(None);
         assert_eq!(payload.author_name(), Some("Test User".to_string()));
+    }
+
+    #[test]
+    fn credential_lookup_not_found_remains_non_retryable_no_credential() {
+        let (status, Json(body)) = notion_credential_lookup_failure_response(
+            "ws-456",
+            NotionStoreError::NotFound("ws-456".to_string()),
+        );
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["status"], "ignored");
+        assert_eq!(body["reason"], "no_credential");
+    }
+
+    #[test]
+    fn credential_lookup_store_errors_are_retryable_failures() {
+        let (status, Json(body)) = notion_credential_lookup_failure_response(
+            "ws-456",
+            NotionStoreError::MongoConfig("missing MONGODB_URI".to_string()),
+        );
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body["status"], "credential_lookup_error");
+        assert!(body.get("reason").is_none());
     }
 
     #[test]
