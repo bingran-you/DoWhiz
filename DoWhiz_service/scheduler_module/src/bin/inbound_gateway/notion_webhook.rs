@@ -612,26 +612,13 @@ pub async fn ingest_notion_webhook(
         return (StatusCode::OK, Json(json!({"status": "no_route"})));
     };
 
-    // Check if comment @mentions the employee's Notion user account (person, not bot).
-    // This filters out comments that don't explicitly invoke the employee.
-    if let Some(employee) = state
+    // Get employee's Notion user ID for @mention filtering.
+    // We check this after fetching comment via API (webhook v2 doesn't include rich_text).
+    let required_mention_user_id: Option<String> = state
         .employee_directory
         .employee_by_id
         .get(&route.employee_id)
-    {
-        if let Some(notion_user_id) = &employee.notion_user_id {
-            if !payload.contains_bot_mention(notion_user_id) {
-                info!(
-                    "notion webhook ignoring: comment does not @mention employee notion_user_id={}",
-                    notion_user_id
-                );
-                return (
-                    StatusCode::OK,
-                    Json(json!({"status": "ignored", "reason": "employee_not_mentioned"})),
-                );
-            }
-        }
-    }
+        .and_then(|e| e.notion_user_id.clone());
 
     // Extract message details
     let mut comment_text = payload.extract_comment_text();
@@ -704,6 +691,43 @@ pub async fn ingest_notion_webhook(
                                         if cid == comment_id {
                                             // Extract plain text from rich_text array
                                             if let Some(rich_text) = c["rich_text"].as_array() {
+                                                // Check if comment @mentions the employee's Notion user (person, not bot)
+                                                if let Some(ref user_id) = required_mention_user_id
+                                                {
+                                                    info!(
+                                                        "notion webhook rich_text for mention check: {:?}",
+                                                        rich_text
+                                                    );
+                                                    let has_mention =
+                                                        rich_text.iter().any(|elem| {
+                                                            elem.get("type")
+                                                                .and_then(|t| t.as_str())
+                                                                == Some("mention")
+                                                                && elem
+                                                                    .get("mention")
+                                                                    .and_then(|m| m.get("type"))
+                                                                    .and_then(|t| t.as_str())
+                                                                    == Some("user")
+                                                                && elem
+                                                                    .get("mention")
+                                                                    .and_then(|m| m.get("user"))
+                                                                    .and_then(|u| u.get("id"))
+                                                                    .and_then(|id| id.as_str())
+                                                                    == Some(user_id.as_str())
+                                                        });
+                                                    if !has_mention {
+                                                        info!(
+                                                            "notion webhook ignoring: comment does not @mention employee notion_user_id={}",
+                                                            user_id
+                                                        );
+                                                        return (
+                                                            StatusCode::OK,
+                                                            Json(
+                                                                json!({"status": "ignored", "reason": "employee_not_mentioned"}),
+                                                            ),
+                                                        );
+                                                    }
+                                                }
                                                 comment_text = rich_text
                                                     .iter()
                                                     .filter_map(|rt| rt["plain_text"].as_str())
