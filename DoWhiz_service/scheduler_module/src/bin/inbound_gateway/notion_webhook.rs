@@ -19,7 +19,7 @@ use tracing::{debug, info, warn};
 
 use scheduler_module::channel::{Channel, ChannelMetadata, InboundMessage};
 use scheduler_module::notion_browser::models::NotionMention;
-use scheduler_module::notion_store::{NotionStore, NotionStoreError};
+use scheduler_module::notion_store::{NotionCredential, NotionStore, NotionStoreError};
 
 use super::handlers::{build_envelope, enqueue_envelope};
 use super::state::{GatewayState, RouteDecision};
@@ -109,8 +109,9 @@ pub struct NotionWebhookPayload {
     /// Timestamp of the event
     #[serde(default)]
     pub timestamp: Option<String>,
-    /// The integration that received this webhook (same as bot_id from OAuth)
+    /// The integration that received this webhook.
     pub integration_id: String,
+    #[serde(default)]
     pub workspace_id: String,
     #[serde(default)]
     pub workspace_name: Option<String>,
@@ -259,6 +260,12 @@ impl NotionWebhookPayload {
                 return Some(id.to_string());
             }
         }
+        // Newer webhook payloads carry the changed object under `entity`.
+        if let Some(entity) = self.entity.as_ref() {
+            if let Some(id) = entity.get("id").and_then(|v| v.as_str()) {
+                return Some(id.to_string());
+            }
+        }
         // From extra fields
         self.extra
             .get("comment_id")
@@ -322,6 +329,30 @@ impl NotionWebhookPayload {
         None
     }
 
+    /// Bot IDs that can identify the workspace-specific OAuth credential.
+    pub fn credential_lookup_bot_ids(&self) -> Vec<String> {
+        let mut bot_ids = Vec::new();
+
+        if let Some(accessible_by) = &self.accessible_by {
+            for principal in accessible_by {
+                if principal.author_type == "bot" {
+                    push_unique(&mut bot_ids, &principal.id);
+                }
+            }
+        }
+
+        if let Some(authors) = &self.authors {
+            for author in authors {
+                if author.author_type == "bot" {
+                    push_unique(&mut bot_ids, &author.id);
+                }
+            }
+        }
+
+        push_unique(&mut bot_ids, &self.integration_id);
+        bot_ids
+    }
+
     /// Check if the comment contains an @mention for a specific bot/integration.
     pub fn contains_bot_mention(&self, integration_id: &str) -> bool {
         let Some(data) = self.comment_data_value() else {
@@ -371,6 +402,72 @@ impl NotionWebhookPayload {
         }
         false
     }
+}
+
+fn push_unique(values: &mut Vec<String>, candidate: &str) {
+    let candidate = candidate.trim();
+    if !candidate.is_empty() && !values.iter().any(|value| value == candidate) {
+        values.push(candidate.to_string());
+    }
+}
+
+trait NotionCredentialLookup {
+    fn lookup_by_workspace(&self, workspace_id: &str)
+        -> Result<NotionCredential, NotionStoreError>;
+    fn lookup_by_bot_id(&self, bot_id: &str) -> Result<NotionCredential, NotionStoreError>;
+}
+
+impl NotionCredentialLookup for NotionStore {
+    fn lookup_by_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<NotionCredential, NotionStoreError> {
+        self.get_credential_by_workspace(workspace_id)
+    }
+
+    fn lookup_by_bot_id(&self, bot_id: &str) -> Result<NotionCredential, NotionStoreError> {
+        self.get_credential_by_bot_id(bot_id)
+    }
+}
+
+fn lookup_notion_credential(
+    lookup: &impl NotionCredentialLookup,
+    payload: &NotionWebhookPayload,
+) -> Result<NotionCredential, NotionStoreError> {
+    let workspace_id = payload.workspace_id.trim();
+    let mut not_found_reasons = Vec::new();
+
+    if !workspace_id.is_empty() {
+        match lookup.lookup_by_workspace(workspace_id) {
+            Ok(credential) => return Ok(credential),
+            Err(NotionStoreError::NotFound(reason)) => {
+                not_found_reasons.push(format!("workspace_id={workspace_id}: {reason}"));
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        not_found_reasons.push("workspace_id missing or empty".to_string());
+    }
+
+    for bot_id in payload.credential_lookup_bot_ids() {
+        match lookup.lookup_by_bot_id(&bot_id) {
+            Ok(credential) => {
+                info!(
+                    "notion webhook credential matched by bot_id fallback: bot_id={} workspace_id={} original_workspace_id={:?}",
+                    bot_id,
+                    credential.workspace_id,
+                    workspace_id
+                );
+                return Ok(credential);
+            }
+            Err(NotionStoreError::NotFound(reason)) => {
+                not_found_reasons.push(format!("bot_id={bot_id}: {reason}"));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(NotionStoreError::NotFound(not_found_reasons.join("; ")))
 }
 
 /// Check if this webhook is for our environment's integration.
@@ -473,11 +570,14 @@ pub async fn ingest_notion_webhook(
         }
     };
 
-    // Look up credential by workspace_id
-    let credential = match notion_store.get_credential_by_workspace(&payload.workspace_id) {
+    // Look up credential by workspace_id first. Some real deliveries have
+    // arrived with an empty workspace_id, so fall back to the bot principal IDs
+    // Notion includes for public integration webhooks.
+    let credential = match lookup_notion_credential(&notion_store, &payload) {
         Ok(cred) => cred,
         Err(e) => return notion_credential_lookup_failure_response(&payload.workspace_id, e),
     };
+    let resolved_workspace_id = credential.workspace_id.clone();
 
     // Check for self-trigger using the workspace-specific bot_id from credential
     // The bot_id is the bot's user ID within this workspace, while integration_id is the public integration ID
@@ -503,11 +603,11 @@ pub async fn ingest_notion_webhook(
     }
 
     // Build routing decision based on employee directory
-    let route = resolve_notion_route(&payload, &credential, &state);
+    let route = resolve_notion_route(&resolved_workspace_id, &credential, &state);
     let Some(route) = route else {
         info!(
             "notion webhook no route for workspace_id={}",
-            payload.workspace_id
+            resolved_workspace_id
         );
         return (StatusCode::OK, Json(json!({"status": "no_route"})));
     };
@@ -664,7 +764,7 @@ pub async fn ingest_notion_webhook(
     );
 
     // Build InboundMessage
-    let thread_id = format!("notion:{}:{}", payload.workspace_id, discussion_id);
+    let thread_id = format!("notion:{}:{}", resolved_workspace_id, discussion_id);
     let message_id = format!("notion-comment-{}", comment_id);
 
     let message = InboundMessage {
@@ -683,7 +783,7 @@ pub async fn ingest_notion_webhook(
         metadata: ChannelMetadata {
             notion_page_id: Some(page_id.clone()),
             notion_comment_id: Some(comment_id.clone()),
-            notion_workspace_id: Some(payload.workspace_id.clone()),
+            notion_workspace_id: Some(resolved_workspace_id.clone()),
             ..Default::default()
         },
     };
@@ -691,10 +791,11 @@ pub async fn ingest_notion_webhook(
     // Convert webhook payload to NotionMention format for worker compatibility
     let notion_mention = NotionMention {
         id: payload.id.clone(),
-        workspace_id: payload.workspace_id.clone(),
+        workspace_id: resolved_workspace_id.clone(),
         workspace_name: payload
             .workspace_name
             .clone()
+            .or_else(|| credential.workspace_name.clone())
             .unwrap_or_else(|| "Unknown".to_string()),
         page_id: page_id.clone(),
         page_title: format!("Notion Page {}", page_id), // Title not available in webhook
@@ -786,12 +887,12 @@ fn notion_credential_lookup_failure_response(
 
 /// Resolve routing for Notion webhook based on workspace/integration mapping.
 fn resolve_notion_route(
-    payload: &NotionWebhookPayload,
+    workspace_id: &str,
     credential: &scheduler_module::notion_store::NotionCredential,
     state: &GatewayState,
 ) -> Option<RouteDecision> {
     // Try to find employee by workspace_id in routes
-    let route_key = payload.workspace_id.clone();
+    let route_key = workspace_id.to_string();
 
     // Check explicit routes first
     if let Some(route) = super::routes::resolve_route(Channel::Notion, &route_key, state) {
@@ -827,6 +928,9 @@ fn resolve_notion_route(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
 
     fn make_test_payload(authors: Option<Vec<NotionWebhookAuthor>>) -> NotionWebhookPayload {
         NotionWebhookPayload {
@@ -851,6 +955,66 @@ mod tests {
             discussion_id: None,
             comment_id: None,
             extra: std::collections::HashMap::new(),
+        }
+    }
+
+    fn test_credential(workspace_id: &str, bot_id: &str) -> NotionCredential {
+        NotionCredential {
+            account_id: uuid::Uuid::nil(),
+            workspace_id: workspace_id.to_string(),
+            workspace_name: Some("Test Workspace".to_string()),
+            access_token: "secret_test_token".to_string(),
+            bot_id: bot_id.to_string(),
+            owner_user_id: Some("owner-user".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeCredentialLookup {
+        by_workspace: HashMap<String, NotionCredential>,
+        by_bot_id: HashMap<String, NotionCredential>,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl FakeCredentialLookup {
+        fn with_workspace(mut self, workspace_id: &str, credential: NotionCredential) -> Self {
+            self.by_workspace
+                .insert(workspace_id.to_string(), credential);
+            self
+        }
+
+        fn with_bot_id(mut self, bot_id: &str, credential: NotionCredential) -> Self {
+            self.by_bot_id.insert(bot_id.to_string(), credential);
+            self
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl NotionCredentialLookup for FakeCredentialLookup {
+        fn lookup_by_workspace(
+            &self,
+            workspace_id: &str,
+        ) -> Result<NotionCredential, NotionStoreError> {
+            self.calls
+                .borrow_mut()
+                .push(format!("workspace:{workspace_id}"));
+            self.by_workspace
+                .get(workspace_id)
+                .cloned()
+                .ok_or_else(|| NotionStoreError::NotFound(workspace_id.to_string()))
+        }
+
+        fn lookup_by_bot_id(&self, bot_id: &str) -> Result<NotionCredential, NotionStoreError> {
+            self.calls.borrow_mut().push(format!("bot:{bot_id}"));
+            self.by_bot_id
+                .get(bot_id)
+                .cloned()
+                .ok_or_else(|| NotionStoreError::NotFound(format!("bot_id: {bot_id}")))
         }
     }
 
@@ -941,6 +1105,23 @@ mod tests {
     }
 
     #[test]
+    fn test_get_comment_id_from_entity() {
+        let mut payload = make_test_payload(None);
+        payload.data = Some(serde_json::json!({
+            "page_id": "page-789"
+        }));
+        payload.entity = Some(serde_json::json!({
+            "id": "comment-from-entity",
+            "type": "comment"
+        }));
+
+        assert_eq!(
+            payload.get_comment_id(),
+            Some("comment-from-entity".to_string())
+        );
+    }
+
+    #[test]
     fn test_author_name() {
         let payload = make_test_payload(None);
         assert_eq!(payload.author_name(), Some("Test User".to_string()));
@@ -971,6 +1152,67 @@ mod tests {
     }
 
     #[test]
+    fn credential_lookup_uses_workspace_before_bot_ids() {
+        let payload = make_test_payload(None);
+        let lookup = FakeCredentialLookup::default()
+            .with_workspace("ws-456", test_credential("ws-456", "workspace-bot"))
+            .with_bot_id("bot-123", test_credential("other-ws", "bot-123"));
+
+        let credential = lookup_notion_credential(&lookup, &payload).unwrap();
+
+        assert_eq!(credential.workspace_id, "ws-456");
+        assert_eq!(lookup.calls(), vec!["workspace:ws-456"]);
+    }
+
+    #[test]
+    fn credential_lookup_falls_back_to_accessible_bot_when_workspace_empty() {
+        let mut payload = make_test_payload(None);
+        payload.workspace_id.clear();
+        payload.integration_id = "public-integration".to_string();
+        payload.accessible_by = Some(vec![
+            NotionWebhookAuthor {
+                id: "person-1".to_string(),
+                author_type: "person".to_string(),
+            },
+            NotionWebhookAuthor {
+                id: "workspace-bot".to_string(),
+                author_type: "bot".to_string(),
+            },
+        ]);
+        let lookup = FakeCredentialLookup::default().with_bot_id(
+            "workspace-bot",
+            test_credential("resolved-ws", "workspace-bot"),
+        );
+
+        let credential = lookup_notion_credential(&lookup, &payload).unwrap();
+
+        assert_eq!(credential.workspace_id, "resolved-ws");
+        assert_eq!(lookup.calls(), vec!["bot:workspace-bot"]);
+    }
+
+    #[test]
+    fn credential_lookup_falls_back_to_bot_when_workspace_not_found() {
+        let mut payload = make_test_payload(None);
+        payload.workspace_id = "missing-ws".to_string();
+        payload.accessible_by = Some(vec![NotionWebhookAuthor {
+            id: "workspace-bot".to_string(),
+            author_type: "bot".to_string(),
+        }]);
+        let lookup = FakeCredentialLookup::default().with_bot_id(
+            "workspace-bot",
+            test_credential("resolved-ws", "workspace-bot"),
+        );
+
+        let credential = lookup_notion_credential(&lookup, &payload).unwrap();
+
+        assert_eq!(credential.workspace_id, "resolved-ws");
+        assert_eq!(
+            lookup.calls(),
+            vec!["workspace:missing-ws", "bot:workspace-bot"]
+        );
+    }
+
+    #[test]
     fn test_deserialize_comment_created() {
         let json = r#"{
             "id": "event-123",
@@ -990,6 +1232,41 @@ mod tests {
         assert_eq!(payload.event_type, Some(NotionEventType::CommentCreated));
         assert_eq!(payload.integration_id, "abc-123");
         assert_eq!(payload.extract_comment_text(), "Hello");
+    }
+
+    #[test]
+    fn test_deserialize_comment_created_without_workspace_id() {
+        let json = r#"{
+            "id": "event-123",
+            "type": "comment.created",
+            "integration_id": "public-integration",
+            "accessible_by": [
+                {"id": "workspace-bot", "type": "bot"},
+                {"id": "person-1", "type": "person"}
+            ],
+            "entity": {
+                "id": "comment-from-entity",
+                "type": "comment"
+            },
+            "data": {
+                "page_id": "page-1"
+            }
+        }"#;
+
+        let payload: NotionWebhookPayload = serde_json::from_str(json).unwrap();
+
+        assert_eq!(payload.workspace_id, "");
+        assert_eq!(
+            payload.get_comment_id(),
+            Some("comment-from-entity".to_string())
+        );
+        assert_eq!(
+            payload.credential_lookup_bot_ids(),
+            vec![
+                "workspace-bot".to_string(),
+                "public-integration".to_string()
+            ]
+        );
     }
 
     #[test]

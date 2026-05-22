@@ -270,20 +270,32 @@ impl NotionStore {
         }
     }
 
-    /// Get credential by bot_id (integration_id in webhook payloads).
+    /// Get credential by bot_id.
     ///
-    /// The bot_id from OAuth is called `integration_id` in Notion webhook payloads.
-    /// This method is used to look up credentials when processing incoming webhooks.
+    /// This is used as a webhook fallback when the payload exposes the
+    /// workspace-specific bot principal but not a usable workspace_id.
     pub fn get_credential_by_bot_id(
         &self,
         bot_id: &str,
     ) -> Result<NotionCredential, NotionStoreError> {
-        let doc = self
-            .credentials
-            .find_one(doc! { "bot_id": bot_id }, None)?
-            .ok_or_else(|| NotionStoreError::NotFound(format!("bot_id: {}", bot_id)))?;
+        self.get_credentials_by_bot_id_candidates(bot_id)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| NotionStoreError::NotFound(format!("bot_id: {}", bot_id)))
+    }
 
-        Self::doc_to_credential(doc)
+    /// Get all credentials matching a bot_id, newest first.
+    ///
+    /// Public integration webhooks can be mapped back to a workspace-specific
+    /// OAuth token through the bot principal in `accessible_by`. Multiple
+    /// accounts may have connected the same workspace, so keep selection
+    /// deterministic and prefer the most recently updated token.
+    pub fn get_credentials_by_bot_id_candidates(
+        &self,
+        bot_id: &str,
+    ) -> Result<Vec<NotionCredential>, NotionStoreError> {
+        let cursor = self.credentials.find(doc! { "bot_id": bot_id }, None)?;
+        collect_credentials_newest_first(cursor)
     }
 
     /// Get any available credential (fallback when workspace_name is unknown).
