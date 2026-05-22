@@ -4,7 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use mongodb::bson::{doc, Bson, DateTime as BsonDateTime, Document};
-use mongodb::options::{FindOptions, IndexOptions, UpdateOptions};
+use mongodb::options::{IndexOptions, UpdateOptions};
 use mongodb::sync::Collection;
 use mongodb::IndexModel;
 
@@ -176,14 +176,11 @@ impl NotionStore {
         &self,
         workspace_id: &str,
     ) -> Result<Vec<NotionCredential>, NotionStoreError> {
-        let options = FindOptions::builder()
-            .sort(doc! { "updated_at": -1, "created_at": -1 })
-            .build();
         let cursor = self.credentials.find(
             doc! { "workspace_id": { "$in": Self::workspace_id_variants(workspace_id) } },
-            options,
+            None,
         )?;
-        collect_credentials(cursor)
+        collect_credentials_newest_first(cursor)
     }
 
     /// Normalize workspace_id to canonical UUID format with dashes.
@@ -243,11 +240,9 @@ impl NotionStore {
         // Normalize the search term: lowercase, remove non-alphanumeric
         let normalized_search = Self::normalize_workspace_name(name_or_slug);
 
-        // Get all credentials and find a match
-        let options = FindOptions::builder()
-            .sort(doc! { "updated_at": -1, "created_at": -1 })
-            .build();
-        let cursor = self.credentials.find(doc! {}, options)?;
+        // Get all credentials and find a match. Keep sorting client-side because
+        // Cosmos Mongo requires composite indexes for server-side ORDER BY.
+        let cursor = self.credentials.find(doc! {}, None)?;
         let mut matches = Vec::new();
 
         for result in cursor {
@@ -270,24 +265,37 @@ impl NotionStore {
                 name_or_slug
             )))
         } else {
+            sort_credentials_newest_first(&mut matches);
             Ok(matches)
         }
     }
 
-    /// Get credential by bot_id (integration_id in webhook payloads).
+    /// Get credential by bot_id.
     ///
-    /// The bot_id from OAuth is called `integration_id` in Notion webhook payloads.
-    /// This method is used to look up credentials when processing incoming webhooks.
+    /// This is used as a webhook fallback when the payload exposes the
+    /// workspace-specific bot principal but not a usable workspace_id.
     pub fn get_credential_by_bot_id(
         &self,
         bot_id: &str,
     ) -> Result<NotionCredential, NotionStoreError> {
-        let doc = self
-            .credentials
-            .find_one(doc! { "bot_id": bot_id }, None)?
-            .ok_or_else(|| NotionStoreError::NotFound(format!("bot_id: {}", bot_id)))?;
+        self.get_credentials_by_bot_id_candidates(bot_id)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| NotionStoreError::NotFound(format!("bot_id: {}", bot_id)))
+    }
 
-        Self::doc_to_credential(doc)
+    /// Get all credentials matching a bot_id, newest first.
+    ///
+    /// Public integration webhooks can be mapped back to a workspace-specific
+    /// OAuth token through the bot principal in `accessible_by`. Multiple
+    /// accounts may have connected the same workspace, so keep selection
+    /// deterministic and prefer the most recently updated token.
+    pub fn get_credentials_by_bot_id_candidates(
+        &self,
+        bot_id: &str,
+    ) -> Result<Vec<NotionCredential>, NotionStoreError> {
+        let cursor = self.credentials.find(doc! { "bot_id": bot_id }, None)?;
+        collect_credentials_newest_first(cursor)
     }
 
     /// Get any available credential (fallback when workspace_name is unknown).
@@ -303,11 +311,8 @@ impl NotionStore {
     pub fn get_all_credentials_newest_first(
         &self,
     ) -> Result<Vec<NotionCredential>, NotionStoreError> {
-        let options = FindOptions::builder()
-            .sort(doc! { "updated_at": -1, "created_at": -1 })
-            .build();
-        let cursor = self.credentials.find(doc! {}, options)?;
-        collect_credentials(cursor)
+        let cursor = self.credentials.find(doc! {}, None)?;
+        collect_credentials_newest_first(cursor)
     }
 
     /// Normalize a workspace name for comparison.
@@ -395,19 +400,81 @@ impl NotionStore {
     }
 }
 
-fn collect_credentials(
+fn collect_credentials_newest_first(
     cursor: mongodb::sync::Cursor<Document>,
 ) -> Result<Vec<NotionCredential>, NotionStoreError> {
     let mut credentials = Vec::new();
     for result in cursor {
         credentials.push(NotionStore::doc_to_credential(result?)?);
     }
+    sort_credentials_newest_first(&mut credentials);
     Ok(credentials)
+}
+
+fn sort_credentials_newest_first(credentials: &mut [NotionCredential]) {
+    credentials.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| b.created_at.cmp(&a.created_at))
+            .then_with(|| a.workspace_id.cmp(&b.workspace_id))
+            .then_with(|| a.account_id.cmp(&b.account_id))
+    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_credential_with_times(
+        account_id: uuid::Uuid,
+        workspace_id: &str,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+    ) -> NotionCredential {
+        NotionCredential {
+            account_id,
+            workspace_id: workspace_id.to_string(),
+            workspace_name: Some("Test Workspace".to_string()),
+            access_token: "secret_test_token".to_string(),
+            bot_id: "bot_123".to_string(),
+            owner_user_id: Some("user_456".to_string()),
+            created_at,
+            updated_at,
+        }
+    }
+
+    #[test]
+    fn sort_credentials_newest_first_prefers_updated_at_then_created_at() {
+        let account_id = uuid::Uuid::new_v4();
+        let base = DateTime::parse_from_rfc3339("2026-05-20T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let one_hour_later = base + chrono::Duration::hours(1);
+        let two_hours_later = base + chrono::Duration::hours(2);
+
+        let mut credentials = vec![
+            test_credential_with_times(account_id, "old", base, base),
+            test_credential_with_times(
+                account_id,
+                "newest-created",
+                two_hours_later,
+                one_hour_later,
+            ),
+            test_credential_with_times(account_id, "newest-updated", base, two_hours_later),
+            test_credential_with_times(account_id, "older-created", base, one_hour_later),
+        ];
+
+        sort_credentials_newest_first(&mut credentials);
+
+        let ordered_workspaces: Vec<_> = credentials
+            .iter()
+            .map(|credential| credential.workspace_id.as_str())
+            .collect();
+        assert_eq!(
+            ordered_workspaces,
+            vec!["newest-updated", "newest-created", "older-created", "old"]
+        );
+    }
 
     #[test]
     fn test_credential_roundtrip() {
