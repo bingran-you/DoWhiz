@@ -673,6 +673,7 @@ fn sync_task_status_to_user_storage(
             | Channel::GoogleSheets
             | Channel::GoogleSlides
             | Channel::Lark
+            | Channel::Notion
     ) {
         return;
     }
