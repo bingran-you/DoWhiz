@@ -13,7 +13,7 @@ addresses = [
   "little-bear@dowhiz.com",
   "agent@dowhiz.com",
 ]
-notion_user_id = "69037bc1-a421-83b1-ba79-0105ead7371f"
+notion_user_id = "300d872b-594c-81eb-b5fe-000281acc42c"
 agents_path = "employees/little_bear/AGENTS.md"
 claude_path = "employees/little_bear/CLAUDE.md"
 soul_path = "employees/little_bear/SOUL.md"
