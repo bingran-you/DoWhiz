@@ -222,8 +222,9 @@ pub(crate) fn process_notion_message(
             .unwrap_or_else(|| synthetic_notion_email(&authorized_requester.notion_identifier))
     });
 
-    // Create or get user
-    let user = user_store.get_or_create_user("notion", &user_email)?;
+    // Create or get user using the notion identifier (workspace_id:user_id format)
+    // This must match the account identifier format so dashboard legacy lookup works.
+    let user = user_store.get_or_create_user("notion", &authorized_requester.notion_identifier)?;
     let user_paths = user_store.user_paths(&config.users_root, &user.user_id);
     user_store.ensure_user_dirs(&user_paths)?;
 
