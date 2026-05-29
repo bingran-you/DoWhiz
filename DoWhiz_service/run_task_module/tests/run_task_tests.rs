@@ -1561,7 +1561,7 @@ fn run_task_investment_content_filter_retry_recovers_without_claude_fallback() {
 
 #[test]
 #[cfg(unix)]
-fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry() {
+fn run_task_investment_content_filter_failure_returns_explanation_without_claude_fallback() {
     let _lock = ENV_MUTEX.lock().unwrap();
     let temp = TempDir::new("codex_task_investment_content_filter_fallback").unwrap();
     let workspace = create_workspace(&temp.path).unwrap();
@@ -1576,7 +1576,7 @@ fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry()
     fs::create_dir_all(&home_dir).unwrap();
     fs::create_dir_all(&bin_dir).unwrap();
     write_fake_codex(&bin_dir, FakeCodexMode::InvestmentContentFilterAlwaysFail).unwrap();
-    write_fake_claude(&bin_dir, FakeClaudeMode::EnsureModel).unwrap();
+    write_fake_claude(&bin_dir, FakeClaudeMode::Fail).unwrap();
 
     let old_path = env::var("PATH").unwrap_or_default();
     let new_path = format!("{}:{}", bin_dir.display(), old_path);
@@ -1585,17 +1585,92 @@ fn run_task_investment_content_filter_failure_falls_back_to_claude_after_retry()
         ("PATH", &new_path),
         ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
         ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
-        ("EXPECTED_CLAUDE_MODEL", "claude-sonnet-4-5"),
         ("GH_AUTH_DISABLED", "1"),
     ]);
 
     let params = build_params(&workspace);
     let result = run_task(&params).unwrap();
     let reply = fs::read_to_string(&result.reply_html_path).unwrap();
-    assert!(reply.contains("Claude fallback reply"));
+    assert!(reply.contains("Azure/OpenAI content filter"));
+    assert!(reply.contains("send a new request"));
+    assert!(!reply.contains("Investment analysis could not be completed"));
     let note = result.recovery_note.unwrap_or_default();
-    assert!(note.contains("Claude fallback"));
-    assert!(!note.contains("deterministic operational"));
+    assert!(note.contains("content-filter explanation"));
+    assert!(
+        result
+            .terminal_error_message
+            .as_deref()
+            .unwrap_or("")
+            .contains("content-filter explanation"),
+        "content-filter explanation replies should be delivered but recorded as failed executions"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn run_task_investment_content_filter_retry_infra_failure_preserves_filter_classification() {
+    let _lock = ENV_MUTEX.lock().unwrap();
+    let temp = TempDir::new("codex_task_investment_content_filter_retry_infra").unwrap();
+    let workspace = create_workspace(&temp.path).unwrap();
+    write_investment_request(
+        &workspace,
+        "Apple stock",
+        "You are a wall street stock investor. Please help me deep research Apple stock, and give me advice of when to buy/sell.",
+    );
+
+    let home_dir = temp.path.join("home");
+    let bin_dir = temp.path.join("bin");
+    let claude_counter_path = temp.path.join("claude_invocations.txt");
+    fs::create_dir_all(&home_dir).unwrap();
+    fs::create_dir_all(&bin_dir).unwrap();
+    write_shell_script(
+        &bin_dir,
+        "codex",
+        r#"#!/bin/sh
+set -e
+if [ -f codex_fast_completion_context.md ]; then
+  echo "skipped Azure ACI fast-completion retry because remaining budget 45s is below the minimum viable Azure ACI retry window of 60s" >&2
+  exit 1
+fi
+echo "I'm sorry, but I cannot assist with that request." >&2
+echo "stream disconnected before completion: Incomplete response returned, reason: content_filter" >&2
+exit 1
+"#,
+    );
+    write_shell_script(
+        &bin_dir,
+        "claude",
+        r#"#!/bin/sh
+set -e
+echo invoked >> "$CLAUDE_COUNTER_PATH"
+echo "simulated claude failure" >&2
+exit 7
+"#,
+    );
+
+    let old_path = env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", bin_dir.display(), old_path);
+    let _env = EnvGuard::set(&[
+        ("HOME", home_dir.to_str().unwrap()),
+        ("PATH", &new_path),
+        ("AZURE_OPENAI_API_KEY_BACKUP", "test-key"),
+        ("AZURE_OPENAI_ENDPOINT_BACKUP", "https://example.azure.com/"),
+        ("CLAUDE_COUNTER_PATH", claude_counter_path.to_str().unwrap()),
+        ("GH_AUTH_DISABLED", "1"),
+    ]);
+
+    let params = build_params(&workspace);
+    let result = run_task(&params).unwrap();
+    let reply = fs::read_to_string(&result.reply_html_path).unwrap();
+    assert!(reply.contains("Azure/OpenAI content filter"));
+    assert!(reply.contains("send a new request"));
+    assert!(!reply.contains("Investment analysis could not be completed"));
+    assert!(
+        !claude_counter_path.exists(),
+        "Claude fallback should not run after an investment content-filter refusal even if the bounded retry fails for a different operational reason"
+    );
+    let note = result.recovery_note.unwrap_or_default();
+    assert!(note.contains("content-filter explanation"));
 }
 
 #[test]

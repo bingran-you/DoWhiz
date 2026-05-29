@@ -81,7 +81,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
         Ok(output) => Ok(output),
         Err(primary_err) => {
             let mut fallback_primary_err = primary_err;
-            let mut allow_fast_completion_retry = codex_budget_split.is_some();
+            let allow_fast_completion_retry = codex_budget_split.is_some();
             if is_notion_unrecoverable_reply_failure(params, &fallback_primary_err) {
                 return Err(fallback_primary_err);
             }
@@ -97,9 +97,17 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                     &fallback_primary_err,
                 ) {
                     Ok(output) => return Ok(output),
-                    Err(retry_err) => {
-                        fallback_primary_err = retry_err;
-                        allow_fast_completion_retry = false;
+                    Err(_retry_err) => {
+                        if let Some(output) = maybe_finalize_content_filter_reply(
+                            params,
+                            &workspace_dir,
+                            &fallback_primary_err,
+                        )? {
+                            return Ok(output);
+                        }
+                        // If no reply can be produced, preserve the original content-filter
+                        // classification instead of sending it into unrelated fallbacks.
+                        return Err(fallback_primary_err);
                     }
                 }
             }
@@ -118,11 +126,9 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                     Ok(output) => return Ok(output),
                     Err(retry_err) => {
                         // Retry also failed - send generic content filter reply
-                        if let Some(output) = maybe_finalize_generic_content_filter_reply(
-                            params,
-                            &workspace_dir,
-                            &retry_err,
-                        )? {
+                        if let Some(output) =
+                            maybe_finalize_content_filter_reply(params, &workspace_dir, &retry_err)?
+                        {
                             return Ok(output);
                         }
                         fallback_primary_err = retry_err;
@@ -134,7 +140,7 @@ pub fn run_task(params: &RunTaskParams) -> Result<RunTaskOutput, RunTaskError> {
                 && !params.reply_to.is_empty()
                 && is_content_filter_failure(&fallback_primary_err)
             {
-                if let Some(output) = maybe_finalize_generic_content_filter_reply(
+                if let Some(output) = maybe_finalize_content_filter_reply(
                     params,
                     &workspace_dir,
                     &fallback_primary_err,
@@ -205,7 +211,7 @@ fn is_content_filter_failure(err: &RunTaskError) -> bool {
     output_looks_like_content_filter_failure(output)
 }
 
-fn maybe_finalize_generic_content_filter_reply(
+fn maybe_finalize_content_filter_reply(
     params: &RunTaskParams,
     workspace_dir: &Path,
     cause: &RunTaskError,
