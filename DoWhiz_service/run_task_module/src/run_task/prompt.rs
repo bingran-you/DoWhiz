@@ -914,11 +914,6 @@ fn build_tpm_capabilities_section(identities: &UserIdentities) -> String {
     let Some(org_name) = &identities.organization_name else {
         return String::new();
     };
-    let account_id = identities
-        .account_id
-        .as_deref()
-        .unwrap_or("<UNKNOWN_ACCOUNT_ID>");
-
     let db_flag = identities
         .notion_database_id
         .as_ref()
@@ -1306,12 +1301,8 @@ When creating tasks, include context: link to GitHub issue/PR if available.
 - manual: Manually created (including from GitHub discovery)
 
 **Priority Levels:** P0 (critical), P1 (high), P2 (medium), P3 (low)
-
-**Account ID for trigger-sync:** {account_id}
-- `tpm_cli trigger-sync --user-id {account_id} --organization {org_name}` - Queue immediate TPM sync task
 "#,
         org_name = org_name,
-        account_id = account_id,
         db_flag = db_flag,
         github_context_section = github_context_section,
         no_db_warning = no_db_warning
