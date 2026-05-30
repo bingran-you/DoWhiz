@@ -1476,6 +1476,7 @@ pub struct AccountResponse {
     pub tokens_to_hours: Option<f64>,
     pub organization_id: Option<Uuid>,
     pub organization_name: Option<String>,
+    pub organization_accept_status: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1599,6 +1600,7 @@ pub async fn get_account(State(state): State<AuthState>, headers: HeaderMap) -> 
             tokens_to_hours: account.tokens_to_hours,
             organization_id: account.organization_id,
             organization_name,
+            organization_accept_status: account.organization_accept_status,
         }),
     )
         .into_response()
@@ -1999,6 +2001,84 @@ pub async fn update_organization_leader(
             .into_response(),
         Ok(Err(e)) => {
             error!("Failed to update organization leader: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
+/// GET /auth/organization/:name/pending-members - List pending members in an organization
+pub async fn list_pending_members(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(org_name): Path<String>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    let Some(leader_id) = org.leader_account_id else {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "Organization has no leader configured",
+        );
+    };
+
+    if account.id != leader_id {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "Only the organization leader can view pending members",
+        );
+    }
+
+    let store = state.account_store.clone();
+    let org_id = org.id;
+    let members_result = task::spawn_blocking(move || store.list_pending_org_members(org_id))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match members_result {
+        Ok(Ok(members)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "pending_members": members.iter().map(|m| serde_json::json!({
+                    "account_id": m.account_id,
+                    "email": m.email,
+                    "name": m.name,
+                })).collect::<Vec<_>>()
+            })),
+        )
+            .into_response(),
+        Ok(Err(e)) => {
+            error!("Failed to list pending members: {}", e);
             json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
         }
         Err(response) => response,
@@ -2698,6 +2778,7 @@ pub async fn set_account_organization(
                 "account_id": updated_account.id,
                 "organization_id": updated_account.organization_id,
                 "organization_name": payload.organization_name,
+                "organization_accept_status": updated_account.organization_accept_status,
             })),
         )
             .into_response(),
@@ -7993,6 +8074,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/auth/organization/:name/leader",
             put(update_organization_leader),
+        )
+        .route(
+            "/auth/organization/:name/pending-members",
+            get(list_pending_members),
         )
         .route(
             "/auth/organization/:name/members/:account_id/accept",

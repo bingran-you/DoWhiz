@@ -2224,6 +2224,33 @@ impl AccountStore {
             .collect())
     }
 
+    pub fn list_pending_org_members(
+        &self,
+        organization_id: Uuid,
+    ) -> Result<Vec<OrgMember>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let rows = conn.query(
+            "SELECT a.id, u.email, u.raw_user_meta_data->>'full_name' as name,
+                    NULL as notion_user_id, NULL as slack_user_id, NULL as discord_user_id
+             FROM accounts a
+             JOIN auth.users u ON a.auth_user_id = u.id
+             WHERE a.organization_id = $1 AND a.organization_accept_status = 'pending'",
+            &[&organization_id],
+        )?;
+
+        Ok(rows
+            .iter()
+            .map(|r| OrgMember {
+                account_id: r.get(0),
+                email: r.get::<_, Option<String>>(1).unwrap_or_default(),
+                name: r.get(2),
+                notion_user_id: r.get(3),
+                slack_user_id: r.get(4),
+                discord_user_id: r.get(5),
+            })
+            .collect())
+    }
+
     /// Create an email verification token (expires in 24 hours)
     pub fn create_email_verification_token(
         &self,
