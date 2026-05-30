@@ -2049,6 +2049,7 @@ impl AccountStore {
         };
 
         let is_first_member = leader_account_id.is_none();
+        let is_leader = leader_account_id == Some(account_id);
 
         // If no leader, set this account as leader
         if is_first_member {
@@ -2058,8 +2059,8 @@ impl AccountStore {
             )?;
         }
 
-        // Update account's organization_id - auto-accept if first member, pending otherwise
-        let status = if is_first_member {
+        // Auto-accept if first member or rejoining as leader
+        let status = if is_first_member || is_leader {
             "accepted"
         } else {
             "pending"
