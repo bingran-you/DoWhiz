@@ -2029,6 +2029,7 @@ impl AccountStore {
     }
 
     /// Set an account's organization by organization name.
+    /// If the org has no leader, the joining account becomes leader and is auto-accepted.
     pub fn set_account_organization(
         &self,
         account_id: Uuid,
@@ -2038,22 +2039,33 @@ impl AccountStore {
 
         // Look up organization by name
         let org_row = conn.query_opt(
-            "SELECT id FROM organizations WHERE name = $1",
+            "SELECT id, leader_account_id FROM organizations WHERE name = $1",
             &[&organization_name],
         )?;
 
-        let org_id: Uuid = match org_row {
-            Some(r) => r.get(0),
+        let (org_id, leader_account_id): (Uuid, Option<Uuid>) = match org_row {
+            Some(r) => (r.get(0), r.get(1)),
             None => return Err(AccountStoreError::NotFound),
         };
 
-        // Update account's organization_id with pending status
+        let is_first_member = leader_account_id.is_none();
+
+        // If no leader, set this account as leader
+        if is_first_member {
+            conn.execute(
+                "UPDATE organizations SET leader_account_id = $1 WHERE id = $2",
+                &[&account_id, &org_id],
+            )?;
+        }
+
+        // Update account's organization_id - auto-accept if first member, pending otherwise
+        let status = if is_first_member { "accepted" } else { "pending" };
         let row = conn.query_opt(
             "UPDATE accounts
-             SET organization_id = $1, organization_accept_status = 'pending'
-             WHERE id = $2
+             SET organization_id = $1, organization_accept_status = $2
+             WHERE id = $3
              RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status",
-            &[&org_id, &account_id],
+            &[&org_id, &status, &account_id],
         )?;
 
         match row {
