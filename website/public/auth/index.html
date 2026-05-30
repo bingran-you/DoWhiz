@@ -2767,7 +2767,7 @@
                     <h2 style="margin: 0;">Organization</h2>
                     <a href="organizations_help.html" target="_blank" title="Organization setup guide" style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: transparent; border: 1.5px solid currentColor; color: var(--text-color, #333); font-size: 0.8rem; text-decoration: none; font-weight: 600;">?</a>
                   </div>
-                  <p>Join an organization to enable TPM mode and team task management.</p>
+                  <p>Join an organization to enable Chief of Staff mode and team task management.</p>
 
                   <div class="settings-panel" style="margin-top: 1.5rem;">
                     <div id="org-current-display" class="current-org-display hidden">
@@ -2777,7 +2777,7 @@
                       </div>
                       <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <button id="trigger-tpm-sync-btn" class="auth-btn auth-btn-primary">
-                          Trigger TPM Sync
+                          Start Sync
                         </button>
                         <button id="org-leave-btn" class="auth-btn auth-btn-oauth">
                           Leave Organization
@@ -2788,9 +2788,9 @@
                       <a href="#" id="org-advanced-toggle" style="display: block; margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted, #888);">Advanced</a>
                       <div id="org-advanced-section" class="hidden" style="display: block; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #333); width: 100%;">
                         <div id="tpm-cron-section">
-                          <h4 style="margin-bottom: 0.5rem;">TPM Cron Schedule</h4>
+                          <h4 style="margin-bottom: 0.5rem;">Chief of Staff Cron Schedule</h4>
                           <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
-                            Set a recurring schedule for automatic TPM syncs.
+                            Set a recurring schedule for automatic syncs.
                           </p>
                           <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
@@ -2806,7 +2806,7 @@
 
                         <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Change Notion task board</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
-                          Connect an existing Notion database for TPM task management.
+                          Connect an existing Notion database for task management.
                         </p>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                           <input
@@ -2829,7 +2829,7 @@
 
                         <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Organization Leader</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
-                          The leader's Notion credentials are used for all TPM operations.
+                          The leader's Notion credentials are used for all Chief of Staff operations.
                         </p>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                           <input
@@ -2845,7 +2845,7 @@
 
                         <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Community Bug Tracking</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
-                          Connect community channels to automatically scan for bug reports during TPM syncs.
+                          Connect community channels to automatically scan for bug reports during syncs.
                         </p>
                         <h5 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.95rem;">Discord</h5>
                         <div style="display: flex; flex-direction: column; gap: 0.5rem;">
@@ -2891,7 +2891,7 @@
                     <div id="org-join-container">
                       <h3>Join an organization</h3>
                       <p style="font-size: 0.9rem; color: var(--text-muted, #888); margin-bottom: 1rem;">
-                        Search for your organization to join and enable TPM mode.
+                        Search for your organization to join and enable Chief of Staff mode.
                       </p>
                       <div class="org-search-input-wrap" style="position: relative; margin-bottom: 0.75rem;">
                         <input
@@ -3082,11 +3082,11 @@
           authTitle: 'Run your work with Oliver',
           authSubtitle:
             'Sign in to review follow-through, connect the tools Oliver watches, and keep cross-functional context up to date.',
-          dashboardTitle: 'Your Oliver TPM workspace',
+          dashboardTitle: 'Your Oliver Chief of Staff workspace',
           dashboardSubtitle:
             'Review signals, follow-through, and the current setup Oliver uses to keep work moving.',
-          sidebarEyebrow: 'Oliver for TPMs',
-          sidebarTitle: 'TPM workspace',
+          sidebarEyebrow: 'Oliver Chief of Staff',
+          sidebarTitle: 'Chief of Staff workspace',
           sidebarDescription:
             'See the current state, the next move, and the follow-through Oliver is coordinating in one place.',
           overviewCopy: 'Current state, one honest next move, and the follow-through that needs review.'
@@ -6329,7 +6329,7 @@
           if (slackInput) slackInput.value = currentOrg?.slack_team_id || '';
           if (githubInput) githubInput.value = currentOrg?.github_org_name || '';
 
-          // Show TPM cron section if no leader set, or if current user is the leader
+          // Show cron section if no leader set, or if current user is the leader
           const cronSection = document.getElementById('tpm-cron-section');
           if (cronSection && currentOrg) {
             const noLeaderSet = !currentOrg.leader_account_id;
@@ -6443,7 +6443,7 @@
           if (memberCountRes.ok) {
             const memberData = await memberCountRes.json();
             if (memberData.member_count === 1) {
-              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - setting up TPM mode...`;
+              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - setting up Chief of Staff mode...`;
 
               try {
                 const tpmRes = await fetch(`${DOWHIZ_API_URL}/api/tpm/setup-cron`, {
@@ -6457,16 +6457,16 @@
 
                 if (tpmRes.ok) {
                   const tpmData = await tpmRes.json();
-                  console.log('TPM cron set up successfully:', tpmData);
-                  orgStatus.textContent = `Joined ${selectedOrganization}! TPM mode is now active.`;
+                  console.log('Chief of Staff cron set up successfully:', tpmData);
+                  orgStatus.textContent = `Joined ${selectedOrganization}! Chief of Staff mode is now active.`;
                 } else {
                   const errData = await tpmRes.json().catch(() => ({}));
-                  console.error('TPM cron setup failed:', tpmRes.status, errData);
-                  orgStatus.textContent = `Joined ${selectedOrganization}! (TPM setup failed: ${errData.error || tpmRes.status})`;
+                  console.error('Chief of Staff cron setup failed:', tpmRes.status, errData);
+                  orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup failed: ${errData.error || tpmRes.status})`;
                 }
               } catch (tpmErr) {
-                console.error('TPM cron setup error:', tpmErr);
-                orgStatus.textContent = `Joined ${selectedOrganization}! (TPM setup error)`;
+                console.error('Chief of Staff cron setup error:', tpmErr);
+                orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup error)`;
               }
             }
           }
@@ -6684,7 +6684,7 @@
           const data = await res.json();
           const timeStr = `${localHours.toString().padStart(2, '0')}:${localMinutes.toString().padStart(2, '0')}`;
           const daysStr = weekdaysCheckbox.checked ? 'weekdays' : 'daily';
-          syncStatus.textContent = `TPM cron set for ${timeStr} ${daysStr} (local time)! Task ID: ${data.task_id.slice(0, 8)}...`;
+          syncStatus.textContent = `Cron set for ${timeStr} ${daysStr} (local time)! Task ID: ${data.task_id.slice(0, 8)}...`;
           syncStatus.className = 'org-status success';
         } catch (err) {
           syncStatus.textContent = normalizeApiFetchError(err);
