@@ -2059,7 +2059,11 @@ impl AccountStore {
         }
 
         // Update account's organization_id - auto-accept if first member, pending otherwise
-        let status = if is_first_member { "accepted" } else { "pending" };
+        let status = if is_first_member {
+            "accepted"
+        } else {
+            "pending"
+        };
         let row = conn.query_opt(
             "UPDATE accounts
              SET organization_id = $1, organization_accept_status = $2
