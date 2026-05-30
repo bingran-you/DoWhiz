@@ -50,7 +50,8 @@ Get current account details and linked identifiers.
   ],
   "tokens_to_hours": 0.5,
   "organization_id": "uuid or null",
-  "organization_name": "deeptutor or null"
+  "organization_name": "deeptutor or null",
+  "organization_accept_status": "accepted" | "pending" | null
 }
 ```
 
@@ -302,8 +303,72 @@ Set the organization's Slack team (workspace) ID for TPM notifications.
 
 ---
 
+### GET /auth/organization/:name/pending-members
+List pending member applications for an organization. Only accessible by the organization leader.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+
+**Response 200:**
+```json
+{
+  "pending_members": [
+    {
+      "account_id": "uuid",
+      "email": "user@example.com",
+      "name": "John Doe"
+    }
+  ]
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "Only the organization leader can view pending members"
+}
+```
+
+---
+
+### POST /auth/organization/:name/members/:account_id/accept
+Accept a pending member application. Only accessible by the organization leader.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Path Parameters:**
+- `name` - Organization name
+- `account_id` - UUID of the pending member's account
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "account_id": "uuid",
+  "organization_accept_status": "accepted"
+}
+```
+
+**Response 403:**
+```json
+{
+  "error": "Only the organization leader can accept members"
+}
+```
+
+**Response 404:**
+```json
+{
+  "error": "Account not found or not a member of any organization"
+}
+```
+
+---
+
 ### PUT /auth/account/organization
-Join an organization by name.
+Join an organization by name. First member is auto-accepted and becomes leader. Subsequent members are set to "pending" status awaiting leader approval.
 
 **Headers:** `Authorization: Bearer <token>`
 
@@ -319,7 +384,8 @@ Join an organization by name.
 {
   "account_id": "uuid",
   "organization_id": "uuid",
-  "organization_name": "deeptutor"
+  "organization_name": "deeptutor",
+  "organization_accept_status": "accepted" | "pending"
 }
 ```
 
@@ -333,7 +399,7 @@ Join an organization by name.
 ---
 
 ### DELETE /auth/account/organization
-Leave the current organization.
+Leave the current organization (or withdraw pending application).
 
 **Headers:** `Authorization: Bearer <token>`
 

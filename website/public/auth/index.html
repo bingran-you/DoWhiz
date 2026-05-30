@@ -2774,13 +2774,19 @@
                       <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                         <span class="current-org-label">Current organization:</span>
                         <span id="org-current-name" class="current-org-name" style="font-weight: 600;"></span>
+                        <span id="org-pending-badge" class="hidden" style="background: #f59e0b; color: #000; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Pending Approval</span>
                       </div>
-                      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                      <div id="org-accepted-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <button id="trigger-tpm-sync-btn" class="auth-btn auth-btn-primary">
                           Start Sync
                         </button>
                         <button id="org-leave-btn" class="auth-btn auth-btn-oauth">
                           Leave Organization
+                        </button>
+                      </div>
+                      <div id="org-pending-actions" class="hidden" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="org-withdraw-btn" class="auth-btn auth-btn-oauth">
+                          Withdraw Application
                         </button>
                       </div>
                       <span id="org-sync-status" class="org-status" style="display: block; margin-top: 0.75rem;"></span>
@@ -2842,6 +2848,15 @@
                           <button id="set-org-leader-btn" class="auth-btn auth-btn-oauth" style="align-self: flex-start;">Set Leader</button>
                         </div>
                         <span id="org-leader-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+
+                        <div id="pending-members-section" class="hidden" style="margin-top: 1.5rem;">
+                          <h4 style="margin-bottom: 0.5rem;">Pending Member Requests</h4>
+                          <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
+                            Review and approve member applications to your organization.
+                          </p>
+                          <div id="pending-members-list" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                          <span id="pending-members-status" class="org-status" style="display: block; margin-top: 0.5rem;"></span>
+                        </div>
 
                         <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Community Bug Tracking</h4>
                         <p style="font-size: 0.85rem; color: var(--text-muted, #888); margin-bottom: 0.75rem;">
@@ -6301,8 +6316,13 @@
         const orgCurrentDisplay = document.getElementById('org-current-display');
         const orgCurrentName = document.getElementById('org-current-name');
         const orgJoinContainer = document.getElementById('org-join-container');
+        const orgPendingBadge = document.getElementById('org-pending-badge');
+        const orgAcceptedActions = document.getElementById('org-accepted-actions');
+        const orgPendingActions = document.getElementById('org-pending-actions');
 
         currentOrganizationName = accountData.organization_name || null;
+        const acceptStatus = accountData.organization_accept_status || null;
+        const isPending = acceptStatus === 'pending';
 
         if (currentOrganizationName) {
           if (orgCurrentDisplay && orgCurrentName) {
@@ -6312,6 +6332,19 @@
           if (orgJoinContainer) {
             orgJoinContainer.classList.add('hidden');
           }
+
+          if (isPending) {
+            orgPendingBadge?.classList.remove('hidden');
+            orgAcceptedActions?.classList.add('hidden');
+            orgPendingActions?.classList.remove('hidden');
+            orgPendingActions.style.display = 'flex';
+          } else {
+            orgPendingBadge?.classList.add('hidden');
+            orgAcceptedActions?.classList.remove('hidden');
+            orgAcceptedActions.style.display = 'flex';
+            orgPendingActions?.classList.add('hidden');
+          }
+
           // Pre-populate database ID, workspace ID, and leader fields
           const orgs = await searchOrganizations(currentOrganizationName);
           const currentOrg = orgs.find(o => o.name === currentOrganizationName);
@@ -6329,12 +6362,22 @@
           if (slackInput) slackInput.value = currentOrg?.slack_team_id || '';
           if (githubInput) githubInput.value = currentOrg?.github_org_name || '';
 
-          // Show cron section if no leader set, or if current user is the leader
+          // Show cron section if accepted AND (no leader set, or current user is the leader)
           const cronSection = document.getElementById('tpm-cron-section');
+          const pendingSection = document.getElementById('pending-members-section');
+          const isLeader = currentAccountId && currentOrg?.leader_account_id === currentAccountId;
+
           if (cronSection && currentOrg) {
             const noLeaderSet = !currentOrg.leader_account_id;
-            const isLeader = currentAccountId && currentOrg.leader_account_id === currentAccountId;
-            cronSection.style.display = (noLeaderSet || isLeader) ? 'block' : 'none';
+            cronSection.style.display = (!isPending && (noLeaderSet || isLeader)) ? 'block' : 'none';
+          }
+
+          // Show pending members section for leaders
+          if (pendingSection && isLeader) {
+            pendingSection.classList.remove('hidden');
+            await loadPendingMembers();
+          } else if (pendingSection) {
+            pendingSection.classList.add('hidden');
           }
         } else {
           if (orgCurrentDisplay) {
@@ -6433,42 +6476,38 @@
           }
 
           const data = await res.json();
-          orgStatus.textContent = `Joined ${selectedOrganization}!`;
-          orgStatus.className = 'org-status success';
+          const acceptStatus = data.organization_accept_status;
 
-          const memberCountRes = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(selectedOrganization)}/member-count`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
+          if (acceptStatus === 'accepted') {
+            orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - setting up Chief of Staff mode...`;
+            orgStatus.className = 'org-status success';
 
-          if (memberCountRes.ok) {
-            const memberData = await memberCountRes.json();
-            if (memberData.member_count === 1) {
-              orgStatus.textContent = `Joined ${selectedOrganization}! You are the first member - setting up Chief of Staff mode...`;
+            try {
+              const tpmRes = await fetch(`${DOWHIZ_API_URL}/api/tpm/setup-cron`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ organization_name: selectedOrganization })
+              });
 
-              try {
-                const tpmRes = await fetch(`${DOWHIZ_API_URL}/api/tpm/setup-cron`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({ organization_name: selectedOrganization })
-                });
-
-                if (tpmRes.ok) {
-                  const tpmData = await tpmRes.json();
-                  console.log('Chief of Staff cron set up successfully:', tpmData);
-                  orgStatus.textContent = `Joined ${selectedOrganization}! Chief of Staff mode is now active.`;
-                } else {
-                  const errData = await tpmRes.json().catch(() => ({}));
-                  console.error('Chief of Staff cron setup failed:', tpmRes.status, errData);
-                  orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup failed: ${errData.error || tpmRes.status})`;
-                }
-              } catch (tpmErr) {
-                console.error('Chief of Staff cron setup error:', tpmErr);
-                orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup error)`;
+              if (tpmRes.ok) {
+                const tpmData = await tpmRes.json();
+                console.log('Chief of Staff cron set up successfully:', tpmData);
+                orgStatus.textContent = `Joined ${selectedOrganization}! Chief of Staff mode is now active.`;
+              } else {
+                const errData = await tpmRes.json().catch(() => ({}));
+                console.error('Chief of Staff cron setup failed:', tpmRes.status, errData);
+                orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup failed: ${errData.error || tpmRes.status})`;
               }
+            } catch (tpmErr) {
+              console.error('Chief of Staff cron setup error:', tpmErr);
+              orgStatus.textContent = `Joined ${selectedOrganization}! (Chief of Staff setup error)`;
             }
+          } else {
+            orgStatus.textContent = `Application submitted to ${selectedOrganization}. Pending leader approval.`;
+            orgStatus.className = 'org-status';
           }
 
           const joinedOrgName = selectedOrganization;
@@ -6477,7 +6516,8 @@
 
           await initOrganizationUI({
             account_id: currentAccountId,
-            organization_name: joinedOrgName
+            organization_name: joinedOrgName,
+            organization_accept_status: acceptStatus
           });
 
         } catch (err) {
@@ -6537,6 +6577,139 @@
           }
         } finally {
           if (leaveBtn) leaveBtn.disabled = false;
+        }
+      }
+
+      async function withdrawApplication() {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        if (!confirm(`Withdraw application to "${currentOrganizationName}"?`)) return;
+
+        const withdrawBtn = document.getElementById('org-withdraw-btn');
+        const orgStatus = document.getElementById('org-sync-status');
+
+        if (withdrawBtn) withdrawBtn.disabled = true;
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/account/organization`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to withdraw application');
+          }
+
+          if (orgStatus) {
+            orgStatus.textContent = 'Application withdrawn';
+            orgStatus.className = 'org-status success';
+          }
+
+          currentOrganizationName = null;
+
+          const orgCurrentDisplay = document.getElementById('org-current-display');
+          const orgJoinContainer = document.getElementById('org-join-container');
+          const orgJoinBtn = document.getElementById('org-join-btn');
+          if (orgCurrentDisplay) {
+            orgCurrentDisplay.classList.add('hidden');
+          }
+          if (orgJoinContainer) {
+            orgJoinContainer.classList.remove('hidden');
+          }
+          if (orgJoinBtn) {
+            orgJoinBtn.disabled = true;
+          }
+
+        } catch (err) {
+          if (orgStatus) {
+            orgStatus.textContent = normalizeApiFetchError(err);
+            orgStatus.className = 'org-status error';
+          }
+        } finally {
+          if (withdrawBtn) withdrawBtn.disabled = false;
+        }
+      }
+
+      async function loadPendingMembers() {
+        if (!currentOrganizationName) return;
+
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        const listEl = document.getElementById('pending-members-list');
+        const statusEl = document.getElementById('pending-members-status');
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/pending-members`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to load pending members');
+          }
+
+          const data = await res.json();
+          const members = data.pending_members || [];
+
+          if (members.length === 0) {
+            listEl.innerHTML = '<p style="color: var(--text-muted, #888); font-size: 0.85rem;">No pending applications</p>';
+          } else {
+            listEl.innerHTML = members.map(m => `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: var(--bg-secondary, #1a1a1a); border-radius: 4px;">
+                <div>
+                  <span style="font-weight: 500;">${escapeHtml(m.name || m.email)}</span>
+                  ${m.name ? `<span style="color: var(--text-muted, #888); font-size: 0.85rem;"> (${escapeHtml(m.email)})</span>` : ''}
+                </div>
+                <button class="auth-btn auth-btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" onclick="acceptMember('${m.account_id}')">Accept</button>
+              </div>
+            `).join('');
+          }
+
+          if (statusEl) statusEl.textContent = '';
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = normalizeApiFetchError(err);
+            statusEl.className = 'org-status error';
+          }
+        }
+      }
+
+      async function acceptMember(accountId) {
+        if (!currentOrganizationName) return;
+
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (!accessToken) return;
+
+        const statusEl = document.getElementById('pending-members-status');
+
+        try {
+          const res = await fetch(`${DOWHIZ_API_URL}/auth/organization/${encodeURIComponent(currentOrganizationName)}/members/${accountId}/accept`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to accept member');
+          }
+
+          if (statusEl) {
+            statusEl.textContent = 'Member accepted!';
+            statusEl.className = 'org-status success';
+          }
+
+          await loadPendingMembers();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.textContent = normalizeApiFetchError(err);
+            statusEl.className = 'org-status error';
+          }
         }
       }
 
@@ -6699,6 +6872,7 @@
         const resultsEl = document.getElementById('org-join-search-results');
         const joinBtn = document.getElementById('org-join-btn');
         const leaveBtn = document.getElementById('org-leave-btn');
+        const withdrawBtn = document.getElementById('org-withdraw-btn');
         const triggerSyncBtn = document.getElementById('trigger-tpm-sync-btn');
         const setupCronBtn = document.getElementById('setup-tpm-cron-btn');
         const advancedToggle = document.getElementById('org-advanced-toggle');
@@ -6742,6 +6916,7 @@
 
         if (joinBtn) joinBtn.addEventListener('click', joinOrganization);
         if (leaveBtn) leaveBtn.addEventListener('click', leaveOrganization);
+        if (withdrawBtn) withdrawBtn.addEventListener('click', withdrawApplication);
         if (triggerSyncBtn) triggerSyncBtn.addEventListener('click', triggerTpmSync);
         if (setupCronBtn) setupCronBtn.addEventListener('click', setupTpmCron);
         if (createBtn) createBtn.addEventListener('click', createOrganization);
