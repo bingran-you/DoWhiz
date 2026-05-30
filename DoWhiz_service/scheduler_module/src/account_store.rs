@@ -2208,7 +2208,7 @@ impl AccountStore {
                      ORDER BY ai.created_at DESC LIMIT 1) as discord_user_id
              FROM accounts a
              JOIN auth.users u ON a.auth_user_id = u.id
-             WHERE a.organization_id = $1",
+             WHERE a.organization_id = $1 AND a.organization_accept_status = 'accepted'",
             &[&organization_id],
         )?;
 
