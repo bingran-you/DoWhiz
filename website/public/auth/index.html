@@ -1077,6 +1077,21 @@
         border-color: var(--border);
       }
 
+      .pending-member-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.75rem;
+        background: var(--surface, #1a1a1a);
+        border: 1px solid var(--border, #333);
+        border-radius: 6px;
+      }
+
+      [data-theme="light"] .pending-member-row {
+        background: var(--surface);
+        border-color: var(--border);
+      }
+
       [data-theme="light"] .legal-card,
       [data-theme="dark"] .legal-card {
         background: var(--card);
@@ -6660,8 +6675,8 @@
             listEl.innerHTML = '<p style="color: var(--text-muted, #888); font-size: 0.85rem;">No pending applications</p>';
           } else {
             listEl.innerHTML = members.map(m => `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: var(--bg-secondary, #1a1a1a); border-radius: 4px;">
-                <div>
+              <div class="pending-member-row">
+                <div
                   <span style="font-weight: 500;">${escapeHtml(m.name || m.email)}</span>
                   ${m.name ? `<span style="color: var(--text-muted, #888); font-size: 0.85rem;"> (${escapeHtml(m.email)})</span>` : ''}
                 </div>
