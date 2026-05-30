@@ -6679,7 +6679,7 @@
         }
       }
 
-      async function acceptMember(accountId) {
+      window.acceptMember = async function acceptMember(accountId) {
         if (!currentOrganizationName) return;
 
         const session = await supabase.auth.getSession();
