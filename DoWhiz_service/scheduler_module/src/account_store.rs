@@ -42,6 +42,7 @@ pub struct Account {
     pub tokens_to_hours: Option<f64>,
     pub purchased_hours: Option<f64>,
     pub organization_id: Option<Uuid>,
+    pub organization_accept_status: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -466,7 +467,8 @@ impl AccountStore {
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 tokens_to_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
                 purchased_hours DOUBLE PRECISION NOT NULL DEFAULT 0,
-                organization_id UUID NULL REFERENCES organizations(id) ON DELETE SET NULL
+                organization_id UUID NULL REFERENCES organizations(id) ON DELETE SET NULL,
+                organization_accept_status TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS account_identifiers (
@@ -630,7 +632,7 @@ impl AccountStore {
         let row = conn.query_one(
             "INSERT INTO accounts (id, auth_user_id, created_at, tokens_to_hours, purchased_hours)
              VALUES ($1, $2, NOW(), 0, 0)
-             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status",
             &[&id, &auth_user_id],
         )?;
         Ok(Account {
@@ -640,6 +642,7 @@ impl AccountStore {
             tokens_to_hours: row.get(3),
             purchased_hours: row.get(4),
             organization_id: row.get(5),
+            organization_accept_status: row.get(6),
         })
     }
 
@@ -650,7 +653,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status
              FROM accounts WHERE auth_user_id = $1",
             &[&auth_user_id],
         )?;
@@ -661,6 +664,7 @@ impl AccountStore {
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
             organization_id: r.get(5),
+            organization_accept_status: r.get(6),
         }))
     }
 
@@ -668,7 +672,7 @@ impl AccountStore {
     pub fn get_account(&self, account_id: Uuid) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status
              FROM accounts WHERE id = $1",
             &[&account_id],
         )?;
@@ -679,6 +683,7 @@ impl AccountStore {
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
             organization_id: r.get(5),
+            organization_accept_status: r.get(6),
         }))
     }
 
@@ -690,7 +695,7 @@ impl AccountStore {
     ) -> Result<Option<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
-            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8, a.organization_id
+            "SELECT a.id, a.auth_user_id, a.created_at, a.tokens_to_hours::float8, a.purchased_hours::float8, a.organization_id, a.organization_accept_status
              FROM accounts a
              JOIN account_identifiers ai ON ai.account_id = a.id
              WHERE ai.identifier_type = $1 AND ai.identifier = $2 AND ai.verified = true",
@@ -703,6 +708,7 @@ impl AccountStore {
             tokens_to_hours: r.get(3),
             purchased_hours: r.get(4),
             organization_id: r.get(5),
+            organization_accept_status: r.get(6),
         }))
     }
 
@@ -1146,7 +1152,7 @@ impl AccountStore {
     ) -> Result<Vec<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let rows = conn.query(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status
              FROM accounts
              WHERE created_at >= $1 AND created_at < $2
              ORDER BY created_at ASC",
@@ -1161,6 +1167,7 @@ impl AccountStore {
                 tokens_to_hours: row.get(3),
                 purchased_hours: row.get(4),
                 organization_id: row.get(5),
+                organization_accept_status: row.get(6),
             })
             .collect())
     }
@@ -2040,12 +2047,12 @@ impl AccountStore {
             None => return Err(AccountStoreError::NotFound),
         };
 
-        // Update account's organization_id
+        // Update account's organization_id with pending status
         let row = conn.query_opt(
             "UPDATE accounts
-             SET organization_id = $1
+             SET organization_id = $1, organization_accept_status = 'pending'
              WHERE id = $2
-             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status",
             &[&org_id, &account_id],
         )?;
 
@@ -2057,6 +2064,7 @@ impl AccountStore {
                 tokens_to_hours: r.get(3),
                 purchased_hours: r.get(4),
                 organization_id: r.get(5),
+                organization_accept_status: r.get(6),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -2070,9 +2078,9 @@ impl AccountStore {
         let mut conn = self.conn()?;
         let row = conn.query_opt(
             "UPDATE accounts
-             SET organization_id = NULL
+             SET organization_id = NULL, organization_accept_status = NULL
              WHERE id = $1
-             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id",
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status",
             &[&account_id],
         )?;
 
@@ -2084,6 +2092,34 @@ impl AccountStore {
                 tokens_to_hours: r.get(3),
                 purchased_hours: r.get(4),
                 organization_id: r.get(5),
+                organization_accept_status: r.get(6),
+            }),
+            None => Err(AccountStoreError::NotFound),
+        }
+    }
+
+    pub fn accept_organization_member(
+        &self,
+        account_id: Uuid,
+    ) -> Result<Account, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "UPDATE accounts
+             SET organization_accept_status = 'accepted'
+             WHERE id = $1 AND organization_id IS NOT NULL
+             RETURNING id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status",
+            &[&account_id],
+        )?;
+
+        match row {
+            Some(r) => Ok(Account {
+                id: r.get(0),
+                auth_user_id: r.get(1),
+                created_at: r.get(2),
+                tokens_to_hours: r.get(3),
+                purchased_hours: r.get(4),
+                organization_id: r.get(5),
+                organization_accept_status: r.get(6),
             }),
             None => Err(AccountStoreError::NotFound),
         }
@@ -2116,7 +2152,7 @@ impl AccountStore {
     ) -> Result<Vec<Account>, AccountStoreError> {
         let mut conn = self.conn()?;
         let rows = conn.query(
-            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id
+            "SELECT id, auth_user_id, created_at, tokens_to_hours::float8, purchased_hours::float8, organization_id, organization_accept_status
              FROM accounts WHERE organization_id = $1",
             &[&organization_id],
         )?;
@@ -2130,6 +2166,7 @@ impl AccountStore {
                 tokens_to_hours: r.get(3),
                 purchased_hours: r.get(4),
                 organization_id: r.get(5),
+                organization_accept_status: r.get(6),
             })
             .collect())
     }
