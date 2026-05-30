@@ -2005,6 +2005,92 @@ pub async fn update_organization_leader(
     }
 }
 
+/// POST /auth/organization/:name/members/:account_id/accept - Accept a pending organization member
+pub async fn accept_organization_member(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path((org_name, member_account_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let account = match load_authenticated_account_from_headers(&state, &headers).await {
+        Ok(acc) => acc,
+        Err(response) => return response,
+    };
+
+    let member_id = match Uuid::parse_str(&member_account_id) {
+        Ok(id) => id,
+        Err(_) => {
+            return json_error_response(StatusCode::BAD_REQUEST, "Invalid account ID format");
+        }
+    };
+
+    let store = state.account_store.clone();
+    let org_name_clone = org_name.clone();
+    let org_result = task::spawn_blocking(move || store.get_organization_by_name(&org_name_clone))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    let org = match org_result {
+        Ok(Ok(Some(org))) => org,
+        Ok(Ok(None)) => {
+            return json_error_response(
+                StatusCode::NOT_FOUND,
+                &format!("Organization '{}' not found", org_name),
+            );
+        }
+        Ok(Err(e)) => {
+            error!("Failed to get organization: {}", e);
+            return json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error");
+        }
+        Err(response) => return response,
+    };
+
+    let Some(leader_id) = org.leader_account_id else {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "Organization has no leader configured",
+        );
+    };
+
+    if account.id != leader_id {
+        return json_error_response(
+            StatusCode::FORBIDDEN,
+            "Only the organization leader can accept members",
+        );
+    }
+
+    let store = state.account_store.clone();
+    let accept_result = task::spawn_blocking(move || store.accept_organization_member(member_id))
+        .await
+        .map_err(|e| {
+            error!("spawn_blocking panicked: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal error")
+        });
+
+    match accept_result {
+        Ok(Ok(updated_account)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "account_id": updated_account.id,
+                "organization_accept_status": updated_account.organization_accept_status,
+            })),
+        )
+            .into_response(),
+        Ok(Err(crate::account_store::AccountStoreError::NotFound)) => json_error_response(
+            StatusCode::NOT_FOUND,
+            "Account not found or not a member of any organization",
+        ),
+        Ok(Err(e)) => {
+            error!("Failed to accept organization member: {}", e);
+            json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+        }
+        Err(response) => response,
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateOrganizationDiscordRequest {
     pub guild_id: String,
@@ -7907,6 +7993,10 @@ pub fn auth_router(state: AuthState) -> Router {
         .route(
             "/auth/organization/:name/leader",
             put(update_organization_leader),
+        )
+        .route(
+            "/auth/organization/:name/members/:account_id/accept",
+            post(accept_organization_member),
         )
         .route(
             "/auth/organization/:name/discord",
