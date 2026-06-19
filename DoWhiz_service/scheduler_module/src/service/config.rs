@@ -488,6 +488,7 @@ mod tests {
             discord_enabled: false,
             slack_enabled: false,
             bluebubbles_enabled: false,
+            notion_user_id: None,
         }
     }
 

@@ -1219,6 +1219,7 @@ mod tests {
             discord_enabled: false,
             slack_enabled: false,
             bluebubbles_enabled: false,
+            notion_user_id: None,
         };
         let workspace = ensure_thread_workspace(&user_paths, "user123", &thread, &employee, None)
             .expect("create workspace");

@@ -701,6 +701,7 @@ mod tests {
             tokens_to_hours: Some(0.0),
             purchased_hours: Some(1.0),
             organization_id: None,
+            organization_accept_status: None,
         }
     }
 

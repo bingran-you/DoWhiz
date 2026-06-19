@@ -973,6 +973,7 @@ mod tests {
             discord_enabled: false,
             slack_enabled: false,
             bluebubbles_enabled: false,
+            notion_user_id: None,
         };
 
         let service_root = Path::new(env!("CARGO_MANIFEST_DIR"))

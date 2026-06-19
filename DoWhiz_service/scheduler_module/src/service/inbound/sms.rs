@@ -265,6 +265,7 @@ mod tests {
             discord_enabled: false,
             slack_enabled: false,
             bluebubbles_enabled: false,
+            notion_user_id: None,
         };
         let mut employee_by_id = HashMap::new();
         employee_by_id.insert(employee.id.clone(), employee.clone());
