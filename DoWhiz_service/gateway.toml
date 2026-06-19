@@ -24,6 +24,12 @@ tenant_id = "default"
 
 [[routes]]
 channel = "email"
+key = "f4539b87b9eb29a0ecce5585895e7a6c@inbound.postmarkapp.com"
+employee_id = "little_bear"
+tenant_id = "default"
+
+[[routes]]
+channel = "email"
 key = "proto@dowhiz.com"
 employee_id = "boiled_egg"
 tenant_id = "default"

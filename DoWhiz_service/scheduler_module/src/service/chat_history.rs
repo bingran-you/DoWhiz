@@ -2156,6 +2156,7 @@ mod tests {
             discord_enabled: true,
             slack_enabled: true,
             bluebubbles_enabled: false,
+            notion_user_id: None,
         };
         let employee_directory = crate::employee_config::EmployeeDirectory {
             default_employee_id: Some("little_bear".to_string()),

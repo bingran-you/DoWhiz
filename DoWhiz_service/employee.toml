@@ -12,6 +12,9 @@ addresses = [
   "oliver@dowhiz.com",
   "little-bear@dowhiz.com",
   "agent@dowhiz.com",
+  # Current production Postmark inbound address. Keep after verified senders so
+  # replies still use oliver@dowhiz.com as From.
+  "f4539b87b9eb29a0ecce5585895e7a6c@inbound.postmarkapp.com",
 ]
 notion_user_id = "300d872b-594c-81eb-b5fe-000281acc42c"
 agents_path = "employees/little_bear/AGENTS.md"
