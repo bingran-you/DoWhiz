@@ -179,5 +179,7 @@ or client not authorized for any of the scopes requested.
 
 - Never commit `GOOGLE_SERVICE_ACCOUNT_JSON` to the repository
 - The Service Account can only impersonate users in authorized domains
-- Scopes are limited to Docs/Drive/Sheets/Slides (no Gmail access)
+- Default workspace scopes cover Docs/Drive/Sheets/Slides/Calendar/Tasks/Contacts.
+- If `GMAIL_POLLER_ENABLED=true`, the Domain-wide Delegation client must also include:
+  `https://www.googleapis.com/auth/gmail.readonly`
 - Each operation is logged with the impersonated user's identity

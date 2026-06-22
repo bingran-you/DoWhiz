@@ -269,11 +269,13 @@ jobs:
 
       - name: Create SSH config file
         run: |
-          echo "Host azureproduction" >> ~/.ssh/config
-          echo "  HostName ${{ secrets.PROD_AZURE_VM_IP }}" >> ~/.ssh/config
-          echo "  User ${{ secrets.PROD_AZURE_VM_USER }}" >> ~/.ssh/config
-          echo "  Port 22" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/private_key.pem" >> ~/.ssh/config
+          {
+            echo "Host azureproduction"
+            echo "  HostName ${{ secrets.PROD_AZURE_VM_IP }}"
+            echo "  User ${{ secrets.PROD_AZURE_VM_USER }}"
+            echo "  Port 22"
+            echo "  IdentityFile ~/.ssh/private_key.pem"
+          } >> ~/.ssh/config
 
       - name: Update repo on Azure VM
         run: |
@@ -379,6 +381,18 @@ jobs:
             grep -En '^(STAGING_|PROD_)' "$ENV_FILE" >&2 || true
             exit 1
           fi
+
+          # Non-secret production override: keep Oliver email ingestion resilient even
+          # when Gmail routing/forwarding does not copy messages to Postmark inbound.
+          cat << GMAIL_POLLER_ENV_EOF >> "$ENV_FILE"
+          GMAIL_POLLER_ENABLED=true
+          GMAIL_POLLER_RECIPIENT=oliver@dowhiz.com
+          GMAIL_POLLER_INTERVAL_SECS=15
+          GMAIL_POLLER_LOOKBACK_DAYS=2
+          GMAIL_POLLER_MAX_RESULTS=50
+          GMAIL_POLLER_STATE_PATH=$APP_DIR/.gmail_poller_processed_ids
+          GMAIL_POLLER_BOOTSTRAP_PROCESS_EXISTING=false
+          GMAIL_POLLER_ENV_EOF
           chmod 600 "$APP_DIR/.env"
           EOF
 
@@ -484,11 +498,13 @@ jobs:
             exit 1
           }
 
-          echo "should_build=1" >> "$GITHUB_OUTPUT"
-          echo "run_task_image=$run_task_image" >> "$GITHUB_OUTPUT"
-          echo "login_server=$login_server" >> "$GITHUB_OUTPUT"
-          echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
-          echo "registry_name=$registry_name" >> "$GITHUB_OUTPUT"
+          {
+            echo "should_build=1"
+            echo "run_task_image=$run_task_image"
+            echo "login_server=$login_server"
+            echo "image_name=$image_name"
+            echo "registry_name=$registry_name"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Azure login for ACR build
         if: steps.aci_config.outputs.should_build == '1'
