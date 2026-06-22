@@ -264,6 +264,12 @@ Azure ACI execution path (required vars):
 - WeChat Work: `WECHAT_CORP_ID`, `WECHAT_CORP_SECRET`, `WECHAT_AGENT_ID`, `WECHAT_TOKEN`, `WECHAT_ENCODING_AES_KEY`
 - Twilio SMS: `TWILIO_*`
 - Google Workspace: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, refresh tokens, `GOOGLE_*_ENABLED`
+- Gmail inbox polling fallback: `GMAIL_POLLER_ENABLED=true` enables inbound email ingestion from
+  the service account subject mailbox when Gmail routing/forwarding does not deliver to Postmark.
+  Requires Domain-wide Delegation for `https://www.googleapis.com/auth/gmail.readonly`. Optional:
+  `GMAIL_POLLER_RECIPIENT`, `GMAIL_POLLER_QUERY`, `GMAIL_POLLER_INTERVAL_SECS`,
+  `GMAIL_POLLER_LOOKBACK_DAYS`, `GMAIL_POLLER_MAX_RESULTS`, `GMAIL_POLLER_STATE_PATH`, and
+  `GMAIL_POLLER_BOOTSTRAP_PROCESS_EXISTING`.
 - Google Workspace CLI (`gws`):
   `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` (preferred) or
   `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE_CLIENT_ID`,
