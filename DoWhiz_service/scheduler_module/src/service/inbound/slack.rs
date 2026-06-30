@@ -117,6 +117,19 @@ pub(crate) fn process_slack_event(
         thread_state.epoch
     );
 
+    let linked_account_id = match account_store.get_account_by_identifier("slack", &message.sender)
+    {
+        Ok(Some(account)) => Some(account.id),
+        Ok(None) => None,
+        Err(err) => {
+            warn!(
+                "failed to resolve slack sender {} to billing account: {}",
+                message.sender, err
+            );
+            None
+        }
+    };
+
     // Create RunTask to process the message
     let run_task = RunTaskTask {
         workspace_dir: workspace.clone(),
@@ -137,9 +150,9 @@ pub(crate) fn process_slack_event(
         channel: Channel::Slack,
         slack_team_id: message.metadata.slack_team_id.clone(),
         employee_id: Some(config.employee_profile.id.clone()),
-        requester_identifier_type: None,
-        requester_identifier: None,
-        account_id: None,
+        requester_identifier_type: Some("slack".to_string()),
+        requester_identifier: Some(message.sender.clone()),
+        account_id: linked_account_id,
         channel_metadata: message.metadata.clone(),
     };
 
@@ -185,14 +198,13 @@ pub(crate) fn process_slack_event(
         thread_state.epoch
     );
 
-    // If the Slack user has linked their account, also write to account-level tasks.db
-    // message.sender contains the Slack user ID
-    if let Ok(Some(account)) = account_store.get_account_by_identifier("slack", &message.sender) {
-        let account_tasks_dir = config.users_root.join(account.id.to_string()).join("state");
+    // If the Slack user has linked their account, also write to account-level tasks.db.
+    if let Some(account_id) = linked_account_id {
+        let account_tasks_dir = config.users_root.join(account_id.to_string()).join("state");
         if let Err(err) = std::fs::create_dir_all(&account_tasks_dir) {
             warn!(
                 "failed to create account tasks dir for account {}: {}",
-                account.id, err
+                account_id, err
             );
         } else {
             let account_tasks_db_path = account_tasks_dir.join("tasks.db");
@@ -207,19 +219,19 @@ pub(crate) fn process_slack_event(
                         Ok(true) => {
                             info!(
                                 "also enqueued task to account-level storage account={} task_id={}",
-                                account.id, task_id
+                                account_id, task_id
                             );
                         }
                         Ok(false) => {
                             info!(
                                 "skipping duplicate slack account-level enqueue account={} task_id={}",
-                                account.id, task_id
+                                account_id, task_id
                             );
                         }
                         Err(err) => {
                             warn!(
                                 "failed to add task to account scheduler for account {}: {}",
-                                account.id, err
+                                account_id, err
                             );
                         }
                     }
@@ -227,7 +239,7 @@ pub(crate) fn process_slack_event(
                 Err(err) => {
                     warn!(
                         "failed to load account scheduler for account {}: {}",
-                        account.id, err
+                        account_id, err
                     );
                 }
             }

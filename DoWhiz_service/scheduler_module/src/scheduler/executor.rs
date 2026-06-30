@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -93,6 +94,8 @@ use super::utils::{
     load_google_access_token_from_service_env, load_notion_access_token_for_account,
 };
 
+const INSUFFICIENT_BALANCE_DISABLE_REASON: &str = "insufficient_billing_hours";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GitHubInboundContext {
     is_github_notification: bool,
@@ -131,6 +134,15 @@ fn resolve_account_for_run_task(
 ) -> Option<Uuid> {
     if let Some(account_id) = task.account_id {
         return Some(account_id);
+    }
+
+    if let (Some(identifier_type), Some(identifier)) = (
+        task.requester_identifier_type.as_deref(),
+        task.requester_identifier.as_deref(),
+    ) {
+        if let Some(account_id) = lookup_account_by_identifier(identifier_type, identifier) {
+            return Some(account_id);
+        }
     }
 
     if let Some(identifier) = task.reply_to.first() {
@@ -582,6 +594,12 @@ fn default_billing_link() -> String {
         .unwrap_or_else(|| "https://www.dowhiz.com/auth/index.html".to_string())
 }
 
+fn notification_sender_email() -> Option<String> {
+    ["POSTMARK_FROM_EMAIL", "HUMAN_APPROVAL_FROM", "ADMIN_EMAIL"]
+        .iter()
+        .find_map(|key| read_non_empty_env(key))
+}
+
 fn html_escape(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -593,7 +611,8 @@ fn html_escape(value: &str) -> String {
 fn build_insufficient_balance_plain_text(payment_link: &str) -> String {
     format!(
         "Insufficient balance. I could not run this request.\n\
-Please add more employee hours, then resend your message.\n\
+If this was a scheduled or routine task, it has been disabled so it will not keep retrying without hours.\n\
+Please add more employee hours, then re-enable or resend your request.\n\
 Payment link: {payment_link}"
     )
 }
@@ -606,7 +625,8 @@ fn build_insufficient_balance_email_html(payment_link: &str) -> String {
 <body>
   <p>Hi there,</p>
   <p>Your account currently has insufficient balance, so I could not run this request.</p>
-  <p>Please add more employee hours, then resend your message.</p>
+  <p>If this was a scheduled or routine task, it has been disabled so it will not keep retrying without hours.</p>
+  <p>Please add more employee hours, then re-enable or resend your request.</p>
   <p>Payment link: <a href="{link}">{link}</a></p>
 </body>
 </html>
@@ -618,8 +638,9 @@ fn build_insufficient_balance_email_html(payment_link: &str) -> String {
 fn write_insufficient_balance_notice_body(
     task: &super::types::RunTaskTask,
     payment_link: &str,
+    notice_channel: &Channel,
 ) -> Result<PathBuf, SchedulerError> {
-    let (filename, body) = match task.channel {
+    let (filename, body) = match notice_channel {
         Channel::Email => (
             ".insufficient_balance_notice.html",
             build_insufficient_balance_email_html(payment_link),
@@ -632,6 +653,62 @@ fn write_insufficient_balance_notice_body(
     let path = task.workspace_dir.join(filename);
     std::fs::write(&path, body)?;
     Ok(path)
+}
+
+fn push_unique_email_recipient(
+    recipients: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+    raw: &str,
+) {
+    let email = raw.trim();
+    if email.is_empty() {
+        return;
+    }
+    let key = email.to_ascii_lowercase();
+    if seen.insert(key) {
+        recipients.push(email.to_string());
+    }
+}
+
+fn billing_notice_email_recipients(account_id: Uuid) -> Vec<String> {
+    let mut recipients = Vec::new();
+    let mut seen = HashSet::new();
+    let Some(store) = get_global_account_store() else {
+        warn!(
+            "cannot resolve billing notice email recipients for account {}: account store unavailable",
+            account_id
+        );
+        return recipients;
+    };
+
+    match store.list_identifiers(account_id) {
+        Ok(identifiers) => {
+            for identifier in identifiers {
+                if identifier.verified && identifier.identifier_type == "email" {
+                    push_unique_email_recipient(&mut recipients, &mut seen, &identifier.identifier);
+                }
+            }
+        }
+        Err(err) => {
+            warn!(
+                "failed to list identifiers for insufficient-balance email account={}: {}",
+                account_id, err
+            );
+        }
+    }
+
+    match store.get_account_auth_email(account_id) {
+        Ok(Some(email)) => push_unique_email_recipient(&mut recipients, &mut seen, &email),
+        Ok(None) => {}
+        Err(err) => {
+            warn!(
+                "failed to read auth email for insufficient-balance email account={}: {}",
+                account_id, err
+            );
+        }
+    }
+
+    recipients
 }
 
 fn dispatch_send_reply_task(task: &SendReplyTask) -> Result<(), SchedulerError> {
@@ -710,9 +787,29 @@ fn send_insufficient_balance_notice(
     task: &super::types::RunTaskTask,
     account_id: Uuid,
 ) -> Result<(), SchedulerError> {
-    if task.reply_to.is_empty() {
+    let email_recipients = billing_notice_email_recipients(account_id);
+    let (notice_channel, recipients) = if email_recipients.is_empty() {
+        if !task.reply_to.is_empty() {
+            warn!(
+                "Account {} has insufficient balance but no billing email recipients; falling back to {:?}",
+                account_id, task.channel
+            );
+            (task.channel.clone(), task.reply_to.clone())
+        } else {
+            warn!(
+                "Account {} has insufficient balance but no billing email recipients and no reply recipients for workspace {}",
+                account_id,
+                task.workspace_dir.display()
+            );
+            return Ok(());
+        }
+    } else {
+        (Channel::Email, email_recipients)
+    };
+
+    if recipients.is_empty() {
         warn!(
-            "Account {} has insufficient balance but no reply recipients for workspace {}",
+            "Account {} has insufficient balance but notice recipients were empty for workspace {}",
             account_id,
             task.workspace_dir.display()
         );
@@ -721,7 +818,7 @@ fn send_insufficient_balance_notice(
 
     let payment_link =
         configured_insufficient_balance_payment_link().unwrap_or_else(default_billing_link);
-    let body_path = write_insufficient_balance_notice_body(task, &payment_link)?;
+    let body_path = write_insufficient_balance_notice_body(task, &payment_link, &notice_channel)?;
     let attachments_dir = task
         .workspace_dir
         .join(".insufficient_balance_notice_attachments");
@@ -729,27 +826,51 @@ fn send_insufficient_balance_notice(
     let reply_context = super::reply::load_reply_context(&task.workspace_dir);
 
     let send_task = SendReplyTask {
-        channel: task.channel.clone(),
-        subject: reply_context.subject,
+        channel: notice_channel.clone(),
+        subject: "Action needed: DoWhiz hours are exhausted".to_string(),
         html_path: body_path,
         attachments_dir,
-        from: task.reply_from.clone().or(reply_context.from),
-        to: task.reply_to.clone(),
+        from: task
+            .reply_from
+            .clone()
+            .or(reply_context.from)
+            .or_else(notification_sender_email),
+        to: recipients,
         cc: Vec::new(),
         bcc: Vec::new(),
-        in_reply_to: reply_context.in_reply_to,
-        references: reply_context.references,
+        in_reply_to: if notice_channel == Channel::Email {
+            reply_context.in_reply_to
+        } else {
+            None
+        },
+        references: if notice_channel == Channel::Email {
+            reply_context.references
+        } else {
+            None
+        },
         archive_root: task.archive_root.clone(),
-        thread_epoch: task.thread_epoch,
-        thread_state_path: task.thread_state_path.clone(),
+        thread_epoch: if notice_channel == task.channel {
+            task.thread_epoch
+        } else {
+            None
+        },
+        thread_state_path: if notice_channel == task.channel {
+            task.thread_state_path.clone()
+        } else {
+            None
+        },
         employee_id: task.employee_id.clone(),
-        channel_metadata: task.normalized_channel_metadata(),
+        channel_metadata: if notice_channel == task.channel {
+            task.normalized_channel_metadata()
+        } else {
+            Default::default()
+        },
     };
 
     dispatch_send_reply_task(&send_task)?;
     info!(
         "sent insufficient-balance notice for account {} via {:?}",
-        account_id, task.channel
+        account_id, notice_channel
     );
     Ok(())
 }
@@ -1311,9 +1432,20 @@ impl TaskExecutor for ModuleExecutor {
                                         "channel": task.channel.to_string(),
                                     }),
                                 );
-                                send_insufficient_balance_notice(task, account_id)?;
+                                if let Err(err) = send_insufficient_balance_notice(task, account_id)
+                                {
+                                    warn!(
+                                        "failed to send insufficient-balance notice for account {}: {}",
+                                        account_id, err
+                                    );
+                                }
                                 let mut execution = TaskExecution::empty();
                                 execution.skip_auto_reply = true;
+                                execution.disable_current_task_reason =
+                                    Some(INSUFFICIENT_BALANCE_DISABLE_REASON.to_string());
+                                execution.terminal_status = Some("failed".to_string());
+                                execution.terminal_error_message =
+                                    Some(INSUFFICIENT_BALANCE_DISABLE_REASON.to_string());
                                 return Ok(execution);
                             }
                             Ok(true) => {}
@@ -1781,6 +1913,7 @@ impl TaskExecutor for ModuleExecutor {
                     scheduler_actions_error: output.scheduler_actions_error,
                     skip_auto_reply: false,
                     superseded: false,
+                    disable_current_task_reason: None,
                     terminal_note: output.recovery_note,
                     terminal_status,
                     terminal_error_message: output.terminal_error_message,
@@ -1907,6 +2040,43 @@ mod tests {
             recovery_note: recovery_note.map(str::to_string),
             terminal_error_message: None,
         }
+    }
+
+    #[test]
+    fn push_unique_email_recipient_dedupes_case_insensitively() {
+        let mut recipients = Vec::new();
+        let mut seen = HashSet::new();
+
+        push_unique_email_recipient(&mut recipients, &mut seen, " User@Example.com ");
+        push_unique_email_recipient(&mut recipients, &mut seen, "user@example.com");
+        push_unique_email_recipient(&mut recipients, &mut seen, "other@example.com");
+        push_unique_email_recipient(&mut recipients, &mut seen, " ");
+
+        assert_eq!(
+            recipients,
+            vec![
+                "User@Example.com".to_string(),
+                "other@example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn insufficient_balance_email_notice_mentions_scheduled_task_disable() {
+        let temp = TempDir::new().expect("tempdir");
+        let task = sample_email_task(temp.path().to_path_buf());
+
+        let path = write_insufficient_balance_notice_body(
+            &task,
+            "https://billing.example.test",
+            &Channel::Email,
+        )
+        .expect("write notice");
+        let body = fs::read_to_string(path).expect("notice body");
+
+        assert!(body.contains("insufficient balance"));
+        assert!(body.contains("scheduled or routine task"));
+        assert!(body.contains("disabled"));
     }
 
     #[test]

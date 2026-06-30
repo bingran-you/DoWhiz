@@ -328,19 +328,35 @@ impl<E: TaskExecutor> Scheduler<E> {
                     reset_reconciliation_failure_counter();
                 }
                 self.tasks[index].last_run = Some(executed_at);
-                match &mut self.tasks[index].schedule {
-                    Schedule::Cron {
-                        expression,
-                        next_run,
-                    } => {
-                        *next_run = next_run_after(expression, executed_at)?;
-                    }
-                    Schedule::OneShot { .. } => {
-                        self.tasks[index].enabled = false;
+                let disable_current_task_reason = execution.disable_current_task_reason.clone();
+                if disable_current_task_reason.is_some() {
+                    self.tasks[index].enabled = false;
+                } else {
+                    match &mut self.tasks[index].schedule {
+                        Schedule::Cron {
+                            expression,
+                            next_run,
+                        } => {
+                            *next_run = next_run_after(expression, executed_at)?;
+                        }
+                        Schedule::OneShot { .. } => {
+                            self.tasks[index].enabled = false;
+                        }
                     }
                 }
                 let updated_task = self.tasks[index].clone();
                 self.store.update_task(&updated_task)?;
+                if let Some(reason) = disable_current_task_reason.as_deref() {
+                    if let Err(err) = self
+                        .store
+                        .disable_task_by_id_with_reason(&task_id.to_string(), reason)
+                    {
+                        warn!(
+                            "failed to persist auto-disable reason for task {}: {}",
+                            task_id, err
+                        );
+                    }
+                }
                 if execution.superseded {
                     if let TaskKind::RunTask(task) = &task_kind {
                         sync_task_status_to_user_storage(

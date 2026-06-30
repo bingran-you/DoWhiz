@@ -271,6 +271,7 @@ pub struct TaskExecution {
     pub scheduler_actions_error: Option<String>,
     pub skip_auto_reply: bool,
     pub superseded: bool,
+    pub disable_current_task_reason: Option<String>,
     pub terminal_note: Option<String>,
     pub terminal_status: Option<String>,
     pub terminal_error_message: Option<String>,
@@ -285,3 +286,59 @@ impl TaskExecution {
 pub(crate) const RUN_TASK_FAILURE_NOTICE: &str = "We could not complete your request";
 pub(crate) const RUN_TASK_FAILURE_DIR: &str = "failure_notifications";
 pub(crate) const RUN_TASK_FAILURE_REPORT_DIR: &str = "dowhiz_failure_reports";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, TimeZone};
+
+    fn test_task(schedule: Schedule) -> ScheduledTask {
+        ScheduledTask {
+            id: Uuid::new_v4(),
+            kind: TaskKind::Noop,
+            schedule,
+            enabled: true,
+            created_at: Utc.with_ymd_and_hms(2026, 6, 30, 8, 0, 0).unwrap(),
+            last_run: None,
+        }
+    }
+
+    #[test]
+    fn cron_task_is_due_when_next_run_is_now_or_past() {
+        let now = Utc.with_ymd_and_hms(2026, 6, 30, 9, 0, 0).unwrap();
+        let due_now = test_task(Schedule::Cron {
+            expression: "0 0 9 * * *".to_string(),
+            next_run: now,
+        });
+        let due_past = test_task(Schedule::Cron {
+            expression: "0 0 9 * * *".to_string(),
+            next_run: now - Duration::seconds(1),
+        });
+
+        assert!(due_now.is_due(now));
+        assert!(due_past.is_due(now));
+    }
+
+    #[test]
+    fn cron_task_is_not_due_when_next_run_is_future() {
+        let now = Utc.with_ymd_and_hms(2026, 6, 30, 9, 0, 0).unwrap();
+        let task = test_task(Schedule::Cron {
+            expression: "0 0 9 * * *".to_string(),
+            next_run: now + Duration::seconds(1),
+        });
+
+        assert!(!task.is_due(now));
+    }
+
+    #[test]
+    fn one_shot_due_uses_run_at_cutoff() {
+        let now = Utc.with_ymd_and_hms(2026, 6, 30, 9, 0, 0).unwrap();
+        let due = test_task(Schedule::OneShot { run_at: now });
+        let future = test_task(Schedule::OneShot {
+            run_at: now + Duration::seconds(1),
+        });
+
+        assert!(due.is_due(now));
+        assert!(!future.is_due(now));
+    }
+}

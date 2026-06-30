@@ -98,6 +98,7 @@ impl TaskExecutor for RecordingExecutor {
                     scheduler_actions_error: output.scheduler_actions_error,
                     skip_auto_reply: false,
                     superseded: false,
+                    disable_current_task_reason: None,
                     terminal_note: output.recovery_note,
                     terminal_status: output
                         .terminal_error_message
