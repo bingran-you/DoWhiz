@@ -32,6 +32,7 @@ impl TaskExecutor for FollowUpExecutor {
                     scheduler_actions_error: None,
                     skip_auto_reply: false,
                     superseded: false,
+                    disable_current_task_reason: None,
                     terminal_note: None,
                     terminal_status: None,
                     terminal_error_message: None,

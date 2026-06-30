@@ -29,7 +29,7 @@ pub(crate) fn next_run_after(
 ) -> Result<DateTime<Utc>, SchedulerError> {
     validate_cron_expression(expression)?;
     let schedule = CronSchedule::from_str(expression)?;
-    for datetime in schedule.upcoming(Utc) {
+    for datetime in schedule.after(&after) {
         if datetime > after {
             return Ok(datetime);
         }
@@ -73,4 +73,34 @@ fn request_implies_monday_through_friday(text: &str) -> bool {
 
 fn is_legacy_weekday_field(field: &str) -> bool {
     matches!(field.trim(), "0-4" | "0,1,2,3,4" | "1-5" | "1,2,3,4,5")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn validate_cron_expression_requires_six_fields() {
+        assert!(validate_cron_expression("0 0 9 * * *").is_ok());
+
+        let err = validate_cron_expression("0 9 * * *").expect_err("five fields invalid");
+        assert!(matches!(err, SchedulerError::InvalidCron(5)));
+    }
+
+    #[test]
+    fn next_run_after_returns_same_day_future_occurrence() {
+        let after = Utc.with_ymd_and_hms(2026, 6, 30, 8, 59, 0).unwrap();
+        let expected = Utc.with_ymd_and_hms(2026, 6, 30, 9, 0, 0).unwrap();
+
+        assert_eq!(next_run_after("0 0 9 * * *", after).unwrap(), expected);
+    }
+
+    #[test]
+    fn next_run_after_is_strictly_after_reference_time() {
+        let after = Utc.with_ymd_and_hms(2026, 6, 30, 9, 0, 0).unwrap();
+        let expected = Utc.with_ymd_and_hms(2026, 7, 1, 9, 0, 0).unwrap();
+
+        assert_eq!(next_run_after("0 0 9 * * *", after).unwrap(), expected);
+    }
 }

@@ -687,6 +687,26 @@ impl AccountStore {
         }))
     }
 
+    /// Get the auth.users email for an account, if the account still has an auth user.
+    pub fn get_account_auth_email(
+        &self,
+        account_id: Uuid,
+    ) -> Result<Option<String>, AccountStoreError> {
+        let mut conn = self.conn()?;
+        let row = conn.query_opt(
+            "SELECT u.email
+             FROM accounts a
+             JOIN auth.users u ON u.id = a.auth_user_id
+             WHERE a.id = $1",
+            &[&account_id],
+        )?;
+        Ok(row.and_then(|r| {
+            r.get::<_, Option<String>>(0)
+                .map(|email| email.trim().to_string())
+                .filter(|email| !email.is_empty())
+        }))
+    }
+
     /// Look up account by channel identifier (for message routing)
     pub fn get_account_by_identifier(
         &self,

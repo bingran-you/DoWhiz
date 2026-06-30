@@ -64,6 +64,21 @@ impl TaskExecutor for TerminalFailureReplyExecutor {
     }
 }
 
+#[derive(Default)]
+struct DisableCurrentTaskExecutor;
+
+impl TaskExecutor for DisableCurrentTaskExecutor {
+    fn execute(&self, _task: &TaskKind) -> Result<TaskExecution, SchedulerError> {
+        Ok(TaskExecution {
+            skip_auto_reply: true,
+            disable_current_task_reason: Some("insufficient_billing_hours".to_string()),
+            terminal_status: Some("failed".to_string()),
+            terminal_error_message: Some("insufficient_billing_hours".to_string()),
+            ..TaskExecution::empty()
+        })
+    }
+}
+
 fn base_run_task(workspace: &Path, mail_root: &Path) -> RunTaskTask {
     RunTaskTask {
         workspace_dir: workspace.to_path_buf(),
@@ -767,6 +782,97 @@ fn terminal_failure_reply_outcome_uses_failed_status_and_error_note() {
     assert_eq!(
         outcome.note.as_deref(),
         Some("Investment analysis runners failed after all configured attempts")
+    );
+}
+
+#[test]
+fn terminal_outcome_defaults_to_success_for_empty_execution() {
+    let outcome = execution_terminal_outcome(&TaskExecution::empty());
+
+    assert_eq!(outcome.status, "success");
+    assert_eq!(outcome.note, None);
+}
+
+#[test]
+fn terminal_outcome_superseded_overrides_explicit_failure_status() {
+    let mut execution = TaskExecution {
+        terminal_status: Some("failed".to_string()),
+        terminal_error_message: Some("terminal error wins note precedence".to_string()),
+        terminal_note: Some("superseded by newer request".to_string()),
+        ..TaskExecution::empty()
+    };
+    execution.superseded = true;
+
+    let outcome = execution_terminal_outcome(&execution);
+
+    assert_eq!(outcome.status, "superseded");
+    assert_eq!(
+        outcome.note.as_deref(),
+        Some("terminal error wins note precedence")
+    );
+}
+
+#[test]
+fn disable_current_task_reason_disables_due_cron_and_persists_reason() {
+    if !mongo_execution_tests_enabled() {
+        eprintln!("skipping mongo-backed test: MONGODB_URI/MONGODB_DATABASE not set");
+        return;
+    }
+
+    let _lock = env_lock();
+    let temp = TempDir::new().expect("tempdir");
+    let user_id = format!("cron_disable_{}", Uuid::new_v4());
+    let tasks_db = user_scoped_tasks_db(&temp, &user_id);
+    let workspace = temp.path().join("workspace");
+    let mail_root = temp.path().join("mail");
+    fs::create_dir_all(&workspace).expect("workspace");
+    fs::create_dir_all(&mail_root).expect("mail root");
+
+    let mut scheduler =
+        Scheduler::load(&tasks_db, DisableCurrentTaskExecutor).expect("load scheduler");
+    let task = base_run_task(&workspace, &mail_root);
+    let task_id = scheduler
+        .add_cron_task("0 0 16 * * *", TaskKind::RunTask(task))
+        .expect("add cron");
+
+    let due_next_run = Utc::now() - chrono::Duration::seconds(5);
+    let index = scheduler
+        .tasks
+        .iter()
+        .position(|task| task.id == task_id)
+        .expect("created task");
+    scheduler.tasks[index].schedule = Schedule::Cron {
+        expression: "0 0 16 * * *".to_string(),
+        next_run: due_next_run,
+    };
+    let updated = scheduler.tasks[index].clone();
+    scheduler
+        .store
+        .update_task(&updated)
+        .expect("persist due cron");
+
+    assert!(scheduler
+        .execute_task_by_id(task_id)
+        .expect("execute due cron"));
+
+    let task_after = scheduler
+        .tasks()
+        .iter()
+        .find(|task| task.id == task_id)
+        .expect("task after execution");
+    assert!(!task_after.enabled);
+    assert!(task_after.last_run.is_some());
+    match &task_after.schedule {
+        Schedule::Cron { next_run, .. } => assert_eq!(*next_run, due_next_run),
+        other => panic!("expected cron schedule, got {other:?}"),
+    }
+
+    let task_docs = load_task_documents(&user_id, task_id);
+    assert_eq!(task_docs.len(), 1);
+    assert_eq!(task_docs[0].get_bool("enabled"), Ok(false));
+    assert_eq!(
+        task_docs[0].get_str("auto_disabled_reason"),
+        Ok("insufficient_billing_hours")
     );
 }
 

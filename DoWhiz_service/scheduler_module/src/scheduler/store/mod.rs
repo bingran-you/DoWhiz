@@ -165,6 +165,18 @@ impl SchedulerStore {
         Ok(())
     }
 
+    pub(crate) fn disable_task_by_id_with_reason(
+        &self,
+        task_id: &str,
+        reason: &str,
+    ) -> Result<(), SchedulerError> {
+        if let Some(mut task) = self.load_task_by_id(task_id)? {
+            task.enabled = false;
+            self.update_task(&task)?;
+        }
+        self.mongo.disable_task_by_id(task_id, reason)
+    }
+
     pub(crate) fn append_execution_event(
         &self,
         task_id: &str,

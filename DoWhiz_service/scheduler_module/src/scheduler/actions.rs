@@ -1566,7 +1566,11 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                         continue;
                     }
                 };
+                let inherited_account_id = resolve_account_id_for_run_task(task);
                 let mut new_task = task.clone();
+                if new_task.account_id.is_none() {
+                    new_task.account_id = inherited_account_id;
+                }
                 if let Some(model_name) =
                     model_name.as_ref().filter(|value| !value.trim().is_empty())
                 {
@@ -1577,6 +1581,9 @@ pub(crate) fn apply_scheduler_actions<E: TaskExecutor>(
                 }
                 if !reply_to.is_empty() {
                     new_task.reply_to = reply_to.clone();
+                }
+                if new_task.account_id.is_none() {
+                    new_task.account_id = resolve_account_id_for_run_task(&new_task);
                 }
                 match schedule {
                     Schedule::Cron { expression, .. } => {
@@ -2191,6 +2198,16 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
     }
 
     #[test]
+    fn resolve_account_id_for_run_task_prefers_persisted_account_when_reply_to_is_thread_key() {
+        let account_id = Uuid::new_v4();
+        let mut task = make_test_task(vec!["slack:D0AVC970Z3L:1777218656.751839".to_string()]);
+        task.channel = Channel::Slack;
+        task.account_id = Some(account_id);
+
+        assert_eq!(resolve_account_id_for_run_task(&task), Some(account_id));
+    }
+
+    #[test]
     fn create_run_task_actions_are_mirrored_to_account_storage() {
         let _lock = env_lock().lock().expect("env lock");
         let temp = TempDir::new().expect("tempdir");
@@ -2231,12 +2248,20 @@ addresses = ["proto@dowhiz.com", "boiled-egg@dowhiz.com"]
             },
             model_name: None,
             codex_disabled: None,
-            reply_to: Vec::new(),
+            reply_to: vec!["slack:D0AVC970Z3L:1777218656.751839".to_string()],
         }];
 
         apply_scheduler_actions(&mut scheduler, &task, &actions).expect("apply actions");
 
         let created_task = scheduler.tasks().last().cloned().expect("created task");
+        let TaskKind::RunTask(created_run_task) = &created_task.kind else {
+            panic!("expected created run task");
+        };
+        assert_eq!(created_run_task.account_id, Some(account_id));
+        assert_eq!(
+            created_run_task.reply_to,
+            vec!["slack:D0AVC970Z3L:1777218656.751839".to_string()]
+        );
         let account_db = users_root
             .join(account_id.to_string())
             .join("state")

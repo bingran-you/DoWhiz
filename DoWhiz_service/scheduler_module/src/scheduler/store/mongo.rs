@@ -1840,12 +1840,17 @@ fn derive_user_task_status(
 }
 
 fn humanize_auto_disabled_reason(raw: &str) -> String {
-    raw.trim()
+    let normalized = raw
+        .trim()
         .strip_prefix("auto-disabled:")
         .unwrap_or(raw.trim())
         .trim()
-        .trim_end_matches('.')
-        .to_string()
+        .trim_end_matches('.');
+
+    match normalized {
+        "insufficient_billing_hours" => "the billing account has no remaining hours".to_string(),
+        _ => normalized.to_string(),
+    }
 }
 
 fn resolve_aci_registration_grace_period() -> ChronoDuration {
@@ -2619,7 +2624,7 @@ mod tests {
     use mongodb::bson::{doc, Bson, DateTime as BsonDateTime};
 
     use super::{
-        apply_persisted_task_fields, build_task_status_summary,
+        apply_persisted_task_fields, build_task_status_summary, humanize_auto_disabled_reason,
         missing_aci_registry_reconciliation_reason, resolve_owner_scope_with,
         should_replace_stale_reconciliation_terminal_row, workspace_peer_supersede_reason,
         workspace_suggests_recent_inflight_aci_result_handling, ExecutionRow,
@@ -2832,6 +2837,20 @@ mod tests {
         assert!(summary.can_resubmit);
         assert!(!summary.will_retry);
         assert!(summary.retry_at.is_none());
+    }
+
+    #[test]
+    fn humanize_auto_disabled_reason_explains_insufficient_billing_hours() {
+        assert_eq!(
+            humanize_auto_disabled_reason("insufficient_billing_hours"),
+            "the billing account has no remaining hours"
+        );
+        assert_eq!(
+            humanize_auto_disabled_reason(
+                "auto-disabled: execution started but ACI container was never created."
+            ),
+            "execution started but ACI container was never created"
+        );
     }
 
     #[test]
