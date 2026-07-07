@@ -1,0 +1,4 @@
+HSBC Operating Account Statement
+Client: Acme HK Limited
+Period: 1 December 2025 to 31 December 2025
+Closing balance: HKD 310,000

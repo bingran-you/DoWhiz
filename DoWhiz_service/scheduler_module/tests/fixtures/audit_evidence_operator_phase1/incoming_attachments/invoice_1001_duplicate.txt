@@ -1,0 +1,6 @@
+Invoice No: INV-1001
+Client: Acme HK Limited
+Customer: Blue Harbour Trading Ltd.
+Invoice date: 15 December 2025
+Amount: HKD 180,000
+Description: Product sale
