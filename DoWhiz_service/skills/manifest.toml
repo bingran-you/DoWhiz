@@ -1,6 +1,7 @@
 runtime_root = "DoWhiz_service/skills"
 
 shared_skill_dirs = [
+  "audit-evidence-operator",
   "bright-data-social",
   "build-hotel-itinerary",
   "canvas-design",

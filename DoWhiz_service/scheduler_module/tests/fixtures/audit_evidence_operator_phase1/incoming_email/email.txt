@@ -1,0 +1,17 @@
+From: audit.senior@example-cpa.hk
+To: oliver@dowhiz.com
+Subject: Please process PBC batch - Acme HK FY2025
+Date: 2026-02-03
+
+Oliver,
+
+Please process the attached PBC batch for Acme HK Limited for the year ended 31 December 2025.
+
+I need a package for review:
+- attachment inventory
+- PBC tracker
+- exception report
+- client follow-up draft for missing or incorrect items
+- reviewer summary
+
+Do not send anything to the client. I will review the draft first.
